@@ -1,0 +1,276 @@
+{
+  "entities": {
+    "Client": {
+      "title": "Giffoni Client",
+      "description": "Unified client document containing either PF or PJ data blocks.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["PF", "PJ"] },
+        "active": { "type": "boolean" },
+        "slug": { "type": "string" },
+        "pfData": {
+          "type": "object",
+          "properties": {
+            "pf_nomeCompleto": { "type": "string" },
+            "pf_cpf": { "type": "string" },
+            "pf_rg": { "type": "string" },
+            "pf_dataNascimento": { "type": "string" },
+            "pf_estadoCivil": { "type": "string" },
+            "pf_profissao": { "type": "string" },
+            "pf_nacionalidade": { "type": "string" },
+            "pf_email": { "type": "string" },
+            "pf_telefone": { "type": "string" },
+            "pf_whatsapp": { "type": "string" },
+            "pf_cep": { "type": "string" },
+            "pf_endereco": { "type": "string" },
+            "pf_numero": { "type": "string" },
+            "pf_complemento": { "type": "string" },
+            "pf_bairro": { "type": "string" },
+            "pf_cidade": { "type": "string" },
+            "pf_estado": { "type": "string" },
+            "pf_instagram": { "type": "string" },
+            "pf_facebook": { "type": "string" },
+            "pf_tiktok": { "type": "string" }
+          }
+        },
+        "pjData": {
+          "type": "object",
+          "properties": {
+            "pj_razaoSocial": { "type": "string" },
+            "pj_nomeFantasia": { "type": "string" },
+            "pj_cnpj": { "type": "string" },
+            "pj_inscricaoEstadual": { "type": "string" },
+            "pj_emailEmpresa": { "type": "string" },
+            "pj_telefoneEmpresa": { "type": "string" },
+            "pj_whatsappEmpresa": { "type": "string" },
+            "pj_cepEmpresa": { "type": "string" },
+            "pj_enderecoEmpresa": { "type": "string" },
+            "pj_numeroEmpresa": { "type": "string" },
+            "pj_complementoEmpresa": { "type": "string" },
+            "pj_bairroEmpresa": { "type": "string" },
+            "pj_cidadeEmpresa": { "type": "string" },
+            "pj_estadoEmpresa": { "type": "string" },
+            "pj_instagramEmpresa": { "type": "string" },
+            "pj_facebookEmpresa": { "type": "string" },
+            "pj_tiktokEmpresa": { "type": "string" }
+          }
+        },
+        "socioData": {
+          "type": "object",
+          "properties": {
+            "socio_nomeCompleto": { "type": "string" },
+            "socio_cpf": { "type": "string" },
+            "socio_rg": { "type": "string" },
+            "socio_dataNascimento": { "type": "string" },
+            "socio_estadoCivil": { "type": "string" },
+            "socio_profissao": { "type": "string" },
+            "socio_nacionalidade": { "type": "string" },
+            "socio_cargo": { "type": "string" },
+            "socio_email": { "type": "string" },
+            "socio_telefone": { "type": "string" },
+            "socio_whatsapp": { "type": "string" },
+            "socio_cep": { "type": "string" },
+            "socio_endereco": { "type": "string" },
+            "socio_numero": { "type": "string" },
+            "socio_complemento": { "type": "string" },
+            "socio_bairro": { "type": "string" },
+            "socio_cidade": { "type": "string" },
+            "socio_estado": { "type": "string" },
+            "socio_instagram": { "type": "string" },
+            "socio_facebook": { "type": "string" },
+            "socio_tiktok": { "type": "string" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "active", "slug"]
+    },
+    "ClientPortal": {
+      "title": "Client Portal Link",
+      "description": "Mapping from slugs to client IDs.",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string" },
+        "slug": { "type": "string" }
+      },
+      "required": ["clientId", "slug"]
+    },
+    "User": {
+      "title": "Platform User",
+      "description": "User profile with role-based access.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["boss_admin", "client"] },
+        "clientId": { "type": "string" }
+      },
+      "required": ["email", "role"]
+    },
+    "Case": {
+      "title": "Legal Case",
+      "description": "The central entity for legal process tracking.",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string" },
+        "title": { "type": "string" },
+        "processNumber": { "type": "string" },
+        "actionType": { "type": "string" },
+        "court": { "type": "string" },
+        "district": { "type": "string" },
+        "tribunal": { "type": "string" },
+        "responsibleLawyer": { "type": "string" },
+        "status": { "type": "string" },
+        "priority": { "type": "string" },
+        "lastUpdate": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientId", "title", "status"]
+    },
+    "CaseEvent": {
+      "title": "Case Event",
+      "description": "Audiences, meetings, expertises, and deadlines.",
+      "type": "object",
+      "properties": {
+        "caseId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "type": { "type": "string", "enum": ["audiencia", "pericia", "reuniao", "prazo", "compromisso"] },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "time": { "type": "string" },
+        "location": { "type": "string" },
+        "status": { "type": "string", "enum": ["agendado", "realizado", "cancelado", "remarcado"] },
+        "visibleToClient": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["caseId", "clientId", "type", "title", "date"]
+    },
+    "CasePendingTask": {
+      "title": "Case Pending Task",
+      "description": "Tasks or documents requested from the client.",
+      "type": "object",
+      "properties": {
+        "caseId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "type": "string", "enum": ["documento", "confirmacao", "assinatura", "informacao", "outro"] },
+        "status": { "type": "string", "enum": ["pendente", "concluido", "vencido"] },
+        "dueDate": { "type": "string", "format": "date" },
+        "visibleToClient": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["caseId", "clientId", "title", "status"]
+    },
+    "CaseExplanation": {
+      "title": "Case Explanation",
+      "description": "Giffoni Explica: Manual explanations for the client.",
+      "type": "object",
+      "properties": {
+        "caseId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string", "enum": ["andamento", "decisao", "audiencia", "pericia", "financeiro", "geral"] },
+        "visibleToClient": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["caseId", "clientId", "title", "content"]
+    },
+    "CaseDocument": {
+      "title": "Case Document",
+      "description": "Linked documents, proofs, and pending uploads.",
+      "type": "object",
+      "properties": {
+        "caseId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string" },
+        "url": { "type": "string" },
+        "status": { "type": "string", "enum": ["vinculado", "solicitado", "pendente"] },
+        "visibleToClient": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["caseId", "clientId", "title", "status"]
+    },
+    "CaseFinancial": {
+      "title": "Case Financial",
+      "description": "Honorariums and payment tracking.",
+      "type": "object",
+      "properties": {
+        "caseId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "status": { "type": "string" },
+        "installments": { "type": "number" },
+        "installmentsPaid": { "type": "number" },
+        "nextDueDate": { "type": "string", "format": "date-time" },
+        "visibleToClient": { "type": "boolean" }
+      },
+      "required": ["caseId", "clientId", "status"]
+    },
+    "CaseCommunication": {
+      "title": "Case Communication",
+      "description": "Messages, requests, and 'Giffoni Explica'.",
+      "type": "object",
+      "properties": {
+        "caseId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "content": { "type": "string" },
+        "type": { "type": "string", "enum": ["mensagem", "solicitacao", "aviso", "explicacao"] },
+        "visibleToClient": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["caseId", "clientId", "content", "type"]
+    }
+  },
+  "firestore": {
+    "clients": {
+      "schema": "Client",
+      "description": "Consolidated client data."
+    },
+    "clientPortals": {
+      "schema": "ClientPortal",
+      "description": "Slug-to-clientId mapping."
+    },
+    "users": {
+      "schema": "User",
+      "description": "User profiles for auth."
+    },
+    "cases": {
+      "schema": "Case",
+      "description": "Legal cases."
+    },
+    "caseEvents": {
+      "schema": "CaseEvent",
+      "description": "Events linked to a case."
+    },
+    "casePendingTasks": {
+      "schema": "CasePendingTask",
+      "description": "Tasks pending from client."
+    },
+    "caseExplanations": {
+      "schema": "CaseExplanation",
+      "description": "Manual explanations for client."
+    },
+    "caseDocuments": {
+      "schema": "CaseDocument",
+      "description": "Documents linked to a case."
+    },
+    "caseFinancials": {
+      "schema": "CaseFinancial",
+      "description": "Financial records for cases."
+    },
+    "caseCommunications": {
+      "schema": "CaseCommunication",
+      "description": "Communications for cases."
+    }
+  }
+}

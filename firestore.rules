@@ -1,0 +1,141 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // -------------------------------------------------------------------------
+    // GLOBAL HELPERS
+    // -------------------------------------------------------------------------
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+    
+    function isAdmin() {
+      // Primary admin email always has access if signed in.
+      // We also check for the boss_admin role in the users collection.
+      return isSignedIn() && (
+        request.auth.token.email == 'direito.rgr@gmail.com' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'boss_admin'
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // -------------------------------------------------------------------------
+    // CATCH-ALL DENY
+    // -------------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // USERS AND INVITES
+    // -------------------------------------------------------------------------
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin() || (isSignedIn() && request.auth.uid == userId && (
+        // Allow self-registration if document doesn't exist
+        !exists(/databases/$(database)/documents/users/$(userId))
+      ));
+    }
+
+    match /users_invites/{inviteId} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.token.email == resource.data.email);
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // CLIENT PORTALS (SLUG MAPPING)
+    // -------------------------------------------------------------------------
+    match /clientPortals/{slug} {
+      allow read: if true; // Publicly readable to find the clientID by slug
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // CLIENTS COLLECTION
+    // -------------------------------------------------------------------------
+    match /clients/{clientId} {
+      function isOwnClient() {
+        return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId == clientId;
+      }
+
+      allow read: if isAdmin() || isOwnClient();
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // CASES COLLECTION
+    // -------------------------------------------------------------------------
+    match /cases/{caseId} {
+      function isValidCase(data) {
+        return data.keys().hasAll(['clientId', 'title', 'status']) &&
+               data.clientId is string &&
+               data.title is string && data.title.size() <= 200 &&
+               data.status is string;
+      }
+
+      function belongsToUser() {
+        let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+        return isSignedIn() && (isAdmin() || (userDoc.role == 'client' && resource.data.clientId == userDoc.clientId));
+      }
+
+      allow read: if isAdmin() || belongsToUser();
+      allow create: if isAdmin() && isValidCase(request.resource.data);
+      allow update: if (isAdmin() && isValidCase(request.resource.data)) || 
+                     (belongsToUser() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastUpdate'])); // Example: allow minimal updates if needed
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // CASE SUB-RESOURCES (Events, Docs, Financial, Comms)
+    // -------------------------------------------------------------------------
+    
+    function canAccessCase(caseId) {
+      let caseData = get(/databases/$(database)/documents/cases/$(caseId)).data;
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return isAdmin() || (userDoc.role == 'client' && caseData.clientId == userDoc.clientId);
+    }
+
+    function isVisibleToClient(data) {
+      return data.get('visibleToClient', false) == true;
+    }
+
+    match /caseEvents/{eventId} {
+      allow read: if isAdmin() || (isSignedIn() && canAccessCase(resource.data.caseId) && isVisibleToClient(resource.data));
+      allow write: if isAdmin();
+    }
+
+    match /casePendingTasks/{taskId} {
+      allow read: if isAdmin() || (isSignedIn() && canAccessCase(resource.data.caseId) && isVisibleToClient(resource.data));
+      allow write: if isAdmin();
+    }
+
+    match /caseExplanations/{explId} {
+      allow read: if isAdmin() || (isSignedIn() && canAccessCase(resource.data.caseId) && isVisibleToClient(resource.data));
+      allow write: if isAdmin();
+    }
+
+    match /caseDocuments/{docId} {
+      allow read: if isAdmin() || (isSignedIn() && canAccessCase(resource.data.caseId) && isVisibleToClient(resource.data));
+      allow write: if isAdmin();
+    }
+
+    match /caseFinancials/{finId} {
+      allow read: if isAdmin() || (isSignedIn() && canAccessCase(resource.data.caseId) && isVisibleToClient(resource.data));
+      allow write: if isAdmin();
+    }
+
+    match /caseCommunications/{commId} {
+      allow read: if isAdmin() || (isSignedIn() && canAccessCase(resource.data.caseId) && isVisibleToClient(resource.data));
+      allow create: if isSignedIn() && (isAdmin() || (canAccessCase(request.resource.data.caseId) && request.resource.data.clientId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId));
+      allow update, delete: if isAdmin();
+    }
+  }
+}
