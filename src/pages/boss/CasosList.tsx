@@ -3,8 +3,9 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { collection, query, onSnapshot, orderBy, where, getDocs } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { BossLayout } from '../../components/Layout';
-import { Plus, Search, Filter, ChevronRight, Briefcase, X } from 'lucide-react';
+import { Plus, Search, Filter, ChevronRight, Briefcase, X, ArrowRight } from 'lucide-react';
 import { motion } from 'motion/react';
+import { EDRP_STAGES, getStageLabel, getStageColor, getRegTypeLabel } from '../../utils/edrpHelpers';
 
 export default function BossCasosList() {
   const navigate = useNavigate();
@@ -15,6 +16,7 @@ export default function BossCasosList() {
   const [clients, setClients] = React.useState<Record<string, string>>({});
   const [loading, setLoading] = React.useState(true);
   const [searchTerm, setSearchTerm] = React.useState('');
+  const [selectedStage, setSelectedStage] = React.useState('Todos');
 
   React.useEffect(() => {
     const clientsUnsubscribe = onSnapshot(collection(db, 'clients'), (snapshot) => {
@@ -52,13 +54,18 @@ export default function BossCasosList() {
   const filteredCases = cases.filter(c => {
     const clientName = clients[c.clientId] || '';
     const search = searchTerm.toLowerCase();
-    return (
+
+    const matchesStage = selectedStage === 'Todos' || (c.edrpStage || 'cadastro') === selectedStage;
+
+    const matchesSearch = (
       c.title?.toLowerCase().includes(search) ||
       c.processNumber?.includes(searchTerm) ||
       c.adverseParty?.toLowerCase().includes(search) ||
       clientName.toLowerCase().includes(search) ||
       c.responsibleLawyer?.toLowerCase().includes(search)
     );
+
+    return matchesStage && matchesSearch;
   });
 
   return (
@@ -111,6 +118,33 @@ export default function BossCasosList() {
           </button>
         </div>
 
+        {/* EDRP Stage filter bar */}
+        <div className="bg-white border border-gray-100 p-2.5 rounded-2xl flex items-center gap-2 overflow-x-auto scrollbar-none shadow-sm">
+          <button
+            onClick={() => setSelectedStage('Todos')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors select-none cursor-pointer ${
+              selectedStage === 'Todos'
+                ? 'bg-gray-950 text-white shadow-md'
+                : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
+            }`}
+          >
+            Todos os Casos
+          </button>
+          {EDRP_STAGES.map((stage) => (
+            <button
+              key={stage.id}
+              onClick={() => setSelectedStage(stage.id)}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-colors select-none cursor-pointer ${
+                selectedStage === stage.id
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-100'
+                  : 'bg-gray-50 text-gray-500 hover:bg-gray-100'
+              }`}
+            >
+              {stage.label}
+            </button>
+          ))}
+        </div>
+
         {loading ? (
           <div className="grid grid-cols-1 gap-4">
             {[1, 2, 3].map(i => (
@@ -150,6 +184,18 @@ export default function BossCasosList() {
                     <span>{c.caseType}</span>
                     <span className="w-1 h-1 bg-gray-300 rounded-full" />
                     <span>{c.responsibleLawyer}</span>
+                  </div>
+
+                  {/* EDRP discrete display */}
+                  <div className="flex flex-wrap items-center gap-2 mt-2.5">
+                    <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${getStageColor(c.edrpStage || 'cadastro')}`}>
+                      Esteira: {getStageLabel(c.edrpStage || 'cadastro')}
+                    </span>
+                    {c.registrationType && (
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-gray-50 border border-gray-100 text-gray-600">
+                        {getRegTypeLabel(c.registrationType)}
+                      </span>
+                    )}
                   </div>
                 </div>
 

@@ -3,7 +3,15 @@ import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { collection, addDoc, getDocs, serverTimestamp, query, orderBy } from 'firebase/firestore';
 import { db, OperationType, handleFirestoreError } from '../../lib/firebase';
 import { BossLayout } from '../../components/Layout';
-import { ChevronLeft, Save, Briefcase, User, Info, Scale } from 'lucide-react';
+import { ChevronLeft, Save, Briefcase, User, Info, Scale, ClipboardList, BookOpen, Clock, Settings, FileCheck } from 'lucide-react';
+import { 
+  EDRP_STAGES, 
+  REGISTRATION_TYPES, 
+  REVIEW_STATUSES, 
+  PROTOCOL_STATUSES, 
+  CONTROLADORIA_STATUSES,
+  mapRegTypeToActionCategory 
+} from '../../utils/edrpHelpers';
 
 export default function BossNewCase() {
   const navigate = useNavigate();
@@ -29,6 +37,37 @@ export default function BossNewCase() {
     priority: 'media',
     description: '',
     visibleToClient: true,
+
+    // EDRP expansion attributes
+    edrpStage: 'cadastro',
+    registrationType: 'peticao_inicial',
+    structureNotes: '',
+    delegationResponsible: '',
+    delegationSector: '',
+    delegationTask: '',
+    delegationInternalDeadline: '',
+    schedulingType: '',
+    schedulingDate: '',
+    schedulingTime: '',
+    schedulingNotes: '',
+    reviewResponsible: '',
+    reviewDate: '',
+    reviewStatus: 'aguardando_revisao',
+    reviewNotes: '',
+    protocolScheduleDate: '',
+    protocolResponsible: '',
+    protocolSystem: '',
+    protocolStatus: 'nao_aplicavel',
+    controladoriaStatus: 'nao_enviado',
+    archiveReason: '',
+
+    // Conditional hearing fields
+    audienciaAgendada: false,
+    audienciaData: '',
+    audienciaHora: '',
+    audienciaLocalOuLink: '',
+    audienciaResponsavel: '',
+    audienciaObservacoes: '',
   });
 
   const applyCNJMask = (value: string) => {
@@ -325,6 +364,369 @@ export default function BossNewCase() {
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className={inputClasses}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ESTEIRA EDRP SECTION */}
+          <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-8">
+            <div className="flex items-center gap-3 border-b border-gray-100 pb-5">
+              <ClipboardList className="text-blue-600" size={24} />
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Esteira EDRP - Operacional</h2>
+                <p className="text-xs text-gray-500">Esteira de Desenvolvimento e Registro Processual</p>
+              </div>
+            </div>
+
+            {/* Stage and Registration Type */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50/50 p-6 rounded-2xl border border-gray-100">
+              <div>
+                <label className={labelClasses}>Etapa Atual do EDRP</label>
+                <select
+                  value={formData.edrpStage}
+                  onChange={(e) => setFormData({ ...formData, edrpStage: e.target.value })}
+                  className={inputClasses}
+                >
+                  {EDRP_STAGES.map(stage => (
+                    <option key={stage.id} value={stage.id}>{stage.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className={labelClasses}>Tipo de Cadastro</label>
+                <select
+                  value={formData.registrationType}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    const cat = mapRegTypeToActionCategory(value);
+                    setFormData({ 
+                      ...formData, 
+                      registrationType: value,
+                      actionCategory: cat 
+                    });
+                  }}
+                  className={inputClasses}
+                >
+                  {REGISTRATION_TYPES.map(type => (
+                    <option key={type.id} value={type.id}>{type.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* CONDITIONAL HEARINGS */}
+            {(formData.registrationType === 'processo_judicial_em_andamento' || 
+              formData.registrationType === 'processo_judicial_ajuizado') && (
+              <div className="bg-blue-50/40 p-6 rounded-2xl border border-blue-100/60 space-y-4">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="audienciaAgendada"
+                    checked={formData.audienciaAgendada}
+                    onChange={(e) => setFormData({ ...formData, audienciaAgendada: e.target.checked })}
+                    className="w-5 h-5 rounded border-blue-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="audienciaAgendada" className="text-sm font-bold text-blue-900 cursor-pointer">
+                    Possui Audiência Agendada? (Opcional)
+                  </label>
+                </div>
+
+                {formData.audienciaAgendada && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+                    <div>
+                      <label className="block text-xs font-bold text-blue-900 uppercase tracking-widest mb-1.5">Data da Audiência</label>
+                      <input
+                        type="date"
+                        value={formData.audienciaData}
+                        onChange={(e) => setFormData({ ...formData, audienciaData: e.target.value })}
+                        className={inputClasses}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-blue-900 uppercase tracking-widest mb-1.5">Hora da Audiência</label>
+                      <input
+                        type="time"
+                        value={formData.audienciaHora}
+                        onChange={(e) => setFormData({ ...formData, audienciaHora: e.target.value })}
+                        className={inputClasses}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-blue-900 uppercase tracking-widest mb-1.5">Responsável</label>
+                      <input
+                        type="text"
+                        value={formData.audienciaResponsavel}
+                        onChange={(e) => setFormData({ ...formData, audienciaResponsavel: e.target.value })}
+                        className={inputClasses}
+                        placeholder="Nome do Advogado"
+                      />
+                    </div>
+                    <div className="md:col-span-3">
+                      <label className="block text-xs font-bold text-blue-900 uppercase tracking-widest mb-1.5">Local ou Link Virtual</label>
+                      <input
+                        type="text"
+                        value={formData.audienciaLocalOuLink}
+                        onChange={(e) => setFormData({ ...formData, audienciaLocalOuLink: e.target.value })}
+                        className={inputClasses}
+                        placeholder="Fórum presencial ou link de vídeoconferência (ex: Teams/Zoom)"
+                      />
+                    </div>
+                    <div className="md:col-span-3">
+                      <label className="block text-xs font-bold text-blue-900 uppercase tracking-widest mb-1.5">Observações da Audiência</label>
+                      <textarea
+                        rows={2}
+                        value={formData.audienciaObservacoes}
+                        onChange={(e) => setFormData({ ...formData, audienciaObservacoes: e.target.value })}
+                        className={inputClasses}
+                        placeholder="Orientações e pendências específicas para a audiência..."
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Structure Notes */}
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-xs font-bold text-gray-700 uppercase tracking-wider">
+                <BookOpen size={16} className="text-gray-400" />
+                Notas de Estruturação (Etapa 6 - Estruturação)
+              </label>
+              <textarea
+                rows={3}
+                value={formData.structureNotes}
+                onChange={(e) => setFormData({ ...formData, structureNotes: e.target.value })}
+                className={inputClasses}
+                placeholder="Diretrizes do caso, plano processual, teses a serem aplicadas..."
+              />
+            </div>
+
+            {/* Delegation Fields */}
+            <div className="bg-gray-50/30 p-6 rounded-2xl border border-gray-100 space-y-4">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-widest block border-b border-gray-100 pb-2">
+                Etapa 7 - Delegação de Atividades
+              </span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-1">Responsável Delegado</label>
+                  <input
+                    type="text"
+                    value={formData.delegationResponsible}
+                    onChange={(e) => setFormData({ ...formData, delegationResponsible: e.target.value })}
+                    className={inputClasses}
+                    placeholder="Advogado / Assessor"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-1">Setor Interno</label>
+                  <input
+                    type="text"
+                    value={formData.delegationSector}
+                    onChange={(e) => setFormData({ ...formData, delegationSector: e.target.value })}
+                    className={inputClasses}
+                    placeholder="ex: Cível, Previdenciário"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-1">Prazo Interno</label>
+                  <input
+                    type="date"
+                    value={formData.delegationInternalDeadline}
+                    onChange={(e) => setFormData({ ...formData, delegationInternalDeadline: e.target.value })}
+                    className={inputClasses}
+                  />
+                </div>
+                <div className="md:col-span-3">
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-1">Tarefa Delegada</label>
+                  <textarea
+                    rows={2}
+                    value={formData.delegationTask}
+                    onChange={(e) => setFormData({ ...formData, delegationTask: e.target.value })}
+                    className={inputClasses}
+                    placeholder="Descrição da redação ou providência delegada..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Scheduling Fields */}
+            <div className="bg-gray-50/30 p-6 rounded-2xl border border-gray-100 space-y-4">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-widest block border-b border-gray-100 pb-2">
+                Etapa 8 - Agendamentos do Processo
+              </span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-1">Tipo de Agendamento</label>
+                  <input
+                    type="text"
+                    value={formData.schedulingType}
+                    onChange={(e) => setFormData({ ...formData, schedulingType: e.target.value })}
+                    className={inputClasses}
+                    placeholder="ex: Perícia, Vistoria, Prazo fatal"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-1">Data Agendada</label>
+                  <input
+                    type="date"
+                    value={formData.schedulingDate}
+                    onChange={(e) => setFormData({ ...formData, schedulingDate: e.target.value })}
+                    className={inputClasses}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-1">Hora Agendada</label>
+                  <input
+                    type="time"
+                    value={formData.schedulingTime}
+                    onChange={(e) => setFormData({ ...formData, schedulingTime: e.target.value })}
+                    className={inputClasses}
+                  />
+                </div>
+                <div className="md:col-span-3">
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-1">Observações do Agendamento</label>
+                  <textarea
+                    rows={2}
+                    value={formData.schedulingNotes}
+                    onChange={(e) => setFormData({ ...formData, schedulingNotes: e.target.value })}
+                    className={inputClasses}
+                    placeholder="Pontos de atenção ou link do evento..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Review Fields */}
+            <div className="bg-gray-50/30 p-6 rounded-2xl border border-gray-100 space-y-4">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-widest block border-b border-gray-100 pb-2">
+                Etapa 9 - Controle de Revisão
+              </span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-1">Status de Revisão</label>
+                  <select
+                    value={formData.reviewStatus}
+                    onChange={(e) => setFormData({ ...formData, reviewStatus: e.target.value as any })}
+                    className={inputClasses}
+                  >
+                    {REVIEW_STATUSES.map(status => (
+                      <option key={status.id} value={status.id}>{status.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-1">Revisor Responsável</label>
+                  <input
+                    type="text"
+                    value={formData.reviewResponsible}
+                    onChange={(e) => setFormData({ ...formData, reviewResponsible: e.target.value })}
+                    className={inputClasses}
+                    placeholder="Nome do Revisor"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-1">Data da Revisão</label>
+                  <input
+                    type="date"
+                    value={formData.reviewDate}
+                    onChange={(e) => setFormData({ ...formData, reviewDate: e.target.value })}
+                    className={inputClasses}
+                  />
+                </div>
+                <div className="md:col-span-3">
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-1">Observações da Revisão</label>
+                  <textarea
+                    rows={2}
+                    value={formData.reviewNotes}
+                    onChange={(e) => setFormData({ ...formData, reviewNotes: e.target.value })}
+                    className={inputClasses}
+                    placeholder="Feedbacks, correções necessárias ou ajustes aprovadores..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Protocol fields */}
+            <div className="bg-gray-50/30 p-6 rounded-2xl border border-gray-100 space-y-4">
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-widest block border-b border-gray-100 pb-2">
+                Etapa 10 - Agendamento & Protocolização
+              </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-1">Status de Protocolo</label>
+                  <select
+                    value={formData.protocolStatus}
+                    onChange={(e) => setFormData({ ...formData, protocolStatus: e.target.value as any })}
+                    className={inputClasses}
+                  >
+                    {PROTOCOL_STATUSES.map(status => (
+                      <option key={status.id} value={status.id}>{status.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-1">Data do Protocolo</label>
+                  <input
+                    type="date"
+                    value={formData.protocolScheduleDate}
+                    onChange={(e) => setFormData({ ...formData, protocolScheduleDate: e.target.value })}
+                    className={inputClasses}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-1">Responsável Protocolo</label>
+                  <input
+                    type="text"
+                    value={formData.protocolResponsible}
+                    onChange={(e) => setFormData({ ...formData, protocolResponsible: e.target.value })}
+                    className={inputClasses}
+                    placeholder="Nome"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-widest mb-1">Sistema Judicial</label>
+                  <input
+                    type="text"
+                    value={formData.protocolSystem}
+                    onChange={(e) => setFormData({ ...formData, protocolSystem: e.target.value })}
+                    className={inputClasses}
+                    placeholder="PJe, e-SAJ, Creta"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Controladoria & Arquivamento */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-100">
+              <div>
+                <label className={labelClasses}>
+                  <Settings size={16} className="text-gray-400 inline mr-2 align-text-bottom" />
+                  Status da Controladoria
+                </label>
+                <select
+                  value={formData.controladoriaStatus}
+                  onChange={(e) => setFormData({ ...formData, controladoriaStatus: e.target.value })}
+                  className={inputClasses}
+                >
+                  {CONTROLADORIA_STATUSES.map(status => (
+                    <option key={status.id} value={status.id}>{status.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className={labelClasses}>
+                  <FileCheck size={16} className="text-gray-400 inline mr-2 align-text-bottom" />
+                  Motivo do Arquivamento (Caso Aplicável)
+                </label>
+                <input
+                  type="text"
+                  value={formData.archiveReason}
+                  onChange={(e) => setFormData({ ...formData, archiveReason: e.target.value })}
+                  className={inputClasses}
+                  placeholder="Justificativa técnica de encerramento..."
                 />
               </div>
             </div>

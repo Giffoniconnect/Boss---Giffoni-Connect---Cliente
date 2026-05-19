@@ -10,7 +10,7 @@ interface PendingTask {
   clientId: string;
   title: string;
   description: string;
-  type: 'documento' | 'confirmacao' | 'assinatura' | 'informacao' | 'outro';
+  type: 'documento' | 'confirmacao' | 'assinatura' | 'informacao' | 'prova' | 'outro';
   status: 'pendente' | 'concluido' | 'vencido';
   dueDate: string;
   visibleToClient: boolean;
@@ -174,6 +174,7 @@ export default function CasePendingTasksPanel({ caseId, clientId, isAdmin = fals
                     <option value="confirmacao">Confirmação</option>
                     <option value="assinatura">Assinatura</option>
                     <option value="informacao">Informação</option>
+                    <option value="prova">Prova</option>
                     <option value="outro">Outro</option>
                   </select>
                 </div>

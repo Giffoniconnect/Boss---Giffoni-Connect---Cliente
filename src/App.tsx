@@ -13,6 +13,7 @@ import BossNewCase from './pages/boss/NewCase';
 import BossCaseDetail from './pages/boss/CaseDetail';
 import BossConfiguracoes from './pages/boss/Configuracoes';
 import BossSetores from './pages/boss/Setores';
+import BossEDRP from './pages/boss/EDRP';
 
 import ClientLogin from './pages/client/Login';
 import ClientCasosList from './pages/client/CasosList';
@@ -157,6 +158,16 @@ export default function App() {
               element={
                 <ProtectedRoute role="boss_admin">
                   <BossSetores />
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* Boss EDRP Routes */}
+            <Route 
+              path="/boss-giffoni-clientes/edrp" 
+              element={
+                <ProtectedRoute role="boss_admin">
+                  <BossEDRP />
                 </ProtectedRoute>
               } 
             />

@@ -8,7 +8,7 @@ interface CaseEvent {
   id: string;
   caseId: string;
   clientId: string;
-  type: 'audiencia' | 'pericia' | 'reuniao' | 'prazo' | 'compromisso';
+  type: 'audiencia' | 'pericia' | 'reuniao' | 'prazo' | 'compromisso' | 'revisao' | 'protocolo';
   title: string;
   description: string;
   date: string;
@@ -166,6 +166,8 @@ export default function CaseEventsPanel({ caseId, clientId, isAdmin = false }: P
                     <option value="reuniao">Reunião</option>
                     <option value="prazo">Prazo Processual</option>
                     <option value="compromisso">Compromisso</option>
+                    <option value="revisao">Revisão</option>
+                    <option value="protocolo">Protocolo</option>
                   </select>
                 </div>
                 <div>

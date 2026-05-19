@@ -12,6 +12,7 @@ import CasePendingTasksPanel from '../../modules/cases/components/CasePendingTas
 import CaseExplanationsPanel from '../../modules/cases/components/CaseExplanationsPanel';
 import CaseCommunicationsPanel from '../../modules/cases/components/CaseCommunicationsPanel';
 import CaseFinancialsPanel from '../../modules/cases/components/CaseFinancialsPanel';
+import CaseEDRPPanel from '../../modules/cases/components/CaseEDRPPanel';
 
 export default function BossCaseDetail() {
   const { caseId } = useParams();
@@ -99,6 +100,13 @@ export default function BossCaseDetail() {
               </button>
           </div>
         </div>
+
+        {/* EDRP Operational Pipeline Panel */}
+        <CaseEDRPPanel 
+          caseId={caseId!} 
+          caseData={caseData} 
+          onUpdate={(updated) => setCaseData(updated)} 
+        />
 
         {/* 3-Column Grid as Requested */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, LogOut, ChevronRight, Menu, X, Briefcase, Settings, Building2 } from 'lucide-react';
+import { LayoutDashboard, Users, LogOut, ChevronRight, Menu, X, Briefcase, Settings, Building2, ClipboardList } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -17,6 +17,7 @@ export function BossLayout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { name: 'Clientes', path: '/boss-giffoni-clientes/clientes', icon: Users },
     { name: 'Casos', path: '/boss-giffoni-clientes/casos', icon: Briefcase },
+    { name: 'EDRP', path: '/boss-giffoni-clientes/edrp', icon: ClipboardList },
     { name: 'Setores do Escritório', path: '/boss-giffoni-clientes/setores', icon: Building2 },
     { name: 'Configurações', path: '/boss-giffoni-clientes/configuracoes', icon: Settings },
   ];
