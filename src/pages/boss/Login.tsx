@@ -10,7 +10,7 @@ export default function BossLogin() {
 
   React.useEffect(() => {
     if (user && isAdmin) {
-      navigate('/boss-giffoni-clientes/casos');
+      navigate('/boss-giffoni-clientes/dashboard');
     }
   }, [user, isAdmin, navigate]);
 

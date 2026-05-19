@@ -229,6 +229,16 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["caseId", "clientId", "content", "type"]
+    },
+    "SystemSetting": {
+      "title": "System Setting",
+      "description": "Global settings for portal links and parameters.",
+      "type": "object",
+      "properties": {
+        "link": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["link"]
     }
   },
   "firestore": {
@@ -271,6 +281,10 @@
     "caseCommunications": {
       "schema": "CaseCommunication",
       "description": "Communications for cases."
+    },
+    "settings": {
+      "schema": "SystemSetting",
+      "description": "Global settings parameters."
     }
   }
 }

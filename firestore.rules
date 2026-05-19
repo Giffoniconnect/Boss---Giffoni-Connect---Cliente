@@ -137,5 +137,17 @@ service cloud.firestore {
       allow create: if isSignedIn() && (isAdmin() || (canAccessCase(request.resource.data.caseId) && request.resource.data.clientId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId));
       allow update, delete: if isAdmin();
     }
+
+    // -------------------------------------------------------------------------
+    // SETTINGS COLLECTION
+    // -------------------------------------------------------------------------
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin() && (settingId != 'portal' || (
+        request.resource.data.keys().hasAll(['link']) &&
+        request.resource.data.link is string &&
+        request.resource.data.link.size() <= 2048
+      ));
+    }
   }
 }

@@ -11,6 +11,7 @@ import BossNewClient from './modules/boss/pages/NewClient';
 import BossCasosList from './pages/boss/CasosList';
 import BossNewCase from './pages/boss/NewCase';
 import BossCaseDetail from './pages/boss/CaseDetail';
+import BossConfiguracoes from './pages/boss/Configuracoes';
 
 import ClientLogin from './pages/client/Login';
 import ClientCasosList from './pages/client/CasosList';
@@ -49,7 +50,7 @@ export default function App() {
             
             {/* BOSS Admin Routes */}
             <Route path="/boss-giffoni-clientes/login" element={<BossLogin />} />
-            <Route path="/boss-giffoni-clientes/dashboard" element={<Navigate to="/boss-giffoni-clientes/casos" replace />} />
+            <Route path="/boss-giffoni-clientes/dashboard" element={<Navigate to="/boss-giffoni-clientes/clientes" replace />} />
             <Route 
               path="/boss-giffoni-clientes/casos" 
               element={
@@ -119,6 +120,24 @@ export default function App() {
               element={
                 <ProtectedRoute role="boss_admin">
                   <BossCaseDetail />
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* Boss Configuracoes Routes */}
+            <Route 
+              path="/boss-giffoni-clientes/configuracoes" 
+              element={
+                <ProtectedRoute role="boss_admin">
+                  <BossConfiguracoes />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/boss-giffoni-clientes/configurações" 
+              element={
+                <ProtectedRoute role="boss_admin">
+                  <BossConfiguracoes />
                 </ProtectedRoute>
               } 
             />
