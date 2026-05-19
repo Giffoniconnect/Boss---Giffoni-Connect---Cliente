@@ -14,6 +14,8 @@ import BossCaseDetail from './pages/boss/CaseDetail';
 import BossConfiguracoes from './pages/boss/Configuracoes';
 import BossSetores from './pages/boss/Setores';
 import BossEDRP from './pages/boss/EDRP';
+import FluxoProducao from './pages/boss/FluxoProducao';
+import CentralControle from './pages/boss/CentralControle';
 
 import ClientLogin from './pages/client/Login';
 import ClientCasosList from './pages/client/CasosList';
@@ -168,6 +170,26 @@ export default function App() {
               element={
                 <ProtectedRoute role="boss_admin">
                   <BossEDRP />
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* Boss Fluxo de Produção Routes */}
+            <Route 
+              path="/boss-giffoni-clientes/fluxo-producao" 
+              element={
+                <ProtectedRoute role="boss_admin">
+                  <FluxoProducao />
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* Boss Central de Controle Routes */}
+            <Route 
+              path="/boss-giffoni-clientes/central-controle" 
+              element={
+                <ProtectedRoute role="boss_admin">
+                  <CentralControle />
                 </ProtectedRoute>
               } 
             />
