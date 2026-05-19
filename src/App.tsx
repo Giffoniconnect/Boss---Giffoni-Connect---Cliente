@@ -12,6 +12,7 @@ import BossCasosList from './pages/boss/CasosList';
 import BossNewCase from './pages/boss/NewCase';
 import BossCaseDetail from './pages/boss/CaseDetail';
 import BossConfiguracoes from './pages/boss/Configuracoes';
+import BossSetores from './pages/boss/Setores';
 
 import ClientLogin from './pages/client/Login';
 import ClientCasosList from './pages/client/CasosList';
@@ -138,6 +139,24 @@ export default function App() {
               element={
                 <ProtectedRoute role="boss_admin">
                   <BossConfiguracoes />
+                </ProtectedRoute>
+              } 
+            />
+
+            {/* Boss Setores Routes */}
+            <Route 
+              path="/boss-giffoni-clientes/setores" 
+              element={
+                <ProtectedRoute role="boss_admin">
+                  <BossSetores />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/boss/clientes/setores" 
+              element={
+                <ProtectedRoute role="boss_admin">
+                  <BossSetores />
                 </ProtectedRoute>
               } 
             />
