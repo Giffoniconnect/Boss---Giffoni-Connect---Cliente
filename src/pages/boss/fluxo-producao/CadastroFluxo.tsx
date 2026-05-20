@@ -1,24 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, doc, setDoc, getDoc, getDocs, query, where, addDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, updateDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import FluxoStepLayout from './components/FluxoStepLayout';
+
+// Core dynamic forms
+import { PFForm } from '../../../modules/boss/components/forms/PFForm';
+import { PJForm } from '../../../modules/boss/components/forms/PJForm';
+import { SocioForm } from '../../../modules/boss/components/forms/SocioForm';
+import { AccessForm } from '../../../modules/boss/components/forms/AccessForm';
+import { BankingForm } from '../../../modules/boss/components/forms/BankingForm';
+
 import { 
   UserPlus, 
   Briefcase, 
   Search, 
   ArrowRight, 
   Info, 
-  Users, 
   AlertCircle, 
   CheckCircle2, 
-  RefreshCw,
-  Building2,
+  ShieldAlert, 
+  Loader2,
   ChevronRight,
-  ShieldAlert,
-  Loader2
+  ShieldCheck,
+  Edit2
 } from 'lucide-react';
-import { normalizeCpfCnpj, isValidCpf, isValidCnpj, detectDocumentType } from './utils/documentUtils';
+
+import { normalizeCpfCnpj, isValidCpf, isValidCnpj } from './utils/documentUtils';
 import { generateSafeClientSlug } from './utils/slugUtils';
 import { unifiedSearch, ClientData, getAllClients } from './utils/clientSearch';
 
@@ -31,19 +39,90 @@ export default function CadastroFluxo() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Path 1 — Novo Cliente states
-  const [clientType, setClientType] = useState<'PF' | 'PJ'>('PF');
-  const [pfNome, setPfNome] = useState('');
-  const [pfCpf, setPfCpf] = useState('');
-  const [pfEmail, setPfEmail] = useState('');
-  const [pfTelefone, setPfTelefone] = useState('');
-  const [pfPortalStatus, setPfPortalStatus] = useState<'ativo' | 'inativo'>('ativo');
+  // Editing mode indicator
+  const [editingClientId, setEditingClientId] = useState<string | null>(null);
 
-  const [pjRazao, setPjRazao] = useState('');
-  const [pjCnpj, setPjCnpj] = useState('');
-  const [pjEmail, setPjEmail] = useState('');
-  const [pjTelefone, setPjTelefone] = useState('');
-  const [pjPortalStatus, setPjPortalStatus] = useState<'ativo' | 'inativo'>('ativo');
+  // Client Type
+  const [clientType, setClientType] = useState<'PF' | 'PJ'>('PF');
+
+  // Single Unified Form State
+  const [formData, setFormData] = useState<any>({
+    // pfData
+    pf_nomeCompleto: '',
+    pf_cpf: '',
+    pf_rg: '',
+    pf_orgaoEmissor: '',
+    pf_dataEmissao: '',
+    pf_nascimento: '',
+    pf_nacionalidade: 'Brasileira',
+    pf_estadoCivil: '',
+    pf_profissao: '',
+    pf_telefone: '',
+    pf_whatsapp: '',
+    pf_email: '',
+    pf_cep: '',
+    pf_endereco: '',
+    pf_numero: '',
+    pf_complemento: '',
+    pf_bairro: '',
+    pf_cidade: '',
+    pf_estado: '',
+
+    // pjData
+    pj_razaoSocial: '',
+    pj_nomeFantasia: '',
+    pj_cnpj: '',
+    pj_inscricaoEstadual: '',
+    pj_inscricaoMunicipal: '',
+    pj_emailEmpresa: '',
+    pj_telefoneEmpresa: '',
+    pj_whatsappEmpresa: '',
+    pj_cepEmpresa: '',
+    pj_enderecoEmpresa: '',
+    pj_numeroEmpresa: '',
+    pj_complementoEmpresa: '',
+    pj_bairroEmpresa: '',
+    pj_cidadeEmpresa: '',
+    pj_estadoEmpresa: '',
+
+    // socioData
+    socio_nomeCompleto: '',
+    socio_cpf: '',
+    socio_rg: '',
+    socio_orgaoEmissor: '',
+    socio_dataEmissao: '',
+    socio_nascimento: '',
+    socio_nacionalidade: 'Brasileira',
+    socio_estadoCivil: '',
+    socio_profissao: '',
+    socio_telefone: '',
+    socio_whatsapp: '',
+    socio_email: '',
+    socio_cep: '',
+    socio_endereco: '',
+    socio_numero: '',
+    socio_complemento: '',
+    socio_bairro: '',
+    socio_cidade: '',
+    socio_estado: '',
+
+    // acessoData
+    acesso_emailLogin: '',
+    acesso_statusAcesso: 'pendente',
+    acesso_senha: '',
+    acesso_confirmarSenha: '',
+
+    // bancarioData
+    bancario_possuiDadosBancarios: false,
+    bancario_tipoChavePix: '',
+    bancario_chavePix: '',
+    bancario_titularEhCliente: false,
+    bancario_titularConta: '',
+    bancario_banco: '',
+    bancario_agencia: '',
+    bancario_numeroConta: '',
+    bancario_operacao: '',
+  });
 
   // Duplication management
   const [checkingDuplicity, setCheckingDuplicity] = useState(false);
@@ -56,18 +135,22 @@ export default function CadastroFluxo() {
   const [searching, setSearching] = useState(false);
   const [selectedClientForCase, setSelectedClientForCase] = useState<ClientData | null>(null);
 
-  // Path 3 — Continuar Fluxo states
+  // Path 3 — Continuar states
   const [casesList, setCasesList] = useState<any[]>([]);
   const [filteredCases, setFilteredCases] = useState<any[]>([]);
   const [casesQuery, setCasesQuery] = useState('');
   const [loadingCases, setLoadingCases] = useState(false);
+
+  // Interactive draft warning Modal/Overlay State
+  const [missingModalFields, setMissingModalFields] = useState<string[]>([]);
+  const [showDraftWarningModal, setShowDraftWarningModal] = useState(false);
 
   // Paths descriptions
   const paths = [
     {
       id: 'novo-cliente' as CadastroPath,
       label: 'Novo Cliente',
-      desc: 'Primeiro cadastro do cliente.',
+      desc: 'Cadastro completo ou rascunho.',
       icon: UserPlus
     },
     {
@@ -78,22 +161,27 @@ export default function CadastroFluxo() {
     },
     {
       id: 'continuar' as CadastroPath,
-      label: 'Continuar Fluxo',
+      label: 'Continuar',
       desc: 'Retomar de onde parou.',
       icon: Search
     }
   ];
 
-  // Auto search duplicity for PF CPF or PJ CNPJ
-  const checkDuplicity = async (docValue: string, type: 'PF' | 'PJ') => {
-    const cleanDoc = normalizeCpfCnpj(docValue);
+  // Auto check duplicity for document input
+  const handleDocumentBlur = async () => {
+    const isPf = clientType === 'PF';
+    const rawDoc = isPf ? formData.pf_cpf : formData.pj_cnpj;
+    const cleanDoc = normalizeCpfCnpj(rawDoc);
+
     setFoundDuplicateClient(null);
     setDocValidationError(null);
 
-    if (type === 'PF') {
+    if (!cleanDoc) return;
+
+    if (isPf) {
       if (cleanDoc.length === 11) {
         if (!isValidCpf(cleanDoc)) {
-          setDocValidationError('CPF inválido.');
+          setDocValidationError('CPF informado possui dígitos de validação inválidos.');
           return;
         }
         await performDuplicitySearch(cleanDoc, 'PF');
@@ -101,7 +189,7 @@ export default function CadastroFluxo() {
     } else {
       if (cleanDoc.length === 14) {
         if (!isValidCnpj(cleanDoc)) {
-          setDocValidationError('CNPJ inválido.');
+          setDocValidationError('CNPJ informado possui dígitos de validação inválidos.');
           return;
         }
         await performDuplicitySearch(cleanDoc, 'PJ');
@@ -114,6 +202,8 @@ export default function CadastroFluxo() {
     try {
       const all = await getAllClients();
       const match = all.find(c => {
+        if (editingClientId && c.clientId === editingClientId) return false; // Ignore current edited client
+
         if (type === 'PF' && c.type === 'PF') {
           const docCpf = normalizeCpfCnpj(c.pfDadosPessoais?.pf_cpf || c.pfData?.pf_cpf || '');
           return docCpf === cleanDoc;
@@ -135,19 +225,10 @@ export default function CadastroFluxo() {
     }
   };
 
-  // PF doc change
-  const handlePfCpfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setPfCpf(val);
-    checkDuplicity(val, 'PF');
-  };
-
-  // PJ doc change
-  const handlePjCnpjChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setPjCnpj(val);
-    checkDuplicity(val, 'PJ');
-  };
+  // Run validation whenever doc fields change
+  useEffect(() => {
+    handleDocumentBlur();
+  }, [formData.pf_cpf, formData.pj_cnpj, clientType]);
 
   // Path 2 searches
   const handleClientSearch = async (e: React.FormEvent) => {
@@ -199,7 +280,6 @@ export default function CadastroFluxo() {
         });
       });
 
-      // Filter: status == rascunho OR productionStatus belongs to ['em_producao', 'com_pendencias', 'pausado']
       const filtered = list.filter((c: any) => {
         return c.status === 'rascunho' || ['em_producao', 'com_pendencias', 'pausado'].includes(c.productionStatus);
       });
@@ -233,165 +313,317 @@ export default function CadastroFluxo() {
     setFilteredCases(filtered);
   };
 
-  // Path 1 — Novo Cliente Save
-  const handleSaveNovoCliente = async () => {
+  // Missing Fields calculation
+  const getMissingFields = () => {
+    const missing: string[] = [];
+    if (clientType === 'PF') {
+      if (!formData.pf_nomeCompleto?.trim()) missing.push('Nome Completo');
+      if (!formData.pf_cpf?.trim()) missing.push('CPF');
+      if (!formData.pf_email?.trim()) missing.push('E-mail');
+      if (!formData.pf_telefone?.trim()) missing.push('Telefone');
+      if (!formData.pf_cep?.trim()) missing.push('CEP');
+      if (!formData.pf_endereco?.trim()) missing.push('Endereço');
+    } else {
+      if (!formData.pj_razaoSocial?.trim()) missing.push('Razão Social');
+      if (!formData.pj_cnpj?.trim()) missing.push('CNPJ');
+      if (!formData.pj_emailEmpresa?.trim()) missing.push('E-mail Empresa');
+      if (!formData.pj_telefoneEmpresa?.trim()) missing.push('Telefone Empresa');
+      if (!formData.pj_cepEmpresa?.trim()) missing.push('CEP Empresa');
+      if (!formData.pj_enderecoEmpresa?.trim()) missing.push('Endereço Empresa');
+      
+      if (!formData.socio_nomeCompleto?.trim()) missing.push('Nome do Sócio');
+      if (!formData.socio_cpf?.trim()) missing.push('CPF do Sócio');
+    }
+
+    if (!formData.acesso_emailLogin?.trim()) missing.push('E-mail Login');
+    if (!formData.acesso_senha?.trim()) missing.push('Senha de Acesso');
+    if (!formData.acesso_confirmarSenha?.trim()) missing.push('Confirmar Senha');
+
+    return missing;
+  };
+
+  const checkPortalSetupReady = () => {
+    const isPf = clientType === 'PF';
+    const docValue = isPf ? normalizeCpfCnpj(formData.pf_cpf) : normalizeCpfCnpj(formData.pj_cnpj);
+    
+    let isDocValid = false;
+    if (isPf && docValue.length === 11 && isValidCpf(docValue)) isDocValid = true;
+    if (!isPf && docValue.length === 14 && isValidCnpj(docValue)) isDocValid = true;
+
+    const hasEmail = formData.acesso_emailLogin && formData.acesso_emailLogin.trim() !== '';
+    const hasSenha = formData.acesso_senha && formData.acesso_senha.trim().length >= 6;
+    const isMatch = formData.acesso_senha === formData.acesso_confirmarSenha;
+
+    return isDocValid && hasEmail && hasSenha && isMatch;
+  };
+
+  // Unified dynamic block separators
+  const getCategorizedBlocks = () => {
+    const pfBlock: any = {};
+    const pjBlock: any = {};
+    const socioBlock: any = {};
+    const acessoBlock: any = {};
+    const bancarioBlock: any = {};
+
+    Object.keys(formData).forEach(key => {
+      if (key.startsWith('pf_')) pfBlock[key] = formData[key];
+      else if (key.startsWith('pj_')) pjBlock[key] = formData[key];
+      else if (key.startsWith('socio_')) socioBlock[key] = formData[key];
+      else if (key.startsWith('acesso_')) acessoBlock[key] = formData[key];
+      else if (key.startsWith('bancario_')) {
+        bancarioBlock[key] = formData[key];
+      }
+    });
+
+    return { pfBlock, pjBlock, socioBlock, acessoBlock, bancarioBlock };
+  };
+
+  // Button Action A — Salvar como Rascunho Interno (Incompleto)
+  const handleSaveInternalDraft = async (overridePrompt = false) => {
     setError(null);
     setSuccess(null);
 
     const isPf = clientType === 'PF';
-    const name = isPf ? pfNome.trim() : pjRazao.trim();
-    const email = isPf ? pfEmail.trim() : pjEmail.trim();
-    const docCode = isPf ? normalizeCpfCnpj(pfCpf) : normalizeCpfCnpj(pjCnpj);
-    const phone = isPf ? pfTelefone.trim() : pjTelefone.trim();
-    const portalStatus = isPf ? pfPortalStatus : pjPortalStatus;
+    const mainName = isPf ? formData.pf_nomeCompleto?.trim() : formData.pj_razaoSocial?.trim();
 
-    if (!name) {
-      setError(isPf ? 'Por favor, informe o Nome Completo.' : 'Por favor, informe a Razão Social.');
-      return;
-    }
-    if (!docCode) {
-      setError(isPf ? 'Por favor, informe o CPF.' : 'Por favor, informe o CNPJ.');
-      return;
-    }
-    if (isPf && !isValidCpf(docCode)) {
-      setError('O CPF informado é inválido.');
-      return;
-    }
-    if (!isPf && !isValidCnpj(docCode)) {
-      setError('O CNPJ informado é inválido.');
-      return;
-    }
-    if (!email) {
-      setError('Por favor, informe o e-mail de contato cadastral.');
-      return;
-    }
-    if (!phone) {
-      setError('Por favor, informe o telefone/WhatsApp.');
+    if (!mainName) {
+      setError(isPf ? 'Por favor, informe pelo menos o Nome Completo para salvar rascunho.' : 'Por favor, informe pelo menos a Razão Social para salvar rascunho.');
       return;
     }
 
-    if (foundDuplicateClient) {
-      setError('O CPF/CNPJ digitado já encontra-se vinculado a outro cliente existente. Operação bloqueada.');
+    const missing = getMissingFields();
+    if (missing.length > 0 && !overridePrompt) {
+      setMissingModalFields(missing);
+      setShowDraftWarningModal(true);
       return;
     }
 
+    setShowDraftWarningModal(false);
     setLoading(true);
+
     try {
-      // 1. Generate safe slug
-      const clientSlug = generateSafeClientSlug(name, clientType, docCode);
-
-      // Verify if clientPortals/{slug} document already exists
-      const portalDocSnap = await getDoc(doc(db, 'clientPortals', clientSlug));
-      if (portalDocSnap.exists()) {
-        setError('Slug já existente. Revise o cadastro antes de prosseguir.');
-        setLoading(false);
-        return;
-      }
-
-      // 2. Generate new absolute clientId
-      const clientsCollect = collection(db, 'clients');
-      const newClientDocRef = doc(clientsCollect);
-      const generatedClientId = newClientDocRef.id;
-
       const rightNow = new Date().toISOString();
+      const targetId = editingClientId || doc(collection(db, 'clients')).id;
 
-      // Structure of clients document
-      const clientPayload: any = {
-        clientId: generatedClientId,
+      const { pfBlock, pjBlock, socioBlock, acessoBlock, bancarioBlock } = getCategorizedBlocks();
+
+      const payload: any = {
+        clientId: targetId,
         type: clientType,
-        active: true,
-        slug: clientSlug,
+        active: false,
+        portalStatus: 'nao_criado',
+        cadastroIncompleto: true,
+        missingFields: missing,
         createdAt: rightNow,
         updatedAt: rightNow,
+        pfData: pfBlock,
+        pfDadosPessoais: pfBlock,
+        pjData: pjBlock,
+        pjDadosEmpresa: pjBlock,
+        socioData: socioBlock,
+        socioDadosPessoais: socioBlock,
+        bancarioData: bancarioBlock,
+        bancarioDadosBancarios: bancarioBlock,
         acessoSistema: {
-          acesso_statusAcesso: portalStatus,
-          acesso_emailLogin: email
+          acesso_emailLogin: formData.acesso_emailLogin || '',
+          acesso_statusAcesso: formData.acesso_statusAcesso || 'pendente'
         }
       };
 
-      if (isPf) {
-        const pfBlock = {
-          pf_nomeCompleto: name,
-          pf_cpf: docCode,
-          pf_email: email,
-          pf_telefone: phone,
-          pf_whatsapp: phone
-        };
-        clientPayload.pfData = pfBlock;
-        clientPayload.pfDadosPessoais = pfBlock;
-      } else {
-        const pjBlock = {
-          pj_razaoSocial: name,
-          pj_cnpj: docCode,
-          pj_emailEmpresa: email,
-          pj_telefoneEmpresa: phone,
-          pj_whatsappEmpresa: phone
-        };
-        clientPayload.pjData = pjBlock;
-        clientPayload.pjDadosEmpresa = pjBlock;
+      // If we are editing and slug already exists, keep it
+      if (editingClientId) {
+        const docSnap = await getDoc(doc(db, 'clients', editingClientId));
+        if (docSnap.exists()) {
+          const prev = docSnap.data();
+          payload.createdAt = prev.createdAt || rightNow;
+          if (prev.slug) payload.slug = prev.slug;
+          if (prev.senhaVisivelPreview) payload.senhaVisivelPreview = prev.senhaVisivelPreview;
+          if (prev.portalStatus) payload.portalStatus = prev.portalStatus;
+          if (prev.active !== undefined) payload.active = prev.active;
+        }
       }
 
-      // Write to FB (clients)
-      await setDoc(newClientDocRef, clientPayload);
+      await setDoc(doc(db, 'clients', targetId), payload);
 
-      // Write clientPortals mapping
-      await setDoc(doc(db, 'clientPortals', clientSlug), {
-        clientId: generatedClientId,
-        slug: clientSlug,
-        active: portalStatus === "ativo",
-        createdAt: rightNow,
-        updatedAt: rightNow
-      });
-
-      // Write users registry
-      await setDoc(doc(db, 'users', generatedClientId), {
-        email: email,
-        role: "client",
-        clientId: generatedClientId,
-        clientSlug: clientSlug,
-        name: name,
-        status: portalStatus,
-        createdAt: rightNow
-      });
-
-      // Write users invites registry
-      await setDoc(doc(db, 'users_invites', generatedClientId), {
-        email: email,
-        role: "client",
-        clientId: generatedClientId,
-        clientSlug: clientSlug,
-        status: "pending",
-        invitedAt: rightNow
-      });
-
-      setSuccess('Cadastro cadastral prévio concluído com sucesso total!');
-      
-      // Redirect to /boss-giffoni-clientes/fluxo-producao/tipo-producao?clientId={generatedClientId}
-      navigate(`/boss-giffoni-clientes/fluxo-producao/tipo-producao?clientId=${generatedClientId}`);
+      setSuccess('Salvo como Rascunho Interno Incompleto com sucesso!');
+      setTimeout(() => {
+        navigate(`/boss-giffoni-clientes/fluxo-producao/tipo-producao?clientId=${targetId}`);
+      }, 1000);
 
     } catch (err: any) {
       console.error(err);
-      setError(`Erro ao tentar salvar novo cliente: ${err.message || err}`);
+      setError(`Erro ao salvar rascunho interno: ${err.message || err}`);
     } finally {
       setLoading(false);
     }
   };
 
-  // Path 2 — Novo Caso Save / Advance
+  // Button Action B — Criar Portal do Cliente
+  const handleCreateCustomerPortal = async () => {
+    setError(null);
+    setSuccess(null);
+
+    const isPf = clientType === 'PF';
+    const mainName = isPf ? formData.pf_nomeCompleto?.trim() : formData.pj_razaoSocial?.trim();
+    const docValue = isPf ? normalizeCpfCnpj(formData.pf_cpf) : normalizeCpfCnpj(formData.pj_cnpj);
+
+    if (!mainName) {
+      setError(isPf ? 'Preencha o Nome Completo antes de criar o Portal.' : 'Preencha a Razão Social antes de criar o Portal.');
+      return;
+    }
+
+    if (!checkPortalSetupReady()) {
+      setError('Campos mandatórios para criação do Portal estão ausentes ou inválidos. (Verifique CPF/CNPJ, Login, Senha idênticos de 6 dígitos).');
+      return;
+    }
+
+    if (foundDuplicateClient) {
+      setError('Documento já cadastrado em duplicidade na base. Ajuste o documento de acesso.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const slug = generateSafeClientSlug(mainName, clientType, docValue);
+
+      // Verify if clientPortals/{slug} already exists
+      const portalSnap = await getDoc(doc(db, 'clientPortals', slug));
+      if (portalSnap.exists() && (!editingClientId || portalSnap.data().clientId !== editingClientId)) {
+        setError(`O slug sugerido [/${slug}] já está em uso por outro cliente. Altere levemente o nome do cliente.`);
+        setLoading(false);
+        return;
+      }
+
+      const rightNow = new Date().toISOString();
+      const targetId = editingClientId || doc(collection(db, 'clients')).id;
+
+      const { pfBlock, pjBlock, socioBlock, acessoBlock, bancarioBlock } = getCategorizedBlocks();
+
+      const payload: any = {
+        clientId: targetId,
+        type: clientType,
+        active: formData.acesso_statusAcesso === 'ativo',
+        portalStatus: 'criado',
+        cadastroIncompleto: false,
+        missingFields: [],
+        slug: slug,
+        senhaVisivelPreview: formData.acesso_senha,
+        avisoSegurancaSenha: true,
+        createdAt: rightNow,
+        updatedAt: rightNow,
+        pfData: pfBlock,
+        pfDadosPessoais: pfBlock,
+        pjData: pjBlock,
+        pjDadosEmpresa: pjBlock,
+        socioData: socioBlock,
+        socioDadosPessoais: socioBlock,
+        bancarioData: bancarioBlock,
+        bancarioDadosBancarios: bancarioBlock,
+        acessoSistema: {
+          acesso_emailLogin: formData.acesso_emailLogin,
+          acesso_statusAcesso: formData.acesso_statusAcesso,
+          acesso_senha: formData.acesso_senha
+        }
+      };
+
+      if (editingClientId) {
+        const docSnap = await getDoc(doc(db, 'clients', editingClientId));
+        if (docSnap.exists()) {
+          payload.createdAt = docSnap.data().createdAt || rightNow;
+        }
+      }
+
+      // 1. Save main clients document
+      await setDoc(doc(db, 'clients', targetId), payload);
+
+      // 2. Save clientPortals registry mapping
+      await setDoc(doc(db, 'clientPortals', slug), {
+        clientId: targetId,
+        slug: slug,
+        active: formData.acesso_statusAcesso === 'ativo',
+        createdAt: rightNow,
+        updatedAt: rightNow
+      });
+
+      // 3. Save to users collection
+      await setDoc(doc(db, 'users', targetId), {
+        email: formData.acesso_emailLogin,
+        role: "client",
+        clientId: targetId,
+        clientSlug: slug,
+        name: mainName,
+        status: formData.acesso_statusAcesso,
+        senhaVisivelPreview: formData.acesso_senha,
+        createdAt: rightNow
+      });
+
+      // 4. Save to users_invites collection
+      await setDoc(doc(db, 'users_invites', targetId), {
+        email: formData.acesso_emailLogin,
+        role: 'client',
+        clientId: targetId,
+        clientSlug: slug,
+        status: 'pending',
+        invitedAt: rightNow
+      });
+
+      setSuccess(`Portal do cliente [/${slug}] criado e liberado com sucesso em modo preview!`);
+      setTimeout(() => {
+        navigate(`/boss-giffoni-clientes/fluxo-producao/tipo-producao?clientId=${targetId}`);
+      }, 1000);
+
+    } catch (err: any) {
+      console.error(err);
+      setError(`Erro ao criar ecossistema de portal do cliente: ${err.message || err}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Switch Selected Client into editing draft mode
+  const handleLoadClientForEditing = (client: any) => {
+    setEditingClientId(client.clientId);
+
+    // Reconstruct fields mapping
+    const pfData = client.pfData || client.pfDadosPessoais || {};
+    const pjData = client.pjData || client.pjDadosEmpresa || {};
+    const socioData = client.socioData || client.socioDadosPessoais || {};
+    const access = client.acessoSistema || {};
+    const banking = client.bancarioData || client.bancarioDadosBancarios || {};
+
+    setClientType(client.type as 'PF' | 'PJ');
+    setFormData({
+      ...pfData,
+      ...pjData,
+      ...socioData,
+      
+      // Access values override
+      acesso_emailLogin: access.acesso_emailLogin || client.email || '',
+      acesso_statusAcesso: access.acesso_statusAcesso || 'pendente',
+      acesso_senha: access.acesso_senha || client.senhaVisivelPreview || '',
+      acesso_confirmarSenha: access.acesso_senha || client.senhaVisivelPreview || '',
+
+      // Banking values
+      ...banking
+    });
+
+    setSelectedPath('novo-cliente');
+    setSuccess('Carregado cadastro de cliente para edição técnica.');
+  };
+
+  // Save selected path for existing case and proceed
   const handleSaveNovoCaso = () => {
     if (!selectedClientForCase) {
-      setError('Por favor, selecione um cliente existente na lista.');
+      setError('Por favor, selecione um cliente existente na lista para vincular.');
       return;
     }
     const cId = selectedClientForCase.clientId;
     navigate(`/boss-giffoni-clientes/fluxo-producao/tipo-producao?clientId=${cId}`);
   };
 
-  // Stage routing redirect for Path 3
   const handleContinueCase = (c: any) => {
     const routeStage = c.productionStage || 'dados-caso';
     
-    // Clean stage mapping
     let pagePath = 'dados-caso';
     const s = routeStage.toLowerCase();
     if (s === 'dados-caso' || s === 'dadoscaso') pagePath = 'dados-caso';
@@ -408,8 +640,51 @@ export default function CadastroFluxo() {
   };
 
   return (
-    <FluxoStepLayout stepName="Cadastro Geral" statusText="Fase Ativa">
-      <div className="space-y-8">
+    <FluxoStepLayout stepName="Cadastro Geral" statusText="Cadastro de Cliente">
+      <div className="space-y-8 relative">
+        
+        {/* Warning missing fields Modal */}
+        {showDraftWarningModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex gap-3 items-start text-amber-600 mb-4">
+                <AlertCircle size={22} className="shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-extrabold text-gray-950">Faltam informações importantes!</h4>
+                  <p className="text-[11px] text-gray-500 mt-1">O preenchimento não está completo. Deseja arquivar provisoriamente como rascunho de cliente interno mesmo assim?</p>
+                </div>
+              </div>
+
+              <div className="bg-amber-50/50 rounded-2xl p-4 border border-amber-100 text-[10.5px] max-h-[160px] overflow-y-auto space-y-1">
+                <span className="font-bold text-amber-850 block mb-1">Campos ausentes identificados:</span>
+                {missingModalFields.map((f, idx) => (
+                  <div key={idx} className="flex items-center gap-1 text-amber-800">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                    <span>{f}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end gap-2 mt-6 border-t border-gray-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowDraftWarningModal(false)}
+                  className="px-4 py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold rounded-xl text-xs transition-all"
+                >
+                  Cancelar e Ajustar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveInternalDraft(true)}
+                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs transition-all flex items-center gap-1 shadow-sm"
+                >
+                  <span>Sim, Salvar como Rascunho</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div>
           <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">Qual é o caminho desejado?</h3>
           <p className="text-xs text-gray-500 mt-1">
@@ -417,7 +692,7 @@ export default function CadastroFluxo() {
           </p>
         </div>
 
-        {/* Path Grid Selection */}
+        {/* Path Picker Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {paths.map((p) => {
             const Icon = p.icon;
@@ -453,7 +728,6 @@ export default function CadastroFluxo() {
           })}
         </div>
 
-        {/* ERRORS & SUCCESS MESSAGES */}
         {error && (
           <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-900 text-xs flex gap-3 items-center">
             <AlertCircle size={16} className="text-red-500 shrink-0" />
@@ -468,15 +742,20 @@ export default function CadastroFluxo() {
           </div>
         )}
 
-        {/* PATH VIEWS */}
-        
         {/* PATH 1 — NOVO CLIENTE */}
         {selectedPath === 'novo-cliente' && (
-          <div className="space-y-6">
+          <div className="space-y-8">
             <div className="border border-gray-150 rounded-2xl bg-white p-6 space-y-6">
               <div className="flex justify-between items-center border-b border-gray-100 pb-4">
-                <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono">Ficha de Identificação Cadastral</h4>
-                <div className="flex bg-gray-100 p-0.5 rounded-lg">
+                <div>
+                  <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono">Ficha de Identificação Cadastral Completa</h4>
+                  {editingClientId && (
+                    <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-100 rounded mt-1">
+                      <Edit2 size={10} /> Editando Cliente (ID: {editingClientId})
+                    </span>
+                  )}
+                </div>
+                <div className="flex bg-gray-100 p-0.5 rounded-lg shrink-0">
                   <button
                     type="button"
                     onClick={() => {
@@ -484,7 +763,7 @@ export default function CadastroFluxo() {
                       setFoundDuplicateClient(null);
                       setDocValidationError(null);
                     }}
-                    className={`px-3 py-1 text-[10px] font-bold rounded-md ${
+                    className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${
                       clientType === 'PF' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
                     }`}
                   >
@@ -497,7 +776,7 @@ export default function CadastroFluxo() {
                       setFoundDuplicateClient(null);
                       setDocValidationError(null);
                     }}
-                    className={`px-3 py-1 text-[10px] font-bold rounded-md ${
+                    className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${
                       clientType === 'PJ' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
                     }`}
                   >
@@ -506,154 +785,46 @@ export default function CadastroFluxo() {
                 </div>
               </div>
 
-              {clientType === 'PF' ? (
-                /* PF FORM FIELDS */
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="col-span-1 sm:col-span-2">
-                    <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Nome Completo *</label>
-                    <input
-                      type="text"
-                      value={pfNome}
-                      onChange={(e) => setPfNome(e.target.value)}
-                      placeholder="Nome completo sem abreviações"
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl font-medium text-xs text-gray-800 transition-all outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">CPF *</label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={pfCpf}
-                        onChange={handlePfCpfChange}
-                        placeholder="Ex: 12345678900 (apenas números)"
-                        className={`w-full px-4 py-3 bg-gray-50 border focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl font-medium text-xs text-gray-800 transition-all outline-none ${
-                          docValidationError ? 'border-red-300' : 'border-gray-200'
-                        }`}
-                      />
-                      {checkingDuplicity && (
-                        <div className="absolute right-3 top-3.5">
-                          <Loader2 size={14} className="text-gray-400 animate-spin" />
-                        </div>
-                      )}
+              {/* Dynamic Sub-form inclusion */}
+              <div className="space-y-8 animate-in fade-in duration-300">
+                {clientType === 'PF' ? (
+                  <PFForm data={formData} onChange={(d) => setFormData(d)} />
+                ) : (
+                  <div className="space-y-8">
+                    <PJForm data={formData} onChange={(d) => setFormData(d)} />
+                    
+                    <div className="border-t border-gray-100 pt-6">
+                      <h4 className="text-xs font-black uppercase text-gray-400 tracking-wider mb-4 font-mono">Quadro de Sócios / Representante do CNPJ</h4>
+                      <SocioForm data={formData} onChange={(d) => setFormData(d)} />
                     </div>
-                    {docValidationError && (
-                      <p className="text-[10px] text-red-500 font-bold mt-1">{docValidationError}</p>
-                    )}
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">E-mail *</label>
-                    <input
-                      type="email"
-                      value={pfEmail}
-                      onChange={(e) => setPfEmail(e.target.value)}
-                      placeholder="exemplo@email.com"
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl font-medium text-xs text-gray-800 transition-all outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Telefone / WhatsApp *</label>
-                    <input
-                      type="text"
-                      value={pfTelefone}
-                      onChange={(e) => setPfTelefone(e.target.value)}
-                      placeholder="81999998888"
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl font-medium text-xs text-gray-800 transition-all outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Status de Acesso ao Portal *</label>
-                    <select
-                      value={pfPortalStatus}
-                      onChange={(e) => setPfPortalStatus(e.target.value as 'ativo' | 'inativo')}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl font-semibold text-xs text-gray-800 transition-all outline-none cursor-pointer"
-                    >
-                      <option value="ativo">Ativo (Permitir convite de login)</option>
-                      <option value="inativo">Inativo (Bloquear portal temporariamente)</option>
-                    </select>
-                  </div>
+                )}
+
+                <div className="border-t border-gray-100 pt-6">
+                  <AccessForm data={formData} onChange={(d) => setFormData(d)} />
                 </div>
-              ) : (
-                /* PJ FORM FIELDS */
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="col-span-1 sm:col-span-2">
-                    <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Razão Social *</label>
-                    <input
-                      type="text"
-                      value={pjRazao}
-                      onChange={(e) => setPjRazao(e.target.value)}
-                      placeholder="Razão social completa"
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl font-medium text-xs text-gray-800 transition-all outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">CNPJ *</label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={pjCnpj}
-                        onChange={handlePjCnpjChange}
-                        placeholder="Ex: 12345678000100 (apenas números)"
-                        className={`w-full px-4 py-3 bg-gray-50 border focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl font-medium text-xs text-gray-800 transition-all outline-none ${
-                          docValidationError ? 'border-red-300' : 'border-gray-200'
-                        }`}
-                      />
-                      {checkingDuplicity && (
-                        <div className="absolute right-3 top-3.5">
-                          <Loader2 size={14} className="text-gray-400 animate-spin" />
-                        </div>
-                      )}
-                    </div>
-                    {docValidationError && (
-                      <p className="text-[10px] text-red-500 font-bold mt-1">{docValidationError}</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">E-mail *</label>
-                    <input
-                      type="email"
-                      value={pjEmail}
-                      onChange={(e) => setPjEmail(e.target.value)}
-                      placeholder="financeiro@empresa.com"
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl font-medium text-xs text-gray-800 transition-all outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Telefone / WhatsApp *</label>
-                    <input
-                      type="text"
-                      value={pjTelefone}
-                      onChange={(e) => setPjTelefone(e.target.value)}
-                      placeholder="8133334444"
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl font-medium text-xs text-gray-800 transition-all outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400 mb-1">Status de Acesso ao Portal *</label>
-                    <select
-                      value={pjPortalStatus}
-                      onChange={(e) => setPjPortalStatus(e.target.value as 'ativo' | 'inativo')}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl font-semibold text-xs text-gray-800 transition-all outline-none cursor-pointer"
-                    >
-                      <option value="ativo">Ativo (Permitir convite de login)</option>
-                      <option value="inativo">Inativo (Bloquear portal temporariamente)</option>
-                    </select>
-                  </div>
+
+                <div className="border-t border-gray-100 pt-6">
+                  <BankingForm 
+                    data={formData} 
+                    onChange={(d) => setFormData(d)} 
+                    clientName={clientType === 'PF' ? (formData.pf_nomeCompleto || '') : (formData.pj_razaoSocial || '')}
+                  />
                 </div>
-              )}
+              </div>
             </div>
 
-            {/* DUPLICITY MATCH ALREADY EXISTS WARNING */}
+            {/* DUPLICITY MATCH WARNING ALERT */}
             {foundDuplicateClient && (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 space-y-4 text-amber-900 animate-fadeIn">
+              <div className="bg-amber-50 border border-amber-250 rounded-2xl p-5 space-y-4 text-amber-950 animate-fadeIn">
                 <div className="flex gap-3 items-start">
                   <ShieldAlert size={18} className="text-amber-600 shrink-0 mt-0.5" />
                   <div className="space-y-1">
-                    <h5 className="text-xs font-black uppercase tracking-wider font-sans">Atenção: Duplicidade Encontrada!</h5>
+                    <h5 className="text-xs font-black uppercase tracking-wider font-sans">Alerta Técnico: Documento já cadastrado!</h5>
                     <p className="text-xs leading-relaxed font-semibold">
-                      O CPF/CNPJ digitado já existe na base corporativa. O processo de criação de um novo cadastro foi bloqueado para manter integridade dos dados.
+                      O CPF/CNPJ digitado já existe no banco de dados. Caso deseje criar um processo vinculado, use o caminho &quot;Novo Caso&quot;.
                     </p>
-                    <div className="pt-3 font-mono text-[10px] space-y-0.5 text-amber-800">
+                    <div className="pt-3 font-mono text-[10px] space-y-0.5 text-amber-900">
                       <div><span className="font-bold">Cliente:</span> {
                         foundDuplicateClient.type === 'PF' 
                           ? (foundDuplicateClient.pfDadosPessoais?.pf_nomeCompleto || foundDuplicateClient.pfData?.pf_nomeCompleto)
@@ -676,34 +847,52 @@ export default function CadastroFluxo() {
                     onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/tipo-producao?clientId=${foundDuplicateClient.clientId}`)}
                     className="inline-flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm"
                   >
-                    <span>Criar novo caso para este cliente</span>
+                    <span>Criar novo caso para esse cliente</span>
                     <ArrowRight size={13} />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* ACTION FOOTER */}
-            <div className="flex sm:justify-end border-t border-gray-100 pt-6">
+            {/* ACTION DUAL FOOTER BUTTONS */}
+            <div className="flex flex-col sm:flex-row sm:justify-end gap-3 border-t border-gray-150 pt-6">
               <button
                 type="button"
-                disabled={loading || foundDuplicateClient !== null}
-                onClick={handleSaveNovoCliente}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white px-8 py-3.5 rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md text-xs cursor-pointer"
+                disabled={loading}
+                onClick={() => handleSaveInternalDraft(false)}
+                className="inline-flex items-center justify-center gap-2 bg-white border border-gray-250 hover:bg-gray-50 text-gray-800 px-6 py-3.5 rounded-xl font-bold transition-all disabled:opacity-50 text-xs shadow-3xs cursor-pointer"
+              >
+                {loading ? <Loader2 size={13} className="animate-spin" /> : null}
+                <span>Salvar como Rascunho Interno (Incompleto)</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={loading || foundDuplicateClient !== null || !checkPortalSetupReady()}
+                onClick={handleCreateCustomerPortal}
+                className="inline-flex items-center justify-center gap-2 bg-gray-950 hover:bg-black text-white px-8 py-3.5 rounded-xl font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-md text-xs cursor-pointer"
               >
                 {loading ? (
                   <>
                     <Loader2 size={14} className="animate-spin" />
-                    <span>Salvando Cliente...</span>
+                    <span>Processando...</span>
                   </>
                 ) : (
                   <>
-                    <span>Adicionar Cliente e Prosseguir</span>
+                    <ShieldCheck size={14} />
+                    <span>Criar Portal do Cliente e Prosseguir</span>
                     <ArrowRight size={14} />
                   </>
                 )}
               </button>
             </div>
+            
+            {/* INHERENT PORTAL REQUIREMENT HELPER */}
+            {!checkPortalSetupReady() && (
+              <p className="text-[10px] text-gray-400 font-medium text-right mt-1 leading-normal italic">
+                * Para liberar a criação do Portal do Cliente, preencha: CPF/CNPJ válido, Login, Senha idênticos de 6 dígitos e Status de acesso.
+              </p>
+            )}
           </div>
         )}
 
@@ -714,7 +903,7 @@ export default function CadastroFluxo() {
               <div>
                 <h4 className="text-xs font-black uppercase text-gray-700 tracking-wider font-sans">Pesquisa na Base de Clientes</h4>
                 <p className="text-[10px] text-gray-400 leading-relaxed mt-1">
-                  Encontre um cliente já integrado ao Giffoni Connect para criar uma nova ordem processual sob a mesma titularidade.
+                  Encontre um cliente já cadastrado no Giffoni Connect para criar uma nova ordem processual sob a mesma titularidade.
                 </p>
               </div>
 
@@ -723,7 +912,7 @@ export default function CadastroFluxo() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Pesquisar por CPF, CNPJ, nome completo, e-mail, telefone, slug..."
+                  placeholder="Pesquisar por CPF, CNPJ, nome, e-mail, telefone ou slug..."
                   className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl focus:ring-1 focus:ring-gray-950 placeholder:text-gray-450 transition-all font-medium text-xs text-gray-800 outline-none"
                 />
                 <button
@@ -747,7 +936,7 @@ export default function CadastroFluxo() {
             {searchResults.length > 0 && (
               <div className="bg-white border border-gray-150 rounded-2xl overflow-hidden shadow-sm">
                 <div className="p-4 bg-gray-50 border-b border-gray-150 text-[10px] font-bold text-gray-500 uppercase tracking-widest font-mono">
-                  Resultados da Busca Correspondendo a Termos fáticos
+                  Clientes Encontrados
                 </div>
                 <div className="divide-y divide-gray-100 max-h-[300px] overflow-y-auto">
                   {searchResults.map((client) => {
@@ -783,7 +972,7 @@ export default function CadastroFluxo() {
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-gray-400 font-bold">{client.slug}</span>
+                          <span className="text-[10px] text-gray-450 font-semibold">/{client.slug || 'sem-slug'}</span>
                           <ChevronRight size={14} className="text-gray-300" />
                         </div>
                       </button>
@@ -793,29 +982,86 @@ export default function CadastroFluxo() {
               </div>
             )}
 
+            {/* DETAILED RESUME CARD OF THE SELECTED CLIENT */}
+            {selectedClientForCase && (
+              <div className="bg-gray-50 border border-gray-150 rounded-2xl p-5 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+                  <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono">Resumo Cadastral do Cliente Selecionado</h4>
+                  <button
+                    type="button"
+                    onClick={() => handleLoadClientForEditing(selectedClientForCase)}
+                    className="inline-flex items-center gap-1 text-[10px] font-black uppercase bg-white border border-gray-200 hover:border-gray-400 text-gray-700 px-3 py-1.5 rounded-lg transition-all cursor-pointer"
+                  >
+                    <Edit2 size={10} />
+                    <span>Editar cadastro antes de continuar</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-400 block">Tipo de Inquilino:</span>
+                    <span className="font-extrabold text-gray-800 uppercase font-mono">{selectedClientForCase.type}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-400 block">Status de Acesso ao Portal:</span>
+                    <span className={`inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider mt-0.5 ${
+                      selectedClientForCase.portalStatus === 'criado' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                    }`}>
+                      {selectedClientForCase.portalStatus || 'nao_criado'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-400 block">Status de Ativação Geral:</span>
+                    <span className={`inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider mt-0.5 ${
+                      selectedClientForCase.active !== false ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                    }`}>
+                      {selectedClientForCase.active !== false ? 'Ativo' : 'Suspenso / Inativo'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-400 block">Slug do Portal:</span>
+                    <span className="font-bold text-indigo-650 font-mono block">/{selectedClientForCase.slug || 'ausente'}</span>
+                  </div>
+                </div>
+
+                {/* Warning message if client has no portal */}
+                {(!selectedClientForCase.portalStatus || selectedClientForCase.portalStatus === 'nao_criado') && (
+                  <div className="p-4 bg-amber-50/60 border border-amber-100 rounded-xl text-amber-900 text-xs flex gap-3 items-start">
+                    <Info size={16} className="text-amber-650 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold leading-normal">Cliente ainda não possui Portal do Cliente criado.</p>
+                      <p className="text-[10px] text-amber-800 mt-0.5 leading-normal">
+                        É possível criar o caso, mas o cliente não terá acesso externo até a criação do portal.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ACTION FOOTER */}
-            <div className="flex sm:justify-end border-t border-gray-100 pt-6">
+            <div className="flex sm:justify-end border-t border-gray-150 pt-6">
               <button
                 type="button"
                 disabled={!selectedClientForCase}
                 onClick={handleSaveNovoCaso}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white px-8 py-3.5 rounded-xl font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md text-xs cursor-pointer"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gray-950 hover:bg-black text-white px-8 py-3.5 rounded-xl font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md text-xs cursor-pointer"
               >
-                <span>Vincular e Prosseguir</span>
+                <span>Vincular Cliente e Prosseguir</span>
                 <ArrowRight size={14} />
               </button>
             </div>
           </div>
         )}
 
-        {/* PATH 3 — CONTINUAR FLUXO */}
+        {/* PATH 3 — CONTINUAR */}
         {selectedPath === 'continuar' && (
           <div className="space-y-6">
             <div className="bg-gray-50 rounded-2xl border border-gray-200 p-6 space-y-4 pb-5">
               <div>
                 <h4 className="text-xs font-black uppercase text-gray-700 tracking-wider font-sans">Retomar Fluxos Incompletos / Ativos</h4>
                 <p className="text-[10px] text-gray-400 leading-relaxed mt-1">
-                  Encontre rascunhos de produção ou procedimentos em andamento para continuar seu preenchimento e homologação fática na controladoria.
+                  Enencontre rascunhos de produção ou procedimentos em andamento para continuar seu preenchimento fático.
                 </p>
               </div>
 
@@ -825,7 +1071,7 @@ export default function CadastroFluxo() {
                   type="text"
                   value={casesQuery}
                   onChange={handleCasesFilterChange}
-                  placeholder="Pesquisar por nome do cliente, título do caso, código fático..."
+                  placeholder="Pesquisar por nome do cliente, título do caso, código de processo..."
                   className="w-full pl-11 pr-4 py-2.5 bg-white border border-gray-250 rounded-xl focus:ring-1 focus:ring-gray-950 placeholder:text-gray-450 transition-all font-medium text-xs text-gray-800 outline-none"
                 />
               </div>
@@ -838,7 +1084,7 @@ export default function CadastroFluxo() {
                 <span className="text-xs font-bold font-mono">Indexando casos ativos...</span>
               </div>
             ) : filteredCases.length > 0 ? (
-              <div className="border border-gray-100 rounded-2xl overflow-hidden bg-white divide-y divide-gray-100 shadow-sm">
+              <div className="border border-gray-150 rounded-2xl overflow-hidden bg-white divide-y divide-gray-100 shadow-3xs">
                 {filteredCases.map((c) => (
                   <div
                     key={c.id}
@@ -853,7 +1099,7 @@ export default function CadastroFluxo() {
                       </div>
                       <h4 className="text-xs font-bold text-gray-900 tracking-tight font-sans">{c.clientName}</h4>
                       <div className="text-[10.5px] text-gray-400 leading-relaxed">
-                        Procedimento: <span className="font-bold text-gray-600">{c.actionCategory || c.actionType || 'Geral'}</span> • Etapa atual: <span className="font-bold text-indigo-600 uppercase tracking-wide font-mono text-[9px]">{c.productionStage || 'Início'}</span>
+                        Procedimento: <span className="font-bold text-gray-600">{c.actionCategory || c.actionType || 'Geral'}</span> • Etapa atual: <span className="font-bold text-indigo-650 uppercase tracking-wide font-mono text-[9px]">{c.productionStage || 'Início'}</span>
                       </div>
                     </div>
                     
@@ -869,10 +1115,10 @@ export default function CadastroFluxo() {
                 ))}
               </div>
             ) : (
-              <div className="p-12 border border-dashed border-gray-200 rounded-2xl text-center text-gray-400 bg-gray-50/20">
+              <div className="p-12 border border-dashed border-gray-250 rounded-2xl text-center text-gray-450 bg-gray-50/20">
                 <Info size={24} className="mx-auto mb-2 text-gray-300" />
                 <p className="text-xs font-bold text-gray-500">Nenhum fluxo em rascunho correspondente.</p>
-                <p className="text-[10px] text-gray-400 leading-relaxed max-w-sm mx-auto mt-1">Todos os processos encontram-se concluídos na auditoria ou não há casos registrados sob esta consulta fática.</p>
+                <p className="text-[10px] text-gray-400 leading-relaxed max-w-sm mx-auto mt-1">Todos os processos encontram-se concluídos ou não há casos registrados sob esta consulta fática.</p>
               </div>
             )}
           </div>

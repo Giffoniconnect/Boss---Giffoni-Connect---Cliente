@@ -544,6 +544,23 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                             <td className="py-4 px-4">
                               <span className="font-extrabold text-gray-900 block">{clientName}</span>
                               <span className="text-[10px] text-indigo-500 font-bold block mt-0.5 font-mono">{numCasos} processo(s) vinculado(s)</span>
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {c.portalStatus === 'criado' ? (
+                                  <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded text-[9px] font-bold">Portal criado</span>
+                                ) : (
+                                  <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-100 rounded text-[9px] font-bold">Portal não criado</span>
+                                )}
+                                {c.cadastroIncompleto === true ? (
+                                  <span className="px-2 py-0.5 bg-red-50 text-red-700 border border-red-100 rounded text-[9px] font-bold" title={c.missingFields && c.missingFields.length > 0 ? `Campos faltantes: ${c.missingFields.join(', ')}` : 'Cadastro incompleto'}>
+                                    Cadastro incompleto
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 bg-green-50 text-green-700 border border-green-150 rounded text-[9px] font-bold">Cadastro completo</span>
+                                )}
+                              </div>
+                              {c.cadastroIncompleto === true && c.missingFields && c.missingFields.length > 0 && (
+                                <span className="text-[9px] text-gray-400 block mt-1 leading-normal font-sans">Falta: {c.missingFields.join(', ')}</span>
+                              )}
                             </td>
                             <td className="py-4 font-mono font-semibold">{getClientDocument(c)}</td>
                             <td className="py-4 text-gray-500">{getClientEmail(c)}</td>
@@ -824,7 +841,23 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                       const portalExists = clientPortals.some(p => p.slug === u.clientSlug);
                       return (
                         <tr key={u.id} className="hover:bg-gray-50/40">
-                          <td className="py-4 px-4 font-extrabold text-gray-900">{u.email}</td>
+                          <td className="py-4 px-4 text-xs">
+                            <span className="font-extrabold text-gray-900 block">{u.email}</span>
+                            {(() => {
+                              const relatedClient = clients.find(cl => cl.id === u.clientId);
+                              const password = u.senhaVisivelPreview || relatedClient?.senhaVisivelPreview || relatedClient?.acessoSistema?.acesso_senha;
+                              if (!password) return null;
+                              return (
+                                <div className="mt-1.5 p-2 bg-amber-50 border border-amber-100 rounded-lg text-amber-850 text-[10px] font-sans">
+                                  <div className="flex items-center gap-1.5 font-bold mb-0.5">
+                                    <span className="text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Preview</span>
+                                    <span>Senha: <span className="font-mono text-gray-900 select-all font-bold">{password}</span></span>
+                                  </div>
+                                  <span className="text-[9px] text-amber-600 block leading-normal mt-0.5">🔒 Senha visível apenas em modo preview.</span>
+                                </div>
+                              );
+                            })()}
+                          </td>
                           <td className="py-4">
                             <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
                               u.role === 'boss_admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'

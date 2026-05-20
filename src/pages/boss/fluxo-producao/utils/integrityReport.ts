@@ -114,14 +114,88 @@ export function buildIntegrityReport(
       });
     }
 
-    if (!client.slug || client.slug.trim() === '') {
+    // New Check 1: Cadastro Incompleto Check
+    if (client.cadastroIncompleto === true) {
+      const missingList = Array.isArray(client.missingFields) ? client.missingFields : [];
       items.push({
         section: 'Cliente',
-        label: 'Atribuição de Slug Exclusiva',
-        status: 'Erro Crítico',
-        details: 'O cliente não possui um slug fático definido. Isso inviabiliza as rotas personalizadas do Portal.',
-        severity: 'critical'
+        label: 'Integridade dos Campos Cadastrais',
+        status: 'Atenção',
+        details: `O cadastro do cliente está incompleto. Campos pendentes: ${missingList.length > 0 ? missingList.join(', ') : 'dados não preenchidos'}.`,
+        severity: 'medium'
       });
+    } else {
+      items.push({
+        section: 'Cliente',
+        label: 'Integridade dos Campos Cadastrais',
+        status: 'OK',
+        details: 'Todos os campos cadastrais obrigatórios preenchidos com sucesso.',
+        severity: 'low'
+      });
+    }
+
+    // New Check 2: Portal Status & Visibility Coordination
+    const portStat = client.portalStatus || 'nao_criado';
+    const isCaseVisible = caseObj?.visibleToClient === true || caseObj?.visibletoClient === true || caseObj?.visibleToClient === 'true';
+    if (portStat === 'nao_criado') {
+      if (isCaseVisible) {
+        items.push({
+          section: 'Cliente',
+          label: 'Status de Acesso do Portal',
+          status: 'Erro Crítico',
+          details: 'O caso foi marcado como visível para o cliente, mas o portal de acesso ainda não foi criado.',
+          severity: 'critical'
+        });
+      } else {
+        items.push({
+          section: 'Cliente',
+          label: 'Status de Acesso do Portal',
+          status: 'Atenção',
+          details: 'Cliente interno sem portal de acesso criado.',
+          severity: 'medium'
+        });
+      }
+    } else {
+      items.push({
+        section: 'Cliente',
+        label: 'Status de Acesso do Portal',
+        status: 'OK',
+        details: 'Portal de acesso do inquilino devidamente criado e vinculado.',
+        severity: 'low'
+      });
+    }
+
+    // New Check 3: Preview Password Active Warning
+    if (client.senhaVisivelPreview) {
+      items.push({
+        section: 'Cliente',
+        label: 'Visualização Segura da Senha',
+        status: 'Atenção',
+        details: 'O cliente possui senha de pré-visualização ativa.',
+        severity: 'low'
+      });
+    }
+
+    // New Check 4: Slug & Portal status pairing
+    const hasSlug = !!(client.slug && client.slug.trim() !== '');
+    if (!hasSlug) {
+      if (portStat === 'criado') {
+        items.push({
+          section: 'Cliente',
+          label: 'Atribuição de Slug Exclusiva',
+          status: 'Erro Crítico',
+          details: 'O cliente possui portal marcado como "criado", mas não há slug atribuído no registro. Isso impede rotas dinâmicas.',
+          severity: 'critical'
+        });
+      } else {
+        items.push({
+          section: 'Cliente',
+          label: 'Atribuição de Slug Exclusiva',
+          status: 'Atenção',
+          details: 'Não há slug fático definido para este rascunho de cliente interno.',
+          severity: 'medium'
+        });
+      }
     } else {
       items.push({
         section: 'Cliente',
