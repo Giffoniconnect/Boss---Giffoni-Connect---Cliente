@@ -66,6 +66,8 @@ interface ConnectorConfig {
 export default function Configuracoes() {
   const [activeSubTab, setActiveSubTab] = useState<ConfigSubTab>('links');
   const [portalLink, setPortalLink] = useState(DEFAULT_PORTAL_LINK);
+  const [portalExternalMode, setPortalExternalMode] = useState<'ai_studio_preview' | 'dominio_publicado'>('ai_studio_preview');
+  const [portalPublicDomain, setPortalPublicDomain] = useState('');
   const [sectorsLinks, setSectorsLinks] = useState({
     marketing: '',
     comercial: '',
@@ -159,6 +161,12 @@ export default function Configuracoes() {
           if (data.link) {
             setPortalLink(data.link);
           }
+          if (data.portalExternalMode) {
+            setPortalExternalMode(data.portalExternalMode);
+          }
+          if (data.portalPublicDomain) {
+            setPortalPublicDomain(data.portalPublicDomain);
+          }
         }
 
         // Fetch Sectors Links
@@ -223,6 +231,8 @@ export default function Configuracoes() {
         // Save Portal Link to settings/portal
         await setDoc(doc(db, 'settings', 'portal'), {
           link: sanitizedPortalLink,
+          portalExternalMode,
+          portalPublicDomain: portalPublicDomain.trim(),
           updatedAt: serverTimestamp(),
         });
 
@@ -425,31 +435,71 @@ export default function Configuracoes() {
                 {/* PORTAL DO CLIENTE */}
                 <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-8">
                   <div className="flex items-center gap-3 border-b border-gray-100 pb-5 mb-6">
-                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
                       <LinkIcon size={20} />
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-gray-900">Portal do Cliente</h3>
-                      <p className="text-xs text-gray-500">Link público do card inicial da home cliente.</p>
+                      <h3 className="text-lg font-bold text-gray-900">Link Base do Portal do Cliente Externo</h3>
+                      <p className="text-xs text-gray-500">Este é o app externo onde o cliente acessará o portal. O BOSS apenas gera o slug, clientId e caseId.</p>
                     </div>
                   </div>
 
-                  <div className="space-y-4">
+                  <div className="space-y-6">
                     <div>
                       <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
-                        Link do Card "Portal do Cliente" (Home)
+                        URL do App Externo (Portal de Clientes)
                       </label>
                       <p className="text-xs text-gray-500 leading-relaxed mb-3">
-                        Cole o link para onde o cliente deve ser direcionado ao clicar no card correspondente na página principal.
+                        Cole o link do workspace ou aplicação externa que servirá de contêiner de exibição para o Portal do Cliente.
                       </p>
                       <input
                         type="url"
                         value={portalLink}
                         onChange={(e) => setPortalLink(e.target.value)}
-                        placeholder="https://exemplo.com/portal..."
+                        placeholder="https://aistudio.google.com/apps/..."
                         className="w-full px-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-100 placeholder:text-gray-400 transition-all font-medium text-sm text-gray-800"
                       />
                     </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-100">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
+                          Modo de Exibição do Portal
+                        </label>
+                        <select
+                          value={portalExternalMode}
+                          onChange={(e) => setPortalExternalMode(e.target.value as 'ai_studio_preview' | 'dominio_publicado')}
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-100 font-medium text-sm text-gray-800 select-none cursor-pointer"
+                        >
+                          <option value="ai_studio_preview">Modo Preview (Google AI Studio)</option>
+                          <option value="dominio_publicado">Domínio Publicado (Produção)</option>
+                        </select>
+                      </div>
+
+                      {portalExternalMode === 'dominio_publicado' && (
+                        <div>
+                          <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
+                            Domínio Base Publicado (portalPublicDomain)
+                          </label>
+                          <input
+                            type="url"
+                            value={portalPublicDomain}
+                            onChange={(e) => setPortalPublicDomain(e.target.value)}
+                            placeholder="https://clientes.giffoniconnect.com"
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-100 placeholder:text-gray-400 font-medium text-sm text-gray-800"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {portalExternalMode === 'ai_studio_preview' && (
+                      <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl text-amber-900 text-xs flex gap-3 items-start mt-2">
+                        <AlertCircle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                        <span className="font-semibold leading-relaxed">
+                          Modo Preview do Google AI Studio. O link do slug será apresentado como rota interna simulada para validação.
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 

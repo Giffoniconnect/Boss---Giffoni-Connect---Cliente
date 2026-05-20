@@ -16,6 +16,7 @@ import BossSetores from './pages/boss/Setores';
 import BossEDRP from './pages/boss/EDRP';
 import FluxoProducao from './pages/boss/FluxoProducao';
 import CentralControle from './pages/boss/CentralControle';
+import BossPortalClientePreview from './pages/boss/PortalClientePreview';
 
 // Modular Production Flow
 import FluxoHome from './pages/boss/fluxo-producao/FluxoHome';
@@ -148,6 +149,16 @@ export default function App() {
               element={
                 <ProtectedRoute role="boss_admin">
                   <BossConfiguracoes />
+                </ProtectedRoute>
+              } 
+            />
+            
+            {/* Public Mirror Preview Routing */}
+            <Route 
+              path="/boss-giffoni-clientes/portal-cliente-preview/:clientId" 
+              element={
+                <ProtectedRoute role="boss_admin">
+                  <BossPortalClientePreview />
                 </ProtectedRoute>
               } 
             />

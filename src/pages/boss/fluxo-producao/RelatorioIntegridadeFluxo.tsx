@@ -28,6 +28,11 @@ import {
 } from 'lucide-react';
 import { flowRoutes } from './utils/flowRoutes';
 import { buildIntegrityReport, IntegrityResult, IntegrityItem } from './utils/integrityReport';
+import {
+  getClientInternalPath,
+  getClientExternalPortalBase,
+  getClientPortalInstruction
+} from './utils/clientPortalLinks';
 
 export default function RelatorioIntegridadeFluxo() {
   const { caseId } = useParams<{ caseId: string }>();
@@ -49,6 +54,7 @@ export default function RelatorioIntegridadeFluxo() {
   const [evidenceRequests, setEvidenceRequests] = useState<any[]>([]);
   const [financials, setFinancials] = useState<any[]>([]);
   const [connectors, setConnectors] = useState<any>(null);
+  const [portalSettings, setPortalSettings] = useState<any>(null);
 
   // Visual report outcome
   const [reportResult, setReportResult] = useState<IntegrityResult | null>(null);
@@ -57,6 +63,8 @@ export default function RelatorioIntegridadeFluxo() {
   // Copy feedbacks
   const [copySlugSuccess, setCopySlugSuccess] = useState(false);
   const [copyLinkSuccess, setCopyLinkSuccess] = useState(false);
+  const [copyInstructionSuccess, setCopyInstructionSuccess] = useState(false);
+  const [copyInternalPathSuccess, setCopyInternalPathSuccess] = useState(false);
 
   // Fetch all related entities sequentially/parallelly to perform a flawless audit
   const loadEntities = async () => {
@@ -156,6 +164,16 @@ export default function RelatorioIntegridadeFluxo() {
         console.warn('Conectores não configurados ou erro de leitura: ', conErr);
       }
 
+      // 9.5 Portal Settings
+      try {
+        const portalSettingsSnap = await getDoc(doc(db, 'settings', 'portal'));
+        if (portalSettingsSnap.exists()) {
+          setPortalSettings(portalSettingsSnap.data());
+        }
+      } catch (portErr) {
+        console.warn('Configurações do Portal não localizadas: ', portErr);
+      }
+
     } catch (err: any) {
       console.error(err);
       setError(`Erro ao auditar prontuário: ${err.message || err}`);
@@ -247,6 +265,24 @@ export default function RelatorioIntegridadeFluxo() {
 
       await updateDoc(doc(db, 'cases', caseId), payload);
 
+      // PART 7 — Update clientPortals alignment
+      if (client && client.slug) {
+        const { setDoc } = await import('firebase/firestore');
+        const portalRef = doc(db, 'clientPortals', client.slug);
+        const portalLink = portalSettings?.link || 'https://aistudio.google.com/apps/93c62126-a17f-4c18-8bc7-d327df1ca6b5?showPreview=true&showAssistant=true';
+        const portalExternalMode = portalSettings?.portalExternalMode || 'ai_studio_preview';
+        
+        await setDoc(portalRef, {
+          clientId: client.id,
+          slug: client.slug,
+          active: client.active ?? true,
+          portalExternalBaseLink: portalLink,
+          portalInternalPath: `/portal-cliente-giffoni/${client.slug}/login`,
+          portalExternalMode: portalExternalMode,
+          updatedAt: new Date()
+        }, { merge: true });
+      }
+
       setCaseObj((prev: any) => ({
         ...prev,
         ...payload
@@ -262,15 +298,21 @@ export default function RelatorioIntegridadeFluxo() {
   };
 
   // Standard safe copy action
-  const copyToClipboard = async (text: string, type: 'slug' | 'link') => {
+  const copyToClipboard = async (text: string, type: 'slug' | 'link' | 'instruction' | 'internalPath') => {
     try {
       await navigator.clipboard.writeText(text);
       if (type === 'slug') {
         setCopySlugSuccess(true);
         setTimeout(() => setCopySlugSuccess(false), 2000);
-      } else {
+      } else if (type === 'link') {
         setCopyLinkSuccess(true);
         setTimeout(() => setCopyLinkSuccess(false), 2000);
+      } else if (type === 'instruction') {
+        setCopyInstructionSuccess(true);
+        setTimeout(() => setCopyInstructionSuccess(false), 2000);
+      } else if (type === 'internalPath') {
+        setCopyInternalPathSuccess(true);
+        setTimeout(() => setCopyInternalPathSuccess(false), 2000);
       }
     } catch (err) {
       console.warn('Fallback copy');
@@ -299,6 +341,14 @@ export default function RelatorioIntegridadeFluxo() {
 
   const clientSlugResolved = client?.slug || 'sem-slug';
   const loginUrl = `${window.location.origin}/portal-cliente-giffoni/${clientSlugResolved}/login`;
+
+  // External Portal Checker Metrics
+  const hasClientSlug = !!client?.slug;
+  const hasPortalDoc = !!portal;
+  const hasUserAccount = !!userAccount;
+  const hasPortalLink = !!portalSettings?.link;
+  const hasPortalExternalMode = !!portalSettings?.portalExternalMode;
+  const plannedInternalRoute = getClientInternalPath(clientSlugResolved);
 
   // Filter items in UI
   const filteredChecklist = reportResult?.items.filter((item) => {
@@ -386,69 +436,181 @@ export default function RelatorioIntegridadeFluxo() {
           </div>
         )}
 
-        {/* ACTION LINKS BOX */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          <div className="p-5 border border-gray-150 rounded-2xl bg-white space-y-3 shadow-xs">
-            <h4 className="text-xs font-black uppercase text-gray-500 tracking-wide">Inquilino & Portal</h4>
-            <div className="space-y-2">
+        {/* ACTION & INTEGRITY MANAGEMENT */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* PORTAL EXTERNO DO CLIENTE SECTION */}
+          <div className="lg:col-span-2 bg-white border border-gray-150 rounded-3xl p-6 space-y-6 shadow-sm">
+            <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                <ExternalLink size={20} />
+              </div>
+              <div>
+                <h3 className="text-md font-bold text-gray-900">Portal Externo do Cliente</h3>
+                <p className="text-xs text-gray-500">Validação da mirroring de dados para o Portal de Clientes externo.</p>
+              </div>
+            </div>
+
+            {/* Verification Checklist Badges */}
+            <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4 space-y-2">
+              <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 block mb-1">Status de Conectividade do Espelho</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-[11px] font-semibold text-gray-700">
+                <div className="flex items-center gap-2">
+                  {hasClientSlug ? <CheckCircle2 size={14} className="text-emerald-500 shrink-0" /> : <AlertTriangle size={14} className="text-amber-500 shrink-0" />}
+                  <span>Slug do Inquilino Existente: <strong className="font-mono text-indigo-600">{clientSlugResolved}</strong></span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {hasPortalDoc ? <CheckCircle2 size={14} className="text-emerald-500 shrink-0" /> : <AlertTriangle size={14} className="text-amber-500 shrink-0" />}
+                  <span>Documento clientPortals/{clientSlugResolved}: {hasPortalDoc ? 'Sim' : 'Criar cadastro'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {hasUserAccount ? <CheckCircle2 size={14} className="text-emerald-500 shrink-0" /> : <AlertTriangle size={14} className="text-amber-500 shrink-0" />}
+                  <span>Id de Login em users/: {hasUserAccount ? 'Sim' : 'Criar usuário'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {hasPortalLink ? <CheckCircle2 size={14} className="text-emerald-500 shrink-0" /> : <AlertTriangle size={14} className="text-amber-500 shrink-0" />}
+                  <span>Base url externa configurada: {hasPortalLink ? 'Sim' : 'Não'}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
+                  <span>Rota interna planejada: <strong className="font-mono text-gray-500">{plannedInternalRoute}</strong></span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {hasPortalExternalMode ? <CheckCircle2 size={14} className="text-emerald-500 shrink-0" /> : <AlertTriangle size={14} className="text-amber-500 shrink-0" />}
+                  <span>Modo Configurado ({portalSettings?.portalExternalMode || 'padrão'}): {hasPortalExternalMode ? 'Sim' : 'Simulado'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Display Values */}
+            <div className="space-y-3">
+              <div>
+                <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1">Link Base Externo</span>
+                <div className="p-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-mono text-gray-600 truncate">
+                  {getClientExternalPortalBase(portalSettings)}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1">Rota Interna de Validação</span>
+                  <div className="p-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-mono text-indigo-650 truncate">
+                    {plannedInternalRoute}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1">Modo de Distribuição</span>
+                  <div className="p-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-semibold text-gray-700 capitalize">
+                    {portalSettings?.portalExternalMode === 'dominio_publicado' ? 'Domínio Publicado (Produção)' : 'Modo Preview (Google AI Studio)'}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-1">Instrução de Integração</span>
+                <div className="p-3 bg-indigo-50/50 border border-indigo-100/50 rounded-xl text-xs text-indigo-900 leading-relaxed font-semibold">
+                  {getClientPortalInstruction(clientSlugResolved, portalSettings)}
+                </div>
+              </div>
+            </div>
+
+            {/* Copy Operations Row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={() => copyToClipboard(clientSlugResolved, 'slug')}
-                className="w-full text-left inline-flex items-center justify-between text-xs font-semibold text-gray-700 bg-gray-50 hover:bg-gray-100 p-2.5 rounded-xl border border-gray-150 cursor-pointer"
+                className="py-2.5 px-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-700 inline-flex items-center justify-between cursor-pointer"
               >
-                <span className="truncate">Slug: <strong className="font-mono text-indigo-650">{clientSlugResolved}</strong></span>
-                <span className="text-[10px] text-indigo-600 font-bold flex items-center gap-1 shrink-0">
-                  <Copy size={12} />
-                  {copySlugSuccess ? 'Copiado!' : 'Copiar'}
-                </span>
+                <span>Copiar Slug</span>
+                <span className="text-[10px] text-indigo-600 font-semibold">{copySlugSuccess ? 'Copiado!' : 'Copiar'}</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => copyToClipboard(loginUrl, 'link')}
-                className="w-full text-left inline-flex items-center justify-between text-xs font-semibold text-gray-700 bg-gray-50 hover:bg-gray-100 p-2.5 rounded-xl border border-gray-150 cursor-pointer"
+                onClick={() => copyToClipboard(plannedInternalRoute, 'internalPath')}
+                className="py-2.5 px-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-700 inline-flex items-center justify-between cursor-pointer"
               >
-                <span className="truncate">Link do Portal</span>
-                <span className="text-[10px] text-indigo-600 font-bold flex items-center gap-1 shrink-0">
-                  <Copy size={12} />
-                  {copyLinkSuccess ? 'Copiado!' : 'Copiar'}
-                </span>
+                <span>Copiar Rota Interna</span>
+                <span className="text-[10px] text-indigo-600 font-semibold">{copyInternalPathSuccess ? 'Copiado!' : 'Copiar'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const payloadStr = `Portal externo: ${getClientExternalPortalBase(portalSettings)}\nRota interna: ${plannedInternalRoute}\nCliente: ${clientNameResolved}\nSlug: ${clientSlugResolved}\nCaseId: ${caseId}`;
+                  copyToClipboard(payloadStr, 'instruction');
+                }}
+                className="py-2.5 px-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-700 inline-flex items-center justify-between cursor-pointer"
+              >
+                <span>Copiar Instrução</span>
+                <span className="text-[10px] text-indigo-600 font-semibold">{copyInstructionSuccess ? 'Copiado!' : 'Copiar'}</span>
               </button>
             </div>
-          </div>
 
-          <div className="p-5 border border-gray-150 rounded-2xl bg-white space-y-3 shadow-xs">
-            <h4 className="text-xs font-black uppercase text-gray-500 tracking-wide">Atalhos Operacionais</h4>
-            <div className="space-y-2">
+            {/* Operations Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 border-t border-gray-100 pt-5">
               <a
-                href={loginUrl}
+                href={getClientExternalPortalBase(portalSettings)}
                 target="_blank"
                 rel="noreferrer"
-                className="w-full py-2.5 px-3 bg-indigo-50 border border-indigo-150 rounded-xl inline-flex items-center justify-between text-indigo-750 text-xs font-bold hover:bg-indigo-100 cursor-pointer"
+                className="py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-sm text-center"
               >
-                <span>Acessar Portal do Inquilino</span>
                 <ExternalLink size={14} />
+                <span>Abrir Portal Externo</span>
               </a>
 
               <button
                 type="button"
-                onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/dados-caso`)}
-                className="w-full py-2 px-3 border border-gray-250 rounded-xl inline-flex items-center justify-between text-gray-700 text-xs font-bold hover:bg-gray-50 cursor-pointer"
+                onClick={() => navigate(`/boss-giffoni-clientes/portal-cliente-preview/${client?.clientId || client?.id}`)}
+                className="py-3 px-4 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-150 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer text-center"
               >
-                <span>Abrir Ficha do Caso</span>
-                <ChevronRight size={14} />
+                <Activity size={14} />
+                <span>Ver Espelho</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate(`/boss-giffoni-clientes/clientes/${client?.id || client?.clientId}`)}
+                className="py-3 px-4 bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer text-center"
+              >
+                <User size={14} />
+                <span>Cadastro Cliente</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate(`/boss-giffoni-clientes/casos/${caseId}`)}
+                className="py-3 px-4 bg-gray-50 border border-gray-200 text-gray-700 hover:bg-gray-100 rounded-xl text-xs font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer text-center"
+              >
+                <FolderOpen size={14} />
+                <span>Abrir Caso</span>
               </button>
             </div>
           </div>
 
-          <div className="p-5 border border-gray-150 rounded-2xl bg-white space-y-3 shadow-xs">
-            <h4 className="text-xs font-black uppercase text-gray-500 tracking-wide">Sincronizador Fático</h4>
-            <div className="flex flex-col gap-2">
+          {/* SINCRONIZADOR FÁTICO */}
+          <div className="bg-white border border-gray-150 rounded-3xl p-6 flex flex-col justify-between shadow-sm">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 border-b border-gray-100 pb-4">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <Activity size={20} />
+                </div>
+                <div>
+                  <h3 className="text-md font-bold text-gray-900">Sincronizador Fático</h3>
+                  <p className="text-xs text-gray-500">Gestão de encerramentos e fechamento definitivo do prontuário.</p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Ao rodar a integridade, o sistema realiza uma auditoria em tempo real sobre os documentos, relatórios, cadastros e obrigações financeiras. Se tudo estiver correto, você pode fechar o fluxo de produção.
+              </p>
+            </div>
+
+            <div className="space-y-2.5 pt-6">
               <button
                 type="button"
                 disabled={runningReport}
                 onClick={handleGenerateReport}
-                className="w-full h-10 inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-950 text-white font-bold text-xs py-2 px-4 rounded-xl cursor-pointer shadow-xs"
+                className="w-full py-3 inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-950 text-white font-bold text-xs px-4 rounded-xl cursor-pointer shadow-xs"
               >
                 <RefreshCw size={12} className={runningReport ? 'animate-spin' : ''} />
                 Gerar Relatório de Integridade
@@ -458,7 +620,7 @@ export default function RelatorioIntegridadeFluxo() {
                 type="button"
                 disabled={saving}
                 onClick={handleFinalizeProduction}
-                className="w-full h-10 inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-4 rounded-xl cursor-pointer shadow-xs"
+                className="w-full py-3 inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 rounded-xl cursor-pointer shadow-xs"
               >
                 <Check size={14} />
                 Finalizar Produção

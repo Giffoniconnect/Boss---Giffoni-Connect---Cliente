@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { BossLayout } from '../../components/Layout';
 import { doc, getDoc, updateDoc, collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { ArrowLeft, User, Building2, ExternalLink, ShieldAlert, Check, Plus, Briefcase, FileText, Wallet, MessageSquare, ChevronRight, Clock, Calendar } from 'lucide-react';
+import { ArrowLeft, User, Building2, ExternalLink, ShieldAlert, Check, Plus, Briefcase, FileText, Wallet, MessageSquare, ChevronRight, Clock, Calendar, Copy } from 'lucide-react';
 import { PFForm } from '../../modules/boss/components/forms/PFForm';
 import { PJForm } from '../../modules/boss/components/forms/PJForm';
 import { SocioForm } from '../../modules/boss/components/forms/SocioForm';
@@ -20,6 +20,37 @@ export default function ClienteDetail({ tab: initialTab }: { tab?: string }) {
   const [loading, setLoading] = useState(true);
   const [casesLoading, setCasesLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  const [copySlugSuccess, setCopySlugSuccess] = useState(false);
+  const [copyPathSuccess, setCopyPathSuccess] = useState(false);
+  const [copyInstructionSuccess, setCopyInstructionSuccess] = useState(false);
+  const [portalSettings, setPortalSettings] = useState<any>(null);
+
+  useEffect(() => {
+    getDoc(doc(db, 'settings', 'portal')).then(snap => {
+      if (snap.exists()) {
+        setPortalSettings(snap.data());
+      }
+    });
+  }, []);
+
+  const handleCopy = async (text: string, type: 'slug' | 'path' | 'instruction') => {
+    try {
+      await navigator.clipboard.writeText(text);
+      if (type === 'slug') {
+        setCopySlugSuccess(true);
+        setTimeout(() => setCopySlugSuccess(false), 2000);
+      } else if (type === 'path') {
+        setCopyPathSuccess(true);
+        setTimeout(() => setCopyPathSuccess(false), 2000);
+      } else {
+        setCopyInstructionSuccess(true);
+        setTimeout(() => setCopyInstructionSuccess(false), 2000);
+      }
+    } catch (e) {
+      alert(`Conteúdo copiado de forma segura: ${text}`);
+    }
+  };
 
   useEffect(() => {
     if (clientId) fetchClient();
@@ -291,13 +322,52 @@ export default function ClienteDetail({ tab: initialTab }: { tab?: string }) {
             </div>
           </div>
           
-          <div className="flex gap-3">
-            <button 
-              onClick={() => window.open(`/portal-cliente-giffoni/${client.slug}/login`, '_blank')}
-              className="flex items-center gap-2 text-gray-900 bg-white border border-gray-100 px-6 py-3 rounded-2xl font-bold hover:bg-gray-50 transition-all active:scale-95 shadow-sm"
+          <div className="flex flex-wrap gap-2.5 items-center justify-end">
+            <button
+              onClick={() => {
+                const link = portalSettings?.link || 'https://aistudio.google.com/apps/93c62126-a17f-4c18-8bc7-d327df1ca6b5?showPreview=true&showAssistant=true';
+                window.open(link, '_blank');
+              }}
+              className="flex items-center gap-2 text-white bg-indigo-600 hover:bg-indigo-700 px-5 py-2.5 rounded-xl font-bold transition-all active:scale-95 shadow-sm text-xs"
             >
-              Portal do Cliente
-              <ExternalLink size={18} />
+              <ExternalLink size={14} />
+              <span>Abrir App Externo do Cliente</span>
+            </button>
+
+            <button
+              onClick={() => handleCopy(client.slug, 'slug')}
+              className="flex items-center gap-2 text-gray-700 bg-white border border-gray-200 px-4 py-2.5 rounded-xl font-semibold hover:bg-gray-50 transition-all active:scale-95 text-xs shadow-2xs"
+            >
+              <Copy size={12} />
+              <span>{copySlugSuccess ? 'Slug Copiado!' : 'Copiar Slug'}</span>
+            </button>
+
+            <button
+              onClick={() => handleCopy(`/portal-cliente-giffoni/${client.slug}/login`, 'path')}
+              className="flex items-center gap-2 text-gray-700 bg-white border border-gray-200 px-4 py-2.5 rounded-xl font-semibold hover:bg-gray-50 transition-all active:scale-95 text-xs shadow-2xs"
+            >
+              <Copy size={12} />
+              <span>{copyPathSuccess ? 'Rota Copiada!' : 'Copiar Rota Interna'}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                const base = portalSettings?.link || 'https://aistudio.google.com/apps/93c62126-a17f-4c18-8bc7-d327df1ca6b5?showPreview=true&showAssistant=true';
+                const inst = `Portal externo: ${base}\nRota interna: /portal-cliente-giffoni/${client.slug}/login\nCliente: ${getClientDisplayName()}\nSlug: ${client.slug}`;
+                handleCopy(inst, 'instruction');
+              }}
+              className="flex items-center gap-2 text-gray-700 bg-white border border-gray-200 px-4 py-2.5 rounded-xl font-semibold hover:bg-gray-50 transition-all active:scale-95 text-xs shadow-2xs"
+            >
+              <Copy size={12} />
+              <span>{copyInstructionSuccess ? 'Instrução Copiada!' : 'Copiar Instrução de Acesso'}</span>
+            </button>
+
+            <button
+              onClick={() => navigate(`/boss-giffoni-clientes/portal-cliente-preview/${client.id}`)}
+              className="flex items-center gap-2 text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-4 py-2.5 rounded-xl font-semibold transition-all active:scale-95 text-xs"
+            >
+              <ShieldAlert size={14} />
+              <span>Ver Espelho</span>
             </button>
           </div>
         </div>
