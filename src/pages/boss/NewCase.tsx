@@ -1,3 +1,4 @@
+// LEGADO — função absorvida pelo Fluxo de Produção e Central de Controle. Não usar como rota ativa.
 import React from 'react';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { collection, addDoc, getDocs, serverTimestamp, query, orderBy } from 'firebase/firestore';

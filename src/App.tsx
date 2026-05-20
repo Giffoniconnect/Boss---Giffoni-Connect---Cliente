@@ -5,16 +5,9 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 // Regular imports instead of lazy load for debugging
 import Home from './pages/Home';
 import BossLogin from './pages/boss/Login';
-import BossClientesList from './pages/boss/ClientesList';
-import BossClienteDetail from './pages/boss/ClienteDetail';
-import BossNewClient from './modules/boss/pages/NewClient';
-import BossCasosList from './pages/boss/CasosList';
-import BossNewCase from './pages/boss/NewCase';
-import BossCaseDetail from './pages/boss/CaseDetail';
+import BossDashboard from './pages/boss/Dashboard';
 import BossConfiguracoes from './pages/boss/Configuracoes';
 import BossSetores from './pages/boss/Setores';
-import BossEDRP from './pages/boss/EDRP';
-import FluxoProducao from './pages/boss/FluxoProducao';
 import CentralControle from './pages/boss/CentralControle';
 import BossPortalClientePreview from './pages/boss/PortalClientePreview';
 
@@ -69,76 +62,11 @@ export default function App() {
             
             {/* BOSS Admin Routes */}
             <Route path="/boss-giffoni-clientes/login" element={<BossLogin />} />
-            <Route path="/boss-giffoni-clientes/dashboard" element={<Navigate to="/boss-giffoni-clientes/clientes" replace />} />
             <Route 
-              path="/boss-giffoni-clientes/casos" 
+              path="/boss-giffoni-clientes/dashboard" 
               element={
                 <ProtectedRoute role="boss_admin">
-                  <BossCasosList />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/casos/novo" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <BossNewCase />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/casos/:caseId" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <BossCaseDetail />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/clientes" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <BossClientesList />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/clientes/novo" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <BossNewClient />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/clientes/:clientId" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <BossClienteDetail />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/clientes/:clientId/casos" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <BossClienteDetail tab="casos" />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/clientes/:clientId/casos/novo" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <BossNewCase />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/clientes/:clientId/casos/:caseId" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <BossCaseDetail />
+                  <BossDashboard />
                 </ProtectedRoute>
               } 
             />
@@ -177,24 +105,6 @@ export default function App() {
               element={
                 <ProtectedRoute role="boss_admin">
                   <BossSetores />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss/clientes/setores" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <BossSetores />
-                </ProtectedRoute>
-              } 
-            />
-
-            {/* Boss EDRP Routes */}
-            <Route 
-              path="/boss-giffoni-clientes/edrp" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <BossEDRP />
                 </ProtectedRoute>
               } 
             />
