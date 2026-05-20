@@ -206,6 +206,14 @@ export default function App() {
               } 
             />
             <Route 
+              path="/boss-giffoni-clientes/fluxo-producao/tipo-producao" 
+              element={
+                <ProtectedRoute role="boss_admin">
+                  <TipoServico />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
               path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao" 
               element={
                 <ProtectedRoute role="boss_admin">
