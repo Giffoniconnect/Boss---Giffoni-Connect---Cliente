@@ -139,6 +139,36 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // CASE INFORMATION REQUESTS
+    // -------------------------------------------------------------------------
+    match /caseInformationRequests/{requestId} {
+      function canAccessRequest(data) {
+        let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+        return isAdmin() || (userDoc.role == 'client' && data.clientId == userDoc.clientId && data.get('visibleToClient', false) == true);
+      }
+
+      allow read: if isSignedIn() && canAccessRequest(resource.data);
+      allow create: if isAdmin();
+      allow update: if (isAdmin()) || (isSignedIn() && canAccessRequest(resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answer', 'status', 'updatedAt']));
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // CASE EVIDENCE REQUESTS
+    // -------------------------------------------------------------------------
+    match /caseEvidenceRequests/{requestId} {
+      function canAccessEvidenceRequest(data) {
+        let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+        return isAdmin() || (userDoc.role == 'client' && data.clientId == userDoc.clientId && data.get('visibleToClient', false) == true);
+      }
+
+      allow read: if isSignedIn() && canAccessEvidenceRequest(resource.data);
+      allow create: if isAdmin();
+      allow update: if (isAdmin()) || (isSignedIn() && canAccessEvidenceRequest(resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['files', 'status', 'updatedAt']));
+      allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
     // SETTINGS COLLECTION
     // -------------------------------------------------------------------------
     match /settings/{settingId} {

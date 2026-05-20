@@ -239,6 +239,43 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["link"]
+    },
+    "CaseInformationRequest": {
+      "title": "Case Information Request",
+      "description": "Factual questions requested from the client for a specific case.",
+      "type": "object",
+      "properties": {
+        "caseId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "question": { "type": "string" },
+        "answer": { "type": "string" },
+        "status": { "type": "string", "enum": ["pendente", "respondido", "revisado"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["caseId", "clientId", "question", "status"]
+    },
+    "CaseEvidenceRequest": {
+      "title": "Case Evidence Request",
+      "description": "Evidence documents requested from the client for a specific case.",
+      "type": "object",
+      "properties": {
+        "caseId": { "type": "string" },
+        "clientId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["pendente", "entregue", "aprovado", "rejeitado", "revisao_solicitada"] },
+        "files": {
+          "type": "array"
+        },
+        "googleDriveFolderId": { "type": "string" },
+        "googleDriveFileId": { "type": "string" },
+        "googleDriveFileUrl": { "type": "string" },
+        "driveSyncStatus": { "type": "string", "enum": ["nao_sincronizado", "sincronizando", "sincronizado", "erro"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["caseId", "clientId", "title", "status"]
     }
   },
   "firestore": {
@@ -281,6 +318,14 @@
     "caseCommunications": {
       "schema": "CaseCommunication",
       "description": "Communications for cases."
+    },
+    "caseInformationRequests": {
+      "schema": "CaseInformationRequest",
+      "description": "Factual questions requested from the client."
+    },
+    "caseEvidenceRequests": {
+      "schema": "CaseEvidenceRequest",
+      "description": "Evidence documents requested from the client."
     },
     "settings": {
       "schema": "SystemSetting",
