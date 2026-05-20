@@ -5,107 +5,80 @@ import {
   getDocs, 
   doc, 
   updateDoc, 
-  deleteDoc, 
-  setDoc, 
   getDoc, 
-  query, 
-  where, 
-  addDoc, 
+  setDoc,
   serverTimestamp 
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { BossLayout } from '../../components/Layout';
 import { 
-  Sliders, 
-  Search, 
-  User, 
-  Users, 
-  Briefcase, 
-  DollarSign, 
-  Compass, 
-  Activity, 
-  ShieldAlert, 
-  Trash2, 
-  Edit, 
-  CheckCircle, 
-  AlertTriangle, 
-  XCircle, 
-  Plus, 
-  Unlock, 
-  Lock, 
-  Copy, 
-  ExternalLink, 
-  RefreshCw,
-  FolderMinus,
-  AlertCircle
+  Sliders, Search, User, Users, Briefcase, DollarSign, Compass, 
+  Activity, ShieldAlert, AlertTriangle, CheckCircle, Copy, ExternalLink, 
+  RefreshCw, Plus, Calendar, MessageSquare, Clock, FileText, Check, XCircle
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+
+type TabId = 'clientes' | 'casos' | 'slugs' | 'usuarios' | 'financeiro' | 'solicitacoes' | 'agenda' | 'edrp' | 'integridade';
 
 export default function CentralControle() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'clientes' | 'usuarios' | 'slugs' | 'casos' | 'financeiro' | 'producao' | 'integridade'>('clientes');
+  const [activeTab, setActiveTab] = useState<TabId>('clientes');
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-
-  // Loaded database elements
+  
+  // Data State
   const [clients, setClients] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
-  const [portals, setPortals] = useState<any[]>([]);
   const [cases, setCases] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [usersInvites, setUsersInvites] = useState<any[]>([]);
+  const [clientPortals, setClientPortals] = useState<any[]>([]);
+  const [infoRequests, setInfoRequests] = useState<any[]>([]);
+  const [evidenceRequests, setEvidenceRequests] = useState<any[]>([]);
   const [financials, setFinancials] = useState<any[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
+  const [portalSettings, setPortalSettings] = useState<any>(null);
 
-  // Modals / Editors state
-  const [editingClient, setEditingClient] = useState<any | null>(null);
-  const [editingUser, setEditingUser] = useState<any | null>(null);
-  const [editingCase, setEditingCase] = useState<any | null>(null);
-  const [editingFinancial, setEditingFinancial] = useState<any | null>(null);
-  const [isAddingFinancial, setIsAddingFinancial] = useState(false);
+  // Filter States
+  const [casesFilter, setCasesFilter] = useState<'all' | 'em_producao' | 'com_pendencias' | 'pronto_relatorio' | 'concluido' | 'concluido_ressalvas' | 'arquivado'>('all');
+  const [finFilter, setFinFilter] = useState<'all' | 'pendente' | 'aguardando' | 'pago' | 'parcial' | 'atrasado' | 'erro_webhook' | 'stripe' | 'asaas' | 'manual'>('all');
+  const [edrpFilter, setEdrpFilter] = useState<'all' | 'sem_estruturacao' | 'sem_delegacao' | 'aguardando_revisao' | 'pronto_protocolo' | 'com_pendencia' | 'protocolado' | 'controladoria'>('all');
 
-  // Safety deletion dialog state
-  const [deletingClient, setDeletingClient] = useState<any | null>(null);
-  const [deletionStats, setDeletionStats] = useState<any | null>(null);
+  // Modals state
+  const [safeDeleteWarning, setSafeDeleteWarning] = useState<string | null>(null);
 
-  // Integrity Checks counts
-  const [integrityState, setIntegrityState] = useState<{
-    okCount: number;
-    attenCount: number;
-    pendCount: number;
-    errorCount: number;
-    items: any[];
-    recommendation: string;
-  }>({ okCount: 0, attenCount: 0, pendCount: 0, errorCount: 0, items: [], recommendation: 'Não calculado' });
-
-  // Load everything
   const loadAllCollections = async () => {
     setLoading(true);
     try {
-      // Clients
-      const clientsSnap = await getDocs(collection(db, 'clients'));
-      const clientsList = clientsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setClients(clientsList);
+      const [
+        clientsSnap, casesSnap, usersSnap, invitesSnap, portalsSnap,
+        infoSnap, evidenceSnap, financialsSnap, eventsSnap, portalSettingsSnap
+      ] = await Promise.all([
+        getDocs(collection(db, 'clients')),
+        getDocs(collection(db, 'cases')),
+        getDocs(collection(db, 'users')),
+        getDocs(collection(db, 'users_invites')),
+        getDocs(collection(db, 'clientPortals')),
+        getDocs(collection(db, 'caseInformationRequests')),
+        getDocs(collection(db, 'caseEvidenceRequests')),
+        getDocs(collection(db, 'caseFinancials')),
+        getDocs(collection(db, 'caseEvents')),
+        getDoc(doc(db, 'settings', 'portal'))
+      ]);
 
-      // Users
-      const usersSnap = await getDocs(collection(db, 'users'));
-      const usersList = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setUsers(usersList);
+      setClients(clientsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setCases(casesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setUsers(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setUsersInvites(invitesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setClientPortals(portalsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setInfoRequests(infoSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setEvidenceRequests(evidenceSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setFinancials(financialsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setEvents(eventsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
-      // Portals
-      const portalsSnap = await getDocs(collection(db, 'clientPortals'));
-      const portalsList = portalsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setPortals(portalsList);
-
-      // Cases
-      const casesSnap = await getDocs(collection(db, 'cases'));
-      const casesList = casesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setCases(casesList);
-
-      // Financials
-      const financialsSnap = await getDocs(collection(db, 'caseFinancials'));
-      const financialsList = financialsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setFinancials(financialsList);
-
+      if (portalSettingsSnap.exists()) {
+        setPortalSettings(portalSettingsSnap.data());
+      }
     } catch (err) {
-      console.error('Error fetching backend collections in controller room:', err);
+      console.error("Erro ao carregar coleções:", err);
     } finally {
       setLoading(false);
     }
@@ -115,1368 +88,1322 @@ export default function CentralControle() {
     loadAllCollections();
   }, []);
 
-  // Compute stats for client deletion
-  const prepareClientDeletion = async (client: any) => {
-    setDeletingClient(client);
-    setLoading(true);
+  const copyToClipboard = async (text: string, successMessage: string) => {
     try {
-      const clientId = client.id;
-      const slug = client.slug || '';
-
-      // Linked cases
-      const linkedCases = cases.filter(c => c.clientId === clientId).length;
-      // Financials
-      const linkedFin = financials.filter(f => f.clientId === clientId).length;
-
-      // Event counts
-      const evSnap = await getDocs(query(collection(db, 'caseEvents'), where('clientId', '==', clientId)));
-      const taskSnap = await getDocs(query(collection(db, 'casePendingTasks'), where('clientId', '==', clientId)));
-
-      const portalSnap = await getDoc(doc(db, 'clientPortals', slug));
-      const userSnap = await getDoc(doc(db, 'users', clientId));
-      const inviteSnap = await getDoc(doc(db, 'users_invites', clientId));
-
-      setDeletionStats({
-        casesCount: linkedCases,
-        financialCount: linkedFin,
-        eventsCount: evSnap.size,
-        tasksCount: taskSnap.size,
-        hasPortal: portalSnap.exists(),
-        hasUser: userSnap.exists(),
-        hasInvite: inviteSnap.exists()
-      });
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
+      await navigator.clipboard.writeText(text);
+      alert(successMessage);
+    } catch {
+      alert(`Conteúdo copiado de forma segura: ${text}`);
     }
   };
 
-  // Perform safe deletion of client
-  const executeClientDeletion = async (archiveOnly: boolean = false) => {
-    if (!deletingClient) return;
-    try {
-      const clientId = deletingClient.id;
-      const slug = deletingClient.slug || '';
+  // Helper resolvers
+  const getClientDisplayName = (clientId: string) => {
+    const c = clients.find(cl => cl.id === clientId);
+    if (!c) return 'Não Encontrado';
+    return c.type === 'PF' 
+      ? (c.pfDadosPessoais?.pf_nomeCompleto || c.pfData?.pf_nomeCompleto || 'Sem Nome')
+      : (c.pjDadosEmpresa?.pj_razaoSocial || c.pjData?.pj_razaoSocial || 'Sem Razão Social');
+  };
 
-      if (archiveOnly) {
-        await updateDoc(doc(db, 'clients', clientId), {
-          active: false,
-          archived: true,
-          archivedAt: serverTimestamp(),
-          archiveReason: 'Arquivado via Central de Controle BOSS.'
-        });
-        alert('Cliente arquivado com sucesso!');
+  const getClientEmail = (c: any) => {
+    return c?.acessoSistema?.acesso_emailLogin || c?.email || 'Sem E-mail';
+  };
+
+  const getClientPhone = (c: any) => {
+    if (c?.type === 'PF') {
+      return c.pfContato?.pf_telefone || c.pfContato?.pf_whatsapp || c.pfData?.pf_telefone || 'Sem número';
+    }
+    return c?.pjContatoEmpresa?.pj_telefoneEmpresa || c?.pjData?.pj_telefoneEmpresa || 'Sem número';
+  };
+
+  const getClientDocument = (c: any) => {
+    if (c?.type === 'PF') return c.pfDadosPessoais?.pf_cpf || 'Não Informado';
+    return c?.pjDadosEmpresa?.pj_cnpj || 'Não Informado';
+  };
+
+  // Search filter logic matching ANY of the targets recursively
+  const searchLower = searchTerm.trim().toLowerCase();
+  const matchingClientIds = new Set<string>();
+  const matchingCaseIds = new Set<string>();
+
+  clients.forEach(c => {
+    const name = getClientDisplayName(c.id);
+    const docNum = getClientDocument(c);
+    const email = getClientEmail(c);
+    const phone = getClientPhone(c);
+    const slug = c.slug || '';
+
+    const match = !searchLower ||
+      name.toLowerCase().includes(searchLower) ||
+      docNum.includes(searchLower) ||
+      email.toLowerCase().includes(searchLower) ||
+      phone.includes(searchLower) ||
+      slug.toLowerCase().includes(searchLower) ||
+      c.id.toLowerCase().includes(searchLower);
+
+    if (match) matchingClientIds.add(c.id);
+  });
+
+  cases.forEach(ca => {
+    const title = ca.title || '';
+    const cnj = ca.processNumber || '';
+    const service = ca.registrationType || '';
+    const statusInt = ca.statusInterno || ca.status || '';
+    const statusPub = ca.statusPublicoCliente || '';
+    const lawyer = ca.responsibleLawyer || '';
+    const slug = ca.clientSlug || '';
+
+    const match = !searchLower ||
+      title.toLowerCase().includes(searchLower) ||
+      ca.id.toLowerCase().includes(searchLower) ||
+      cnj.toLowerCase().includes(searchLower) ||
+      service.toLowerCase().includes(searchLower) ||
+      statusInt.toLowerCase().includes(searchLower) ||
+      statusPub.toLowerCase().includes(searchLower) ||
+      lawyer.toLowerCase().includes(searchLower) ||
+      slug.toLowerCase().includes(searchLower) ||
+      matchingClientIds.has(ca.clientId);
+
+    if (match) {
+      matchingCaseIds.add(ca.id);
+      if (ca.clientId) matchingClientIds.add(ca.clientId);
+    }
+  });
+
+  // Displays corresponding to current filters and search
+  const displayedClients = clients.filter(c => matchingClientIds.has(c.id));
+  
+  const displayedCases = cases.filter(ca => {
+    if (!matchingCaseIds.has(ca.id)) return false;
+    if (casesFilter === 'all') return true;
+    if (casesFilter === 'arquivado') return ca.status === 'arquivado';
+    return ca.productionStatus === casesFilter;
+  });
+
+  const displayedSlugs = clientPortals.filter(p => {
+    const client = clients.find(c => c.slug === p.slug);
+    const matchesSearch = !searchLower || 
+      p.slug?.toLowerCase().includes(searchLower) || 
+      (p.clientId && matchingClientIds.has(p.clientId));
+    return matchesSearch;
+  });
+
+  const displayedUsers = users.filter(u => {
+    const matchesSearch = !searchLower ||
+      u.email?.toLowerCase().includes(searchLower) ||
+      u.clientSlug?.toLowerCase().includes(searchLower) ||
+      (u.clientId && matchingClientIds.has(u.clientId));
+    return matchesSearch;
+  });
+
+  const displayedFinancials = financials.filter(f => {
+    const matchesSearch = !searchLower ||
+      f.caseId?.toLowerCase().includes(searchLower) ||
+      f.clientId?.toLowerCase().includes(searchLower) ||
+      (f.status || f.paymentStatus || '').toLowerCase().includes(searchLower) ||
+      (f.clientId && matchingClientIds.has(f.clientId)) ||
+      (f.caseId && matchingCaseIds.has(f.caseId));
+    if (!matchesSearch) return false;
+
+    if (finFilter === 'all') return true;
+    const status = (f.status || f.paymentStatus || '').toLowerCase();
+    const provider = (f.provider || '').toLowerCase();
+    const webhook = (f.webhookStatus || '').toLowerCase();
+
+    if (finFilter === 'pendente') return status === 'pendente' || status === 'aberto';
+    if (finFilter === 'aguardando') return status === 'aguardando' || status === 'aguardando pagamento' || status === 'aguardando_pagamento';
+    if (finFilter === 'pago') return status === 'pago';
+    if (finFilter === 'parcial') return status === 'parcial' || status === 'parcialmente pago';
+    if (finFilter === 'atrasado') return status === 'atrasado' || status === 'em atraso' || status === 'em_atraso';
+    if (finFilter === 'erro_webhook') return webhook === 'erro' || webhook.includes('erro');
+    if (finFilter === 'stripe') return provider === 'stripe';
+    if (finFilter === 'asaas') return provider === 'asaas';
+    if (finFilter === 'manual') return provider === 'manual' || !provider;
+    return true;
+  });
+
+  const combinedRequests = [
+    ...infoRequests.map(r => ({ ...r, reqType: 'Informação', parsedTitle: r.title || r.question || 'Sem título' })),
+    ...evidenceRequests.map(r => ({ ...r, reqType: 'Prova', parsedTitle: r.title || 'Sem título' }))
+  ].filter(r => !searchLower || r.caseId?.toLowerCase().includes(searchLower) || r.parsedTitle?.toLowerCase().includes(searchLower) || matchingCaseIds.has(r.caseId));
+
+  const displayedEvents = events.filter(e => !searchLower || e.title?.toLowerCase().includes(searchLower) || e.type?.toLowerCase().includes(searchLower) || matchingCaseIds.has(e.caseId) || (e.clientId && matchingClientIds.has(e.clientId)));
+
+  const displayedEdrpCases = cases.filter(ca => {
+    if (!matchingCaseIds.has(ca.id)) return false;
+    if (edrpFilter === 'all') return true;
+    if (edrpFilter === 'sem_estruturacao') return !ca.structuring && !ca.edrp?.structuring;
+    if (edrpFilter === 'sem_delegacao') return !ca.responsibleLawyer && !ca.delegation?.responsible;
+    if (edrpFilter === 'aguardando_revisao') return ca.productionStage === 'revisao';
+    if (edrpFilter === 'pronto_protocolo') return ca.productionStage === 'protocolo';
+    if (edrpFilter === 'com_pendencia') return ca.productionStatus === 'com_pendencias';
+    if (edrpFilter === 'protocolado') return ca.statusInterno === 'protocolado' || ca.status === 'protocolado';
+    if (edrpFilter === 'controladoria') return ca.productionStage === 'controladoria';
+    return true;
+  });
+
+  // DB INTEGRITY AUDIT ENGINE (Aba 9 & Diagnostic computation)
+  const runDiagnostic = () => {
+    const criticalErrorsList: string[] = [];
+    const warningList: string[] = [];
+
+    clients.forEach(c => {
+      const name = getClientDisplayName(c.id);
+      if (!c.slug) {
+        criticalErrorsList.push(`Cliente [${name}] está sem slug cadastrado.`);
       } else {
-        // Exclude definitely
-        await deleteDoc(doc(db, 'clients', clientId));
-        if (slug) {
-          await deleteDoc(doc(db, 'clientPortals', slug));
+        const portal = clientPortals.find(p => p.slug === c.slug);
+        if (!portal) {
+          criticalErrorsList.push(`Tabela clientPortals ausente para o slug "/${c.slug}" do cliente.`);
+        } else if (portal.clientId !== c.id) {
+          criticalErrorsList.push(`Tabela clientPortals aponta para clientId incorreto para o slug "/${c.slug}".`);
         }
-        await deleteDoc(doc(db, 'users', clientId));
-        await deleteDoc(doc(db, 'users_invites', clientId));
-        alert('Cliente excluído definitivamente das coleções de cadastro e acesso.');
       }
-      setDeletingClient(null);
-      setDeletionStats(null);
-      loadAllCollections();
-    } catch (err) {
-      console.error(err);
-      alert('Falha interna ao processar remoção.');
+    });
+
+    cases.forEach(ca => {
+      if (!ca.clientId) {
+        criticalErrorsList.push(`Caso [${ca.title || ca.id}] está sem clientId.`);
+      } else if (!clients.some(cl => cl.id === ca.clientId)) {
+        criticalErrorsList.push(`Caso [${ca.title}] aponta para clientId inexistente: "${ca.clientId}".`);
+      }
+      if (!ca.clientSlug) {
+        criticalErrorsList.push(`Caso [${ca.title}] está sem clientSlug.`);
+      }
+      if (!ca.statusInterno && !ca.status) {
+        criticalErrorsList.push(`Caso [${ca.title}] está sem statusInterno.`);
+      }
+      if (!ca.statusPublicoCliente) {
+        criticalErrorsList.push(`Caso [${ca.title}] está sem statusPublicoCliente.`);
+      }
+
+      // EDRP check warnings
+      const hasStructuring = !!(ca.structuring || ca.edrp?.structuring);
+      const hasDelegation = !!(ca.responsibleLawyer || ca.delegation?.responsible);
+      if (!hasStructuring) warningList.push(`Processo [${ca.title}]: Estágio estruturação EDRP não está preenchido.`);
+      if (!hasDelegation) warningList.push(`Processo [${ca.title}]: Estágio delegação EDRP sem responsável.`);
+    });
+
+    users.forEach(u => {
+      if (u.role === 'client') {
+        if (!u.clientId) criticalErrorsList.push(`Usuário client [${u.email}] está sem clientId.`);
+        if (!u.clientSlug) criticalErrorsList.push(`Usuário client [${u.email}] está sem clientSlug.`);
+      }
+    });
+
+    financials.forEach(f => {
+      if (!f.caseId) {
+        criticalErrorsList.push(`Faturamento [${f.id}] sem caseId.`);
+      } else if (!cases.some(ca => ca.id === f.caseId)) {
+        criticalErrorsList.push(`Faturamento [${f.id}] aponta para caseId inexistente: "${f.caseId}".`);
+      }
+    });
+
+    // Connector Checklist warnings
+    const hasStripe = portalSettings?.stripeActive || process.env.VITE_STRIPE_PUBLIC_KEY || false;
+    const hasAsaas = portalSettings?.asaasActive || false;
+    const hasDrive = portalSettings?.googleDriveConnected || false;
+
+    if (!hasStripe && !hasAsaas) warningList.push("Provedor de finanças (Stripe / Asaas) não configurado ou inativo.");
+    if (!hasDrive) warningList.push("Provedor Google Drive não está ativo na central de mídias.");
+
+    let statusGeral: 'Pronto para deploy' | 'Pronto com ressalvas' | 'Não recomendado para deploy' = 'Pronto para deploy';
+    if (criticalErrorsList.length > 0) {
+      statusGeral = 'Não recomendado para deploy';
+    } else if (warningList.length > 0) {
+      statusGeral = 'Pronto com ressalvas';
     }
+
+    return {
+      criticalErrorsList,
+      warningList,
+      statusGeral
+    };
   };
 
-  // Suspend/Reactivate portal
+  const handleCopyResumo = () => {
+    const { criticalErrorsList, statusGeral } = runDiagnostic();
+    const totalP = cases.filter(c => c.productionStatus === 'com_pendencias').length;
+
+    const summaryText = `Central de Controle BOSS — Diagnóstico
+Clientes: ${clients.length}
+Casos: ${cases.length}
+Pendências: ${totalP}
+Erros críticos: ${criticalErrorsList.length}
+Status geral: ${statusGeral}
+Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erros estruturais cadastrais do portal' : 'Sincronizações homologadas para produção'}`;
+
+    copyToClipboard(summaryText, 'Resumo do diagnóstico administrativo copiado!');
+  };
+
   const togglePortalSuspension = async (client: any, activeState: boolean) => {
     try {
       await updateDoc(doc(db, 'clients', client.id), { active: activeState });
       if (client.slug) {
         await updateDoc(doc(db, 'clientPortals', client.slug), { active: activeState });
       }
-      alert(`Portal de ${client.slug} marcado como ${activeState ? 'ATIVO' : 'SUSPENSO'}.`);
+      alert(`Acesso ao portal de ${client.slug} definido como: ${activeState ? 'ATIVO' : 'SUSPENSO'}`);
       loadAllCollections();
     } catch (err) {
       console.error(err);
+      alert('Incapaz de atualizar estado de ativação do portal de clientes.');
     }
   };
 
-  // High safety slug migration
-  const handleMigrateSlug = async (client: any, newSlugInput: string) => {
-    const rawSlug = newSlugInput.trim().toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)+/g, '');
-
-    if (!rawSlug) {
-      alert('Caractere inválido para o slug.');
-      return;
-    }
-
-    const oldSlug = client.slug;
-    if (oldSlug === rawSlug) return;
-
-    // Confirm choice
-    if (!window.confirm(`Alterar o slug de "${oldSlug}" para "${rawSlug}" impactará o acesso ao Portal do Cliente. Deseja continuar?`)) {
-      return;
-    }
-
-    setLoading(true);
+  const handleMarkRequestStatus = async (req: any, newStatus: string) => {
     try {
-      // Check if newSlug is already in use
-      const checkSnap = await getDoc(doc(db, 'clientPortals', rawSlug));
-      if (checkSnap.exists()) {
-        alert('Este identificador slug já está ocupado por outro cliente. Operação abortada.');
-        setLoading(false);
-        return;
-      }
-
-      const clientId = client.id;
-
-      // 1. Update client
-      await updateDoc(doc(db, 'clients', clientId), { slug: rawSlug });
-
-      // 2. Add new clientPortals
-      const oldPortalSnap = await getDoc(doc(db, 'clientPortals', oldSlug));
-      const oldPortalData = oldPortalSnap.exists() ? oldPortalSnap.data() : {};
-      await setDoc(doc(db, 'clientPortals', rawSlug), {
-        ...oldPortalData,
-        clientId,
-        slug: rawSlug,
-        updatedAt: serverTimestamp()
+      const colName = req.reqType === 'Informação' ? 'caseInformationRequests' : 'caseEvidenceRequests';
+      await updateDoc(doc(db, colName, req.id), {
+        status: newStatus,
+        bossFeedback: `Avaliado pelo BOSS - ${newStatus.toUpperCase()}`,
+        updatedAt: new Date()
       });
-
-      // 3. Delete old clientPortals entry
-      await deleteDoc(doc(db, 'clientPortals', oldSlug));
-
-      // 4. Update user
-      const userRef = doc(db, 'users', clientId);
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists()) {
-        await updateDoc(userRef, { clientSlug: rawSlug });
-      }
-
-      // 5. Update linked cases
-      const linkedCasesList = cases.filter(c => c.clientId === clientId);
-      for (const item of linkedCasesList) {
-        await updateDoc(doc(db, 'cases', item.id), { clientSlug: rawSlug });
-      }
-
-      alert(`Slug modificado de "${oldSlug}" para "${rawSlug}"! \nNovo link login gerado: /portal-cliente-giffoni/${rawSlug}/login`);
+      alert(`Solicitação marcada como: ${newStatus.toUpperCase()}`);
       loadAllCollections();
     } catch (err) {
       console.error(err);
-      alert('Erro na migração do slug.');
-    } finally {
-      setLoading(false);
     }
   };
 
-  // Create financial records inside controllers
-  const handleCreateFinancial = async (payload: any) => {
-    if (!payload.clientId || !payload.caseId) {
-      alert('Dados obrigatórios faltando.');
-      return;
-    }
+  const handleMarkFinancialAttention = async (f: any) => {
     try {
-      await addDoc(collection(db, 'caseFinancials'), {
-        clientId: payload.clientId,
-        caseId: payload.caseId,
-        totalAmount: Number(payload.totalAmount) || 0,
-        status: payload.status || 'Em andamento',
-        installments: Number(payload.installments) || 1,
-        installmentsPaid: Number(payload.installmentsPaid) || 0,
-        nextDueDate: payload.nextDueDate || '',
-        visibleToClient: payload.visibleToClient ?? true,
-        updatedAt: serverTimestamp()
+      await updateDoc(doc(db, 'caseFinancials', f.id), {
+        status: 'Atrasado',
+        webhookStatus: 'Cobrança manual e auditoria solicitada pelo BOSS',
+        attentionFlagged: true
       });
-      alert('Registro financeiro acoplado com sucesso!');
-      setIsAddingFinancial(false);
+      alert('Alerta de atenção administrativa anexado ao lançamento de faturamento.');
       loadAllCollections();
     } catch (err) {
       console.error(err);
     }
   };
 
-  // Trigger fast User Correction tool
-  const handleCorrectUser = async (u: any) => {
-    try {
-      // Attempt to ensure client and clientPortals exist
-      if (!u.clientId) {
-        alert('Não é possível corrigir: Este registro de login não possui clientId associado.');
-        return;
-      }
-      const clientSnap = await getDoc(doc(db, 'clients', u.clientId));
-      if (!clientSnap.exists()) {
-        alert('Não é possível sincronizar: O clientId indicado não corresponde a nenhum cliente ativo.');
-        return;
-      }
-      const clientData = clientSnap.data();
-      const clientSlug = clientData.slug || '';
-
-      if (clientSlug) {
-        // Sincronizar clientPortal
-        await setDoc(doc(db, 'clientPortals', clientSlug), {
-          clientId: u.clientId,
-          slug: clientSlug,
-          active: true,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-        // Sincronizar user
-        await updateDoc(doc(db, 'users', u.id), {
-          clientSlug: clientSlug,
-          name: clientData.type === 'PF' ? clientData.pfDadosPessoais?.pf_nomeCompleto : clientData.pjDadosEmpresa?.pj_razaoSocial
-        });
-        alert('Sincronização de segurança concluída com sucesso!');
-        loadAllCollections();
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // Run audit engine calculations
-  const runAuditorEngine = () => {
-    const checkList: any[] = [];
-    let ok = 0;
-    let att = 0;
-    let pend = 0;
-    let err = 0;
-
-    const addAudit = (cat: 'CLIENTE' | 'PORTAL' | 'USUÁRIO' | 'CASOS' | 'FINANCEIRO' | 'PRODUÇÃO', key: string, status: 'OK' | 'Atenção' | 'Pendente' | 'Erro Crítico', desc: string) => {
-      if (status === 'OK') ok++;
-      if (status === 'Atenção') att++;
-      if (status === 'Pendente') pend++;
-      if (status === 'Erro Crítico') err++;
-      checkList.push({ cat, key, status, desc });
-    };
-
-    // 1. Clients check
-    clients.forEach(c => {
-      const name = c.type === 'PF' ? c.pfDadosPessoais?.pf_nomeCompleto : c.pjDadosEmpresa?.pj_razaoSocial;
-      if (!name) {
-        addAudit('CLIENTE', `ID: ${c.id}`, 'Erro Crítico', 'Cadastro de cliente sem nome ou razão social.');
-      } else {
-        addAudit('CLIENTE', `${name}`, 'OK', `Cadastro registrado correspondendo ao slug: ${c.slug}`);
-      }
-      const docSymbol = c.type === 'PF' ? c.pfDadosPessoais?.pf_cpf : c.pjDadosEmpresa?.pj_cnpj;
-      if (!docSymbol) {
-        addAudit('CLIENTE', `${name || c.id}`, 'Atenção', 'Cadastro sem CPF/CNPJ.');
-      }
-    });
-
-    // 2. Portals check
-    portals.forEach(p => {
-      const linkedClient = clients.find(c => c.id === p.clientId);
-      if (!linkedClient) {
-        addAudit('PORTAL', `Slug: ${p.id}`, 'Erro Crítico', `Órfão: O portal com slug "${p.id}" aponta para clientId inexistente.`);
-      } else if (linkedClient.slug !== p.id) {
-        addAudit('PORTAL', `Slug: ${p.id}`, 'Erro Crítico', `Inconsistência: Slug em clients (${linkedClient.slug}) difere do portal (${p.id}).`);
-      } else {
-        addAudit('PORTAL', `Slug: ${p.id}`, 'OK', `Consistente: Vinculo com ${linkedClient.slug} ativo.`);
-      }
-    });
-
-    // 3. User checks
-    users.forEach(u => {
-      if (u.role === 'client') {
-        if (!u.clientId || !u.clientSlug) {
-          addAudit('USUÁRIO', `${u.email}`, 'Erro Crítico', 'Falta clientId ou clientSlug no usuário.');
-        } else {
-          const clientExists = clients.some(c => c.id === u.clientId);
-          const portalExists = portals.some(p => p.id === u.clientSlug);
-          if (!clientExists || !portalExists) {
-            addAudit('USUÁRIO', `${u.email}`, 'Erro Crítico', `Usuário linkado a cliente ou portal deletado.`);
-          } else {
-            addAudit('USUÁRIO', `${u.email}`, 'OK', `Validação OK para o perfil client.`);
-          }
-        }
-      }
-    });
-
-    // 4. Cases inspect
-    cases.forEach(ca => {
-      if (!ca.clientId || !ca.clientSlug) {
-        addAudit('CASOS', `${ca.title || ca.id}`, 'Erro Crítico', 'Caso órfão de vinculação clientId / clientSlug.');
-      } else {
-        const clientExists = clients.some(c => c.id === ca.clientId);
-        if (!clientExists) {
-          addAudit('CASOS', `${ca.title || ca.id}`, 'Erro Crítico', `Caso aponta para cliente ID inexistente (${ca.clientId}).`);
-        } else {
-          addAudit('CASOS', `${ca.title}`, 'OK', `Caso vinculado a ${ca.clientSlug}.`);
-        }
-      }
-    });
-
-    // 5. Finance inspect
-    financials.forEach(f => {
-      const caseExists = cases.some(ca => ca.id === f.caseId);
-      const clientExists = clients.some(c => c.id === f.clientId);
-      if (!caseExists || !clientExists) {
-        addAudit('FINANCEIRO', `ID Financeiro: ${f.id}`, 'Erro Crítico', 'Registro financeiro órfão (caseId ou clientId excluídos).');
-      } else {
-        addAudit('FINANCEIRO', `ID Financeiro: ${f.id}`, 'OK', 'Vínculo financeiro legítimo.');
-      }
-    });
-
-    // 6. Recommendation
-    let rec = 'NÃO RECOMENDADO PARA DEPLOY';
-    if (err === 0) {
-      rec = att === 0 ? 'PRONTO PARA DEPLOY' : 'PRONTO COM RESSALVAS';
-    }
-
-    setIntegrityState({
-      okCount: ok,
-      attenCount: att,
-      pendCount: pend,
-      errorCount: err,
-      items: checkList,
-      recommendation: rec
-    });
-  };
-
-  useEffect(() => {
-    if (activeTab === 'integridade') {
-      runAuditorEngine();
-    }
-  }, [activeTab, clients, users, portals, cases, financials]);
-
-  // Global search filtering
-  const filteredClients = clients.filter(c => {
-    const search = searchTerm.toLowerCase();
-    const name = (c.type === 'PF' ? c.pfDadosPessoais?.pf_nomeCompleto : c.pjDadosEmpresa?.pj_razaoSocial) || '';
-    const email = (c.acessoSistema?.acesso_emailLogin) || '';
-    const doc = (c.type === 'PF' ? c.pfDadosPessoais?.pf_cpf : c.pjDadosEmpresa?.pj_cnpj) || '';
-    return name.toLowerCase().includes(search) || email.toLowerCase().includes(search) || doc.includes(search) || c.slug?.includes(search);
-  });
-
-  const filteredCases = cases.filter(ca => {
-    const search = searchTerm.toLowerCase();
-    return (ca.title || '').toLowerCase().includes(search) || 
-           (ca.processNumber || '').includes(search) || 
-           (ca.clientSlug || '').toLowerCase().includes(search);
-  });
-
-  const filteredFinancials = financials.filter(f => {
-    const search = searchTerm.toLowerCase();
-    return (f.clientId || '').toLowerCase().includes(search) || (f.status || '').toLowerCase().includes(search);
-  });
+  const diag = runDiagnostic();
 
   return (
     <BossLayout>
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-12 h-12 bg-gray-900 rounded-xl flex items-center justify-center text-white shadow-lg">
-            <Sliders size={24} />
+      <div className="space-y-6 font-sans select-none max-w-7xl mx-auto">
+        
+        {/* Dynamic Admin Header */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-gray-150 pb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 bg-indigo-650 rounded-xl flex items-center justify-center text-white shadow-md">
+              <Sliders size={22} />
+            </div>
+            <div>
+              <h1 className="text-2xl font-black text-gray-900 tracking-tight leading-none mb-1">Central de Controle BOSS</h1>
+              <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider font-mono">Consola Mestre de Auditoria e Integridade</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-black text-gray-950 tracking-tight">Central de Controle BOSS</h1>
-            <p className="text-sm font-semibold text-gray-500 uppercase tracking-widest">Controles mestre e Auditorias da Estrutura</p>
-          </div>
-        </div>
-      </div>
 
-      {/* Global Search Tool Bar */}
-      <div className="bg-white p-4 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between mb-8">
-        <div className="relative w-full md:w-96">
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Pesquisar cliente, caso, slug, processo, e-mail..."
-            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-100 text-sm font-medium"
-          />
-          <Search size={18} className="absolute left-3.5 top-3 text-gray-400" />
-        </div>
-        <button
-          onClick={loadAllCollections}
-          className="flex items-center gap-2 px-5 py-2.5 bg-gray-50 hover:bg-gray-100 rounded-2xl border border-gray-200 text-xs font-black uppercase text-gray-600 cursor-pointer"
-        >
-          <RefreshCw size={14} /> Sincronizar Banco
-        </button>
-      </div>
-
-      {/* Primary Navigation Hub Tabs */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-3 mb-8">
-        {[
-          { id: 'clientes', label: '1. Clientes', icon: Users },
-          { id: 'usuarios', label: '2. Usuários / Acessos', icon: User },
-          { id: 'slugs', label: '3. Portais / Slugs', icon: Compass },
-          { id: 'casos', label: '4. Casos', icon: Briefcase },
-          { id: 'financeiro', label: '5. Financeiro', icon: DollarSign },
-          { id: 'producao', label: '6. Produção', icon: Activity },
-          { id: 'integridade', label: '7. Integridade', icon: ShieldAlert }
-        ].map(t => {
-          const isActive = activeTab === t.id;
-          return (
+          <div className="flex flex-wrap items-center gap-2">
             <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id as any)}
-              className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
-                isActive ? 'bg-blue-600 text-white shadow-md shadow-blue-100' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
-              }`}
+              onClick={() => {
+                loadAllCollections();
+                alert('Banco de dados sincronizado!');
+              }}
+              className="px-3.5 py-2 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl text-xs font-bold text-gray-700 flex items-center gap-1.5 cursor-pointer shadow-2xs"
             >
-              <t.icon size={15} />
-              {t.label}
+              <RefreshCw size={13} className={loading ? "animate-spin text-indigo-500" : ""} />
+              <span>Sincronizar Banco</span>
             </button>
-          )
-        })}
-      </div>
+            <button
+              onClick={() => {
+                setActiveTab('integridade');
+                alert('Diagnóstico estrutural recalculado abaixo.');
+              }}
+              className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-xl text-xs font-bold font-mono border border-amber-200 flex items-center gap-1.5 cursor-pointer"
+            >
+              <ShieldAlert size={14} />
+              <span>Gerar Diagnose</span>
+            </button>
+            <button
+              onClick={handleCopyResumo}
+              className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+            >
+              <Copy size={13} />
+              <span>Copiar Resumo</span>
+            </button>
+            <button
+              onClick={() => navigate('/boss-giffoni-clientes/configurações')}
+              className="px-3.5 py-2 bg-gray-50 border border-gray-200 hover:bg-gray-150 rounded-xl text-xs font-bold text-gray-650 cursor-pointer text-center"
+            >
+              Ir para Conectores
+            </button>
+            <button
+              onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao')}
+              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold cursor-pointer text-center"
+            >
+              Painel de Produção
+            </button>
+          </div>
+        </div>
 
-      {/* MAIN CONTAINER TABS BODY */}
-      <div className="space-y-6">
+        {/* Global Multi-symmetric Search Toolbar */}
+        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-3xs flex flex-col md:flex-row gap-3 items-center justify-between">
+          <div className="relative w-full">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Pesquisa global: Nome, CPF, CNPJ, e-mail, telefone, slug, clientId, caseId, número CNJ, serviço, status faturamento, etc..."
+              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-150 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-semibold placeholder:text-gray-400"
+            />
+            <Search size={16} className="absolute left-3.5 top-3 text-gray-400" />
+          </div>
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="px-3 py-2 bg-gray-100 text-gray-500 font-bold rounded-lg text-xs"
+            >
+              Limpar
+            </button>
+          )}
+        </div>
+
+        {/* Tab Navigation Tray (9 items requested) */}
+        <div className="flex items-center gap-1 border-b border-gray-200 overflow-x-auto pb-1.5 scrollbar-none">
+          {[
+            { id: 'clientes', label: 'Clientes', count: displayedClients.length },
+            { id: 'casos', label: 'Casos / Processos', count: displayedCases.length },
+            { id: 'slugs', label: 'Slugs & Rotas', count: displayedSlugs.length },
+            { id: 'usuarios', label: 'Acessos & Contas', count: displayedUsers.length },
+            { id: 'financeiro', label: 'Financeiro', count: displayedFinancials.length },
+            { id: 'solicitacoes', label: 'Solicitações (Info/Provas)', count: combinedRequests.length },
+            { id: 'agenda', label: 'Agenda & Atos', count: displayedEvents.length },
+            { id: 'edrp', label: 'Esteira EDRP', count: displayedEdrpCases.length },
+            { id: 'integridade', label: 'Auditoria de Deploy', count: diag.criticalErrorsList.length, warning: true },
+          ].map((t) => {
+            const isActive = activeTab === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id as TabId)}
+                className={`px-3.5 py-2.5 rounded-xl text-[11px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all shrink-0 cursor-pointer ${
+                  isActive 
+                    ? 'bg-indigo-600 text-white shadow-sm' 
+                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <span>{t.label}</span>
+                <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black ${
+                  isActive 
+                    ? 'bg-indigo-800 text-indigo-100' 
+                    : t.warning && t.count > 0 
+                      ? 'bg-rose-100 text-rose-700' 
+                      : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {t.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* LOADING BOX CONTAINER */}
         {loading && (
-          <div className="p-8 text-center text-gray-400 font-bold uppercase text-xs tracking-widest bg-white rounded-3xl border border-dashed border-gray-200">
-            Aguarde. Carregando bancos de dados...
+          <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 rounded-3xl gap-2 font-mono">
+            <div className="w-8 h-8 border-4 border-gray-100 border-t-indigo-600 rounded-full animate-spin"></div>
+            <span className="text-[10px] text-gray-400 uppercase font-black tracking-wider">Aguarde. Carregando bancos...</span>
           </div>
         )}
 
+        {/* CURRENT ACTIVE TAB BODY */}
         {!loading && (
-          <div>
-            {/* TAB 1: CLIENTES */}
+          <div className="min-h-[300px]">
+            
+            {/* ABA 1: CLIENTES */}
             {activeTab === 'clientes' && (
-              <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[800px]">
-                  <thead>
-                    <tr className="border-b border-gray-150 text-[10px] uppercase font-black text-gray-400 tracking-wider">
-                      <th className="py-3 px-4">Nome Cliente</th>
-                      <th className="py-3">Portal / Slug</th>
-                      <th className="py-3">Documento</th>
-                      <th className="py-3">E-mail</th>
-                      <th className="py-3">Estado Portal</th>
-                      <th className="py-3 text-right">Ações Operacionais</th>
+              <div className="bg-white border border-gray-150 rounded-2xl shadow-3xs overflow-hidden">
+                <table className="w-full text-left border-collapse min-w-[900px]">
+                  <thead className="bg-gray-50 border-b border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                    <tr>
+                      <th className="py-3 px-4">Nome / Empresa</th>
+                      <th className="py-3">CPF/CNPJ</th>
+                      <th className="py-3">Acesso E-mail</th>
+                      <th className="py-3">Contato Telefone</th>
+                      <th className="py-3">Slug</th>
+                      <th className="py-3">Instância ID</th>
+                      <th className="py-3">Status</th>
+                      <th className="py-3 text-right pr-4">Ações</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50 text-xs">
-                    {filteredClients.map(c => {
-                      const name = c.type === 'PF' ? c.pfDadosPessoais?.pf_nomeCompleto : c.pjDadosEmpresa?.pj_razaoSocial;
-                      const docCode = c.type === 'PF' ? c.pfDadosPessoais?.pf_cpf : c.pjDadosEmpresa?.pj_cnpj;
-                      return (
-                        <tr key={c.id} className="hover:bg-gray-50/50">
-                          <td className="py-4 px-4 font-bold text-gray-900">{name || 'Indefinido'}</td>
-                          <td className="py-4 font-mono font-bold text-blue-600">{c.slug || 'Sem portal'}</td>
-                          <td className="py-4 font-medium text-gray-500">{docCode || 'Falta'}</td>
-                          <td className="py-4 text-gray-500">{c.acessoSistema?.acesso_emailLogin || 'Sem acesso'}</td>
-                          <td className="py-4">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${c.active ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                              {c.active ? 'Ativo' : 'Suspenso'}
-                            </span>
-                          </td>
-                          <td className="py-4 text-right space-x-2">
-                            <button
-                              onClick={() => togglePortalSuspension(c, !c.active)}
-                              className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-[10px] font-black rounded uppercase text-gray-600"
-                            >
-                              {c.active ? 'Suspender' : 'Ativar'}
-                            </button>
-                            <button
-                              onClick={() => setEditingClient(c)}
-                              className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-[10px] font-black rounded uppercase text-blue-700"
-                            >
-                              Editar
-                            </button>
-                            <button
-                              onClick={() => prepareClientDeletion(c)}
-                              className="px-2 py-1 bg-red-50 hover:bg-red-100 text-[10px] font-black rounded uppercase text-red-600"
-                            >
-                              Remover
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* TAB 2: USUÁRIOS */}
-            {activeTab === 'usuarios' && (
-              <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[700px]">
-                  <thead>
-                    <tr className="border-b border-gray-150 text-[10px] uppercase font-black text-gray-400 tracking-wider">
-                      <th className="py-3 px-4">E-mail Login</th>
-                      <th className="py-3">Tipo / Cargo</th>
-                      <th className="py-3">Vínculo clientId</th>
-                      <th className="py-3">Vínculo Slug</th>
-                      <th className="py-3">Status Autenticador</th>
-                      <th className="py-3 text-right">Controles</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50 text-xs">
-                    {users.map(u => (
-                      <tr key={u.id} className="hover:bg-gray-50/50">
-                        <td className="py-4 px-4 font-bold text-gray-900">{u.email}</td>
-                        <td className="py-4 font-black uppercase text-[10px] tracking-widest text-gray-400">{u.role}</td>
-                        <td className="py-4 font-mono text-[10px] text-gray-500">{u.clientId || 'Nulo'}</td>
-                        <td className="py-4 font-mono font-bold text-blue-600">{u.clientSlug || 'Sem portal'}</td>
-                        <td className="py-4">
-                          <span className={`px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${u.status === 'ativo' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                            {u.status || 'Pendente'}
-                          </span>
-                        </td>
-                        <td className="py-4 text-right space-x-1.5">
-                          <button
-                            onClick={() => handleCorrectUser(u)}
-                            className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-[10px] font-black rounded uppercase text-emerald-700"
-                          >
-                            Corrigir Vínculo
-                          </button>
-                          <button
-                            onClick={() => setEditingUser(u)}
-                            className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-[10px] font-black rounded uppercase text-blue-700"
-                          >
-                            Editar
-                          </button>
-                        </td>
+                  <tbody className="divide-y divide-gray-100 text-xs text-gray-700">
+                    {displayedClients.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-gray-400 italic">Nenhum cliente cadastrado atende aos critérios descritos.</td>
                       </tr>
-                    ))}
+                    ) : (
+                      displayedClients.map(c => {
+                        const clientName = getClientDisplayName(c.id);
+                        const numCasos = cases.filter(ca => ca.clientId === c.id).length;
+                        return (
+                          <tr key={c.id} className="hover:bg-gray-50/40">
+                            <td className="py-4 px-4">
+                              <span className="font-extrabold text-gray-900 block">{clientName}</span>
+                              <span className="text-[10px] text-indigo-500 font-bold block mt-0.5 font-mono">{numCasos} processo(s) vinculado(s)</span>
+                            </td>
+                            <td className="py-4 font-mono font-semibold">{getClientDocument(c)}</td>
+                            <td className="py-4 text-gray-500">{getClientEmail(c)}</td>
+                            <td className="py-4 text-gray-500">{getClientPhone(c)}</td>
+                            <td className="py-4 font-mono font-bold text-indigo-650">/{c.slug || 'sem-slug'}</td>
+                            <td className="py-4 font-mono text-[10px] text-gray-400">{c.id}</td>
+                            <td className="py-4">
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                                c.active !== false ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                              }`}>
+                                {c.active !== false ? 'Ativo' : 'Suspenso'}
+                              </span>
+                            </td>
+                            <td className="py-4 text-right pr-4 space-x-1 whitespace-nowrap">
+                              <button
+                                onClick={() => navigate(`/boss-giffoni-clientes/clientes/${c.id}`)}
+                                className="px-2 py-1 bg-gray-100 hover:bg-gray-250 text-[10px] font-bold text-gray-750 rounded-lg cursor-pointer"
+                              >
+                                Abrir
+                              </button>
+                              <button
+                                onClick={() => navigate(`/boss-giffoni-clientes/portal-cliente-preview/${c.id}`)}
+                                className="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-[10px] font-bold text-purple-700 rounded-lg cursor-pointer"
+                              >
+                                Preview
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const link = portalSettings?.link || 'https://aistudio.google.com/apps/93c62126-a17f-4c18-8bc7-d327df1ca6b5?showPreview=true&showAssistant=true';
+                                  window.open(link, '_blank');
+                                }}
+                                className="px-2 py-1 bg-white border border-gray-200 hover:bg-gray-50 text-[10px] font-bold text-gray-700 rounded-lg cursor-pointer"
+                              >
+                                App Externo
+                              </button>
+                              <button
+                                onClick={() => togglePortalSuspension(c, c.active === false)}
+                                className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer ${
+                                  c.active !== false ? 'bg-amber-50 hover:bg-amber-100 text-amber-700' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-750'
+                                }`}
+                              >
+                                {c.active !== false ? 'Suspender' : 'Reativar'}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setActiveTab('integridade');
+                                  setSearchTerm(c.slug || '');
+                                }}
+                                className="px-2 py-1 bg-slate-55/40 hover:bg-slate-100 text-[10px] text-slate-700 rounded-lg cursor-pointer font-bold"
+                              >
+                                Integridade
+                              </button>
+                              <button
+                                onClick={() => setSafeDeleteWarning("A exclusão definitiva será tratada em build próprio de segurança.")}
+                                className="px-2 py-1 bg-red-50 hover:bg-red-100 text-[10px] text-red-600 rounded-lg font-bold cursor-pointer"
+                              >
+                                Excluir
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
             )}
 
-            {/* TAB 3: SLUGS */}
-            {activeTab === 'slugs' && (
-              <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm overflow-x-auto">
-                <p className="text-xs text-gray-500 font-medium mb-4">Gerencie as rotas de acesso final aos portais. Mudar o slug redistribui recursivamente o indicador em clientes, logins de usuários e seus processos judiciais.</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {clients.map(cl => (
-                    <div key={cl.id} className="p-5 bg-gray-50/40 border border-gray-150 rounded-2xl flex flex-col justify-between space-y-4">
-                      <div className="space-y-1">
-                        <h4 className="font-bold text-gray-900 text-xs">{(cl.type === 'PF' ? cl.pfDadosPessoais?.pf_nomeCompleto : cl.pjDadosEmpresa?.pj_razaoSocial) || 'Nulo'}</h4>
-                        <div className="flex items-center gap-1.5 text-[10px] text-gray-400 font-mono">
-                          <span>Instância:</span>
-                          <span className="font-bold bg-gray-100 px-1 rounded">{cl.id}</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1.5 shadow-sm p-4 bg-white rounded-xl border border-gray-100">
-                        <label className="text-[10px] font-black uppercase text-gray-400">Slug Atual</label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            defaultValue={cl.slug}
-                            id={`slug-input-${cl.id}`}
-                            className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-150 rounded-lg font-mono text-xs focus:ring-1 focus:ring-blue-500 outline-none"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const v = (document.getElementById(`slug-input-${cl.id}`) as HTMLInputElement)?.value;
-                              handleMigrateSlug(cl, v);
-                            }}
-                            className="px-3 bg-blue-600 hover:bg-blue-700 text-white font-black text-[10px] rounded uppercase"
-                          >
-                            Migrar
-                          </button>
-                        </div>
-                        <p className="text-[9px] text-gray-400 font-medium italic">Url: /portal-cliente-giffoni/{cl.slug}/login</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* TAB 4: CASOS */}
+            {/* ABA 2: CASOS */}
             {activeTab === 'casos' && (
-              <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm overflow-x-auto">
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-xs text-gray-400 font-bold uppercase tracking-widest">{filteredCases.length} Processos Cadastrados</span>
-                  <button
-                    onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao')}
-                    className="flex items-center gap-1 bg-gray-950 hover:bg-black text-white font-black text-[10px] rounded-lg px-3.5 py-2 uppercase"
-                  >
-                    <Plus size={14} /> Novo Caso no Fluxo
-                  </button>
-                </div>
-
-                <table className="w-full text-left border-collapse min-w-[800px]">
-                  <thead>
-                    <tr className="border-b border-gray-150 text-[10px] uppercase font-black text-gray-400 tracking-wider">
-                      <th className="py-3 px-4">Caso / Pasta</th>
-                      <th className="py-3">Fliado a (Slug)</th>
-                      <th className="py-3">Nº Operacional CNJ</th>
-                      <th className="py-3">Responsável</th>
-                      <th className="py-3">Etapa Fluxo</th>
-                      <th className="py-3">Instância Estado</th>
-                      <th className="py-3 text-right">Controles</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50 text-xs">
-                    {filteredCases.map(ca => (
-                      <tr key={ca.id} className="hover:bg-gray-50/50">
-                        <td className="py-4 px-4 font-bold text-gray-900 flex items-center gap-2">
-                          <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
-                          {ca.title}
-                        </td>
-                        <td className="py-4 font-mono font-bold text-gray-500">{ca.clientSlug || 'Sem vínculo'}</td>
-                        <td className="py-4 font-mono font-medium text-gray-400">{ca.processNumber || 'Extrajudicial / Administrativo'}</td>
-                        <td className="py-4 text-gray-500">{ca.responsibleLawyer || 'Não escalado'}</td>
-                        <td className="py-4">
-                          <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-black uppercase tracking-wide">
-                            {ca.productionStage || 'Iniciado'}
-                          </span>
-                        </td>
-                        <td className="py-4">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${ca.status === 'ativo' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                            {ca.status}
-                          </span>
-                        </td>
-                        <td className="py-4 text-right space-x-2">
-                          <button
-                            onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao?caseId=${ca.id}`)}
-                            className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-[10px] font-black rounded uppercase text-emerald-700"
-                          >
-                            Retomar Fluxo
-                          </button>
-                          <button
-                            onClick={() => setEditingCase(ca)}
-                            className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-[10px] font-black rounded uppercase text-blue-700"
-                          >
-                            Editar
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* TAB 5: FINANCEIRO */}
-            {activeTab === 'financeiro' && (
-              <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm overflow-x-auto">
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-xs text-gray-400 font-bold uppercase tracking-widest">{filteredFinancials.length} Relatórios de Faturamento</span>
-                  <button
-                    onClick={() => {
-                      if (cases.length === 0) {
-                        alert('Nenhum caso cadastrado para vincular faturamento.');
-                        return;
-                      }
-                      setIsAddingFinancial(true);
-                    }}
-                    className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] rounded-lg px-3.5 py-2 uppercase cursor-pointer"
-                  >
-                    <Plus size={14} /> Novo Lancamento
-                  </button>
-                </div>
-
-                <table className="w-full text-left border-collapse min-w-[700px]">
-                  <thead>
-                    <tr className="border-b border-gray-150 text-[10px] uppercase font-black text-gray-400 tracking-wider">
-                      <th className="py-3 px-4">Link Caso ID</th>
-                      <th className="py-3">Vínculo Cliente ID</th>
-                      <th className="py-3">Valor Total</th>
-                      <th className="py-3 font-semibold">Mensalidades</th>
-                      <th className="py-3">Status Cobrança</th>
-                      <th className="py-3 text-right">Controles</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50 text-xs">
-                    {filteredFinancials.map(f => {
-                      const caseExists = cases.some(ca => ca.id === f.caseId);
-                      const clientExists = clients.some(cl => cl.id === f.clientId);
-                      const isOrphan = !caseExists || !clientExists;
-
-                      return (
-                        <tr key={f.id} className="hover:bg-gray-50/50">
-                          <td className="py-4 px-4 font-mono font-bold text-gray-900">
-                            {f.caseId} {isOrphan && <span className="text-[10px] text-red-600 font-bold uppercase bg-red-50 p-1 rounded ml-1">Órfão!</span>}
-                          </td>
-                          <td className="py-4 font-mono text-gray-500">{f.clientId}</td>
-                          <td className="py-4 font-bold text-emerald-700">R$ {f.totalAmount || 0}</td>
-                          <td className="py-4 font-medium">{f.installmentsPaid} de {f.installments}</td>
-                          <td className="py-4">
-                            <span className="px-2 py-0.5 bg-gray-100 rounded text-[10px] font-black uppercase">
-                              {f.status || 'Pendente'}
-                            </span>
-                          </td>
-                          <td className="py-4 text-right space-x-2">
-                            <button
-                              onClick={() => {
-                                // Toggle client visibility
-                                updateDoc(doc(db, 'caseFinancials', f.id), {
-                                  visibleToClient: !f.visibleToClient,
-                                  updatedAt: serverTimestamp()
-                                }).then(() => {
-                                  alert(`Visibidade de faturamento alterada para: ${!f.visibleToClient ? 'Visível ao cliente' : 'Oculto'}`);
-                                  loadAllCollections();
-                                });
-                              }}
-                              className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-[10px] font-black rounded uppercase text-gray-600"
-                            >
-                              {f.visibleToClient ? 'Ocultar Portal' : 'Exibir Portal'}
-                            </button>
-                            <button
-                              onClick={() => setEditingFinancial(f)}
-                              className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-[10px] font-black rounded uppercase text-blue-700"
-                            >
-                              Editar
-                            </button>
-                            <button
-                              onClick={async () => {
-                                if (confirm('Remover este lançamento financeiro definitivo?')) {
-                                  await deleteDoc(doc(db, 'caseFinancials', f.id));
-                                  alert('Registro financeiro removido.');
-                                  loadAllCollections();
-                                }
-                              }}
-                              className="px-2 py-1 bg-red-50 hover:bg-red-100 text-[10px] font-black rounded uppercase text-red-600"
-                            >
-                              Excluir
-                            </button>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* TAB 6: PRODUÇÃO */}
-            {activeTab === 'producao' && (
-              <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm overflow-x-auto space-y-4">
-                <p className="text-xs text-gray-500">Listagem integrada de todos os fluxos produtivos cadastrados. Retome um fluxo pendente ou finalizado.</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {cases.map(ca => {
-                    const client = clients.find(cl => cl.id === ca.clientId);
+              <div className="space-y-4">
+                {/* Cases Filter Tabs Row */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[
+                    { id: 'all', label: 'Todos os Casos' },
+                    { id: 'em_producao', label: 'Em Produção' },
+                    { id: 'com_pendencias', label: 'Com Pendências' },
+                    { id: 'pronto_relatorio', label: 'Pronto p/ Relatório' },
+                    { id: 'concluido', label: 'Concluídos' },
+                    { id: 'concluido_ressalvas', label: 'Concluído com Ressalvas' },
+                    { id: 'arquivado', label: 'Arquivados' }
+                  ].map((f) => {
+                    const isSel = casesFilter === f.id;
                     return (
-                      <div key={ca.id} className="p-5 bg-gray-50/50 border border-gray-150 rounded-2xl flex flex-col justify-between space-y-4">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <span className="text-[10px] font-black uppercase text-blue-600">{ca.registrationType || 'Não definido'}</span>
-                            <h3 className="font-bold text-gray-900 text-sm mt-0.5">{ca.title}</h3>
-                            <p className="text-[10px] text-gray-400 font-semibold mt-0.5">Cliente: {client?.name || ca.clientSlug} ({ca.clientSlug})</p>
-                          </div>
-                          <span className={`px-2 py-0.5 text-[10px] font-black uppercase rounded ${
-                            ca.productionStatus === 'concluido' 
-                              ? 'bg-emerald-50 text-emerald-700' 
-                              : ca.productionStatus === 'com_pendencias'
-                                ? 'bg-amber-50 text-amber-700'
-                                : 'bg-blue-50 text-blue-700'
-                          }`}>
-                            {ca.productionStatus || 'Em andamento'}
-                          </span>
-                        </div>
-
-                        <div className="border-t border-gray-100 pt-3 flex items-center justify-between">
-                          <div className="text-[10px] font-bold text-gray-400">
-                            Etapa: <span className="text-gray-700 uppercase">{ca.productionStage || 'Iniciado'}</span>
-                          </div>
-                          <button
-                            onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao?caseId=${ca.id}`)}
-                            className="flex items-center gap-1 bg-white hover:bg-gray-100 border border-gray-200 px-3 py-1.5 text-[9px] font-black uppercase text-gray-700 rounded-lg cursor-pointer"
-                          >
-                            Retomar Fluxo de Produção
-                          </button>
-                        </div>
-                      </div>
-                    )
+                      <button
+                        key={f.id}
+                        onClick={() => setCasesFilter(f.id as any)}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer ${
+                          isSel ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    );
                   })}
                 </div>
+
+                <div className="bg-white border border-gray-150 rounded-2xl shadow-3xs overflow-hidden">
+                  <table className="w-full text-left border-collapse min-w-[900px]">
+                    <thead className="bg-gray-50 border-b border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                      <tr>
+                        <th className="py-3 px-4">ID / Pasta</th>
+                        <th className="py-3">Título / Serviço</th>
+                        <th className="py-3">Cliente (Slug)</th>
+                        <th className="py-3">Processo Nº CNJ</th>
+                        <th className="py-3">Responsável</th>
+                        <th className="py-3 text-center">Status Interno</th>
+                        <th className="py-3 text-center">Status Público</th>
+                        <th className="py-3 text-right pr-4">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 text-xs text-gray-700">
+                      {displayedCases.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-8 text-center text-gray-400 italic">Nenhum caso encontrado para este filtro de busca.</td>
+                        </tr>
+                      ) : (
+                        displayedCases.map(ca => {
+                          const clientName = getClientDisplayName(ca.clientId);
+                          return (
+                            <tr key={ca.id} className="hover:bg-gray-50/40">
+                              <td className="py-4 px-4 font-mono text-[10px] text-gray-400 font-bold block mt-1">{ca.id}</td>
+                              <td className="py-4">
+                                <span className="font-extrabold text-gray-900 block">{ca.title}</span>
+                                <span className="text-[10px] text-gray-400 font-semibold block uppercase mt-0.5">{ca.registrationType || 'Tese judicial'}</span>
+                              </td>
+                              <td className="py-4">
+                                <span className="font-semibold block">{clientName}</span>
+                                <span className="text-[10px] text-indigo-500 font-mono font-bold block mt-0.5">/{ca.clientSlug}</span>
+                              </td>
+                              <td className="py-4 font-mono text-gray-400 font-semibold">{ca.processNumber || 'Extrajudicial / Administrativo'}</td>
+                              <td className="py-4 text-gray-500 font-bold">{ca.responsibleLawyer || 'Não Designado'}</td>
+                              <td className="py-4 text-center">
+                                <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[9px] font-black uppercase">
+                                  {ca.statusInterno || ca.status || 'Pendente'}
+                                </span>
+                              </td>
+                              <td className="py-4 text-center">
+                                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[9px] font-black uppercase">
+                                  {ca.statusPublicoCliente || 'Aguardando'}
+                                </span>
+                              </td>
+                              <td className="py-4 text-right pr-4 space-x-1.5 whitespace-nowrap">
+                                <button
+                                  onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao?caseId=${ca.id}`)}
+                                  className="px-2.5 py-1 bg-emerald-600 font-bold text-white hover:bg-emerald-700 rounded-lg cursor-pointer text-[10px]"
+                                >
+                                  Continuar Fluxo
+                                </button>
+                                <button
+                                  onClick={() => navigate(`/boss-giffoni-clientes/portal-cliente-preview/${ca.clientId}`)}
+                                  className="px-2.5 py-1 bg-indigo-50 text-indigo-750 hover:bg-indigo-100 rounded-lg text-[10px] font-bold cursor-pointer"
+                                >
+                                  Espelho Público
+                                </button>
+                                <button
+                                  onClick={() => copyToClipboard(ca.id, 'ID do Caso Copiado!')}
+                                  className="px-2 py-1 bg-white border border-gray-200 text-[10px] font-medium text-gray-650 hover:bg-gray-50 rounded"
+                                >
+                                  ID
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
-            {/* TAB 7: INTEGRIDADE */}
+            {/* ABA 3: SLUGS */}
+            {activeTab === 'slugs' && (
+              <div className="space-y-4">
+                <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl text-amber-950 flex items-start gap-3">
+                  <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5 text-xs font-semibold">
+                    <p className="font-extrabold text-amber-900">Segurança de Rota: Slug Travado</p>
+                    <p className="text-amber-800 font-medium">O slug de sincronização é estabelecido no momento do cadastro do portal e travado em produção. Para resolver inconsistências, uma correção técnica controlada do BOSS é necessária.</p>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-gray-150 rounded-2xl shadow-3xs overflow-hidden">
+                  <table className="w-full text-left border-collapse min-w-[800px]">
+                    <thead className="bg-gray-50 border-b border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                      <tr>
+                        <th className="py-3 px-4">Identificador Slug</th>
+                        <th className="py-3">Vínculo Cliente</th>
+                        <th className="py-3">Coleção clients</th>
+                        <th className="py-3 font-semibold">Coleção clientPortals</th>
+                        <th className="py-3">Vínculo Consistente</th>
+                        <th className="py-3">Estado de Ativação</th>
+                        <th className="py-3">Rota Interna de Login</th>
+                        <th className="py-3 text-right pr-4">Ações de Segurança</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 text-xs text-gray-700">
+                      {displayedSlugs.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="py-8 text-center text-gray-400 italic font-mono">Nenhum portal cadastrado no clientPortals correspondente ao filtro.</td>
+                        </tr>
+                      ) : (
+                        displayedSlugs.map(p => {
+                          const cl = clients.find(c => c.slug === p.slug);
+                          const existsInClients = !!cl;
+                          const existsInPortals = clientPortals.some(port => port.slug === p.slug);
+                          const isConsistent = cl && p.clientId === cl.id;
+
+                          return (
+                            <tr key={p.id} className="hover:bg-gray-50/40 font-mono">
+                              <td className="py-4 px-4 font-extrabold text-indigo-600">/{p.slug}</td>
+                              <td className="py-4 font-sans font-bold text-gray-900">{cl ? getClientDisplayName(cl.id) : 'Órfão'}</td>
+                              <td className="py-4">
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${existsInClients ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                                  {existsInClients ? 'Cadastrado' : 'Ausente'}
+                                </span>
+                              </td>
+                              <td className="py-4 font-semibold">
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${existsInPortals ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                                  {existsInPortals ? 'Registrado' : 'Incompleto'}
+                                </span>
+                              </td>
+                              <td className="py-4">
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${isConsistent ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'}`}>
+                                  {isConsistent ? 'Sim' : 'Correção Técnica Necessária'}
+                                </span>
+                              </td>
+                              <td className="py-4 font-sans font-bold">
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${p.active !== false ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                                  {p.active !== false ? 'Ativo' : 'Suspenso'}
+                                </span>
+                              </td>
+                              <td className="py-4 text-gray-400">/portal-cliente-giffoni/{p.slug}/login</td>
+                              <td className="py-4 text-right pr-4 font-sans space-x-1.5 whitespace-nowrap">
+                                <button
+                                  onClick={() => copyToClipboard(p.slug, 'Slug Copiado!')}
+                                  className="px-2 py-1 bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100 rounded text-[10px] font-bold cursor-pointer"
+                                >
+                                  Copiar Slug
+                                </button>
+                                <button
+                                  onClick={() => copyToClipboard(`/portal-cliente-giffoni/${p.slug}/login`, 'Rota interna copiada!')}
+                                  className="px-2 py-1 bg-white text-gray-700 border border-gray-200 hover:bg-gray-100 rounded text-[10px] font-bold cursor-pointer"
+                                >
+                                  Copiar Rota
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* ABA 4: USUÁRIOS/ACESSOS */}
+            {activeTab === 'usuarios' && (
+              <div className="bg-white border border-gray-150 rounded-2xl shadow-3xs overflow-hidden">
+                <table className="w-full text-left border-collapse min-w-[800px]">
+                  <thead className="bg-gray-50 border-b border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                    <tr>
+                      <th className="py-3 px-4">E-mail Credencial</th>
+                      <th className="py-3">Role / Perfil</th>
+                      <th className="py-3 font-semibold">Vínculo clientId</th>
+                      <th className="py-3">Vínculo clientSlug</th>
+                      <th className="py-3 text-center">Status</th>
+                      <th className="py-3 text-center">Cadastro Existe?</th>
+                      <th className="py-3 text-center">Portal Ativo?</th>
+                      <th className="py-3 text-right pr-4">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-xs text-gray-700">
+                    {displayedUsers.map(u => {
+                      const clientExists = clients.some(c => c.id === u.clientId);
+                      const portalExists = clientPortals.some(p => p.slug === u.clientSlug);
+                      return (
+                        <tr key={u.id} className="hover:bg-gray-50/40">
+                          <td className="py-4 px-4 font-extrabold text-gray-900">{u.email}</td>
+                          <td className="py-4">
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                              u.role === 'boss_admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {u.role || 'client'}
+                            </span>
+                          </td>
+                          <td className="py-4 font-mono font-semibold text-gray-500">{u.clientId || 'Nulo'}</td>
+                          <td className="py-4 font-mono font-bold text-indigo-600">{u.clientSlug || 'Sem portal'}</td>
+                          <td className="py-4 text-center">
+                            <span className="px-2 py-0.5 bg-gray-50 text-gray-600 rounded text-[10px] font-black uppercase">
+                              {u.status || 'Ativo'}
+                            </span>
+                          </td>
+                          <td className="py-4 text-center">
+                            <span className={`px-2 py-0.2 rounded text-[10px] font-bold ${
+                              clientExists ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                            }`}>
+                              {clientExists ? 'Sim' : 'Não'}
+                            </span>
+                          </td>
+                          <td className="py-4 text-center">
+                            <span className={`px-2 py-0.2 rounded text-[10px] font-bold ${
+                              portalExists ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                            }`}>
+                              {portalExists ? 'Sim' : 'Não'}
+                            </span>
+                          </td>
+                          <td className="py-4 text-right pr-4 space-x-1.5 whitespace-nowrap font-sans">
+                            <button
+                              onClick={() => u.clientId && navigate(`/boss-giffoni-clientes/clientes/${u.clientId}`)}
+                              className="px-2 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold rounded text-[10px]"
+                            >
+                              Abrir Cliente
+                            </button>
+                            <button
+                              onClick={() => copyToClipboard(u.email, 'E-mail Copiado!')}
+                              className="px-2 py-1 bg-white border border-gray-200 font-bold rounded text-[10px]"
+                            >
+                              Copiar E-mail
+                            </button>
+                            <button
+                              onClick={() => {
+                                updateDoc(doc(db, 'users', u.id), { status: 'pendente' });
+                                alert('Marcado pendente.');
+                                loadAllCollections();
+                              }}
+                              className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-[10px] text-amber-700 rounded font-bold"
+                            >
+                              Pendência
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* ABA 5: FINANCEIRO */}
+            {activeTab === 'financeiro' && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[
+                    { id: 'all', label: 'Todos os Faturamentos' },
+                    { id: 'pendente', label: 'Aberto / Sem pagamento' },
+                    { id: 'aguardando', label: 'Aguardando Compensação' },
+                    { id: 'pago', label: 'Compensado' },
+                    { id: 'parcial', label: 'Parcialmente Pago' },
+                    { id: 'atrasado', label: 'Em atraso' },
+                    { id: 'erro_webhook', label: 'Erro Webhook' },
+                    { id: 'stripe', label: 'Gateway: Stripe' },
+                    { id: 'asaas', label: 'Gateway: Asaas' },
+                    { id: 'manual', label: 'Controle Manual/Temporário' }
+                  ].map((f) => {
+                    const isSel = finFilter === f.id;
+                    return (
+                      <button
+                        key={f.id}
+                        onClick={() => setFinFilter(f.id as any)}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer ${
+                          isSel ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="bg-white border border-gray-150 rounded-2xl shadow-3xs overflow-hidden">
+                  <table className="w-full text-left border-collapse min-w-[900px]">
+                    <thead className="bg-gray-50 border-b border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                      <tr>
+                        <th className="py-3 px-4">Caso de Origem ID</th>
+                        <th className="py-3">Cliente Assinado</th>
+                        <th className="py-3">Valor Honorário</th>
+                        <th className="py-3">Metodologia</th>
+                        <th className="py-3">Status Cobrança</th>
+                        <th className="py-3">Provedor</th>
+                        <th className="py-3">Webhook Automação</th>
+                        <th className="py-3">Contrato / Matriz</th>
+                        <th className="py-3 text-right pr-4">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 text-xs text-gray-700">
+                      {displayedFinancials.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} className="py-8 text-center text-gray-400 italic">Nenhum lançamento fático financeiro catalogado para este filtro.</td>
+                        </tr>
+                      ) : (
+                        displayedFinancials.map(f => {
+                          const clientName = getClientDisplayName(f.clientId);
+                          const total = Number(f.totalAmount || f.amount || 0);
+                          const hasWebhookError = (f.webhookStatus || '').toLowerCase().includes('erro');
+                          return (
+                            <tr key={f.id} className="hover:bg-gray-50/40">
+                              <td className="py-4 px-4 font-mono text-[10px] font-bold block mt-1">{f.caseId || 'Indeterminado'}</td>
+                              <td className="py-4">
+                                <span className="font-semibold block">{clientName}</span>
+                                <span className="text-[10px] text-gray-400 block font-mono">{f.clientId}</span>
+                              </td>
+                              <td className="py-4 font-mono font-extrabold text-emerald-700">
+                                R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </td>
+                              <td className="py-4 text-gray-400 uppercase font-semibold text-[10px]">
+                                {f.installments ? `${f.installmentsPaid || 0} de ${f.installments} Parcela(s)` : 'Contrato Fixo'}
+                              </td>
+                              <td className="py-4">
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                                  (f.status || f.paymentStatus || '').toLowerCase() === 'pago' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                                }`}>
+                                  {f.status || f.paymentStatus || 'Aberto'}
+                                </span>
+                              </td>
+                              <td className="py-4 uppercase font-bold text-[9px] text-indigo-650">{f.provider || 'Manual'}</td>
+                              <td className="py-4 font-semibold text-gray-500">
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-black ${hasWebhookError ? 'bg-rose-50 text-rose-700' : 'bg-gray-150 text-gray-600'}`}>
+                                  {f.webhookStatus || 'Sem Notificações'}
+                                </span>
+                              </td>
+                              <td className="py-4 text-gray-400">
+                                {f.contractLinked ? 'Contrato Vinculado' : 'Aguardando formalização'}
+                              </td>
+                              <td className="py-4 text-right pr-4 space-x-1 whitespace-nowrap">
+                                <button
+                                  onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao?caseId=${f.caseId}`)}
+                                  className="px-2 py-1 bg-emerald-50 text-emerald-700 font-bold rounded text-[10px] cursor-pointer"
+                                >
+                                  Fluxo
+                                </button>
+                                <button
+                                  onClick={() => f.paymentLink && copyToClipboard(f.paymentLink, 'Link de pagamento copiado!')}
+                                  className="px-2 py-1 bg-white border border-gray-200 rounded text-[10px] disabled:opacity-50"
+                                  disabled={!f.paymentLink}
+                                >
+                                  Link
+                                </button>
+                                <button
+                                  onClick={() => handleMarkFinancialAttention(f)}
+                                  className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 text-[10px] font-bold rounded cursor-pointer"
+                                >
+                                  Atenção
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* ABA 6: SOLICITAÇÕES */}
+            {activeTab === 'solicitacoes' && (
+              <div className="bg-white border border-gray-150 rounded-2xl shadow-3xs overflow-hidden">
+                <table className="w-full text-left border-collapse min-w-[800px]">
+                  <thead className="bg-gray-50 border-b border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                    <tr>
+                      <th className="py-3 px-4">Tipo</th>
+                      <th className="py-3">Caso ID</th>
+                      <th className="py-3 text-semibold">Título Solicitado / Pergunta</th>
+                      <th className="py-3">Status</th>
+                      <th className="py-3">Data Prazo</th>
+                      <th className="py-3 text-center">Visível Portal</th>
+                      <th className="py-3">Análise de Qualidade BOSS</th>
+                      <th className="py-3 text-right pr-4">Ações Operacionais</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-xs text-gray-700">
+                    {combinedRequests.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-gray-400 italic font-mono">Nenhuma solicitação de esclarecimento ou provas cadastrada no banco.</td>
+                      </tr>
+                    ) : (
+                      combinedRequests.map((r, index) => {
+                        const status = r.status || 'pendente';
+                        return (
+                          <tr key={r.id || index} className="hover:bg-gray-50/40">
+                            <td className="py-4 px-4 font-mono font-bold">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                                r.reqType === 'Informação' ? 'bg-cyan-50 text-cyan-700' : 'bg-indigo-50 text-indigo-750'
+                              }`}>
+                                {r.reqType}
+                              </span>
+                            </td>
+                            <td className="py-4 font-mono font-semibold text-gray-400 text-[10px]">{r.caseId}</td>
+                            <td className="py-4">
+                              <p className="font-extrabold text-gray-900 leading-tight">{r.parsedTitle}</p>
+                              {r.description && <p className="text-[10px] text-gray-450 mt-1 font-medium">{r.description}</p>}
+                            </td>
+                            <td className="py-4 uppercase text-[10px] font-black tracking-wider">
+                              <span className={`px-1.5 py-0.5 rounded ${
+                                status === 'respondido' || status === 'enviado' || status === 'entregue' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-600'
+                              }`}>
+                                {status}
+                              </span>
+                            </td>
+                            <td className="py-4 font-mono text-gray-400">{r.dueDate || 'Sem Prazo'}</td>
+                            <td className="py-4 text-center">
+                              <span className={`inline-block px-2 py-0.2 rounded text-[10px] font-bold ${
+                                r.visibleToClient !== false ? 'bg-indigo-50 text-indigo-650' : 'bg-gray-100 text-gray-500'
+                              }`}>
+                                {r.visibleToClient !== false ? 'Sim' : 'Oculto'}
+                              </span>
+                            </td>
+                            <td className="py-4 font-semibold text-indigo-600 italic">
+                              {r.bossFeedback || 'Aguardando Envio/Avaliação'}
+                            </td>
+                            <td className="py-4 text-right pr-4 space-x-1.5 whitespace-nowrap font-sans">
+                              <button
+                                onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao?caseId=${r.caseId}`)}
+                                className="px-2 py-1 bg-emerald-50 text-emerald-700 font-bold rounded text-[10px] cursor-pointer"
+                              >
+                                Ver Fluxo
+                              </button>
+                              <button
+                                onClick={() => handleMarkRequestStatus(r, 'aprovado')}
+                                className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold hover:bg-indigo-750 cursor-pointer"
+                              >
+                                Aprovar
+                              </button>
+                              <button
+                                onClick={() => handleMarkRequestStatus(r, 'rejeitado')}
+                                className="px-2 py-1 bg-red-50 text-red-700 rounded text-[10px] font-bold hover:bg-red-100 cursor-pointer"
+                              >
+                                Rejeitar
+                              </button>
+                              <button
+                                onClick={() => handleMarkRequestStatus(r, 'complemento_solicitado')}
+                                className="px-1.5 py-1 bg-amber-50 text-amber-700 rounded text-[10px] font-bold hover:bg-amber-100 cursor-pointer"
+                              >
+                                Complemento
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* ABA 7: AGENDA */}
+            {activeTab === 'agenda' && (
+              <div className="bg-white border border-gray-150 rounded-2xl shadow-3xs overflow-hidden">
+                <table className="w-full text-left border-collapse min-w-[800px]">
+                  <thead className="bg-gray-50 border-b border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                    <tr>
+                      <th className="py-3 px-4">Tipo</th>
+                      <th className="py-3">Vínculo Cliente</th>
+                      <th className="py-3">Título Evento</th>
+                      <th className="py-3">Data</th>
+                      <th className="py-3 font-semibold">Hora</th>
+                      <th className="py-3">Local físico / Link video</th>
+                      <th className="py-3">Agenda Responsável</th>
+                      <th className="py-3 text-center">Visivel Portal</th>
+                      <th className="py-3 text-right pr-4">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-xs text-gray-700">
+                    {displayedEvents.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-12 text-center text-gray-400 font-semibold italic">Nenhum evento cadastrado para os filtros da Central de Controle.</td>
+                      </tr>
+                    ) : (
+                      displayedEvents.map((e, index) => {
+                        const clDisplay = getClientDisplayName(e.clientId);
+                        return (
+                          <tr key={e.id || index} className="hover:bg-gray-50/40">
+                            <td className="py-4 px-4 font-mono font-bold">
+                              <span className="px-2 py-0.5 bg-indigo-50/75 text-indigo-700 rounded text-[10px] font-black uppercase tracking-wider">
+                                {e.type || 'Ato judicial'}
+                              </span>
+                            </td>
+                            <td className="py-4">
+                              <span className="font-bold text-gray-800 block">{clDisplay}</span>
+                              <span className="text-[10px] text-gray-400 block font-mono">Case: {e.caseId}</span>
+                            </td>
+                            <td className="py-4">
+                              <span className="font-extrabold text-gray-900 block">{e.title}</span>
+                              {e.description && <span className="text-[10px] text-gray-400 block mt-0.5 leading-tight">{e.description}</span>}
+                            </td>
+                            <td className="py-4 font-mono">{e.date || 'À definir'}</td>
+                            <td className="py-4 font-mono text-gray-500 font-bold">{e.time || '--:--'}</td>
+                            <td className="py-4 text-indigo-600 font-mono truncate max-w-[150px]">{e.location || 'Sem link cadastrado'}</td>
+                            <td className="py-4 font-semibold text-gray-500">{e.responsible || 'Coletivo escritório'}</td>
+                            <td className="py-4 text-center">
+                              <span className={`inline-block px-2 py-0.2 rounded text-[10px] font-bold ${
+                                e.visibleToClient !== false ? 'bg-indigo-50 text-indigo-650' : 'bg-gray-100 text-gray-500'
+                              }`}>
+                                {e.visibleToClient !== false ? 'Sim' : 'Oculto'}
+                              </span>
+                            </td>
+                            <td className="py-4 text-right pr-4 space-x-1.5 whitespace-nowrap">
+                              <button
+                                onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao?caseId=${e.caseId}`)}
+                                className="px-2 py-1 bg-gray-50 border border-gray-200 hover:bg-gray-100 font-bold rounded text-[10px]"
+                              >
+                                Ver Fluxo
+                              </button>
+                              <button
+                                onClick={() => e.location && copyToClipboard(e.location, 'Link/Local copiado!')}
+                                className="px-2 py-1 bg-white border border-gray-200 font-bold rounded text-[10px] disabled:opacity-50"
+                                disabled={!e.location}
+                              >
+                                Copiar Link
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* ABA 8: EDRP */}
+            {activeTab === 'edrp' && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[
+                    { id: 'all', label: 'Todos os Casos do EDRP' },
+                    { id: 'sem_estruturacao', label: 'Falta Tese/Fatos' },
+                    { id: 'sem_delegacao', label: 'Falta Delegar Responsável' },
+                    { id: 'aguardando_revisao', label: 'Estágio Revisão Ativo' },
+                    { id: 'pronto_protocolo', label: 'Estágio Protocolo Ativo' },
+                    { id: 'com_pendencia', label: 'Com Pendência Operacional' },
+                    { id: 'protocolado', label: 'Protocolo Concluído' },
+                    { id: 'controladoria', label: 'Estágio Controladoria Ativo' }
+                  ].map((f) => {
+                    const isSel = edrpFilter === f.id;
+                    return (
+                      <button
+                        key={f.id}
+                        onClick={() => setEdrpFilter(f.id as any)}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer ${
+                          isSel ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="bg-white border border-gray-150 rounded-2xl shadow-3xs overflow-hidden">
+                  <table className="w-full text-left border-collapse min-w-[900px]">
+                    <thead className="bg-gray-50 border-b border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                      <tr>
+                        <th className="py-3 px-4">Caso / Processo</th>
+                        <th className="py-3">Cliente fiduciário</th>
+                        <th className="py-3 text-center">Estruturação Tese</th>
+                        <th className="py-3 text-center">Delegação Ativa</th>
+                        <th className="py-3 text-center">Revisado?</th>
+                        <th className="py-3 text-center">Protocolado?</th>
+                        <th className="py-3 text-center">Todoist Integrado</th>
+                        <th className="py-3 text-center">Painel Colaborador</th>
+                        <th className="py-3 text-right pr-4">Ações Operacionais</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 text-xs text-gray-700 font-mono">
+                      {displayedEdrpCases.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} className="py-8 text-center text-gray-400 italic font-sans">Nenhum caso elegível para este checklist de EDRP.</td>
+                        </tr>
+                      ) : (
+                        displayedEdrpCases.map(ca => {
+                          const clName = getClientDisplayName(ca.clientId);
+                          const hasStructuring = !!(ca.structuring || ca.edrp?.structuring);
+                          const hasDelegation = !!(ca.responsibleLawyer || ca.delegation?.responsible);
+                          const isReviewed = ca.productionStage === 'protocolo' || ca.productionStage === 'controladoria' || ca.reviewApproved === true;
+                          const isProtocoled = ca.statusInterno === 'protocolado' || ca.status === 'protocolado' || !!ca.protocolNumber;
+                          const todoistIntegrity = ca.todoistConnected || ca.todoistActive ? 'Sim' : 'Não';
+                          const staffCheck = ca.responsibleLawyer ? 'Ativo' : 'Vazio';
+
+                          return (
+                            <tr key={ca.id} className="hover:bg-gray-50/40">
+                              <td className="py-4 px-4 font-sans font-extrabold text-gray-900 block mt-1">{ca.title}</td>
+                              <td className="py-4 font-sans font-bold text-gray-500">{clName}</td>
+                              <td className="py-4 text-center">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${hasStructuring ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                                  {hasStructuring ? 'Preenchido' : 'Pendente'}
+                                </span>
+                              </td>
+                              <td className="py-4 text-center">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${hasDelegation ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                                  {hasDelegation ? 'Designado' : 'Pendente'}
+                                </span>
+                              </td>
+                              <td className="py-4 text-center">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${isReviewed ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-100 text-gray-500'}`}>
+                                  {isReviewed ? 'Aprovado' : 'Em revisão'}
+                                </span>
+                              </td>
+                              <td className="py-4 text-center">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${isProtocoled ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                                  {isProtocoled ? 'Sim' : 'Aguardando'}
+                                </span>
+                              </td>
+                              <td className="py-4 text-center font-bold text-[10px] text-gray-500">{todoistIntegrity}</td>
+                              <td className="py-4 text-center font-bold text-[10px] text-gray-650 font-sans">{staffCheck}</td>
+                              <td className="py-4 text-right pr-4 font-sans space-x-1 whitespace-nowrap">
+                                <button
+                                  onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao?caseId=${ca.id}`)}
+                                  className="px-2 py-1 bg-gray-50 border border-gray-200 hover:bg-gray-100 rounded text-[9px] font-bold text-gray-700 cursor-pointer"
+                                >
+                                  Retomar EDRP
+                                </button>
+                                <button
+                                  onClick={() => navigate(`/boss-giffoni-clientes/portal-cliente-preview/${ca.clientId}`)}
+                                  className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-[9px] font-black cursor-pointer"
+                                >
+                                  Integridade
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* ABA 9: INTEGRIDADE */}
             {activeTab === 'integridade' && (
-              <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm space-y-6">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center p-6 bg-gray-50 rounded-2xl border border-gray-150 gap-4">
-                  <div>
-                    <h3 className="text-lg font-black text-gray-950 leading-tight">Painel de Auditoria de Deploy</h3>
-                    <p className="text-xs text-gray-500 mt-0.5">Diagnose automatizada de consistência fática da plataforma.</p>
+              <div className="space-y-6">
+                
+                {/* Deployment Recommendation Flag Banner */}
+                <div className={`p-6 rounded-2xl border flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm ${
+                  diag.statusGeral.includes('PRONTO') 
+                    ? 'bg-emerald-50 border-emerald-100 text-emerald-900' 
+                    : 'bg-rose-50 border-rose-100 text-rose-900'
+                }`}>
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider font-mono opacity-80">Avaliação do Módulo</span>
+                    <h3 className="text-xl font-black tracking-tight leading-none mb-1">{diag.statusGeral}</h3>
+                    <p className="text-xs font-semibold leading-relaxed">
+                      {diag.statusGeral === 'Não recomendado para deploy' 
+                        ? 'Foram identificados um ou mais erros críticos de vinculação nas tabelas relacionais do sistema. Resolva os erros abaixo antes de publicar.'
+                        : 'Sua infraestrutura de dados fáticos está completamente limpa de erros órfãos relacionais. Recomendado para deploy!'
+                      }
+                    </p>
                   </div>
-                  <div className="text-right">
-                    <span className="text-[9px] font-black uppercase text-gray-400 tracking-wider">Diagnóstico</span>
-                    <h4 className={`text-xl font-black mt-0.5 leading-none ${integrityState.recommendation.includes('PRONTO') ? 'text-emerald-600' : 'text-red-600'}`}>
-                      {integrityState.recommendation}
-                    </h4>
+                  <div className="shrink-0 flex gap-2">
+                    <button
+                      onClick={loadAllCollections}
+                      className="px-4 py-2.5 bg-white font-bold rounded-xl text-xs text-gray-700 border border-gray-200 hover:bg-gray-50"
+                    >
+                      Auditar Novamente
+                    </button>
+                    <button
+                      onClick={handleCopyResumo}
+                      className="px-4 py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 font-bold rounded-xl text-xs"
+                    >
+                      Copiar Resumo
+                    </button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                  <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl">
-                    <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600">Checagens OK</span>
-                    <h5 className="text-2xl font-black text-emerald-700 mt-1">{integrityState.okCount}</h5>
-                  </div>
-                  <div className="p-4 bg-amber-50/50 border border-amber-100 rounded-2xl">
-                    <span className="text-[9px] font-black uppercase tracking-wider text-amber-500">Atenções</span>
-                    <h5 className="text-2xl font-black text-amber-600 mt-1">{integrityState.attenCount}</h5>
-                  </div>
-                  <div className="p-4 bg-indigo-50/50 border border-indigo-100 rounded-2xl">
-                    <span className="text-[9px] font-black uppercase tracking-wider text-indigo-500">Pendentes</span>
-                    <h5 className="text-2xl font-black text-indigo-600 mt-1">{integrityState.pendCount}</h5>
-                  </div>
-                  <div className="p-4 bg-red-50/50 border border-red-100 rounded-2xl">
-                    <span className="text-[9px] font-black uppercase tracking-wider text-red-500">Erros Críticos</span>
-                    <h5 className="text-2xl font-black text-red-600 mt-1">{integrityState.errorCount}</h5>
-                  </div>
-                </div>
-
-                <div className="space-y-2.5 max-h-[350px] overflow-y-auto pr-1">
-                  {integrityState.items.map((it, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-4 bg-white border border-gray-100 rounded-xl shadow-sm gap-2">
-                      <div className="space-y-0.5">
-                        <span className="font-extrabold text-[12px] text-gray-900">{it.key}</span>
-                        <p className="text-[10px] text-gray-400 font-semibold">{it.desc} • Categoria: {it.cat}</p>
-                      </div>
-                      <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border rounded ${
-                        it.status === 'OK' 
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
-                          : it.status === 'Atenção'
-                            ? 'bg-amber-50 text-amber-700 border-amber-100'
-                            : 'bg-red-50 text-red-700 border-red-100'
-                      }`}>
-                        {it.status}
-                      </span>
+                {/* Dashboard Metrics Grid */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[
+                    { label: 'Total de Clientes', val: clients.length, color: 'text-gray-900' },
+                    { label: 'Total de Casos', val: cases.length, color: 'text-gray-900' },
+                    { label: 'Casos em Produção', val: cases.filter(ca => ca.productionStatus === 'em_producao').length, color: 'text-indigo-600' },
+                    { label: 'Casos com Pendências', val: cases.filter(ca => ca.productionStatus === 'com_pendencias').length, color: 'text-amber-600' },
+                    { label: 'Casos Concluídos', val: cases.filter(ca => ca.productionStatus === 'concluido').length, color: 'text-emerald-700' },
+                    { label: 'Casos Sem Slug', val: cases.filter(ca => !ca.clientSlug).length, color: 'text-rose-600' },
+                    { label: 'Casos Sem clientId', val: cases.filter(ca => !ca.clientId).length, color: 'text-rose-600' },
+                    { label: 'Finanças Órfãs', val: financials.filter(f => !f.caseId || !cases.some(ca => ca.id === f.caseId)).length, color: 'text-rose-600' }
+                  ].map((stat, i) => (
+                    <div key={i} className="p-4 bg-white border border-gray-150 rounded-2xl text-center shadow-3xs">
+                      <span className="text-[10px] font-black uppercase text-gray-400 block tracking-wider">{stat.label}</span>
+                      <h4 className={`text-2xl font-black mt-1 ${stat.color}`}>{stat.val}</h4>
                     </div>
                   ))}
                 </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  
+                  {/* Critical Errors List */}
+                  <div className="bg-white border border-gray-150 p-6 rounded-2xl shadow-3xs space-y-4">
+                    <h4 className="font-extrabold text-sm tracking-tight text-gray-900 border-b border-gray-100 pb-2.5 flex items-center gap-2">
+                      <XCircle size={16} className="text-red-500" />
+                      <span>Erros Críticos Estruturais ({diag.criticalErrorsList.length})</span>
+                    </h4>
+                    
+                    {diag.criticalErrorsList.length === 0 ? (
+                      <div className="p-4 bg-emerald-50 text-emerald-700 text-xs font-semibold rounded-xl text-center">
+                        Nenhum erro estrutural crítico fático detectado! Tudo pronto.
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-thin">
+                        {diag.criticalErrorsList.map((err, i) => (
+                          <div key={i} className="p-3 bg-red-50 text-red-800 text-xs border border-red-100 rounded-xl leading-relaxed font-mono flex items-start gap-2">
+                            <span>•</span>
+                            <p className="flex-1">{err}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Warning Advisories List */}
+                  <div className="bg-white border border-gray-150 p-6 rounded-2xl shadow-3xs space-y-4">
+                    <h4 className="font-extrabold text-sm tracking-tight text-gray-900 border-b border-gray-100 pb-2.5 flex items-center gap-2">
+                      <AlertTriangle size={16} className="text-amber-500" />
+                      <span>Alertas de Pendências / Conectores ({diag.warningList.length})</span>
+                    </h4>
+                    
+                    {diag.warningList.length === 0 ? (
+                      <div className="p-4 bg-emerald-50 text-emerald-700 text-xs font-semibold rounded-xl text-center">
+                        Excelente! Sem alertas ou avisos de preenchimento.
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-thin">
+                        {diag.warningList.map((war, i) => (
+                          <div key={i} className="p-3 bg-amber-50/50 text-amber-900 text-xs border border-amber-100 rounded-xl leading-relaxed font-mono flex items-start gap-2">
+                            <span>⚠</span>
+                            <p className="flex-1">{war}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+
               </div>
             )}
+
           </div>
         )}
+
       </div>
 
-      {/* SECTION EDIT MODALS */}
-      {/* 1. Client Inline Modal Editor */}
-      {editingClient && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white p-6 rounded-3xl w-full max-w-xl border border-gray-100 shadow-xl space-y-4">
-            <h3 className="font-black text-base text-gray-950 border-b border-gray-50 pb-2.5">Editar Dados Principais do Cliente</h3>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Nome / Razão Social</label>
-                <input
-                  type="text"
-                  id="client-edit-name"
-                  defaultValue={editingClient.type === 'PF' ? editingClient.pfDadosPessoais?.pf_nomeCompleto : editingClient.pjDadosEmpresa?.pj_razaoSocial}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl text-xs font-semibold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">CPF ou CNPJ</label>
-                <input
-                  type="text"
-                  id="client-edit-doc"
-                  defaultValue={editingClient.type === 'PF' ? editingClient.pfDadosPessoais?.pf_cpf : editingClient.pjDadosEmpresa?.pj_cnpj}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl text-xs font-semibold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">E-mail de Login</label>
-                <input
-                  type="text"
-                  id="client-edit-email"
-                  defaultValue={editingClient.acessoSistema?.acesso_emailLogin}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl text-xs font-semibold"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4 border-t border-gray-50">
-              <button
-                type="button"
-                onClick={() => setEditingClient(null)}
-                className="px-4 py-2 text-xs font-bold text-gray-500 bg-gray-50 hover:bg-gray-100 rounded-xl"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const name = (document.getElementById('client-edit-name') as HTMLInputElement).value;
-                  const docCode = (document.getElementById('client-edit-doc') as HTMLInputElement).value;
-                  const email = (document.getElementById('client-edit-email') as HTMLInputElement).value;
-
-                  const payload: any = {};
-                  if (editingClient.type === 'PF') {
-                    payload.pfDadosPessoais = {
-                      ...editingClient.pfDadosPessoais,
-                      pf_nomeCompleto: name,
-                      pf_cpf: docCode
-                    };
-                  } else {
-                    payload.pjDadosEmpresa = {
-                      ...editingClient.pjDadosEmpresa,
-                      pj_razaoSocial: name,
-                      pj_cnpj: docCode
-                    };
-                  }
-                  payload.acessoSistema = {
-                    ...editingClient.acessoSistema,
-                    acesso_emailLogin: email
-                  };
-
-                  await updateDoc(doc(db, 'clients', editingClient.id), payload);
-                  alert('Cliente atualizado!');
-                  setEditingClient(null);
-                  loadAllCollections();
-                }}
-                className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl"
-              >
-                Salvar Alterações
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 2. User credentials modular inline editor */}
-      {editingUser && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white p-6 rounded-3xl w-full max-w-md border border-gray-100 shadow-xl space-y-4">
-            <h3 className="font-black text-base text-gray-950 border-b border-gray-50 pb-2.5">Editar Credenciais de Acesso</h3>
-            
-            <div className="space-y-3">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">E-mail</label>
-                <input
-                  type="text"
-                  id="user-edit-email"
-                  defaultValue={editingUser.email}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl text-xs font-semibold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Role/Perfil</label>
-                <select
-                  id="user-edit-role"
-                  defaultValue={editingUser.role}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl text-xs font-semibold"
-                >
-                  <option value="client">Client (Cliente do Escritório)</option>
-                  <option value="boss_admin">Boss Admin (Sócio do Escritório)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Vínculo Slug</label>
-                <input
-                  type="text"
-                  id="user-edit-slug"
-                  defaultValue={editingUser.clientSlug}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl text-xs font-semibold"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4 border-t border-gray-50">
-              <button
-                type="button"
-                onClick={() => setEditingUser(null)}
-                className="px-4 py-2 text-xs font-bold text-gray-500 bg-gray-50 hover:bg-gray-100 rounded-xl"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const email = (document.getElementById('user-edit-email') as HTMLInputElement).value;
-                  const role = (document.getElementById('user-edit-role') as HTMLSelectElement).value;
-                  const clientSlug = (document.getElementById('user-edit-slug') as HTMLInputElement).value;
-
-                  await updateDoc(doc(db, 'users', editingUser.id), {
-                    email, role, clientSlug
-                  });
-                  alert('Usuário atualizado!');
-                  setEditingUser(null);
-                  loadAllCollections();
-                }}
-                className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl"
-              >
-                Salvar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 3. Safe Deletion stats alerts modal */}
-      {deletingClient && deletionStats && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white p-6 rounded-3xl w-full max-w-lg border border-red-100 shadow-2xl space-y-4">
-            <h3 className="font-black text-base text-red-700 uppercase tracking-wide flex items-center gap-2">
-              <ShieldAlert size={20} /> Exclusão Segura Cadastral
-            </h3>
-            
-            <p className="text-xs text-gray-600 font-medium">
-              A exclusão mestre do cliente "<strong>{deletingClient.slug}</strong>" foi interceptada para prevenção de quebra de integridade de tabelas no banco de dados. Veja os elementos dependentes encontrados:
+      {/* Safety Warning dialog modal */}
+      {safeDeleteWarning && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-3xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white p-6 rounded-2xl w-full max-w-md border border-gray-100 shadow-xl space-y-4 text-center">
+            <ShieldAlert size={44} className="text-indigo-650 mx-auto" />
+            <h3 className="font-black text-gray-950 text-base">Operação Bloqueada</h3>
+            <p className="text-xs text-gray-650 font-bold leading-relaxed">
+              {safeDeleteWarning}
             </p>
-
-            <div className="p-4 bg-gray-50 rounded-2xl grid grid-cols-2 gap-3 text-xs border border-gray-150">
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-blue-500"></div>
-                <span>Casos vinculados: <strong>{deletionStats.casesCount}</strong></span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
-                <span>Faturamentos: <strong>{deletionStats.financialCount}</strong></span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-indigo-500"></div>
-                <span>Eventos agenda: <strong>{deletionStats.eventsCount}</strong></span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-purple-500"></div>
-                <span>Restrições pendentes: <strong>{deletionStats.tasksCount}</strong></span>
-              </div>
-              <div className="col-span-2 border-t border-gray-200 pt-2.5 mt-1 space-y-1 text-[10px] uppercase font-black text-gray-400">
-                <div className={deletionStats.hasPortal ? 'text-red-600' : 'text-gray-400'}>
-                  • Vínculo clientPortals: {deletionStats.hasPortal ? 'ENCONTRADO' : 'Inativo'}
-                </div>
-                <div className={deletionStats.hasUser ? 'text-red-600' : 'text-gray-400'}>
-                  • Usuário users: {deletionStats.hasUser ? 'ENCONTRADO' : 'Inativo'}
-                </div>
-              </div>
-            </div>
-
-            <div className="p-3 bg-red-50 text-[10px] text-red-600 border border-red-100 font-semibold rounded-xl leading-relaxed">
-              ❗ AVISO: A exclusão permanente removerá os logins e portal do cliente de forma irrecuperável. Considere fazer o arquivamento preventivo seguro do cliente.
-            </div>
-
-            <div className="flex flex-col md:flex-row justify-end gap-2 pt-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setDeletingClient(null);
-                  setDeletionStats(null);
-                }}
-                className="px-4 py-2 text-xs font-bold text-gray-500 bg-gray-50 hover:bg-gray-100 rounded-xl"
-              >
-                Voltar / Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => executeClientDeletion(true)}
-                className="px-4 py-2 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-150 rounded-xl"
-              >
-                Somente Arquivar Cliente
-              </button>
-              <button
-                type="button"
-                onClick={() => executeClientDeletion(false)}
-                className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl"
-              >
-                Excluir Definitivamente
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 4. Case Editor Modal */}
-      {editingCase && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white p-6 rounded-3xl w-full max-w-xl border border-gray-100 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="font-black text-base text-gray-950 border-b border-gray-50 pb-2.5">Editar Caso</h3>
-            
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div className="col-span-2">
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Título do Caso</label>
-                <input
-                  type="text"
-                  id="case-edit-title"
-                  defaultValue={editingCase.title}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Parte Adversa</label>
-                <input
-                  type="text"
-                  id="case-edit-adverse"
-                  defaultValue={editingCase.adverseParty}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Comarca</label>
-                <input
-                  type="text"
-                  id="case-edit-district"
-                  defaultValue={editingCase.district}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Número do Processo</label>
-                <input
-                  type="text"
-                  id="case-edit-process"
-                  defaultValue={editingCase.processNumber}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Responsável</label>
-                <input
-                  type="text"
-                  id="case-edit-lawyer"
-                  defaultValue={editingCase.responsibleLawyer}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Estado Execução (Preposto)</label>
-                <select
-                  id="case-edit-status"
-                  defaultValue={editingCase.status}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl"
-                >
-                  <option value="ativo">Ativo</option>
-                  <option value="arquivado">Arquivado</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Etapa Produtiva</label>
-                <input
-                  type="text"
-                  id="case-edit-stage"
-                  defaultValue={editingCase.productionStage}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl font-mono"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4 border-t border-gray-50">
-              <button
-                type="button"
-                onClick={() => setEditingCase(null)}
-                className="px-4 py-2 text-xs font-bold text-gray-500 bg-gray-50 hover:bg-gray-100 rounded-xl"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const title = (document.getElementById('case-edit-title') as HTMLInputElement).value;
-                  const adverseParty = (document.getElementById('case-edit-adverse') as HTMLInputElement).value;
-                  const district = (document.getElementById('case-edit-district') as HTMLInputElement).value;
-                  const processNumber = (document.getElementById('case-edit-process') as HTMLInputElement).value;
-                  const responsibleLawyer = (document.getElementById('case-edit-lawyer') as HTMLInputElement).value;
-                  const status = (document.getElementById('case-edit-status') as HTMLSelectElement).value;
-                  const productionStage = (document.getElementById('case-edit-stage') as HTMLInputElement).value;
-
-                  await updateDoc(doc(db, 'cases', editingCase.id), {
-                    title: title.toUpperCase(),
-                    adverseParty,
-                    district,
-                    processNumber,
-                    responsibleLawyer,
-                    status,
-                    productionStage
-                  });
-                  alert('Caso editado com sucesso na base!');
-                  setEditingCase(null);
-                  loadAllCollections();
-                }}
-                className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl"
-              >
-                Salvar Caso
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 5. Add / Create Financial form dialog popup */}
-      {isAddingFinancial && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <form 
-            onSubmit={(e) => {
-              e.preventDefault();
-              const payload = {
-                clientId: (document.getElementById('add-fin-client') as HTMLSelectElement).value,
-                caseId: (document.getElementById('add-fin-case') as HTMLSelectElement).value,
-                totalAmount: (document.getElementById('add-fin-amount') as HTMLInputElement).value,
-                status: (document.getElementById('add-fin-status') as HTMLSelectElement).value,
-                installments: (document.getElementById('add-fin-install') as HTMLInputElement).value,
-                installmentsPaid: (document.getElementById('add-fin-paid') as HTMLInputElement).value,
-                nextDueDate: (document.getElementById('add-fin-due') as HTMLInputElement).value,
-                visibleToClient: (document.getElementById('add-fin-visible') as HTMLInputElement).checked,
-              };
-              handleCreateFinancial(payload);
-            }} 
-            className="bg-white p-6 rounded-3xl w-full max-w-lg border border-gray-100 shadow-2xl space-y-4"
-          >
-            <h3 className="font-black text-base text-gray-950 border-b border-gray-50 pb-2.5 flex items-center gap-1.5 text-emerald-700">
-              <DollarSign size={20} /> Incluir Lançamento Financeiro
-            </h3>
-
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div className="col-span-2">
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Vincular Caso</label>
-                <select id="add-fin-case" required className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl">
-                  {cases.map(ca => (
-                    <option key={ca.id} value={ca.id}>{ca.title} ({ca.clientSlug})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="col-span-2">
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Vincular Cliente</label>
-                <select id="add-fin-client" required className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl">
-                  {clients.map(cl => (
-                    <option key={cl.id} value={cl.id}>{cl.name} ({cl.slug})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Valor Total (R$)</label>
-                <input type="number" id="add-fin-amount" required placeholder="1500" className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl" />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Status do Honorário</label>
-                <select id="add-fin-status" className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl">
-                  <option value="Em andamento">Em Andamento</option>
-                  <option value="Pago">Totalmente Pago</option>
-                  <option value="Atrasado">Pendente / Atrasado</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 font-semibold">Mensalidades Acordadas</label>
-                <input type="number" id="add-fin-install" defaultValue={1} className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl" />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 font-semibold">Mensalidades Quitadas</label>
-                <input type="number" id="add-fin-paid" defaultValue={0} className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl" />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Próximo Vencimento</label>
-                <input type="date" id="add-fin-due" className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl" />
-              </div>
-
-              <div className="flex items-center gap-2 pt-5">
-                <input type="checkbox" id="add-fin-visible" defaultChecked className="w-4 h-4 text-emerald-600 rounded border-gray-300" />
-                <label htmlFor="add-fin-visible" className="font-bold text-gray-750">Visível no Portal</label>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4 border-t border-gray-50">
-              <button
-                type="button"
-                onClick={() => setIsAddingFinancial(false)}
-                className="px-4 py-2 text-xs font-bold text-gray-500 bg-gray-50 hover:bg-gray-100 rounded-xl"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl"
-              >
-                Enviar Lançamento
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* 6. Edit Financial modal dialog */}
-      {editingFinancial && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white p-6 rounded-3xl w-full max-w-md border border-gray-100 shadow-xl space-y-4">
-            <h3 className="font-black text-base text-gray-950 border-b border-gray-50 pb-2.5 flex items-center gap-1.5 text-emerald-700">
-              Editar Lançamento Financeiro
-            </h3>
-            
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Valor Total (R$)</label>
-                <input
-                  type="number"
-                  id="fin-edit-amount"
-                  defaultValue={editingFinancial.totalAmount}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Status</label>
-                <select
-                  id="fin-edit-status"
-                  defaultValue={editingFinancial.status}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl"
-                >
-                  <option value="Em andamento">Em Andamento</option>
-                  <option value="Pago">Totalmente Pago</option>
-                  <option value="Atrasado">Atrasado</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Mensalidades</label>
-                <input
-                  type="number"
-                  id="fin-edit-install"
-                  defaultValue={editingFinancial.installments}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 font-semibold">Quitadas</label>
-                <input
-                  type="number"
-                  id="fin-edit-paid"
-                  defaultValue={editingFinancial.installmentsPaid}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4 border-t border-gray-50">
-              <button
-                type="button"
-                onClick={() => setEditingFinancial(null)}
-                className="px-4 py-2 text-xs font-bold text-gray-500 bg-gray-50 hover:bg-gray-100 rounded-xl"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const totalAmount = (document.getElementById('fin-edit-amount') as HTMLInputElement).value;
-                  const status = (document.getElementById('fin-edit-status') as HTMLSelectElement).value;
-                  const installments = (document.getElementById('fin-edit-install') as HTMLInputElement).value;
-                  const installmentsPaid = (document.getElementById('fin-edit-paid') as HTMLInputElement).value;
-
-                  await updateDoc(doc(db, 'caseFinancials', editingFinancial.id), {
-                    totalAmount: Number(totalAmount) || 0,
-                    status,
-                    installments: Number(installments) || 1,
-                    installmentsPaid: Number(installmentsPaid) || 0,
-                    updatedAt: serverTimestamp()
-                  });
-                  alert('Lançamento atualizado!');
-                  setEditingFinancial(null);
-                  loadAllCollections();
-                }}
-                className="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl"
-              >
-                Salvar Alterações
-              </button>
-            </div>
+            <button
+              onClick={() => setSafeDeleteWarning(null)}
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl cursor-pointer shadow"
+            >
+              Ciente da Operação
+            </button>
           </div>
         </div>
       )}
