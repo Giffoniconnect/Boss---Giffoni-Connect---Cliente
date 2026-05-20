@@ -19,9 +19,10 @@ interface Props {
   caseId: string;
   clientId: string;
   isAdmin?: boolean;
+  forcePublicOnly?: boolean;
 }
 
-export default function CaseCommunicationsPanel({ caseId, clientId, isAdmin = false }: Props) {
+export default function CaseCommunicationsPanel({ caseId, clientId, isAdmin = false, forcePublicOnly = false }: Props) {
   const [comms, setComms] = useState<Communication[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -43,8 +44,11 @@ export default function CaseCommunicationsPanel({ caseId, clientId, isAdmin = fa
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Communication));
-      setComms(isAdmin ? docs : docs.filter(c => c.visibleToClient));
+      let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Communication));
+      if (forcePublicOnly) {
+        docs = docs.filter(c => c.visibleToClient);
+      }
+      setComms((isAdmin && !forcePublicOnly) ? docs : docs.filter(c => c.visibleToClient));
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'caseCommunications');
@@ -52,7 +56,7 @@ export default function CaseCommunicationsPanel({ caseId, clientId, isAdmin = fa
     });
 
     return unsubscribe;
-  }, [caseId, isAdmin]);
+  }, [caseId, isAdmin, forcePublicOnly]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

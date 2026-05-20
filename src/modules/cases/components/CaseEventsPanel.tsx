@@ -24,9 +24,10 @@ interface Props {
   caseId: string;
   clientId: string;
   isAdmin?: boolean;
+  filterType?: string[];
 }
 
-export default function CaseEventsPanel({ caseId, clientId, isAdmin = false }: Props) {
+export default function CaseEventsPanel({ caseId, clientId, isAdmin = false, filterType }: Props) {
   const [events, setEvents] = useState<CaseEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -53,8 +54,10 @@ export default function CaseEventsPanel({ caseId, clientId, isAdmin = false }: P
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CaseEvent));
-      // Filter for client if needed (though rules should handle it, double check logic)
+      let docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CaseEvent));
+      if (filterType && filterType.length > 0) {
+        docs = docs.filter(ev => filterType.includes(ev.type));
+      }
       setEvents(isAdmin ? docs : docs.filter(ev => ev.visibleToClient));
       setLoading(false);
     }, (error) => {
@@ -63,7 +66,7 @@ export default function CaseEventsPanel({ caseId, clientId, isAdmin = false }: P
     });
 
     return unsubscribe;
-  }, [caseId, isAdmin]);
+  }, [caseId, isAdmin, filterType]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
