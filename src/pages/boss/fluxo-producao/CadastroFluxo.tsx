@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, doc, setDoc, getDocs, query, where, addDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocs, query, where, addDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import FluxoStepLayout from './components/FluxoStepLayout';
 import { 
@@ -280,6 +280,14 @@ export default function CadastroFluxo() {
       // 1. Generate safe slug
       const clientSlug = generateSafeClientSlug(name, clientType, docCode);
 
+      // Verify if clientPortals/{slug} document already exists
+      const portalDocSnap = await getDoc(doc(db, 'clientPortals', clientSlug));
+      if (portalDocSnap.exists()) {
+        setError('Slug já existente. Revise o cadastro antes de prosseguir.');
+        setLoading(false);
+        return;
+      }
+
       // 2. Generate new absolute clientId
       const clientsCollect = collection(db, 'clients');
       const newClientDocRef = doc(clientsCollect);
@@ -329,22 +337,30 @@ export default function CadastroFluxo() {
       // Write clientPortals mapping
       await setDoc(doc(db, 'clientPortals', clientSlug), {
         clientId: generatedClientId,
-        slug: clientSlug
+        slug: clientSlug,
+        active: portalStatus === "ativo",
+        createdAt: rightNow,
+        updatedAt: rightNow
       });
 
       // Write users registry
       await setDoc(doc(db, 'users', generatedClientId), {
         email: email,
-        role: 'client',
-        clientId: generatedClientId
+        role: "client",
+        clientId: generatedClientId,
+        clientSlug: clientSlug,
+        name: name,
+        status: portalStatus,
+        createdAt: rightNow
       });
 
       // Write users invites registry
       await setDoc(doc(db, 'users_invites', generatedClientId), {
         email: email,
-        role: 'client',
+        role: "client",
         clientId: generatedClientId,
-        status: 'pending',
+        clientSlug: clientSlug,
+        status: "pending",
         invitedAt: rightNow
       });
 

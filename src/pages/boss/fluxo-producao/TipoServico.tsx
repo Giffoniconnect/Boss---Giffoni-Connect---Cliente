@@ -49,7 +49,7 @@ export default function TipoServico() {
       icon: FileText 
     },
     { 
-      id: 'requerimento_adm', 
+      id: 'requerimento_administrativo', 
       label: 'Requerimento Administrativo', 
       desc: 'Petição direta com trâmite fático perante autarquias e órgãos públicos.',
       icon: FileSignature 
@@ -61,13 +61,13 @@ export default function TipoServico() {
       icon: Scale 
     },
     { 
-      id: 'jud_andamento', 
+      id: 'processo_judicial_em_andamento', 
       label: 'Processo Judicial em Andamento', 
       desc: 'Habilitação e condução ativa sob rito de distribuição fática em processos preexistentes.',
       icon: FolderOpen 
     },
     { 
-      id: 'jud_ajuizado', 
+      id: 'processo_judicial_ajuizado', 
       label: 'Processo Judicial Ajuizado', 
       desc: 'Peças contestatórias, recursos fáticos judiciais e patrocínio completo de defesa.',
       icon: Briefcase 
@@ -79,13 +79,13 @@ export default function TipoServico() {
     switch (serviceId) {
       case 'peticao_inicial':
         return 'judicial';
-      case 'requerimento_adm':
+      case 'requerimento_administrativo':
         return 'administrativo';
       case 'extrajudicial':
         return 'extrajudicial';
-      case 'jud_andamento':
+      case 'processo_judicial_em_andamento':
         return 'judicial';
-      case 'jud_ajuizado':
+      case 'processo_judicial_ajuizado':
         return 'judicial';
       default:
         return 'judicial';
@@ -97,13 +97,13 @@ export default function TipoServico() {
     switch (serviceId) {
       case 'peticao_inicial':
         return 'Aguardando distribuição';
-      case 'requerimento_adm':
+      case 'requerimento_administrativo':
         return 'Requerimento pendente';
       case 'extrajudicial':
         return 'Tratativa extrajudicial pendente';
-      case 'jud_andamento':
+      case 'processo_judicial_em_andamento':
         return 'Aguardando número do processo';
-      case 'jud_ajuizado':
+      case 'processo_judicial_ajuizado':
         return 'Aguardando número do processo';
       default:
         return 'Em análise';
@@ -121,8 +121,9 @@ export default function TipoServico() {
           const caseSnap = await getDoc(doc(db, 'cases', safeCaseId));
           if (caseSnap.exists()) {
             const data = caseSnap.data();
+            const regTypeKey = data.registrationTypeKey || '';
             const regType = data.registrationType || '';
-            const match = serviceTypes.find(s => s.label === regType || s.id === regType);
+            const match = serviceTypes.find(s => s.id === regTypeKey) || serviceTypes.find(s => s.label === regType || s.id === regType);
             if (match) setSelectedService(match.id);
 
             // Fetch matched client label
@@ -185,6 +186,7 @@ export default function TipoServico() {
         // Mode 1: Edit existing case
         await updateDoc(doc(db, 'cases', safeCaseId), {
           registrationType: serviceItem.label,
+          registrationTypeKey: selectedService,
           actionCategory: actionCat,
           statusPublicoCliente: publicStatus,
           updatedAt: now
@@ -201,6 +203,7 @@ export default function TipoServico() {
           clientId: clientId,
           clientSlug: clientSlug,
           registrationType: serviceItem.label,
+          registrationTypeKey: selectedService,
           actionCategory: actionCat,
           title: "RASCUNHO DE PRODUÇÃO",
           status: "rascunho",
