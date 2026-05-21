@@ -39,6 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setProfile(docSnap.data() as UserProfile);
           } else {
             // Check if it's the bootstrap admin
+            // BOOTSTRAP ADMIN DE PREVIEW — revisar antes de produção real.
             if (firebaseUser.email === 'direito.rgr@gmail.com') {
               const bootstrapProfile: UserProfile = {
                 email: firebaseUser.email,

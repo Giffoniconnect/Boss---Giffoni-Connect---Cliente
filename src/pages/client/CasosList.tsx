@@ -1,3 +1,4 @@
+// LEGADO/PREPARAÇÃO — Portal do Cliente real será externo. Não usado no roteamento ativo do BOSS.
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { collection, query, where, getDocs, orderBy, doc, getDoc } from 'firebase/firestore';

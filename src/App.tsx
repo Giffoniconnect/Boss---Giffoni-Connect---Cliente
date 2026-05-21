@@ -25,9 +25,7 @@ import ProtocoloFluxo from './pages/boss/fluxo-producao/ProtocoloFluxo';
 import ControladoriaFluxo from './pages/boss/fluxo-producao/ControladoriaFluxo';
 import RelatorioIntegridadeFluxo from './pages/boss/fluxo-producao/RelatorioIntegridadeFluxo';
 
-import ClientLogin from './pages/client/Login';
-import ClientCasosList from './pages/client/CasosList';
-import ClientCaseDetail from './pages/client/CaseDetail';
+
 
 const ProtectedRoute = ({ children, role }: { children: React.ReactNode, role: 'boss_admin' | 'client' }) => {
   const { profile, loading } = useAuth();
@@ -225,25 +223,7 @@ export default function App() {
               } 
             />
 
-            {/* Client Portal Routes */}
-            <Route path="/portal-cliente-giffoni/:slug/login" element={<ClientLogin />} />
-            <Route path="/portal-cliente-giffoni/:slug/dashboard" element={<Navigate to="../casos" replace />} />
-            <Route 
-              path="/portal-cliente-giffoni/:slug/casos" 
-              element={
-                <ProtectedRoute role="client">
-                  <ClientCasosList />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/portal-cliente-giffoni/:slug/casos/:caseId" 
-              element={
-                <ProtectedRoute role="client">
-                  <ClientCaseDetail />
-                </ProtectedRoute>
-              } 
-            />
+
 
             {/* Default Catch-all */}
             <Route path="*" element={<Navigate to="/" replace />} />
