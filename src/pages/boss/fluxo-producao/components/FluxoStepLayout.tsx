@@ -26,19 +26,19 @@ export default function FluxoStepLayout({
               <h2 className="text-2xl font-black text-gray-900 tracking-tight">{stepName}</h2>
               <FluxoStatusBadge status={statusText} />
             </div>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-sm text-gray-500 mt-1">
               Fluxo de Produção • Processo de formalização fática e estruturação técnica.
             </p>
           </div>
 
           {caseId ? (
             <div className="px-4 py-2.5 bg-gray-50 border border-gray-100 rounded-2xl flex flex-col text-right">
-              <span className="text-[10px] font-sans font-extrabold uppercase tracking-widest text-gray-400">ID do Caso</span>
+              <span className="text-xs font-sans font-extrabold uppercase tracking-widest text-gray-400">ID do Caso</span>
               <span className="text-xs font-mono font-bold text-gray-700 mt-0.5">{caseId}</span>
             </div>
           ) : (
             <div className="px-4 py-2.5 bg-blue-50/50 border border-blue-100/50 rounded-2xl flex flex-col md:text-right">
-              <span className="text-[10px] font-sans font-extrabold uppercase tracking-widest text-blue-500">Fluxo Inicial</span>
+              <span className="text-xs font-sans font-extrabold uppercase tracking-widest text-blue-500">Fluxo Inicial</span>
               <span className="text-xs font-semibold text-blue-700 mt-0.5">Fase de Cadastro Preliminar</span>
             </div>
           )}

@@ -43,7 +43,7 @@ export default function RequestStatusBadge({ status }: RequestStatusBadgeProps) 
   }
 
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 border text-[9px] font-extrabold uppercase rounded-md tracking-wider ${bg}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 border text-xs font-bold uppercase rounded-md tracking-wider ${bg}`}>
       {label}
     </span>
   );

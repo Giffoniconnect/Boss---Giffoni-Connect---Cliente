@@ -59,7 +59,7 @@ export default function Dashboard() {
     setLoading(true);
     setError(null);
     try {
-      // Fetch Firestore datasets parallelized
+      // Fetch Firestore datasets parallelized with safe individual error handlers
       const [
         clientsSnap,
         casesSnap,
@@ -70,22 +70,46 @@ export default function Dashboard() {
         sectorsSnap,
         connectorsSnap
       ] = await Promise.all([
-        getDocs(collection(db, 'clients')),
-        getDocs(collection(db, 'cases')),
-        getDocs(collection(db, 'caseFinancials')),
-        getDocs(collection(db, 'caseInformationRequests')),
-        getDocs(collection(db, 'caseEvidenceRequests')),
-        getDocs(collection(db, 'caseEvents')),
-        getDoc(doc(db, 'settings', 'sectors')),
-        getDoc(doc(db, 'settings', 'connectors'))
+        getDocs(collection(db, 'clients')).catch(err => {
+          console.warn("Aviso ao buscar 'clients' do Firestore:", err);
+          return { docs: [] } as any;
+        }),
+        getDocs(collection(db, 'cases')).catch(err => {
+          console.warn("Aviso ao buscar 'cases' do Firestore:", err);
+          return { docs: [] } as any;
+        }),
+        getDocs(collection(db, 'caseFinancials')).catch(err => {
+          console.warn("Aviso ao buscar 'caseFinancials' do Firestore:", err);
+          return { docs: [] } as any;
+        }),
+        getDocs(collection(db, 'caseInformationRequests')).catch(err => {
+          console.warn("Aviso ao buscar 'caseInformationRequests' do Firestore:", err);
+          return { docs: [] } as any;
+        }),
+        getDocs(collection(db, 'caseEvidenceRequests')).catch(err => {
+          console.warn("Aviso ao buscar 'caseEvidenceRequests' do Firestore:", err);
+          return { docs: [] } as any;
+        }),
+        getDocs(collection(db, 'caseEvents')).catch(err => {
+          console.warn("Aviso ao buscar 'caseEvents' do Firestore:", err);
+          return { docs: [] } as any;
+        }),
+        getDoc(doc(db, 'settings', 'sectors')).catch(err => {
+          console.warn("Aviso ao buscar 'settings/sectors' do Firestore:", err);
+          return { exists: () => false, data: () => null } as any;
+        }),
+        getDoc(doc(db, 'settings', 'connectors')).catch(err => {
+          console.warn("Aviso ao buscar 'settings/connectors' do Firestore:", err);
+          return { exists: () => false, data: () => null } as any;
+        })
       ]);
 
-      const clients = clientsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-      const cases = casesSnap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-      const caseFinancials = financialsSnap.docs.map(d => d.data() as any);
-      const infoReqs = infoSnap.docs.map(d => d.data() as any);
-      const evidenceReqs = evidenceSnap.docs.map(d => d.data() as any);
-      const caseEvents = eventsSnap.docs.map(d => d.data() as any);
+      const clients = clientsSnap.docs ? clientsSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)) : [];
+      const cases = casesSnap.docs ? casesSnap.docs.map(d => ({ id: d.id, ...d.data() } as any)) : [];
+      const caseFinancials = financialsSnap.docs ? financialsSnap.docs.map(d => d.data() as any) : [];
+      const infoReqs = infoSnap.docs ? infoSnap.docs.map(d => d.data() as any) : [];
+      const evidenceReqs = evidenceSnap.docs ? evidenceSnap.docs.map(d => d.data() as any) : [];
+      const caseEvents = eventsSnap.docs ? eventsSnap.docs.map(d => d.data() as any) : [];
 
       if (sectorsSnap.exists()) {
         setSectors(sectorsSnap.data());
@@ -224,13 +248,13 @@ export default function Dashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold text-gray-950 tracking-tight">Painel de Métricas Corporativas</h1>
-          <p className="text-gray-500 mt-1 text-xs">Informações consolidadas em tempo real das operações e faturamento.</p>
+          <p className="text-gray-500 mt-1 text-sm">Informações consolidadas em tempo real das operações e faturamento.</p>
         </div>
         <button
           type="button"
           onClick={fetchMetrics}
           disabled={loading}
-          className="inline-flex items-center gap-2 bg-white border border-gray-250 hover:bg-gray-50 text-gray-800 text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-3xs cursor-pointer disabled:opacity-50"
+          className="inline-flex items-center gap-2 bg-white border border-gray-250 hover:bg-gray-50 text-gray-850 text-sm font-bold px-4 py-2.5 rounded-xl transition-all shadow-3xs cursor-pointer disabled:opacity-50"
         >
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           <span>Atualizar Métricas</span>
@@ -238,7 +262,7 @@ export default function Dashboard() {
       </div>
 
       {error && (
-        <div className="p-4 bg-red-50 border border-red-150 rounded-2xl text-red-950 text-xs flex gap-3 items-center">
+        <div className="p-4 bg-red-50 border border-red-150 rounded-2xl text-red-950 text-sm flex gap-3 items-center">
           <AlertCircle size={16} className="text-red-500 shrink-0" />
           <p className="font-semibold leading-relaxed">{error}</p>
         </div>
@@ -248,69 +272,69 @@ export default function Dashboard() {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 rounded-2xl gap-2 font-mono">
           <div className="w-8 h-8 border-4 border-gray-100 border-t-gray-950 rounded-full animate-spin"></div>
-          <span className="text-[10px] text-gray-400 uppercase font-black tracking-wider">Calculando indicadores...</span>
+          <span className="text-sm text-gray-500 uppercase font-bold tracking-wider">Calculando indicadores...</span>
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           
           <div className="bg-white border border-gray-150 rounded-2xl p-5 shadow-3xs hover:shadow-2xs transition-all">
-            <span className="text-[10px] font-black uppercase text-gray-450 tracking-wider">Clientes Potenciais</span>
+            <span className="text-xs font-bold uppercase text-gray-500 tracking-wider">Clientes Potenciais</span>
             <div className="text-2xl font-black text-gray-900 mt-1">{metrics.potentialClients}</div>
-            <p className="text-[9px] text-gray-400 mt-1 leading-normal">Cadastros s/ portal ou sem caso</p>
+            <p className="text-xs text-gray-500 mt-1 leading-normal">Cadastros s/ portal ou sem caso</p>
           </div>
 
           <div className="bg-white border border-gray-150 rounded-2xl p-5 shadow-3xs hover:shadow-2xs transition-all">
-            <span className="text-[10px] font-black uppercase text-gray-450 tracking-wider">Clientes Ativos</span>
+            <span className="text-xs font-bold uppercase text-gray-500 tracking-wider">Clientes Ativos</span>
             <div className="text-2xl font-black text-emerald-600 mt-1">{metrics.activeClients}</div>
-            <p className="text-[9px] text-gray-400 mt-1 leading-normal">Status regular de acesso</p>
+            <p className="text-xs text-gray-500 mt-1 leading-normal">Status regular de acesso</p>
           </div>
 
           <div className="bg-white border border-gray-150 rounded-2xl p-5 shadow-3xs hover:shadow-2xs transition-all">
-            <span className="text-[10px] font-black uppercase text-gray-450 tracking-wider">Casos em Produção</span>
+            <span className="text-xs font-bold uppercase text-gray-500 tracking-wider">Casos em Produção</span>
             <div className="text-2xl font-black text-blue-600 mt-1">{metrics.casesInProduction}</div>
-            <p className="text-[9px] text-gray-400 mt-1 leading-normal">Fase ativa do fluxo</p>
+            <p className="text-xs text-gray-500 mt-1 leading-normal">Fase ativa do fluxo</p>
           </div>
 
           <div className="bg-white border border-gray-150 rounded-2xl p-5 shadow-3xs hover:shadow-2xs transition-all">
-            <span className="text-[10px] font-black uppercase text-gray-450 tracking-wider">Casos em Andamento</span>
+            <span className="text-xs font-bold uppercase text-gray-500 tracking-wider">Casos em Andamento</span>
             <div className="text-2xl font-black text-indigo-600 mt-1">{metrics.casesOngoing}</div>
-            <p className="text-[9px] text-gray-400 mt-1 leading-normal">Não arquivados nem finalizados</p>
+            <p className="text-xs text-gray-500 mt-1 leading-normal">Não arquivados nem finalizados</p>
           </div>
 
           <div className="bg-white border border-gray-150 rounded-2xl p-5 shadow-3xs hover:shadow-2xs transition-all">
-            <span className="text-[10px] font-black uppercase text-gray-450 tracking-wider">Casos c/ Pendência</span>
+            <span className="text-xs font-bold uppercase text-gray-500 tracking-wider">Casos c/ Pendência</span>
             <div className="text-2xl font-black text-rose-600 mt-1">{metrics.casesWithPending}</div>
-            <p className="text-[9px] text-gray-400 mt-1 leading-normal">Erros ou pendente de auditoria</p>
+            <p className="text-xs text-gray-500 mt-1 leading-normal">Erros ou pendente de auditoria</p>
           </div>
 
           <div className="bg-white border border-gray-150 rounded-2xl p-5 shadow-3xs hover:shadow-2xs transition-all">
-            <span className="text-[10px] font-black uppercase text-gray-450 tracking-wider">Casos Concluídos</span>
+            <span className="text-xs font-bold uppercase text-gray-500 tracking-wider">Casos Concluídos</span>
             <div className="text-2xl font-black text-emerald-700 mt-1">{metrics.casesCompleted}</div>
-            <p className="text-[9px] text-gray-400 mt-1 leading-normal">Sincronizados com ressalva ou aptos</p>
+            <p className="text-xs text-gray-500 mt-1 leading-normal">Sincronizados com ressalva ou aptos</p>
           </div>
 
           <div className="bg-white border border-gray-150 rounded-2xl p-5 shadow-3xs hover:shadow-2xs transition-all">
-            <span className="text-[10px] font-black uppercase text-gray-450 tracking-wider">Faturamento Recebido</span>
+            <span className="text-xs font-bold uppercase text-gray-500 tracking-wider">Faturamento Recebido</span>
             <div className="text-xl font-black text-emerald-650 mt-1 tracking-tight">{formatBRL(metrics.receivedRevenue)}</div>
-            <p className="text-[9px] text-gray-400 mt-1 leading-normal">Honorários pagos consolidados</p>
+            <p className="text-xs text-gray-500 mt-1 leading-normal">Honorários pagos consolidados</p>
           </div>
 
           <div className="bg-white border border-gray-150 rounded-2xl p-5 shadow-3xs hover:shadow-2xs transition-all">
-            <span className="text-[10px] font-black uppercase text-gray-450 tracking-wider">Faturamento a Receber</span>
+            <span className="text-xs font-bold uppercase text-gray-500 tracking-wider">Faturamento a Receber</span>
             <div className="text-xl font-black text-amber-600 mt-1 tracking-tight">{formatBRL(metrics.revenueToReceive)}</div>
-            <p className="text-[9px] text-gray-400 mt-1 leading-normal">Em aberto / Ativos sandbox</p>
+            <p className="text-xs text-gray-500 mt-1 leading-normal">Em aberto / Ativos sandbox</p>
           </div>
 
           <div className="bg-white border border-gray-150 rounded-2xl p-5 shadow-3xs hover:shadow-2xs transition-all">
-            <span className="text-[10px] font-black uppercase text-gray-450 tracking-wider">Solicitações Ativas</span>
+            <span className="text-xs font-bold uppercase text-gray-500 tracking-wider">Solicitações Ativas</span>
             <div className="text-2xl font-black text-purple-650 mt-1">{metrics.pendingRequests}</div>
-            <p className="text-[9px] text-gray-400 mt-1 leading-normal">Provas e dados aguardando cliente</p>
+            <p className="text-xs text-gray-500 mt-1 leading-normal">Provas e dados aguardando cliente</p>
           </div>
 
           <div className="bg-white border border-gray-150 rounded-2xl p-5 shadow-3xs hover:shadow-2xs transition-all">
-            <span className="text-[10px] font-black uppercase text-gray-450 tracking-wider font-sans">Audiências/Perícias</span>
+            <span className="text-xs font-bold uppercase text-gray-500 tracking-wider font-sans">Audiências/Perícias</span>
             <div className="text-2xl font-black text-neutral-900 mt-1">{metrics.futureEvents}</div>
-            <p className="text-[9px] text-gray-400 mt-1 leading-normal">Agendamentos futuros ativos</p>
+            <p className="text-xs text-gray-500 mt-1 leading-normal">Agendamentos futuros ativos</p>
           </div>
 
         </div>
@@ -318,7 +342,7 @@ export default function Dashboard() {
 
       {/* QUICK ACTIONS / SHORTCUTS GRID */}
       <div className="space-y-4">
-        <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider">Atalhos Operacionais Rápidos</h3>
+        <h3 className="text-sm font-black uppercase text-gray-500 tracking-wider">Atalhos Operacionais Rápidos</h3>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           
           <button 
@@ -330,8 +354,8 @@ export default function Dashboard() {
                 <Plus size={18} />
               </div>
               <div>
-                <h4 className="font-bold text-xs text-gray-900 leading-tight">Novo Fluxo de Produção</h4>
-                <p className="text-[10px] text-gray-400 mt-0.5">Iniciar cadastro e tese</p>
+                <h4 className="font-bold text-sm text-gray-900 leading-tight">Novo Fluxo de Produção</h4>
+                <p className="text-xs text-gray-500 mt-0.5">Iniciar cadastro e tese</p>
               </div>
             </div>
             <ArrowRight size={14} className="text-gray-400 transform group-hover:translate-x-1 transition-transform" />
@@ -346,8 +370,8 @@ export default function Dashboard() {
                 <Sliders size={18} />
               </div>
               <div>
-                <h4 className="font-bold text-xs text-gray-900 leading-tight">Central de Controle</h4>
-                <p className="text-[10px] text-gray-400 mt-0.5">Controladoria e logins</p>
+                <h4 className="font-bold text-sm text-gray-900 leading-tight">Central de Controle</h4>
+                <p className="text-xs text-gray-500 mt-0.5">Controladoria e logins</p>
               </div>
             </div>
             <ArrowRight size={14} className="text-gray-400 transform group-hover:translate-x-1 transition-transform" />
@@ -362,8 +386,8 @@ export default function Dashboard() {
                 <Building2 size={18} />
               </div>
               <div>
-                <h4 className="font-bold text-xs text-gray-900 leading-tight">Setores do Escritório</h4>
-                <p className="text-[10px] text-gray-400 mt-0.5">Departamentos e painéis</p>
+                <h4 className="font-bold text-sm text-gray-900 leading-tight">Setores do Escritório</h4>
+                <p className="text-xs text-gray-500 mt-0.5">Departamentos e painéis</p>
               </div>
             </div>
             <ArrowRight size={14} className="text-gray-400 transform group-hover:translate-x-1 transition-transform" />
@@ -378,8 +402,8 @@ export default function Dashboard() {
                 <Settings size={18} />
               </div>
               <div>
-                <h4 className="font-bold text-xs text-gray-900 leading-tight">Configurações</h4>
-                <p className="text-[10px] text-gray-400 mt-0.5">Parâmetros de sistema</p>
+                <h4 className="font-bold text-sm text-gray-900 leading-tight">Configurações</h4>
+                <p className="text-xs text-gray-500 mt-0.5">Parâmetros de sistema</p>
               </div>
             </div>
             <ArrowRight size={14} className="text-gray-400 transform group-hover:translate-x-1 transition-transform" />

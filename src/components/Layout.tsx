@@ -27,7 +27,10 @@ export function BossLayout({ children }: { children: React.ReactNode }) {
       {/* Sidebar Desktop */}
       <aside className="hidden md:flex w-64 bg-white border-r border-gray-200 flex-col sticky top-0 h-screen">
         <div className="p-6">
-          <h1 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
+          <h1 
+            onClick={() => navigate('/boss-giffoni-clientes/dashboard')}
+            className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+          >
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white">B</div>
             BOSS Connect
           </h1>
@@ -69,10 +72,16 @@ export function BossLayout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Nav */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-         <h1 className="text-lg font-bold text-gray-900 tracking-tight flex items-center gap-2">
+         <h1 
+            onClick={() => {
+              setIsMobileMenuOpen(false);
+              navigate('/boss-giffoni-clientes/dashboard');
+            }}
+            className="text-lg font-bold text-gray-900 tracking-tight flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+         >
             <div className="w-6 h-6 bg-blue-600 rounded-md flex items-center justify-center text-white text-xs">B</div>
             BOSS
-          </h1>
+         </h1>
           <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
             {isMobileMenuOpen ? <X /> : <Menu />}
           </button>
@@ -142,7 +151,10 @@ export function ClientLayout({ children, slug, clientName }: { children: React.R
       {/* Sidebar Desktop */}
       <aside className="hidden md:flex w-72 bg-white border-r border-gray-200 flex-col sticky top-0 h-screen">
         <div className="p-8">
-          <h1 className="text-xl font-black text-gray-900 tracking-tighter flex items-center gap-3">
+          <h1 
+            onClick={() => navigate(`/portal-cliente-giffoni/${slug}/casos`)}
+            className="text-xl font-black text-gray-900 tracking-tighter flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
+          >
             <div className="w-10 h-10 bg-gray-900 rounded-xl flex items-center justify-center text-white">
               <ChevronRight size={24} />
             </div>
@@ -189,7 +201,15 @@ export function ClientLayout({ children, slug, clientName }: { children: React.R
       <div className="flex-1 flex flex-col min-h-screen">
         {/* Mobile Header */}
         <header className="md:hidden bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
-          <h1 className="font-black text-gray-900 tracking-tighter">Giffoni Portal</h1>
+          <h1 
+            onClick={() => {
+              setIsMobileMenuOpen(false);
+              navigate(`/portal-cliente-giffoni/${slug}/casos`);
+            }}
+            className="font-black text-gray-900 tracking-tighter cursor-pointer hover:opacity-80 transition-opacity"
+          >
+            Giffoni Portal
+          </h1>
           <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
             {isMobileMenuOpen ? <X /> : <Menu />}
           </button>

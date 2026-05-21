@@ -507,29 +507,29 @@ export default function FinanceiroFluxo() {
           <div className="bg-gray-50/75 border border-gray-150 rounded-2xl p-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
               <div className="space-y-1">
-                <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">Cliente Titular</span>
-                <h4 className="text-xs font-bold text-gray-950 truncate max-w-[180px]">{clientName || 'Carregando...'}</h4>
-                <p className="text-[10px] text-gray-400 font-mono">Slug: {clientSlug || 'Sem slug'}</p>
+                <span className="text-xs font-bold tracking-wider text-gray-400 uppercase">Cliente Titular</span>
+                <h4 className="text-sm font-bold text-gray-950 truncate max-w-[180px]">{clientName || 'Carregando...'}</h4>
+                <p className="text-xs text-gray-450 font-mono">Slug: {clientSlug || 'Sem slug'}</p>
               </div>
               <div className="space-y-1 sm:pl-4">
-                <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">Modalidade</span>
-                <h4 className="text-xs font-bold text-gray-900 truncate uppercase tracking-tight">{caseObj.registrationType}</h4>
-                <span className="inline-block text-[8px] font-bold px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-md font-mono mt-0.5">
+                <span className="text-xs font-bold tracking-wider text-gray-400 uppercase">Modalidade</span>
+                <h4 className="text-sm font-bold text-gray-900 truncate uppercase tracking-tight">{caseObj.registrationType}</h4>
+                <span className="inline-block text-xs font-bold px-2 py-0.5 bg-blue-50 text-blue-750 rounded-md font-mono mt-0.5">
                   {caseObj.registrationTypeKey || 'Ajuizado'}
                 </span>
               </div>
               <div className="space-y-1 lg:pl-4">
-                <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">Controle Operacional</span>
-                <div className="text-[10px] text-gray-600 space-y-0.5">
+                <span className="text-xs font-bold tracking-wider text-gray-400 uppercase">Controle Operacional</span>
+                <div className="text-xs text-gray-600 space-y-1">
                   <div>Interno: <span className="font-bold text-gray-700">{caseObj.statusInterno || 'Em produção'}</span></div>
-                  <div className="truncate max-w-[150px]">Público: <span className="font-bold text-indigo-705">{caseObj.statusPublicoCliente || 'Aguardando...'}</span></div>
+                  <div className="truncate max-w-[150px]">Público: <span className="font-bold text-indigo-750">{caseObj.statusPublicoCliente || 'Aguardando...'}</span></div>
                 </div>
               </div>
               <div className="space-y-1 lg:pl-4">
-                <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">Caso ID Técnico</span>
-                <p className="text-xs font-mono font-bold text-gray-700 truncate">{caseId}</p>
+                <span className="text-xs font-bold tracking-wider text-gray-400 uppercase">Caso ID Técnico</span>
+                <p className="text-sm font-mono font-bold text-gray-700 truncate">{caseId}</p>
                 <div className="flex items-center gap-1.5 mt-1">
-                  <span className="inline-block text-[8px] font-bold px-1.5 py-0.5 bg-gray-100 text-gray-650 rounded">
+                  <span className="inline-block text-xs font-bold px-2 py-0.5 bg-gray-100 text-gray-650 rounded">
                     ESTÁVEL
                   </span>
                 </div>
@@ -630,9 +630,9 @@ export default function FinanceiroFluxo() {
                       {/* Display warning or linking if Contract Reference is on */}
                       {fee.contractLinked && (
                         <div className="p-3 bg-gray-50 border border-gray-150 rounded-xl space-y-1.5">
-                          <div className="flex items-center justify-between text-[10px]">
-                            <span className="font-bold text-gray-700 font-mono flex items-center gap-1">
-                              <FileText size={12} className="text-blue-500" />
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-gray-700 font-mono flex items-center gap-1.5">
+                              <FileText size={14} className="text-blue-500" />
                               <span>{fee.contractName || 'Contrato não nomeado'}</span>
                             </span>
                             {fee.contractUrl ? (
@@ -640,14 +640,14 @@ export default function FinanceiroFluxo() {
                                 href={fee.contractUrl} 
                                 target="_blank" 
                                 rel="noreferrer" 
-                                className="text-indigo-600 hover:underline font-bold flex items-center gap-0.5"
+                                className="text-indigo-655 hover:underline font-bold flex items-center gap-0.5"
                               >
                                 <span>Acessar</span>
-                                <ExternalLink size={10} />
+                                <ExternalLink size={11} />
                               </a>
                             ) : (
-                              <span className="text-red-650 font-bold flex items-center gap-1 text-[9px] bg-red-50 px-1 py-0.5 rounded border border-red-100">
-                                <AlertTriangle size={10} className="text-red-500" />
+                              <span className="text-red-700 font-bold flex items-center gap-1 text-xs bg-red-50 px-1.5 py-0.5 rounded border border-red-100">
+                                <AlertTriangle size={11} className="text-red-500" />
                                 <span>URL DO CONTRATO VAZIA</span>
                               </span>
                             )}
@@ -657,17 +657,17 @@ export default function FinanceiroFluxo() {
 
                       {/* Specific provider metadata highlights */}
                       {fee.paymentProvider !== 'manual_temporario' && (
-                        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-[10px] text-slate-700 font-mono">
-                          <span className="font-sans font-black text-[9px] text-slate-500 uppercase tracking-widest block mb-0.5">PROVER PROTOCOLS</span>
+                        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs text-slate-700 font-mono">
+                          <span className="font-sans font-black text-xs text-slate-500 uppercase tracking-widest block mb-0.5">PROVER PROTOCOLS</span>
                           {fee.paymentProvider === 'stripe' ? (
                             <>
-                              <div>Customer ID: <span className="font-bold">{fee.stripeCustomerId || '—'}</span></div>
-                              <div>Checkout Session: <span className="font-bold truncate select-all">{fee.stripeCheckoutSessionId || '—'}</span></div>
+                              <div>Customer ID: <span className="font-medium text-slate-900">{fee.stripeCustomerId || '—'}</span></div>
+                              <div>Checkout Session: <span className="font-medium text-slate-900 truncate select-all">{fee.stripeCheckoutSessionId || '—'}</span></div>
                             </>
                           ) : (
                             <>
-                              <div>Asaas Cust ID: <span className="font-bold">{fee.asaasCustomerId || '—'}</span></div>
-                              <div>Asaas Payment ID: <span className="font-bold truncate select-all">{fee.asaasPaymentId || '—'}</span></div>
+                              <div>Asaas Cust ID: <span className="font-medium text-slate-900">{fee.asaasCustomerId || '—'}</span></div>
+                              <div>Asaas Payment ID: <span className="font-medium text-slate-900 truncate select-all">{fee.asaasPaymentId || '—'}</span></div>
                             </>
                           )}
                           {fee.paymentLink && (
@@ -680,33 +680,33 @@ export default function FinanceiroFluxo() {
 
                       {/* Notes / Admin view remarks */}
                       {fee.notes && (
-                        <p className="text-[11px] text-gray-500 italic bg-gray-50 p-2.5 rounded-lg border border-gray-100">
+                        <p className="text-xs text-gray-500 italic bg-gray-50 p-3 rounded-lg border border-gray-100">
                           “{fee.notes}”
                         </p>
                       )}
 
                       {/* Bottom actions */}
-                      <div className="flex items-center justify-between pt-2.5 border-t border-gray-100">
-                        <span className="text-[8px] text-gray-400 font-mono">
+                      <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                        <span className="text-xs text-gray-400 font-mono">
                           Criado em: {new Date(fee.createdAt).toLocaleString('pt-BR')}
                         </span>
 
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-2">
                           <button
                             type="button"
                             onClick={() => handleEditInit(fee)}
-                            className="px-2.5 py-1 hover:bg-gray-100 border border-gray-200 rounded-xl text-[10px] font-bold text-gray-700 cursor-pointer flex items-center gap-1 transition-colors"
+                            className="px-3.5 py-1.5 hover:bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-700 cursor-pointer flex items-center gap-1 transition-colors"
                           >
-                            <Edit2 size={10} />
+                            <Edit2 size={11} />
                             <span>Editar</span>
                           </button>
 
                           <button
                             type="button"
                             onClick={() => handleArchive(fee.id!)}
-                            className="px-2.5 py-1 hover:bg-red-50 text-red-600 border border-transparent hover:border-red-100 rounded-xl text-[10px] font-bold cursor-pointer flex items-center gap-1 transition-colors"
+                            className="px-3.5 py-1.5 hover:bg-red-50 text-red-600 border border-transparent hover:border-red-100 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1 transition-colors"
                           >
-                            <Archive size={10} />
+                            <Archive size={11} />
                             <span>Arquivar</span>
                           </button>
                         </div>

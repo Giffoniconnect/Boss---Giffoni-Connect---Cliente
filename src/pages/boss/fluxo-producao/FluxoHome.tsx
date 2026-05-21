@@ -88,8 +88,8 @@ export default function FluxoHome() {
     <BossLayout>
       <div className="mb-8">
         <div className="flex items-center gap-3">
-          <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Fluxo de Produção</h2>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 border border-gray-150 rounded-full text-gray-700 text-[10px] font-bold uppercase tracking-wider">
+          <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Fluxo de Production</h2>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 border border-gray-150 rounded-full text-gray-750 text-xs font-bold uppercase tracking-wider">
             Arquitetura Pré-Configurada
           </span>
         </div>
@@ -137,11 +137,11 @@ export default function FluxoHome() {
       {/* FLOW OVERVIEW CARDS */}
       <div>
         <div className="mb-6">
-          <h3 className="text-lg font-black text-gray-900 tracking-tight">Etapas do Processo de Produção</h3>
-          <p className="text-xs text-gray-500 mt-0.5">Visão geral linear para controle de integridade de informações.</p>
+          <h3 className="text-xl font-black text-gray-900 tracking-tight">Etapas do Processo de Produção</h3>
+          <p className="text-sm text-gray-550 mt-1">Visão geral linear para controle de integridade de informações.</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {flowSteps.map((step) => {
             const Icon = getStepIcon(step.id);
             const colorClass = getRandomBg(step.id);
@@ -149,14 +149,14 @@ export default function FluxoHome() {
             return (
               <div
                 key={step.id}
-                className="bg-white border border-gray-150 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group"
+                className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group"
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${colorClass}`}>
-                    <Icon size={18} />
+                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${colorClass}`}>
+                    <Icon size={20} />
                   </div>
                   <div>
-                    <span className="text-[10px] font-mono font-bold text-gray-400 block h-3">
+                    <span className="text-xs font-mono font-bold text-gray-400 block h-4">
                       ETAPA {String(step.order).padStart(2, '0')}
                     </span>
                     <h5 className="font-bold text-gray-900 text-sm mt-0.5 tracking-tight truncate max-w-[160px]">
@@ -165,7 +165,7 @@ export default function FluxoHome() {
                   </div>
                 </div>
 
-                <p className="text-[11px] text-gray-400 leading-relaxed mt-3">
+                <p className="text-xs text-gray-500 leading-relaxed mt-4.5">
                   {step.requiresCaseId 
                     ? 'Requer identificador ativo de caso existente na nuvem.' 
                     : 'Abertura de dados mestre e controle cadastral do cliente.'}
@@ -173,7 +173,7 @@ export default function FluxoHome() {
 
                 {/* Micro decorator */}
                 <div className="absolute right-3 bottom-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="text-[9px] font-bold text-gray-300 uppercase tracking-widest font-mono">
+                  <div className="text-xs font-bold text-gray-300 uppercase tracking-widest font-mono">
                     VIEW ONLY
                   </div>
                 </div>

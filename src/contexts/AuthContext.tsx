@@ -40,7 +40,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } else {
             // Check if it's the bootstrap admin
             if (firebaseUser.email === 'direito.rgr@gmail.com') {
-              setProfile({ email: firebaseUser.email, role: 'boss_admin' });
+              const bootstrapProfile: UserProfile = {
+                email: firebaseUser.email,
+                role: 'boss_admin'
+              };
+              try {
+                await setDoc(docRef, {
+                  ...bootstrapProfile,
+                  createdAt: serverTimestamp()
+                });
+              } catch (writeErr) {
+                console.error("Erro ao auto-registrar o admin no banco:", writeErr);
+              }
+              setProfile(bootstrapProfile);
             }
           }
         } catch (error) {

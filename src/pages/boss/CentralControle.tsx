@@ -52,27 +52,57 @@ export default function CentralControle() {
         clientsSnap, casesSnap, usersSnap, invitesSnap, portalsSnap,
         infoSnap, evidenceSnap, financialsSnap, eventsSnap, portalSettingsSnap
       ] = await Promise.all([
-        getDocs(collection(db, 'clients')),
-        getDocs(collection(db, 'cases')),
-        getDocs(collection(db, 'users')),
-        getDocs(collection(db, 'users_invites')),
-        getDocs(collection(db, 'clientPortals')),
-        getDocs(collection(db, 'caseInformationRequests')),
-        getDocs(collection(db, 'caseEvidenceRequests')),
-        getDocs(collection(db, 'caseFinancials')),
-        getDocs(collection(db, 'caseEvents')),
-        getDoc(doc(db, 'settings', 'portal'))
+        getDocs(collection(db, 'clients')).catch(err => {
+          console.warn("Aviso ao buscar 'clients' do Firestore:", err);
+          return { docs: [] } as any;
+        }),
+        getDocs(collection(db, 'cases')).catch(err => {
+          console.warn("Aviso ao buscar 'cases' do Firestore:", err);
+          return { docs: [] } as any;
+        }),
+        getDocs(collection(db, 'users')).catch(err => {
+          console.warn("Aviso ao buscar 'users' do Firestore:", err);
+          return { docs: [] } as any;
+        }),
+        getDocs(collection(db, 'users_invites')).catch(err => {
+          console.warn("Aviso ao buscar 'users_invites' do Firestore:", err);
+          return { docs: [] } as any;
+        }),
+        getDocs(collection(db, 'clientPortals')).catch(err => {
+          console.warn("Aviso ao buscar 'clientPortals' do Firestore:", err);
+          return { docs: [] } as any;
+        }),
+        getDocs(collection(db, 'caseInformationRequests')).catch(err => {
+          console.warn("Aviso ao buscar 'caseInformationRequests' do Firestore:", err);
+          return { docs: [] } as any;
+        }),
+        getDocs(collection(db, 'caseEvidenceRequests')).catch(err => {
+          console.warn("Aviso ao buscar 'caseEvidenceRequests' do Firestore:", err);
+          return { docs: [] } as any;
+        }),
+        getDocs(collection(db, 'caseFinancials')).catch(err => {
+          console.warn("Aviso ao buscar 'caseFinancials' do Firestore:", err);
+          return { docs: [] } as any;
+        }),
+        getDocs(collection(db, 'caseEvents')).catch(err => {
+          console.warn("Aviso ao buscar 'caseEvents' do Firestore:", err);
+          return { docs: [] } as any;
+        }),
+        getDoc(doc(db, 'settings', 'portal')).catch(err => {
+          console.warn("Aviso ao buscar 'settings/portal' do Firestore:", err);
+          return { exists: () => false, data: () => null } as any;
+        })
       ]);
 
-      setClients(clientsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setCases(casesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setUsers(usersSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setUsersInvites(invitesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setClientPortals(portalsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setInfoRequests(infoSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setEvidenceRequests(evidenceSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setFinancials(financialsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setEvents(eventsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setClients(clientsSnap.docs ? clientsSnap.docs.map(d => ({ id: d.id, ...d.data() })) : []);
+      setCases(casesSnap.docs ? casesSnap.docs.map(d => ({ id: d.id, ...d.data() })) : []);
+      setUsers(usersSnap.docs ? usersSnap.docs.map(d => ({ id: d.id, ...d.data() })) : []);
+      setUsersInvites(invitesSnap.docs ? invitesSnap.docs.map(d => ({ id: d.id, ...d.data() })) : []);
+      setClientPortals(portalsSnap.docs ? portalsSnap.docs.map(d => ({ id: d.id, ...d.data() })) : []);
+      setInfoRequests(infoSnap.docs ? infoSnap.docs.map(d => ({ id: d.id, ...d.data() })) : []);
+      setEvidenceRequests(evidenceSnap.docs ? evidenceSnap.docs.map(d => ({ id: d.id, ...d.data() })) : []);
+      setFinancials(financialsSnap.docs ? financialsSnap.docs.map(d => ({ id: d.id, ...d.data() })) : []);
+      setEvents(eventsSnap.docs ? eventsSnap.docs.map(d => ({ id: d.id, ...d.data() })) : []);
 
       if (portalSettingsSnap.exists()) {
         setPortalSettings(portalSettingsSnap.data());
@@ -481,19 +511,19 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
               <button
                 key={t.id}
                 onClick={() => setActiveTab(t.id as TabId)}
-                className={`px-3.5 py-2.5 rounded-xl text-[11px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 transition-all shrink-0 cursor-pointer ${
+                className={`px-3.5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shrink-0 cursor-pointer ${
                   isActive 
                     ? 'bg-indigo-600 text-white shadow-sm' 
-                    : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900'
+                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-950'
                 }`}
               >
                 <span>{t.label}</span>
-                <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black ${
+                <span className={`px-1.5 py-0.5 rounded-full text-xs font-black ${
                   isActive 
                     ? 'bg-indigo-800 text-indigo-100' 
                     : t.warning && t.count > 0 
                       ? 'bg-rose-100 text-rose-700' 
-                      : 'bg-gray-100 text-gray-600'
+                      : 'bg-gray-150 text-gray-700'
                 }`}>
                   {t.count}
                 </span>
@@ -506,7 +536,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
         {loading && (
           <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-100 rounded-3xl gap-2 font-mono">
             <div className="w-8 h-8 border-4 border-gray-100 border-t-indigo-600 rounded-full animate-spin"></div>
-            <span className="text-[10px] text-gray-400 uppercase font-black tracking-wider">Aguarde. Carregando bancos...</span>
+            <span className="text-xs text-gray-500 uppercase font-black tracking-wider">Aguarde. Carregando bancos...</span>
           </div>
         )}
 
@@ -518,7 +548,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
             {activeTab === 'clientes' && (
               <div className="bg-white border border-gray-150 rounded-2xl shadow-3xs overflow-hidden">
                 <table className="w-full text-left border-collapse min-w-[900px]">
-                  <thead className="bg-gray-50 border-b border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                  <thead className="bg-gray-50 border-b border-gray-100 text-xs font-bold text-gray-500 uppercase tracking-wider">
                     <tr>
                       <th className="py-3 px-4">Nome / Empresa</th>
                       <th className="py-3">CPF/CNPJ</th>
@@ -543,47 +573,47 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                           <tr key={c.id} className="hover:bg-gray-50/40">
                             <td className="py-4 px-4">
                               <span className="font-extrabold text-gray-900 block">{clientName}</span>
-                              <span className="text-[10px] text-indigo-500 font-bold block mt-0.5 font-mono">{numCasos} processo(s) vinculado(s)</span>
+                              <span className="text-xs text-indigo-600 font-bold block mt-1 font-mono">{numCasos} processo(s) vinculado(s)</span>
                               <div className="flex flex-wrap gap-1.5 mt-2">
                                 {c.portalStatus === 'criado' ? (
-                                  <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded text-[9px] font-bold">Portal criado</span>
+                                  <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded text-xs font-bold">Portal criado</span>
                                 ) : (
-                                  <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-100 rounded text-[9px] font-bold">Portal não criado</span>
+                                  <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-100 rounded text-xs font-bold">Portal não criado</span>
                                 )}
                                 {c.cadastroIncompleto === true ? (
-                                  <span className="px-2 py-0.5 bg-red-50 text-red-700 border border-red-100 rounded text-[9px] font-bold" title={c.missingFields && c.missingFields.length > 0 ? `Campos faltantes: ${c.missingFields.join(', ')}` : 'Cadastro incompleto'}>
+                                  <span className="px-2 py-0.5 bg-red-50 text-red-700 border border-red-100 rounded text-xs font-bold" title={c.missingFields && c.missingFields.length > 0 ? `Campos faltantes: ${c.missingFields.join(', ')}` : 'Cadastro incompleto'}>
                                     Cadastro incompleto
                                   </span>
                                 ) : (
-                                  <span className="px-2 py-0.5 bg-green-50 text-green-700 border border-green-150 rounded text-[9px] font-bold">Cadastro completo</span>
+                                  <span className="px-2 py-0.5 bg-green-50 text-green-700 border border-green-150 rounded text-xs font-bold">Cadastro completo</span>
                                 )}
                               </div>
                               {c.cadastroIncompleto === true && c.missingFields && c.missingFields.length > 0 && (
-                                <span className="text-[9px] text-gray-400 block mt-1 leading-normal font-sans">Falta: {c.missingFields.join(', ')}</span>
+                                <span className="text-xs text-gray-500 block mt-1 leading-normal font-sans">Falta: {c.missingFields.join(', ')}</span>
                               )}
                             </td>
                             <td className="py-4 font-mono font-semibold">{getClientDocument(c)}</td>
                             <td className="py-4 text-gray-500">{getClientEmail(c)}</td>
                             <td className="py-4 text-gray-500">{getClientPhone(c)}</td>
                             <td className="py-4 font-mono font-bold text-indigo-650">/{c.slug || 'sem-slug'}</td>
-                            <td className="py-4 font-mono text-[10px] text-gray-400">{c.id}</td>
+                            <td className="py-4 font-mono text-xs text-gray-500">{c.id}</td>
                             <td className="py-4">
-                              <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                              <span className={`px-2 py-0.5 rounded text-xs font-black uppercase tracking-wider ${
                                 c.active !== false ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
                               }`}>
                                 {c.active !== false ? 'Ativo' : 'Suspenso'}
                               </span>
                             </td>
-                            <td className="py-4 text-right pr-4 space-x-1 whitespace-nowrap">
+                            <td className="py-4 text-right pr-4 space-x-1.5 whitespace-nowrap">
                               <button
                                 onClick={() => navigate(`/boss-giffoni-clientes/clientes/${c.id}`)}
-                                className="px-2 py-1 bg-gray-100 hover:bg-gray-250 text-[10px] font-bold text-gray-750 rounded-lg cursor-pointer"
+                                className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-250 text-xs font-bold text-gray-750 rounded-lg cursor-pointer"
                               >
                                 Abrir
                               </button>
                               <button
                                 onClick={() => navigate(`/boss-giffoni-clientes/portal-cliente-preview/${c.id}`)}
-                                className="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-[10px] font-bold text-purple-700 rounded-lg cursor-pointer"
+                                className="px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-xs font-bold text-purple-700 rounded-lg cursor-pointer"
                               >
                                 Preview
                               </button>
@@ -592,13 +622,13 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                                   const link = portalSettings?.link || 'https://aistudio.google.com/apps/93c62126-a17f-4c18-8bc7-d327df1ca6b5?showPreview=true&showAssistant=true';
                                   window.open(link, '_blank');
                                 }}
-                                className="px-2 py-1 bg-white border border-gray-200 hover:bg-gray-50 text-[10px] font-bold text-gray-700 rounded-lg cursor-pointer"
+                                className="px-2.5 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-xs font-bold text-gray-700 rounded-lg cursor-pointer"
                               >
                                 App Externo
                               </button>
                               <button
                                 onClick={() => togglePortalSuspension(c, c.active === false)}
-                                className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide cursor-pointer ${
+                                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide cursor-pointer ${
                                   c.active !== false ? 'bg-amber-50 hover:bg-amber-100 text-amber-700' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-750'
                                 }`}
                               >
@@ -609,13 +639,13 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                                   setActiveTab('integridade');
                                   setSearchTerm(c.slug || '');
                                 }}
-                                className="px-2 py-1 bg-slate-55/40 hover:bg-slate-100 text-[10px] text-slate-700 rounded-lg cursor-pointer font-bold"
+                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-xs text-slate-700 rounded-lg cursor-pointer font-bold"
                               >
                                 Integridade
                               </button>
                               <button
                                 onClick={() => setSafeDeleteWarning("A exclusão definitiva será tratada em build próprio de segurança.")}
-                                className="px-2 py-1 bg-red-50 hover:bg-red-100 text-[10px] text-red-600 rounded-lg font-bold cursor-pointer"
+                                className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-xs text-red-600 rounded-lg font-bold cursor-pointer"
                               >
                                 Excluir
                               </button>
@@ -648,7 +678,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                       <button
                         key={f.id}
                         onClick={() => setCasesFilter(f.id as any)}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider cursor-pointer ${
                           isSel ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                         }`}
                       >
@@ -660,7 +690,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
 
                 <div className="bg-white border border-gray-150 rounded-2xl shadow-3xs overflow-hidden">
                   <table className="w-full text-left border-collapse min-w-[900px]">
-                    <thead className="bg-gray-50 border-b border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                    <thead className="bg-gray-50 border-b border-gray-100 text-xs font-bold text-gray-500 uppercase tracking-wider">
                       <tr>
                         <th className="py-3 px-4">ID / Pasta</th>
                         <th className="py-3">Título / Serviço</th>
@@ -675,50 +705,50 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                     <tbody className="divide-y divide-gray-100 text-xs text-gray-700">
                       {displayedCases.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="py-8 text-center text-gray-400 italic">Nenhum caso encontrado para este filtro de busca.</td>
+                          <td colSpan={8} className="py-8 text-center text-gray-400 italic font-medium">Nenhum caso encontrado para este filtro de busca.</td>
                         </tr>
                       ) : (
                         displayedCases.map(ca => {
                           const clientName = getClientDisplayName(ca.clientId);
                           return (
                             <tr key={ca.id} className="hover:bg-gray-50/40">
-                              <td className="py-4 px-4 font-mono text-[10px] text-gray-400 font-bold block mt-1">{ca.id}</td>
+                              <td className="py-4 px-4 font-mono text-xs text-gray-400 font-bold block mt-1">{ca.id}</td>
                               <td className="py-4">
                                 <span className="font-extrabold text-gray-900 block">{ca.title}</span>
-                                <span className="text-[10px] text-gray-400 font-semibold block uppercase mt-0.5">{ca.registrationType || 'Tese judicial'}</span>
+                                <span className="text-xs text-gray-500 font-semibold block uppercase mt-1">{ca.registrationType || 'Tese judicial'}</span>
                               </td>
                               <td className="py-4">
                                 <span className="font-semibold block">{clientName}</span>
-                                <span className="text-[10px] text-indigo-500 font-mono font-bold block mt-0.5">/{ca.clientSlug}</span>
+                                <span className="text-xs text-indigo-650 font-mono font-bold block mt-1">/{ca.clientSlug}</span>
                               </td>
-                              <td className="py-4 font-mono text-gray-400 font-semibold">{ca.processNumber || 'Extrajudicial / Administrativo'}</td>
-                              <td className="py-4 text-gray-500 font-bold">{ca.responsibleLawyer || 'Não Designado'}</td>
+                              <td className="py-4 font-mono text-gray-450 font-semibold">{ca.processNumber || 'Extrajudicial / Administrativo'}</td>
+                              <td className="py-4 text-gray-600 font-bold">{ca.responsibleLawyer || 'Não Designado'}</td>
                               <td className="py-4 text-center">
-                                <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-[9px] font-black uppercase">
+                                <span className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-md text-xs font-bold uppercase">
                                   {ca.statusInterno || ca.status || 'Pendente'}
                                 </span>
                               </td>
                               <td className="py-4 text-center">
-                                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[9px] font-black uppercase">
+                                <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-md text-xs font-bold uppercase">
                                   {ca.statusPublicoCliente || 'Aguardando'}
                                 </span>
                               </td>
                               <td className="py-4 text-right pr-4 space-x-1.5 whitespace-nowrap">
                                 <button
                                   onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao?caseId=${ca.id}`)}
-                                  className="px-2.5 py-1 bg-emerald-600 font-bold text-white hover:bg-emerald-700 rounded-lg cursor-pointer text-[10px]"
+                                  className="px-3 py-1.5 bg-emerald-600 font-bold text-white hover:bg-emerald-700 rounded-lg cursor-pointer text-xs"
                                 >
                                   Continuar Fluxo
                                 </button>
                                 <button
                                   onClick={() => navigate(`/boss-giffoni-clientes/portal-cliente-preview/${ca.clientId}`)}
-                                  className="px-2.5 py-1 bg-indigo-50 text-indigo-750 hover:bg-indigo-100 rounded-lg text-[10px] font-bold cursor-pointer"
+                                  className="px-3 py-1.5 bg-indigo-50 text-indigo-750 hover:bg-indigo-100 rounded-lg text-xs font-bold cursor-pointer"
                                 >
                                   Espelho Público
                                 </button>
                                 <button
                                   onClick={() => copyToClipboard(ca.id, 'ID do Caso Copiado!')}
-                                  className="px-2 py-1 bg-white border border-gray-200 text-[10px] font-medium text-gray-650 hover:bg-gray-50 rounded"
+                                  className="px-2.5 py-1.5 bg-white border border-gray-200 text-xs font-semibold text-gray-750 hover:bg-gray-50 rounded-lg"
                                 >
                                   ID
                                 </button>
@@ -939,7 +969,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                       <button
                         key={f.id}
                         onClick={() => setFinFilter(f.id as any)}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider cursor-pointer ${
                           isSel ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                         }`}
                       >
@@ -951,7 +981,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
 
                 <div className="bg-white border border-gray-150 rounded-2xl shadow-3xs overflow-hidden">
                   <table className="w-full text-left border-collapse min-w-[900px]">
-                    <thead className="bg-gray-50 border-b border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                    <thead className="bg-gray-50 border-b border-gray-100 text-xs font-bold text-gray-500 uppercase tracking-wider">
                       <tr>
                         <th className="py-3 px-4">Caso de Origem ID</th>
                         <th className="py-3">Cliente Assinado</th>
@@ -976,50 +1006,50 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                           const hasWebhookError = (f.webhookStatus || '').toLowerCase().includes('erro');
                           return (
                             <tr key={f.id} className="hover:bg-gray-50/40">
-                              <td className="py-4 px-4 font-mono text-[10px] font-bold block mt-1">{f.caseId || 'Indeterminado'}</td>
+                              <td className="py-4 px-4 font-mono text-xs text-gray-450 font-bold block mt-1">{f.caseId || 'Indeterminado'}</td>
                               <td className="py-4">
                                 <span className="font-semibold block">{clientName}</span>
-                                <span className="text-[10px] text-gray-400 block font-mono">{f.clientId}</span>
+                                <span className="text-xs text-gray-450 block font-mono mt-0.5">{f.clientId}</span>
                               </td>
                               <td className="py-4 font-mono font-extrabold text-emerald-700">
                                 R$ {total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                               </td>
-                              <td className="py-4 text-gray-400 uppercase font-semibold text-[10px]">
+                              <td className="py-4 text-gray-500 uppercase font-semibold text-xs">
                                 {f.installments ? `${f.installmentsPaid || 0} de ${f.installments} Parcela(s)` : 'Contrato Fixo'}
                               </td>
                               <td className="py-4">
-                                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                                <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
                                   (f.status || f.paymentStatus || '').toLowerCase() === 'pago' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
                                 }`}>
                                   {f.status || f.paymentStatus || 'Aberto'}
                                 </span>
                               </td>
-                              <td className="py-4 uppercase font-bold text-[9px] text-indigo-650">{f.provider || 'Manual'}</td>
+                              <td className="py-4 uppercase font-bold text-xs text-indigo-650">{f.provider || 'Manual'}</td>
                               <td className="py-4 font-semibold text-gray-500">
-                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-black ${hasWebhookError ? 'bg-rose-50 text-rose-700' : 'bg-gray-150 text-gray-600'}`}>
+                                <span className={`px-1.5 py-0.5 rounded text-xs font-black ${hasWebhookError ? 'bg-rose-50 text-rose-700' : 'bg-gray-150 text-gray-650'}`}>
                                   {f.webhookStatus || 'Sem Notificações'}
                                 </span>
                               </td>
-                              <td className="py-4 text-gray-400">
+                              <td className="py-4 text-gray-500">
                                 {f.contractLinked ? 'Contrato Vinculado' : 'Aguardando formalização'}
                               </td>
-                              <td className="py-4 text-right pr-4 space-x-1 whitespace-nowrap">
+                              <td className="py-4 text-right pr-4 space-x-1.5 whitespace-nowrap">
                                 <button
                                   onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao?caseId=${f.caseId}`)}
-                                  className="px-2 py-1 bg-emerald-50 text-emerald-700 font-bold rounded text-[10px] cursor-pointer"
+                                  className="px-2.5 py-1.5 bg-emerald-50 text-emerald-700 font-bold rounded-lg text-xs cursor-pointer"
                                 >
                                   Fluxo
                                 </button>
                                 <button
                                   onClick={() => f.paymentLink && copyToClipboard(f.paymentLink, 'Link de pagamento copiado!')}
-                                  className="px-2 py-1 bg-white border border-gray-200 rounded text-[10px] disabled:opacity-50"
+                                  className="px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-bold disabled:opacity-50"
                                   disabled={!f.paymentLink}
                                 >
                                   Link
                                 </button>
                                 <button
                                   onClick={() => handleMarkFinancialAttention(f)}
-                                  className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 text-[10px] font-bold rounded cursor-pointer"
+                                  className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg cursor-pointer"
                                 >
                                   Atenção
                                 </button>
@@ -1038,7 +1068,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
             {activeTab === 'solicitacoes' && (
               <div className="bg-white border border-gray-150 rounded-2xl shadow-3xs overflow-hidden">
                 <table className="w-full text-left border-collapse min-w-[800px]">
-                  <thead className="bg-gray-50 border-b border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                  <thead className="bg-gray-50 border-b border-gray-100 text-xs font-bold text-gray-500 uppercase tracking-wider">
                     <tr>
                       <th className="py-3 px-4">Tipo</th>
                       <th className="py-3">Caso ID</th>
@@ -1053,7 +1083,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                   <tbody className="divide-y divide-gray-100 text-xs text-gray-700">
                     {combinedRequests.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="py-8 text-center text-gray-400 italic font-mono">Nenhuma solicitação de esclarecimento ou provas cadastrada no banco.</td>
+                        <td colSpan={8} className="py-8 text-center text-gray-400 italic">Nenhuma solicitação de esclarecimento ou provas cadastrada no banco.</td>
                       </tr>
                     ) : (
                       combinedRequests.map((r, index) => {
@@ -1061,57 +1091,57 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                         return (
                           <tr key={r.id || index} className="hover:bg-gray-50/40">
                             <td className="py-4 px-4 font-mono font-bold">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                              <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
                                 r.reqType === 'Informação' ? 'bg-cyan-50 text-cyan-700' : 'bg-indigo-50 text-indigo-750'
                               }`}>
                                 {r.reqType}
                               </span>
                             </td>
-                            <td className="py-4 font-mono font-semibold text-gray-400 text-[10px]">{r.caseId}</td>
+                            <td className="py-4 font-mono font-bold text-gray-450 text-xs">{r.caseId}</td>
                             <td className="py-4">
                               <p className="font-extrabold text-gray-900 leading-tight">{r.parsedTitle}</p>
-                              {r.description && <p className="text-[10px] text-gray-450 mt-1 font-medium">{r.description}</p>}
+                              {r.description && <p className="text-xs text-gray-500 mt-1 font-medium">{r.description}</p>}
                             </td>
-                            <td className="py-4 uppercase text-[10px] font-black tracking-wider">
+                            <td className="py-4 uppercase text-xs font-extrabold tracking-wider">
                               <span className={`px-1.5 py-0.5 rounded ${
                                 status === 'respondido' || status === 'enviado' || status === 'entregue' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-600'
                               }`}>
                                 {status}
                               </span>
                             </td>
-                            <td className="py-4 font-mono text-gray-400">{r.dueDate || 'Sem Prazo'}</td>
+                            <td className="py-4 font-mono text-gray-500">{r.dueDate || 'Sem Prazo'}</td>
                             <td className="py-4 text-center">
-                              <span className={`inline-block px-2 py-0.2 rounded text-[10px] font-bold ${
+                              <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${
                                 r.visibleToClient !== false ? 'bg-indigo-50 text-indigo-650' : 'bg-gray-100 text-gray-500'
                               }`}>
                                 {r.visibleToClient !== false ? 'Sim' : 'Oculto'}
                               </span>
                             </td>
-                            <td className="py-4 font-semibold text-indigo-600 italic">
-                              {r.bossFeedback || 'Aguardando Envio/Avaliação'}
+                            <td className="py-4 font-bold text-indigo-600 italic">
+                              {r.bossFeedback || 'Aguardando Avaliação'}
                             </td>
                             <td className="py-4 text-right pr-4 space-x-1.5 whitespace-nowrap font-sans">
                               <button
                                 onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao?caseId=${r.caseId}`)}
-                                className="px-2 py-1 bg-emerald-50 text-emerald-700 font-bold rounded text-[10px] cursor-pointer"
+                                className="px-2.5 py-1.5 bg-emerald-50 text-emerald-700 font-bold rounded-lg text-xs cursor-pointer"
                               >
                                 Ver Fluxo
                               </button>
                               <button
                                 onClick={() => handleMarkRequestStatus(r, 'aprovado')}
-                                className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold hover:bg-indigo-750 cursor-pointer"
+                                className="px-2.5 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-750 cursor-pointer"
                               >
                                 Aprovar
                               </button>
                               <button
                                 onClick={() => handleMarkRequestStatus(r, 'rejeitado')}
-                                className="px-2 py-1 bg-red-50 text-red-700 rounded text-[10px] font-bold hover:bg-red-100 cursor-pointer"
+                                className="px-2.5 py-1.5 bg-red-50 text-red-700 rounded-lg text-xs font-bold hover:bg-red-100 cursor-pointer"
                               >
                                 Rejeitar
                               </button>
                               <button
                                 onClick={() => handleMarkRequestStatus(r, 'complemento_solicitado')}
-                                className="px-1.5 py-1 bg-amber-50 text-amber-700 rounded text-[10px] font-bold hover:bg-amber-100 cursor-pointer"
+                                className="px-2.5 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-bold hover:bg-amber-100 cursor-pointer"
                               >
                                 Complemento
                               </button>
@@ -1129,7 +1159,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
             {activeTab === 'agenda' && (
               <div className="bg-white border border-gray-150 rounded-2xl shadow-3xs overflow-hidden">
                 <table className="w-full text-left border-collapse min-w-[800px]">
-                  <thead className="bg-gray-50 border-b border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                  <thead className="bg-gray-50 border-b border-gray-100 text-xs font-bold text-gray-500 uppercase tracking-wider">
                     <tr>
                       <th className="py-3 px-4">Tipo</th>
                       <th className="py-3">Vínculo Cliente</th>
@@ -1145,7 +1175,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                   <tbody className="divide-y divide-gray-100 text-xs text-gray-700">
                     {displayedEvents.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="py-12 text-center text-gray-400 font-semibold italic">Nenhum evento cadastrado para os filtros da Central de Controle.</td>
+                        <td colSpan={9} className="py-12 text-center text-gray-400 font-semibold italic text-sm">Nenhum evento cadastrado para os filtros da Central de Controle.</td>
                       </tr>
                     ) : (
                       displayedEvents.map((e, index) => {
@@ -1153,24 +1183,24 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                         return (
                           <tr key={e.id || index} className="hover:bg-gray-50/40">
                             <td className="py-4 px-4 font-mono font-bold">
-                              <span className="px-2 py-0.5 bg-indigo-50/75 text-indigo-700 rounded text-[10px] font-black uppercase tracking-wider">
+                              <span className="px-2 py-0.5 bg-indigo-50/75 text-indigo-700 rounded text-xs font-bold uppercase">
                                 {e.type || 'Ato judicial'}
                               </span>
                             </td>
                             <td className="py-4">
-                              <span className="font-bold text-gray-800 block">{clDisplay}</span>
-                              <span className="text-[10px] text-gray-400 block font-mono">Case: {e.caseId}</span>
+                              <span className="font-bold text-gray-900 block">{clDisplay}</span>
+                              <span className="text-xs text-gray-450 block font-mono">Case: {e.caseId}</span>
                             </td>
                             <td className="py-4">
                               <span className="font-extrabold text-gray-900 block">{e.title}</span>
-                              {e.description && <span className="text-[10px] text-gray-400 block mt-0.5 leading-tight">{e.description}</span>}
+                              {e.description && <span className="text-xs text-gray-550 block mt-1 leading-tight">{e.description}</span>}
                             </td>
-                            <td className="py-4 font-mono">{e.date || 'À definir'}</td>
-                            <td className="py-4 font-mono text-gray-500 font-bold">{e.time || '--:--'}</td>
+                            <td className="py-4 font-mono text-gray-500">{e.date || 'À definir'}</td>
+                            <td className="py-4 font-mono text-gray-550 font-bold">{e.time || '--:--'}</td>
                             <td className="py-4 text-indigo-600 font-mono truncate max-w-[150px]">{e.location || 'Sem link cadastrado'}</td>
-                            <td className="py-4 font-semibold text-gray-500">{e.responsible || 'Coletivo escritório'}</td>
+                            <td className="py-4 font-semibold text-gray-605">{e.responsible || 'Coletivo escritório'}</td>
                             <td className="py-4 text-center">
-                              <span className={`inline-block px-2 py-0.2 rounded text-[10px] font-bold ${
+                              <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold ${
                                 e.visibleToClient !== false ? 'bg-indigo-50 text-indigo-650' : 'bg-gray-100 text-gray-500'
                               }`}>
                                 {e.visibleToClient !== false ? 'Sim' : 'Oculto'}
@@ -1179,13 +1209,13 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                             <td className="py-4 text-right pr-4 space-x-1.5 whitespace-nowrap">
                               <button
                                 onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao?caseId=${e.caseId}`)}
-                                className="px-2 py-1 bg-gray-50 border border-gray-200 hover:bg-gray-100 font-bold rounded text-[10px]"
+                                className="px-2.5 py-1.5 bg-gray-50 border border-gray-200 hover:bg-gray-100 font-bold rounded-lg text-xs"
                               >
                                 Ver Fluxo
                               </button>
                               <button
                                 onClick={() => e.location && copyToClipboard(e.location, 'Link/Local copiado!')}
-                                className="px-2 py-1 bg-white border border-gray-200 font-bold rounded text-[10px] disabled:opacity-50"
+                                className="px-2.5 py-1.5 bg-white border border-gray-200 font-bold rounded-lg text-xs disabled:opacity-50"
                                 disabled={!e.location}
                               >
                                 Copiar Link
@@ -1219,7 +1249,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                       <button
                         key={f.id}
                         onClick={() => setEdrpFilter(f.id as any)}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider cursor-pointer ${
                           isSel ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                         }`}
                       >
@@ -1231,7 +1261,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
 
                 <div className="bg-white border border-gray-150 rounded-2xl shadow-3xs overflow-hidden">
                   <table className="w-full text-left border-collapse min-w-[900px]">
-                    <thead className="bg-gray-50 border-b border-gray-100 text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                    <thead className="bg-gray-50 border-b border-gray-100 text-xs font-bold text-gray-500 uppercase tracking-wider">
                       <tr>
                         <th className="py-3 px-4">Caso / Processo</th>
                         <th className="py-3">Cliente fiduciário</th>
@@ -1244,10 +1274,10 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                         <th className="py-3 text-right pr-4">Ações Operacionais</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100 text-xs text-gray-700 font-mono">
+                    <tbody className="divide-y divide-gray-100 text-xs text-gray-750 font-mono">
                       {displayedEdrpCases.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className="py-8 text-center text-gray-400 italic font-sans">Nenhum caso elegível para este checklist de EDRP.</td>
+                          <td colSpan={9} className="py-8 text-center text-gray-450 italic font-sans text-sm">Nenhum caso elegível para este checklist de EDRP.</td>
                         </tr>
                       ) : (
                         displayedEdrpCases.map(ca => {
@@ -1262,39 +1292,39 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                           return (
                             <tr key={ca.id} className="hover:bg-gray-50/40">
                               <td className="py-4 px-4 font-sans font-extrabold text-gray-900 block mt-1">{ca.title}</td>
-                              <td className="py-4 font-sans font-bold text-gray-500">{clName}</td>
+                              <td className="py-4 font-sans font-bold text-gray-600">{clName}</td>
                               <td className="py-4 text-center">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${hasStructuring ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                                <span className={`px-2 py-1 rounded-md text-xs font-semibold ${hasStructuring ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
                                   {hasStructuring ? 'Preenchido' : 'Pendente'}
                                 </span>
                               </td>
                               <td className="py-4 text-center">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${hasDelegation ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                                <span className={`px-2 py-1 rounded-md text-xs font-semibold ${hasDelegation ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
                                   {hasDelegation ? 'Designado' : 'Pendente'}
                                 </span>
                               </td>
                               <td className="py-4 text-center">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${isReviewed ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-100 text-gray-500'}`}>
+                                <span className={`px-2 py-1 rounded-md text-xs font-semibold ${isReviewed ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-100 text-gray-500'}`}>
                                   {isReviewed ? 'Aprovado' : 'Em revisão'}
                                 </span>
                               </td>
                               <td className="py-4 text-center">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${isProtocoled ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                                <span className={`px-2 py-1 rounded-md text-xs font-semibold ${isProtocoled ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-750'}`}>
                                   {isProtocoled ? 'Sim' : 'Aguardando'}
                                 </span>
                               </td>
-                              <td className="py-4 text-center font-bold text-[10px] text-gray-500">{todoistIntegrity}</td>
-                              <td className="py-4 text-center font-bold text-[10px] text-gray-650 font-sans">{staffCheck}</td>
-                              <td className="py-4 text-right pr-4 font-sans space-x-1 whitespace-nowrap">
+                              <td className="py-4 text-center font-bold text-xs text-gray-600">{todoistIntegrity}</td>
+                              <td className="py-4 text-center font-bold text-xs text-gray-700 font-sans">{staffCheck}</td>
+                              <td className="py-4 text-right pr-4 font-sans space-x-1.5 whitespace-nowrap">
                                 <button
                                   onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao?caseId=${ca.id}`)}
-                                  className="px-2 py-1 bg-gray-50 border border-gray-200 hover:bg-gray-100 rounded text-[9px] font-bold text-gray-700 cursor-pointer"
+                                  className="px-2.5 py-1.5 bg-gray-50 border border-gray-200 hover:bg-gray-100 rounded-lg text-xs font-bold text-gray-700 cursor-pointer"
                                 >
                                   Retomar EDRP
                                 </button>
                                 <button
                                   onClick={() => navigate(`/boss-giffoni-clientes/portal-cliente-preview/${ca.clientId}`)}
-                                  className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-[9px] font-black cursor-pointer"
+                                  className="px-2.5 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-bold cursor-pointer"
                                 >
                                   Integridade
                                 </button>
@@ -1320,9 +1350,9 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                     : 'bg-rose-50 border-rose-100 text-rose-900'
                 }`}>
                   <div className="space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider font-mono opacity-80">Avaliação do Módulo</span>
+                    <span className="text-xs font-black uppercase tracking-wider font-mono opacity-85 block">Avaliação do Módulo</span>
                     <h3 className="text-xl font-black tracking-tight leading-none mb-1">{diag.statusGeral}</h3>
-                    <p className="text-xs font-semibold leading-relaxed">
+                    <p className="text-xs font-bold leading-relaxed">
                       {diag.statusGeral === 'Não recomendado para deploy' 
                         ? 'Foram identificados um ou mais erros críticos de vinculação nas tabelas relacionais do sistema. Resolva os erros abaixo antes de publicar.'
                         : 'Sua infraestrutura de dados fáticos está completamente limpa de erros órfãos relacionais. Recomendado para deploy!'
@@ -1332,7 +1362,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                   <div className="shrink-0 flex gap-2">
                     <button
                       onClick={loadAllCollections}
-                      className="px-4 py-2.5 bg-white font-bold rounded-xl text-xs text-gray-700 border border-gray-200 hover:bg-gray-50"
+                      className="px-4 py-2.5 bg-white font-bold rounded-xl text-xs text-gray-750 border border-gray-200 hover:bg-gray-50"
                     >
                       Auditar Novamente
                     </button>
@@ -1358,8 +1388,8 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                     { label: 'Finanças Órfãs', val: financials.filter(f => !f.caseId || !cases.some(ca => ca.id === f.caseId)).length, color: 'text-rose-600' }
                   ].map((stat, i) => (
                     <div key={i} className="p-4 bg-white border border-gray-150 rounded-2xl text-center shadow-3xs">
-                      <span className="text-[10px] font-black uppercase text-gray-400 block tracking-wider">{stat.label}</span>
-                      <h4 className={`text-2xl font-black mt-1 ${stat.color}`}>{stat.val}</h4>
+                      <span className="text-xs font-black uppercase text-gray-500 block tracking-wider leading-relaxed">{stat.label}</span>
+                      <h4 className={`text-3xl font-black mt-1 ${stat.color}`}>{stat.val}</h4>
                     </div>
                   ))}
                 </div>
@@ -1374,7 +1404,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                     </h4>
                     
                     {diag.criticalErrorsList.length === 0 ? (
-                      <div className="p-4 bg-emerald-50 text-emerald-700 text-xs font-semibold rounded-xl text-center">
+                      <div className="p-4 bg-emerald-50 text-emerald-800 text-xs font-semibold rounded-xl text-center">
                         Nenhum erro estrutural crítico fático detectado! Tudo pronto.
                       </div>
                     ) : (
@@ -1397,7 +1427,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                     </h4>
                     
                     {diag.warningList.length === 0 ? (
-                      <div className="p-4 bg-emerald-50 text-emerald-700 text-xs font-semibold rounded-xl text-center">
+                      <div className="p-4 bg-emerald-50 text-emerald-800 text-xs font-semibold rounded-xl text-center">
                         Excelente! Sem alertas ou avisos de preenchimento.
                       </div>
                     ) : (

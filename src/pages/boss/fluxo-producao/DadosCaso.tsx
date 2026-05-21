@@ -433,32 +433,32 @@ export default function DadosCaso() {
           <div className="space-y-6">
 
             {/* TOP METADATA SUMMARY BAR IN COMPLIANCE WITH REGRA 10 */}
-            <div className="bg-gray-50/70 border border-gray-150 rounded-2xl p-5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
+            <div className="bg-gray-50 border border-gray-150 rounded-2xl p-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 divide-y sm:divide-y-0 sm:divide-x divide-gray-200">
                 <div className="space-y-1">
-                  <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">Cliente Titular</span>
-                  <h4 className="text-xs font-bold text-gray-950 truncate max-w-[180px]">{clientName || 'Nenhum'}</h4>
-                  <p className="text-[10px] text-gray-400 font-mono">Slug: {clientSlug || 'Sem slug'}</p>
+                  <span className="text-xs font-bold tracking-wider text-gray-500 uppercase">Cliente Titular</span>
+                  <h4 className="text-sm font-bold text-gray-950 truncate max-w-[180px]">{clientName || 'Nenhum'}</h4>
+                  <p className="text-xs text-gray-500 font-mono">Slug: {clientSlug || 'Sem slug'}</p>
                 </div>
                 <div className="space-y-1 sm:pl-4">
-                  <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">Modalidade</span>
-                  <h4 className="text-xs font-bold text-gray-900 uppercase tracking-tight">{registrationTypeName}</h4>
-                  <span className="inline-block text-[8px] font-bold px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-md font-mono mt-0.5 uppercase">
+                  <span className="text-xs font-bold tracking-wider text-gray-500 uppercase">Modalidade</span>
+                  <h4 className="text-sm font-bold text-gray-900 uppercase tracking-tight">{registrationTypeName}</h4>
+                  <span className="inline-block text-xs font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md font-mono mt-0.5 uppercase">
                     {activeRegKey}
                   </span>
                 </div>
                 <div className="space-y-1 md:pl-4 col-span-1">
-                  <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">Controle Operacional</span>
-                  <div className="text-[10px] text-gray-600 space-y-0.5">
-                    <div>Interno: <span className="font-bold text-gray-700">{statusInterno}</span></div>
+                  <span className="text-xs font-bold tracking-wider text-gray-500 uppercase">Controle Operacional</span>
+                  <div className="text-xs text-gray-700 space-y-1">
+                    <div>Interno: <span className="font-bold text-gray-800">{statusInterno}</span></div>
                     <div className="truncate max-w-[150px]">Público: <span className="font-bold text-indigo-700">{statusPublicoCliente}</span></div>
                   </div>
                 </div>
                 <div className="space-y-1 md:pl-4 col-span-1">
-                  <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">Ficha Técnica</span>
-                  <div className="text-[10px] space-y-0.5">
+                  <span className="text-xs font-bold tracking-wider text-gray-500 uppercase">Ficha Técnica</span>
+                  <div className="text-xs text-gray-750 space-y-1">
                     <div>Status: <span className="font-bold uppercase text-blue-600">{caseObj?.status || 'Rascunho'}</span></div>
-                    <div>Prioridade: <span className="font-bold text-gray-700 capitalize">{priority}</span></div>
+                    <div>Prioridade: <span className="font-bold text-gray-800 capitalize">{priority}</span></div>
                   </div>
                 </div>
               </div>
@@ -466,10 +466,10 @@ export default function DadosCaso() {
 
             {/* CNJ PERSISTENT ALERT IN COMPLIANCE WITH REGRA 9/10 */}
             {showCnjWarning && (
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 text-xs flex gap-3 items-start animate-fadeIn">
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 text-sm flex gap-3 items-start animate-fadeIn">
                 <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <h5 className="font-bold uppercase tracking-wider text-[10px]">Aviso Cadastral de Produção</h5>
+                  <h5 className="font-black uppercase tracking-wider text-xs">Aviso Cadastral de Produção</h5>
                   <p className="font-medium leading-relaxed">
                     CNJ ainda não preenchido. O status público permanecerá como aguardando número do processo. 
                     O avanço das etapas subsequentes não será bloqueado por este quesito, salvo se o status interno for alterado para <span className="font-black font-mono">"Protocolado"</span>.
@@ -484,55 +484,55 @@ export default function DadosCaso() {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5 col-span-1 md:col-span-2">
-                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Título do Caso *</label>
+                  <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Título do Caso *</label>
                   <input 
                     type="text" 
                     value={title} 
                     onChange={(e) => setTitle(e.target.value)}
                     placeholder="Ex: Ação Rescisória de Aluguel Habitacional" 
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Réu / Parte Adversária</label>
+                  <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Réu / Parte Adversária</label>
                   <input 
                     type="text" 
                     value={adverseParty} 
                     onChange={(e) => setAdverseParty(e.target.value)}
                     placeholder="Ex: Banco Imobiliário do Norte S/A" 
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Matéria / Ramo / Tipo de Ação *</label>
+                  <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Matéria / Ramo / Tipo de Ação *</label>
                   <input 
                     type="text" 
                     value={caseType} 
                     onChange={(e) => setCaseType(e.target.value)}
                     placeholder="Ex: Direito Civil / Cobrança" 
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Advogado Responsável / Assessor</label>
+                  <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Advogado Responsável / Assessor</label>
                   <input 
                     type="text" 
                     value={responsibleLawyer} 
                     onChange={(e) => setResponsibleLawyer(e.target.value)}
                     placeholder="Ex: Dr. Carlos Giffoni" 
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Prioridade no Atendimento</label>
+                  <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Prioridade no Atendimento</label>
                   <select 
                     value={priority} 
                     onChange={(e) => setPriority(e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none cursor-pointer"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none cursor-pointer"
                   >
                     <option value="baixa">Baixa prioridade operacional</option>
                     <option value="media">Média / Peticionamento ordinário</option>
@@ -541,13 +541,13 @@ export default function DadosCaso() {
                 </div>
 
                 <div className="space-y-1.5 col-span-1 md:col-span-2">
-                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Descrição Detalhada e Fatos de Abordagem</label>
+                  <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Descrição Detalhada e Fatos de Abordagem</label>
                   <textarea 
                     rows={4} 
                     value={description} 
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Qualifique faticamente os prejuízos do cliente, pontos chaves fáticos e as metas jurídicas..." 
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none resize-none"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none resize-none"
                   />
                 </div>
               </div>
@@ -564,27 +564,27 @@ export default function DadosCaso() {
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Ação Pretendida</label>
+                    <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Ação Pretendida</label>
                     <input 
                       type="text" 
                       value={pretendedActionName}
                       onChange={(e) => setPretendedActionName(e.target.value)}
                       placeholder="Ex: Declaratória de Inexistência" 
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Competência / Juízo Pretendido</label>
+                    <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Competência / Juízo Pretendido</label>
                     <input 
                       type="text" 
                       value={pretendedJurisdiction}
                       onChange={(e) => setPretendedJurisdiction(e.target.value)}
                       placeholder="Ex: Juizado Especial Cível" 
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Valor Estimado Causa</label>
+                    <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Valor Estimado Causa</label>
                     <div className="relative">
                       <DollarSign className="absolute left-3.5 top-3.5 text-gray-400" size={14} />
                       <input 
@@ -592,7 +592,7 @@ export default function DadosCaso() {
                         value={estimatedValue}
                         onChange={(e) => setEstimatedValue(e.target.value)}
                         placeholder="R$ 15.000,00" 
-                        className="w-full pl-9 pr-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                        className="w-full pl-9 pr-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                       />
                     </div>
                   </div>
@@ -609,23 +609,23 @@ export default function DadosCaso() {
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Órgão Administrativo Alvo</label>
+                    <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Órgão Administrativo Alvo</label>
                     <input 
                       type="text" 
                       value={administrativeBody}
                       onChange={(e) => setAdministrativeBody(e.target.value)}
                       placeholder="Ex: INSS, Prefeitura, Receita Federal" 
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Tipo/Objeto de Requerimento</label>
+                    <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Tipo/Objeto de Requerimento</label>
                     <input 
                       type="text" 
                       value={requirementType}
                       onChange={(e) => setRequirementType(e.target.value)}
                       placeholder="Ex: Recurso Ordinário, Liberação de Alvará" 
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                     />
                   </div>
                 </div>
@@ -641,23 +641,23 @@ export default function DadosCaso() {
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Tipo de Tratativa / Notificação</label>
+                    <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Tipo de Tratativa / Notificação</label>
                     <input 
                       type="text" 
                       value={negotiationType}
                       onChange={(e) => setNegotiationType(e.target.value)}
                       placeholder="Ex: Notificação Extrajudicial, Minuta de Acordo" 
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Destinatário da Tratativa</label>
+                    <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Destinatário da Tratativa</label>
                     <input 
                       type="text" 
                       value={recipientName}
                       onChange={(e) => setRecipientName(e.target.value)}
                       placeholder="Ex: Condomínio Edifício Mirador (Representante)" 
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                     />
                   </div>
                 </div>
@@ -674,43 +674,43 @@ export default function DadosCaso() {
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Número ÚNICO CNJ ({statusInterno === 'Protocolado' ? 'Obrigatório *' : 'Recomendado'})</label>
+                      <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Número ÚNICO CNJ ({statusInterno === 'Protocolado' ? 'Obrigatório *' : 'Recomendado'})</label>
                       <input 
                         type="text" 
                         value={processNumber}
                         onChange={handleCnjChange}
                         placeholder="Ex: 0000000-00.0000.0.00.0000" 
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-mono font-bold text-gray-800 transition-all outline-none"
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-mono font-bold text-gray-850 transition-all outline-none"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Tribunal Virtual / Competência</label>
+                      <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Tribunal Virtual / Competência</label>
                       <input 
                         type="text" 
                         value={tribunal}
                         onChange={(e) => setTribunal(e.target.value)}
                         placeholder="Ex: TJPE, TRT6, TRF5" 
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Vara / Órgão Julgador (Court)</label>
+                      <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Vara / Órgão Julgador (Court)</label>
                       <input 
                         type="text" 
                         value={court}
                         onChange={(e) => setCourt(e.target.value)}
                         placeholder="Ex: 2ª Vara Cível da Comarca de Recife" 
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Comarca / Seção Judiciária (District)</label>
+                      <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Comarca / Seção Judiciária (District)</label>
                       <input 
                         type="text" 
                         value={district}
                         onChange={(e) => setDistrict(e.target.value)}
                         placeholder="Ex: Recife - PE" 
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                       />
                     </div>
                   </div>
@@ -724,7 +724,7 @@ export default function DadosCaso() {
                       <span>Agendamento de Audiência</span>
                     </h4>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Há Audiência agendada?</span>
+                      <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Há Audiência agendada?</span>
                       <button
                         type="button"
                         onClick={() => {
@@ -742,53 +742,53 @@ export default function DadosCaso() {
                   {audienciaAgendada && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fadeIn">
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Data da Audiência</label>
+                        <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Data da Audiência</label>
                         <input 
                           type="date" 
                           value={audienciaData}
                           onChange={(e) => setAudienciaData(e.target.value)}
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Horário (HH:MM)</label>
+                        <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Horário (HH:MM)</label>
                         <input 
                           type="time" 
                           value={audienciaHora}
                           onChange={(e) => setAudienciaHora(e.target.value)}
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Local físico ou Link da Videoconferência</label>
+                        <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Local físico ou Link da Videoconferência</label>
                         <input 
                           type="text" 
                           value={audienciaLocalOuLink}
                           onChange={(e) => setAudienciaLocalOuLink(e.target.value)}
                           placeholder="Ex: Sala de Audiências da 2ª Vara ou Link Teams" 
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Advogado / Responsável da Audiência</label>
+                        <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Advogado / Responsável da Audiência</label>
                         <input 
                           type="text" 
                           value={audienciaResponsavel}
                           onChange={(e) => setAudienciaResponsavel(e.target.value)}
                           placeholder="Dr. Carlos Giffoni" 
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                         />
                       </div>
                       <div className="space-y-1.5 col-span-1 md:col-span-2">
-                        <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Instruções / Observações fáticas da Audiência</label>
+                        <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Instruções / Observações fáticas da Audiência</label>
                         <textarea 
                           rows={2}
                           value={audienciaObservacoes}
                           onChange={(e) => setAudienciaObservacoes(e.target.value)}
                           placeholder="Ex: Cliente necessita portar documento original com foto e conectar-se 15 min antes." 
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none resize-none"
+                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none resize-none"
                         />
-                        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mt-1">Os dados de audiência serão salvos temporariamente neste caso operacional e integrados futuramente.</p>
+                        <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mt-1.5">Os dados de audiência serão salvos temporariamente neste caso operacional e integrados futuramente.</p>
                       </div>
                     </div>
                   )}
@@ -799,21 +799,21 @@ export default function DadosCaso() {
 
             {/* STATUS & PORTAL CONTROLS CARD */}
             <div className="bg-white border border-gray-150 rounded-2xl p-6 space-y-6 shadow-xs">
-              <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono border-b border-gray-100 pb-3">Controle e Visibilidade Operacional</h4>
+              <h4 className="text-xs font-bold uppercase text-gray-500 tracking-wider font-mono border-b border-gray-100 pb-3">Controle e Visibilidade Operacional</h4>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
                 {/* STATUS INTERNO IN COMPLIANCE WITH REGRA 6 */}
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider flex items-center gap-1.5">
+                  <label className="text-sm font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
                     <Activity size={12} className="text-gray-400" />
                     <span>Status Interno de Produção *</span>
                   </label>
-                  <p className="text-[9px] text-gray-400 leading-relaxed">Status restrito ao BOSS e assessores internos.</p>
+                  <p className="text-xs text-gray-500 leading-relaxed">Status restrito ao BOSS e assessores internos.</p>
                   <select
                     value={statusInterno}
                     onChange={(e) => setStatusInterno(e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none cursor-pointer"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none cursor-pointer"
                   >
                     {statusInternoOptions.map((opt) => (
                       <option key={opt} value={opt}>{opt}</option>
@@ -823,11 +823,11 @@ export default function DadosCaso() {
 
                 {/* VISIBLE TO CLIENT TOGGLE */}
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider flex items-center gap-1.5">
+                  <label className="text-sm font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
                     <UserCheck size={12} className="text-gray-400" />
                     <span>Exibir no Portal do Cliente?</span>
                   </label>
-                  <p className="text-[9px] text-gray-400 leading-relaxed">Controla a liberação ou opacidade jurídica do caso.</p>
+                  <p className="text-xs text-gray-500 leading-relaxed">Controla a liberação ou opacidade jurídica do caso.</p>
                   <div className="flex items-center gap-3 py-1">
                     <button
                       type="button"
@@ -838,7 +838,7 @@ export default function DadosCaso() {
                     >
                       <div className="w-5 h-5 bg-white rounded-full shadow-xs" />
                     </button>
-                    <span className="text-xs font-bold text-gray-600">
+                    <span className="text-sm font-bold text-gray-700">
                       {visibleToClient ? 'Visível (Recomendado)' : 'Caso Ocultado (Opacidade técnica)'}
                     </span>
                   </div>
@@ -846,11 +846,11 @@ export default function DadosCaso() {
 
                 {/* STATUS PUBLICO CLIENTE IN COMPLIANCE WITH REGRA 6 */}
                 <div className="space-y-2 col-span-1 md:col-span-2">
-                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider flex items-center gap-1.5">
+                  <label className="text-sm font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
                     <User size={12} className="text-indigo-500" />
                     <span>Status Público do Cliente (Visibilidade no Portal) *</span>
                   </label>
-                  <p className="text-[9px] text-gray-400 leading-relaxed">
+                  <p className="text-xs text-gray-500 leading-relaxed">
                     Mensagem limpa exibida em tempo real na timeline do cliente conectado.
                   </p>
                   <input
@@ -858,13 +858,13 @@ export default function DadosCaso() {
                     value={statusPublicoCliente}
                     onChange={handlePublicStatusChange}
                     placeholder="Defina as palavras do status operacional..."
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
                   />
 
                   {/* QUICK SUGGESTIONS LIST FROM REGRA 6 */}
-                  <div className="space-y-1 pt-1">
-                    <span className="text-[9px] uppercase font-black text-gray-400 tracking-wider">Sugestões rápidas de preenchimento:</span>
-                    <div className="flex flex-wrap gap-1.5 pt-1">
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-xs uppercase font-bold text-gray-500 tracking-wider">Sugestões rápidas de preenchimento:</span>
+                    <div className="flex flex-wrap gap-1.5 pt-1.5">
                       {statusPublicoSuggestions.map((sug) => {
                         const displaySug = sug === 'Processo nº [CNJ]' && processNumber.trim() 
                           ? `Processo nº ${processNumber}` 
@@ -874,7 +874,7 @@ export default function DadosCaso() {
                             key={sug}
                             type="button"
                             onClick={() => selectSuggestion(sug)}
-                            className="px-2 py-1 text-[9px] font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 border border-transparent rounded-lg transition-all cursor-pointer"
+                            className="px-2.5 py-1.5 text-xs font-semibold text-gray-750 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-xl transition-all cursor-pointer"
                           >
                             {displaySug}
                           </button>
@@ -893,9 +893,9 @@ export default function DadosCaso() {
               <button
                 type="button"
                 onClick={() => navigate(flowRoutes.tipoServico(caseId!))}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-250 hover:bg-gray-50 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-250 hover:bg-gray-50 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-sm cursor-pointer"
               >
-                <ArrowLeft size={14} />
+                <ArrowLeft size={16} />
                 Voltar
               </button>
 
@@ -905,13 +905,13 @@ export default function DadosCaso() {
                   type="button"
                   disabled={saving}
                   onClick={handleSaveOnly}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-blue-600 hover:bg-blue-50/50 text-blue-700 px-5 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-blue-600 hover:bg-blue-50/50 text-blue-700 px-6 py-3 rounded-xl font-bold transition-all text-sm cursor-pointer"
                 >
                   {saving ? (
-                    <Loader2 size={13} className="animate-spin" />
+                    <Loader2 size={14} className="animate-spin" />
                   ) : (
                     <>
-                      <Save size={13} />
+                      <Save size={14} />
                       <span>Salvar rascunho</span>
                     </>
                   )}
@@ -921,7 +921,7 @@ export default function DadosCaso() {
                   type="button"
                   disabled={saving}
                   onClick={handleSaveAndExit}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-950 text-gray-900 px-6 py-3 rounded-xl font-bold transition-all text-xs hover:bg-gray-50 cursor-pointer"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-950 text-gray-900 px-6 py-3 rounded-xl font-bold transition-all text-sm hover:bg-gray-50 cursor-pointer"
                 >
                   <span>Salvar e Sair</span>
                 </button>
@@ -930,17 +930,17 @@ export default function DadosCaso() {
                   type="button"
                   disabled={saving}
                   onClick={handleSaveAndAdvance}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gray-950 hover:bg-black text-white px-8 py-3.5 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-md"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gray-950 hover:bg-black text-white px-8 py-3.5 rounded-xl font-bold transition-all text-sm cursor-pointer shadow-md"
                 >
                   {saving ? (
                     <>
-                      <Loader2 size={13} className="animate-spin" />
+                      <Loader2 size={14} className="animate-spin" />
                       <span>Processando etapas...</span>
                     </>
                   ) : (
                     <>
                       <span>Salvar e Avançar</span>
-                      <ArrowRight size={14} />
+                      <ArrowRight size={16} />
                     </>
                   )}
                 </button>

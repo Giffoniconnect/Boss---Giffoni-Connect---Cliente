@@ -26,12 +26,12 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
         <h3 className="text-lg font-black text-gray-900 mt-3 tracking-tight">Etapas do Fluxo</h3>
         <p className="text-xs text-gray-500 mt-1">Navegação estruturada de produção.</p>
         {caseId ? (
-          <div className="mt-3 p-2 bg-gray-50 rounded-xl border border-gray-100 text-[10px] font-mono text-gray-600 break-all">
+          <div className="mt-3 p-2 bg-gray-50 rounded-xl border border-gray-100 text-xs font-mono text-gray-600 break-all">
             <span className="font-sans font-bold text-gray-400 uppercase mr-1">Caso:</span>
             {caseId}
           </div>
         ) : (
-          <div className="mt-3 px-2 py-1.5 bg-amber-50 text-amber-800 rounded-xl border border-amber-100 text-[10px] font-bold uppercase tracking-wider">
+          <div className="mt-3 px-2 py-1.5 bg-amber-50 text-amber-800 rounded-xl border border-amber-100 text-xs font-bold uppercase tracking-wider">
             Aguardando Cadastro do Caso
           </div>
         )}
@@ -81,10 +81,10 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
                   navigate(stepUrl);
                 }
               }}
-              className={`w-full flex items-center justify-between px-4 py-3 border text-left rounded-2xl text-xs font-bold transition-all ${stateStyle}`}
+              className={`w-full flex items-center justify-between px-4 py-3 border text-left rounded-2xl text-sm font-bold transition-all ${stateStyle}`}
             >
               <div className="flex items-center gap-3">
-                <span className={`text-[10px] font-mono font-black shrink-0 ${
+                <span className={`text-xs font-mono font-black shrink-0 ${
                   isCurrent ? 'text-blue-400' : isLocked ? 'text-gray-300' : 'text-gray-400'
                 }`}>
                   {String(step.order).padStart(2, '0')}

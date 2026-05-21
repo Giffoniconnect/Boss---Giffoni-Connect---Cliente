@@ -6,7 +6,7 @@ interface RequestVisibilityBadgeProps {
 
 export default function RequestVisibilityBadge({ visible }: RequestVisibilityBadgeProps) {
   return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 border text-[9px] font-extrabold uppercase rounded-md tracking-wider ${
+    <span className={`inline-flex items-center px-1.5 py-0.5 border text-xs font-bold uppercase rounded-md tracking-wider ${
       visible 
         ? 'bg-emerald-50 text-emerald-700 border-emerald-150' 
         : 'bg-gray-50 text-gray-500 border-gray-200'
