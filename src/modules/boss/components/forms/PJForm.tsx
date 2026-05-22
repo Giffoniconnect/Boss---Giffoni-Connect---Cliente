@@ -7,6 +7,28 @@ interface PJFormProps {
 }
 
 export const PJForm: React.FC<PJFormProps> = ({ data, onChange }) => {
+  const lastFetchedCep = React.useRef('');
+
+  React.useEffect(() => {
+    const cep = data.pj_cepEmpresa || '';
+    if (cep.length === 9 && lastFetchedCep.current !== cep) {
+      const delayDebounceFn = setTimeout(async () => {
+        lastFetchedCep.current = cep;
+        const address = await fetchCEP(cep);
+        if (address) {
+          onChange({
+            ...data,
+            pj_enderecoEmpresa: address.street || address.logradouro || data.pj_enderecoEmpresa,
+            pj_bairroEmpresa: address.neighborhood || address.bairro || data.pj_bairroEmpresa,
+            pj_cidadeEmpresa: address.city || address.localidade || data.pj_cidadeEmpresa,
+            pj_estadoEmpresa: address.state || address.uf || data.pj_estadoEmpresa
+          });
+        }
+      }, 350);
+      return () => clearTimeout(delayDebounceFn);
+    }
+  }, [data.pj_cepEmpresa, onChange, data]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     let newValue = value;

@@ -45,7 +45,7 @@ export default function FluxoHome() {
       description: 'Pesquisar e carregar fluxos integrados em andamento via localizador integrado.',
       icon: Search,
       color: 'emerald',
-      path: '/boss-giffoni-clientes/fluxo-producao/cadastro'
+      path: '/boss-giffoni-clientes/central-controle'
     }
   ];
 

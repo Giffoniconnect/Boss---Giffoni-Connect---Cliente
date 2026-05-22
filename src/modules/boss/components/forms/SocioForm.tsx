@@ -1,5 +1,5 @@
 import React from 'react';
-import { formatCPF, formatCEP, formatPhone, fetchCEP } from '../../../../lib/masks';
+import { formatCPF, formatCEP, formatPhone, fetchCEP, formatDate } from '../../../../lib/masks';
 
 const ESTADOS_CIVIS = [
   '',
@@ -56,6 +56,28 @@ interface SocioFormProps {
 }
 
 export const SocioForm: React.FC<SocioFormProps> = ({ data, onChange }) => {
+  const lastFetchedCep = React.useRef('');
+
+  React.useEffect(() => {
+    const cep = data.socio_cep || '';
+    if (cep.length === 9 && lastFetchedCep.current !== cep) {
+      const delayDebounceFn = setTimeout(async () => {
+        lastFetchedCep.current = cep;
+        const address = await fetchCEP(cep);
+        if (address) {
+          onChange({
+            ...data,
+            socio_endereco: address.street || address.logradouro || data.socio_endereco,
+            socio_bairro: address.neighborhood || address.bairro || data.socio_bairro,
+            socio_cidade: address.city || address.localidade || data.socio_cidade,
+            socio_estado: address.state || address.uf || data.socio_estado
+          });
+        }
+      }, 350);
+      return () => clearTimeout(delayDebounceFn);
+    }
+  }, [data.socio_cep, onChange, data]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     let newValue = value;
@@ -70,6 +92,8 @@ export const SocioForm: React.FC<SocioFormProps> = ({ data, onChange }) => {
       newValue = formatCEP(value);
     } else if (name === 'socio_telefone' || name === 'socio_whatsapp') {
       newValue = formatPhone(value);
+    } else if (name === 'socio_dataNascimento') {
+      newValue = formatDate(value);
     }
 
     onChange({ ...data, [name]: newValue });
@@ -107,7 +131,7 @@ export const SocioForm: React.FC<SocioFormProps> = ({ data, onChange }) => {
           <AutocompleteInput 
             label="Nacionalidade" 
             name="socio_nacionalidade" 
-            value={data.socio_nacionalidade || ''} 
+            value={data.socio_nacionalidade || 'Brasileira'} 
             onChange={handleChange} 
             suggestions={NACIONALIDADES_SUGESTOES}
           />
@@ -148,7 +172,7 @@ export const SocioForm: React.FC<SocioFormProps> = ({ data, onChange }) => {
             />
           </div>
 
-          <Input label="Data de Nascimento" name="socio_dataNascimento" type="date" value={data.socio_dataNascimento || ''} onChange={handleChange} />
+          <Input label="Data de Nascimento" name="socio_dataNascimento" type="text" placeholder="DD/MM/AAAA" value={data.socio_dataNascimento || ''} onChange={handleChange} />
           <Input label="Cargo" name="socio_cargo" value={data.socio_cargo || ''} onChange={handleChange} />
         </div>
       </div>

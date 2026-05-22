@@ -550,7 +550,8 @@ export default function CadastroFluxo() {
       const payload: any = {
         clientId: targetId,
         type: clientType,
-        active: formData.acesso_statusAcesso === 'ativo',
+        active: true,
+        visibleToClient: true,
         portalStatus: 'criado',
         cadastroIncompleto: false,
         missingFields: [],
@@ -571,6 +572,42 @@ export default function CadastroFluxo() {
           acesso_emailLogin: formData.acesso_emailLogin,
           acesso_statusAcesso: formData.acesso_statusAcesso,
           acesso_senha: formData.acesso_senha
+        },
+        portalMirror: {
+          name: mainName,
+          type: clientType,
+          pfDadosPessoais: {
+            nomeCompleto: pfBlock.pf_nomeCompleto || '',
+            cpf: pfBlock.pf_cpf || '',
+            rg: pfBlock.pf_rg || '',
+            dataNascimento: pfBlock.pf_dataNascimento || pfBlock.pf_nascimento || '',
+            nacionalidade: pfBlock.pf_nacionalidade || '',
+            profissao: pfBlock.pf_profissao || '',
+            estadoCivil: pfBlock.pf_estadoCivil || ''
+          },
+          pfContato: {
+            email: pfBlock.pf_email || '',
+            telefone: pfBlock.pf_telefone || '',
+            whatsapp: pfBlock.pf_whatsapp || ''
+          },
+          pfEndereco: {
+            cep: pfBlock.pf_cep || '',
+            logradouro: pfBlock.pf_endereco || '',
+            numero: pfBlock.pf_numero || '',
+            bairro: pfBlock.pf_bairro || '',
+            cidade: pfBlock.pf_cidade || '',
+            uf: pfBlock.pf_estado || ''
+          },
+          dadosBancariosOpcional: {
+            bancario_possuiDadosBancarios: !!bancarioBlock.bancario_possuiDadosBancarios,
+            tipoPix: bancarioBlock.bancario_tipoChavePix || '',
+            chavePix: bancarioBlock.bancario_chavePix || '',
+            banco: bancarioBlock.bancario_banco || '',
+            agencia: bancarioBlock.bancario_agencia || '',
+            conta: bancarioBlock.bancario_conta || '',
+            tipoConta: bancarioBlock.bancario_tipoConta || '',
+            titular: bancarioBlock.bancario_titularConta || ''
+          }
         }
       };
 
@@ -584,11 +621,11 @@ export default function CadastroFluxo() {
       // 1. Save main clients document
       await setDoc(doc(db, 'clients', targetId), payload);
 
-      // 2. Save clientPortals registry mapping
+      // 2. Save clientPortals registry mapping (guaranteed active: true)
       await setDoc(doc(db, 'clientPortals', slug), {
         clientId: targetId,
         slug: slug,
-        active: formData.acesso_statusAcesso === 'ativo',
+        active: true,
         createdAt: rightNow,
         updatedAt: rightNow
       });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { formatCPF, formatCEP, formatPhone, fetchCEP } from '../../../../lib/masks';
+import { formatCPF, formatCEP, formatPhone, fetchCEP, formatDate } from '../../../../lib/masks';
 
 const ESTADOS_CIVIS = [
   '',
@@ -56,6 +56,28 @@ interface PFFormProps {
 }
 
 export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
+  const lastFetchedCep = React.useRef('');
+
+  React.useEffect(() => {
+    const cep = data.pf_cep || '';
+    if (cep.length === 9 && lastFetchedCep.current !== cep) {
+      const delayDebounceFn = setTimeout(async () => {
+        lastFetchedCep.current = cep;
+        const address = await fetchCEP(cep);
+        if (address) {
+          onChange({
+            ...data,
+            pf_endereco: address.street || address.logradouro || data.pf_endereco,
+            pf_bairro: address.neighborhood || address.bairro || data.pf_bairro,
+            pf_cidade: address.city || address.localidade || data.pf_cidade,
+            pf_estado: address.state || address.uf || data.pf_estado
+          });
+        }
+      }, 350);
+      return () => clearTimeout(delayDebounceFn);
+    }
+  }, [data.pf_cep, onChange, data]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     let newValue = value;
@@ -70,6 +92,10 @@ export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
       newValue = formatCEP(value);
     } else if (name === 'pf_telefone' || name === 'pf_whatsapp') {
       newValue = formatPhone(value);
+    } else if (name === 'pf_dataNascimento') {
+      newValue = formatDate(value);
+      onChange({ ...data, pf_dataNascimento: newValue, pf_nascimento: newValue });
+      return;
     }
 
     onChange({ ...data, [name]: newValue });
@@ -107,7 +133,7 @@ export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
           <AutocompleteInput 
             label="Nacionalidade" 
             name="pf_nacionalidade" 
-            value={data.pf_nacionalidade || ''} 
+            value={data.pf_nacionalidade || 'Brasileira'} 
             onChange={handleChange} 
             suggestions={NACIONALIDADES_SUGESTOES}
           />
@@ -146,7 +172,7 @@ export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
             />
           </div>
 
-          <Input label="Data de Nascimento" name="pf_dataNascimento" type="date" value={data.pf_dataNascimento || ''} onChange={handleChange} />
+          <Input label="Data de Nascimento" name="pf_dataNascimento" type="text" placeholder="DD/MM/AAAA" value={data.pf_dataNascimento || data.pf_nascimento || ''} onChange={handleChange} />
         </div>
       </div>
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, collection, addDoc, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
+import { LOCAL_FALLBACK_TEMPLATES } from '../Configuracoes';
 import FluxoStepLayout from './components/FluxoStepLayout';
 import RequestStatusBadge from './components/RequestStatusBadge';
 import RequestVisibilityBadge from './components/RequestVisibilityBadge';
@@ -44,6 +45,11 @@ interface EvidenceRequest {
   bossAnalysisNotes?: string;
   createdAt: string;
   updatedAt: string;
+  documentNumber?: string;
+  documentType?: string;
+  generatedFileName?: string;
+  serviceStatus?: string;
+  integrationPayload?: any;
 }
 
 export default function SolicitacoesProvas() {
@@ -61,6 +67,7 @@ export default function SolicitacoesProvas() {
   const [client, setClient] = useState<any>(null);
   const [requests, setRequests] = useState<EvidenceRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
+  const [docTemplates, setDocTemplates] = useState<any[]>([]);
 
   // Form inputs
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -136,6 +143,19 @@ export default function SolicitacoesProvas() {
         reqList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setRequests(reqList);
 
+        // 4. Fetch document configurations
+        try {
+          const docTemplatesSnap = await getDoc(doc(db, 'settings', 'documentTemplates'));
+          if (docTemplatesSnap.exists()) {
+            const tData = docTemplatesSnap.data();
+            if (tData.templates && Array.isArray(tData.templates)) {
+              setDocTemplates(tData.templates);
+            }
+          }
+        } catch (tErr) {
+          console.warn("Settings document templates couldn't be requested:", tErr);
+        }
+
       } catch (err: any) {
         console.error(err);
         setError(`Erro crítico ao buscar registros: ${err.message || err}`);
@@ -147,6 +167,209 @@ export default function SolicitacoesProvas() {
 
     loadData();
   }, [caseId, refreshToggle]);
+
+  const handleGenerateDocument = async (documentType: 'Procuração' | 'Declaração de Pobreza' | 'Contrato de Honorários') => {
+    setError(null);
+    setSuccess(null);
+    setSaving(true);
+    const nowISO = new Date().toISOString();
+
+    try {
+      // 1. Determine documentNumber
+      const numMap = {
+        'Procuração': '001',
+        'Declaração de Pobreza': '002',
+        'Contrato de Honorários': '003'
+      };
+      const documentNumber = numMap[documentType];
+
+      // 2. Resolve templateId
+      // Find matches in Firestore docTemplates, fallback to LOCAL_FALLBACK_TEMPLATES
+      let templateId = '';
+      const remoteMatch = docTemplates.find(t => t.name === documentType || t.id === documentType.toLowerCase().replace(/[^a-z0-0]/g, '_'));
+      if (remoteMatch && remoteMatch.templateId) {
+        templateId = remoteMatch.templateId;
+      } else {
+        const localMatch = LOCAL_FALLBACK_TEMPLATES.find(t => t.name === documentType);
+        if (localMatch) {
+          templateId = localMatch.templateId;
+        }
+      }
+
+      // 3. Resolve targetDriveFolderId
+      const targetDriveFolderId = caseObj?.gdriveFolderId || client?.gdriveFolderId || 'gdrive-folder-id-placeholder';
+
+      // 4. Resolve generatedDocumentName (standard names format)
+      const clientName = client?.name || client?.corporateName || 'Cliente';
+      const clientSlug = client?.slug || client?.corporateName?.toLowerCase().replace(/[^a-z0-9]/g, '_') || 'cliente';
+      const generatedDocumentName = `${clientSlug || 'slug'}_${caseId!.slice(0, 8)}_${documentType.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}_${documentNumber}.docx`;
+
+      // 5. Construct placeholders according to template goals
+      const placeholders = {
+        client_name: clientName || '',
+        client_slug: clientSlug || '',
+        case_id: caseId || '',
+        client_email: client?.email || '',
+        client_phone: client?.phone || '',
+        client_cpf: client?.pfDadosPessoais?.pf_cpf || client?.pfData?.pf_cpf || client?.cnpj || '',
+        client_rg: client?.pfDadosPessoais?.pf_rg || client?.pfData?.pf_rg || '',
+        client_nationality: client?.pfDadosPessoais?.pf_nacionalidade || 'Brasileiro(a)',
+        client_marital: client?.pfDadosPessoais?.pf_estadoCivil || 'Casado(a)/Solteiro(a)',
+        client_profession: client?.pfDadosPessoais?.pf_profession || 'Profissional',
+        client_address: client?.pfDadosPessoais?.pf_enderecoCompleto || client?.pfData?.pf_enderecoCompleto || 'Endereço Completo',
+        system_date: new Date().toLocaleDateString('pt-BR'),
+        system_year: new Date().getFullYear().toString()
+      };
+
+      const createdBy = localStorage.getItem('boss_user_email') || 'direito.rgr@gmail.com';
+
+      // 6. Complete microservice integration payload
+      const integrationPayload = {
+        caseId: caseId!,
+        clientId: caseObj?.clientId || '',
+        clientSlug: clientSlug || '',
+        documentType,
+        documentNumber,
+        templateId,
+        targetDriveFolderId,
+        generatedDocumentName,
+        placeholders,
+        createdBy,
+        createdAt: nowISO
+      };
+
+      // 7. Save to caseEvidenceRequests in Firestore
+      const isDuplicated = requests.some(r => r.documentType === documentType && r.status !== 'arquivado');
+      if (isDuplicated) {
+        if (!window.confirm(`Atenção: Já existe um registro ativo de ${documentType} na lista. Deseja criar uma nova versão com numeração?`)) {
+          setSaving(false);
+          return;
+        }
+      }
+
+      const payload: any = {
+        caseId: caseId!,
+        clientId: caseObj?.clientId || '',
+        clientSlug: clientSlug || '',
+        title: `${documentNumber} - ${documentType}`,
+        description: `Documento de ${documentType} necessário para representação judicial e administrativa do cliente. Preenchido via Google Docs.`,
+        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 7 days from now
+        status: 'pendente',
+        visibleToClient: true,
+        allowUpload: true,
+        expectedFileTypes: ['PDF'],
+        maxFiles: 1,
+        createdAt: nowISO,
+        updatedAt: nowISO,
+
+        // Specific fields from Rule 5
+        documentNumber,
+        documentType,
+        generatedFileName: generatedDocumentName,
+        
+        // Target Integration payload
+        integrationPayload,
+        serviceStatus: 'aguardando_microsservico'
+      };
+
+      await addDoc(collection(db, 'caseEvidenceRequests'), payload);
+      setSuccess(`Coleta de ${documentType} iniciada com sucesso (Código ${documentNumber})! Microserviço em modo de espera ("aguardando_microsservico").`);
+      
+      // Refresh requests list
+      setRefreshToggle((p) => p + 1);
+
+    } catch (err: any) {
+      console.error(err);
+      setError(`Erro na criação de documento: ${err.message || err}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleLoadAll8Documents = async () => {
+    setError(null);
+    setSuccess(null);
+    setSaving(true);
+    const nowISO = new Date().toISOString();
+
+    try {
+      let templatesToUse = LOCAL_FALLBACK_TEMPLATES;
+      // try to check Firestore config
+      const docTemplatesSnap = await getDoc(doc(db, 'settings', 'documentTemplates'));
+      if (docTemplatesSnap.exists()) {
+        const data = docTemplatesSnap.data();
+        if (data.templates && Array.isArray(data.templates) && data.templates.length > 0) {
+          templatesToUse = data.templates;
+        }
+      }
+
+      const clientName = client?.name || client?.corporateName || 'Cliente';
+      const clientSlug = client?.slug || client?.corporateName?.toLowerCase().replace(/[^a-z0-9]/g, '_') || 'cliente';
+
+      let count = 0;
+      for (const t of templatesToUse) {
+        // Only add if it's active and not already on the checklist
+        const isAlreadyAdded = requests.some(r => r.title.includes(t.name));
+        if (t.active && !isAlreadyAdded) {
+          const docNumber = t.id === 'procuracao' ? '001' : (t.id === 'declaracao_pobreza' ? '002' : (t.id === 'contrato_honorarios' ? '003' : ''));
+          const descriptionVal = t.objective || '';
+
+          const payload: any = {
+            caseId: caseId!,
+            clientId: caseObj?.clientId || '',
+            clientSlug: clientSlug || '',
+            title: docNumber ? `${docNumber} - ${t.name}` : t.name,
+            description: descriptionVal,
+            dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 15 days
+            status: 'pendente',
+            visibleToClient: t.visibleToClient ?? true,
+            allowUpload: true,
+            expectedFileTypes: ['PDF'],
+            maxFiles: 1,
+            createdAt: nowISO,
+            updatedAt: nowISO
+          };
+
+          if (docNumber) {
+            payload.documentNumber = docNumber;
+            payload.documentType = t.name;
+            const generatedDocumentName = `${clientSlug || 'slug'}_${caseId!.slice(0, 8)}_${t.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}_${docNumber}.docx`;
+            payload.generatedFileName = generatedDocumentName;
+            payload.serviceStatus = 'aguardando_microsservico';
+            
+            // Generate full Integration Payload
+            payload.integrationPayload = {
+              caseId: caseId!,
+              clientId: caseObj?.clientId || '',
+              clientSlug: clientSlug || '',
+              documentType: t.name,
+              documentNumber: docNumber,
+              templateId: t.templateId || '',
+              targetDriveFolderId: caseObj?.gdriveFolderId || client?.gdriveFolderId || 'gdrive-folder-id-placeholder',
+              generatedDocumentName,
+              placeholders: {
+                client_name: clientName || '',
+                client_slug: clientSlug || '',
+              },
+              createdBy: localStorage.getItem('boss_user_email') || 'direito.rgr@gmail.com',
+              createdAt: nowISO
+            };
+          }
+
+          await addDoc(collection(db, 'caseEvidenceRequests'), payload);
+          count++;
+        }
+      }
+
+      setSuccess(`Sucesso: Adicionamos ${count} itens de documentos ao checklist judicial do cliente.`);
+      setRefreshToggle((p) => p + 1);
+    } catch (err: any) {
+      console.error(err);
+      setError(`Erro ao inicializar checklist em lote: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -416,6 +639,60 @@ export default function SolicitacoesProvas() {
             {/* LEFT AREA: EVIDENCE CHECKLIST OR DOCUMENT LIST (7 COLUMNS) */}
             <div className="xl:col-span-7 space-y-6">
               
+              {/* AUTOMATION TOOLS CARD */}
+              <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                    <FileText size={18} />
+                  </div>
+                  <div>
+                    <h5 className="font-extrabold text-sm text-gray-950">Geração de Documentos Integrados (Google GDocs & Drive)</h5>
+                    <p className="text-[11px] text-gray-505 text-gray-500 leading-relaxed">
+                      Gerencie e associe o checklist fático pré-configurado do BOSS com geração de PDFs automatizada. O microsserviço realizará o preenchimento de placeholders do Google Doc.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => handleGenerateDocument('Procuração')}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-705 text-indigo-700 disabled:opacity-50 text-[10px] font-black uppercase tracking-wider rounded-xl cursor-pointer transition-all border border-indigo-100 shadow-xs"
+                  >
+                    <span>📑 Procuração (001)</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => handleGenerateDocument('Declaração de Pobreza')}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-sky-50 hover:bg-sky-100 text-sky-705 text-sky-700 disabled:opacity-50 text-[10px] font-black uppercase tracking-wider rounded-xl cursor-pointer transition-all border border-sky-100 shadow-xs"
+                  >
+                    <span>📄 Dec. Pobreza (002)</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => handleGenerateDocument('Contrato de Honorários')}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-705 text-emerald-705 text-emerald-700 disabled:opacity-50 text-[10px] font-black uppercase tracking-wider rounded-xl cursor-pointer transition-all border border-emerald-100 shadow-xs"
+                  >
+                    <span>✍️ C. Honorários (003)</span>
+                  </button>
+                </div>
+
+                <div className="pt-2 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-50/50 p-2.5 rounded-xl text-[10px] gap-2">
+                  <span className="font-semibold text-gray-500">Deseja pré-carregar os outros documentos do BOSS no checklist fático?</span>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={handleLoadAll8Documents}
+                    className="text-[9px] font-black uppercase tracking-wider text-indigo-600 hover:text-indigo-800 bg-white border border-gray-200 px-2.5 py-1 rounded-lg hover:shadow-xs transition-all cursor-pointer"
+                  >
+                    Checklist Mestre (8 Documentos)
+                  </button>
+                </div>
+              </div>
+
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h4 className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">

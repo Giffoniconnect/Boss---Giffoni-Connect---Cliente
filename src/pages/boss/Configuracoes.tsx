@@ -39,7 +39,101 @@ import {
 
 const DEFAULT_PORTAL_LINK = 'https://aistudio.google.com/apps/93c62126-a17f-4c18-8bc7-d327df1ca6b5?showPreview=true&showAssistant=true';
 
-type ConfigSubTab = 'links' | 'conectores';
+type ConfigSubTab = 'links' | 'conectores' | 'documentos';
+
+export interface DocumentTemplateConfig {
+  id: string;
+  name: string;
+  objective: string;
+  templateId: string;
+  order: number;
+  required: boolean;
+  visibleToClient: boolean;
+  active: boolean;
+}
+
+export const LOCAL_FALLBACK_TEMPLATES: DocumentTemplateConfig[] = [
+  {
+    id: 'procuracao',
+    name: 'Procuração',
+    objective: 'Documento necessário para representação judicial e administrativa do cliente.',
+    templateId: '',
+    order: 1,
+    required: true,
+    visibleToClient: true,
+    active: true
+  },
+  {
+    id: 'declaracao_pobreza',
+    name: 'Declaração de Pobreza',
+    objective: 'Documento necessário para instruir pedido de justiça gratuita, quando aplicável.',
+    templateId: '',
+    order: 2,
+    required: true,
+    visibleToClient: true,
+    active: true
+  },
+  {
+    id: 'contrato_honorarios',
+    name: 'Contrato de Honorários',
+    objective: 'Documento necessário para formalizar a contratação dos serviços jurídicos.',
+    templateId: '',
+    order: 3,
+    required: true,
+    visibleToClient: true,
+    active: true
+  },
+  {
+    id: 'rg',
+    name: 'RG',
+    objective: 'Documento de identificação pessoal.',
+    templateId: '',
+    order: 4,
+    required: true,
+    visibleToClient: true,
+    active: true
+  },
+  {
+    id: 'cpf',
+    name: 'CPF',
+    objective: 'Documento necessário para qualificação da parte.',
+    templateId: '',
+    order: 5,
+    required: true,
+    visibleToClient: true,
+    active: true
+  },
+  {
+    id: 'cnh',
+    name: 'CNH',
+    objective: 'Documento de identificação pessoal alternativo.',
+    templateId: '',
+    order: 6,
+    required: false,
+    visibleToClient: true,
+    active: true
+  },
+  {
+    id: 'carteira_trabalho',
+    name: 'Carteira de Trabalho',
+    objective: 'Documento necessário para comprovação de vínculo, profissão, histórico laboral ou dados previdenciários.',
+    templateId: '',
+    order: 7,
+    required: false,
+    visibleToClient: true,
+    active: true
+  },
+  {
+    id: 'comprovante_residencia',
+    name: 'Comprovante de residência',
+    objective: 'Documento necessário para qualificação, competência territorial e atualização cadastral.',
+    templateId: '',
+    order: 8,
+    required: true,
+    visibleToClient: true,
+    active: true
+  }
+];
 
 // Connectors Schema Types
 interface ConnectorConfig {
@@ -150,6 +244,18 @@ export default function Configuracoes() {
   const [newConnectorDesc, setNewConnectorDesc] = useState('');
   const [showNewForm, setShowNewForm] = useState(false);
 
+  // Standard documents template configuration state
+  const [documentTemplates, setDocumentTemplates] = useState<DocumentTemplateConfig[]>(LOCAL_FALLBACK_TEMPLATES);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  
+  // New Document Template Form states
+  const [newDocName, setNewDocName] = useState('');
+  const [newDocObjective, setNewDocObjective] = useState('');
+  const [newDocTemplateId, setNewDocTemplateId] = useState('');
+  const [newDocOrder, setNewDocOrder] = useState(9);
+  const [newDocRequired, setNewDocRequired] = useState(false);
+  const [newDocVisible, setNewDocVisible] = useState(true);
+
   useEffect(() => {
     async function fetchSettings() {
       try {
@@ -202,12 +308,33 @@ export default function Configuracoes() {
             setCustomConnectors(loadedConns.custom);
           }
         }
+
+        // Fetch document templates from settings/documentTemplates
+        const docTemplatesSnap = await getDoc(doc(db, 'settings', 'documentTemplates'));
+        if (docTemplatesSnap.exists()) {
+          const data = docTemplatesSnap.data();
+          if (data.templates && Array.isArray(data.templates)) {
+            setDocumentTemplates(data.templates);
+          }
+        } else {
+          // Check if we have localStorage backup
+          const localTemplates = localStorage.getItem('giffoni_document_templates');
+          if (localTemplates) {
+            setDocumentTemplates(JSON.parse(localTemplates));
+          } else {
+            setDocumentTemplates(LOCAL_FALLBACK_TEMPLATES);
+          }
+        }
       } catch (err) {
         console.error('Error loading settings:', err);
         // Resilient fallback
         const localSectors = localStorage.getItem('giffoni_sectors_links');
         if (localSectors) {
           setSectorsLinks(JSON.parse(localSectors));
+        }
+        const localTemplates = localStorage.getItem('giffoni_document_templates');
+        if (localTemplates) {
+          setDocumentTemplates(JSON.parse(localTemplates));
         }
       } finally {
         setLoading(false);
@@ -255,13 +382,30 @@ export default function Configuracoes() {
         localStorage.setItem('giffoni_sectors_links', JSON.stringify(cleanedSectors));
         setPortalLink(sanitizedPortalLink);
         setSectorsLinks(cleanedSectors);
-      } else {
+      } else if (activeSubTab === 'conectores') {
         // Active sub-tab connectors persistence settings/connectors
         const payload: any = { ...connectors };
         payload.custom = customConnectors;
         payload.updatedAt = new Date().toISOString();
 
         await setDoc(doc(db, 'settings', 'connectors'), payload);
+      } else if (activeSubTab === 'documentos') {
+        const cleanedTemplates = documentTemplates.map(t => ({
+          ...t,
+          name: (t.name || '').trim(),
+          objective: (t.objective || '').trim(),
+          templateId: (t.templateId || '').trim(),
+          order: Number(t.order) || 1,
+          required: !!t.required,
+          visibleToClient: !!t.visibleToClient,
+          active: !!t.active,
+        }));
+        await setDoc(doc(db, 'settings', 'documentTemplates'), {
+          templates: cleanedTemplates,
+          updatedAt: serverTimestamp(),
+        });
+        localStorage.setItem('giffoni_document_templates', JSON.stringify(cleanedTemplates));
+        setDocumentTemplates(cleanedTemplates);
       }
 
       setFeedback({ type: 'success', message: 'Configurações atualizadas com sucesso na nuvem do sistema!' });
@@ -416,6 +560,14 @@ export default function Configuracoes() {
             }`}
           >
             Conectores de APIs
+          </button>
+          <button
+            onClick={() => { setActiveSubTab('documentos'); setFeedback(null); }}
+            className={`px-4 py-2 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+              activeSubTab === 'documentos' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'
+            }`}
+          >
+            Documentos Padrão
           </button>
         </div>
       </div>
@@ -1706,6 +1858,248 @@ export default function Configuracoes() {
                   </div>
                 )}
 
+              </div>
+            )}
+
+            {activeSubTab === 'documentos' && (
+              <div className="space-y-6">
+                <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-8">
+                  <div className="flex items-center gap-3 border-b border-gray-100 pb-5 mb-6">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                      <FileText size={20} />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">Modelos de Documentos Coletores & Geração Automática</h3>
+                      <p className="text-xs text-gray-500">
+                        Configure os metadados dos 8 documentos padrão e templates do Google Docs vinculados ao microsserviço.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Left side: List of active/defined templates */}
+                    <div className="md:col-span-12 lg:col-span-7 space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Documentos Padrão Cadastrados ({documentTemplates.length})</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm('Deseja reverter todas as alterações em tela para as configurações fáticas padrão?')) {
+                              setDocumentTemplates(LOCAL_FALLBACK_TEMPLATES);
+                              setFeedback({ type: 'success', message: 'Modelos padrão do BOSS reiniciados na tela. Salve para persistir.' });
+                            }
+                          }}
+                          className="text-[9px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                        >
+                          Restaurar Padrões Locais
+                        </button>
+                      </div>
+
+                      <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                        {[...documentTemplates].sort((a,b) => a.order - b.order).map((temp) => (
+                          <div 
+                            key={temp.id} 
+                            onClick={() => {
+                              setEditingTemplateId(temp.id);
+                              setNewDocName(temp.name);
+                              setNewDocObjective(temp.objective);
+                              setNewDocTemplateId(temp.templateId || '');
+                              setNewDocOrder(temp.order);
+                              setNewDocRequired(temp.required);
+                              setNewDocVisible(temp.visibleToClient);
+                            }}
+                            className={`p-4 border rounded-2xl transition-all cursor-pointer ${
+                              editingTemplateId === temp.id 
+                                ? 'bg-indigo-50/30 border-indigo-500 ring-1 ring-indigo-505' 
+                                : 'bg-gray-50 hover:bg-gray-100 border-gray-150'
+                            }`}
+                          >
+                            <div className="flex justify-between items-start gap-2 mb-1.5">
+                              <div>
+                                <span className="inline-block text-[10px] font-mono text-gray-400 font-bold mr-1.5">#{temp.order}</span>
+                                <span className="font-extrabold text-xs text-gray-950">{temp.name}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                {temp.required ? (
+                                  <span className="text-[8px] font-black uppercase tracking-tight bg-red-105 bg-red-100 text-red-800 px-1.5 py-0.5 rounded-md">Obrigatório</span>
+                                ) : (
+                                  <span className="text-[8px] font-black uppercase tracking-tight bg-gray-200 text-gray-650 px-1.5 py-0.5 rounded-md">Opcional</span>
+                                )}
+                                {temp.active ? (
+                                  <span className="text-[8px] font-black uppercase tracking-tight bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-md">Ativo</span>
+                                ) : (
+                                  <span className="text-[8px] font-black uppercase tracking-tight bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded-md">Inativo</span>
+                                )}
+                              </div>
+                            </div>
+                            <p className="text-[11px] text-gray-600 font-medium leading-relaxed line-clamp-2">
+                              {temp.objective || 'Nenhum objetivo fornecido.'}
+                            </p>
+                            <div className="mt-2 flex items-center justify-between text-[9px] text-gray-405 text-gray-400 font-mono">
+                              <span className="truncate max-w-[200px]">Template GDocs: <strong className="text-gray-600 font-bold">{temp.templateId || 'não cadastrado'}</strong></span>
+                              <span>Portal: <strong className="text-gray-600 font-bold">{temp.visibleToClient ? 'Visível' : 'Oculto'}</strong></span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Right side: Edit / Add Form */}
+                    <div className="md:col-span-12 lg:col-span-5 bg-gray-50/50 border border-gray-150 rounded-[1.5rem] p-5 space-y-4">
+                      <div>
+                        <h4 className="text-xs font-black uppercase tracking-wider text-gray-800 flex items-center gap-1.5">
+                          <span>{editingTemplateId ? '✏️ Editar Modelo' : '➕ Novo Tipo de Documento'}</span>
+                        </h4>
+                        <p className="text-[10px] text-gray-500 mt-0.5">
+                          {editingTemplateId ? 'Altere as informações abaixo e clique em "Aplicar" para atualizar a listagem.' : 'Adicione um novo documento na tabela padrão.'}
+                        </p>
+                      </div>
+
+                      <div className="space-y-3.5">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold uppercase text-gray-500 animate-fadeIn">Nome do Documento</label>
+                          <input 
+                            type="text" 
+                            value={newDocName} 
+                            onChange={(e) => setNewDocName(e.target.value)}
+                            placeholder="Ex: Contrato de Honorários"
+                            className="w-full px-3 py-2 bg-white border border-gray-200 focus:ring-1 focus:ring-gray-905 rounded-xl text-xs font-semibold text-gray-800 outline-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold uppercase text-gray-500">Objetivo Padrão</label>
+                          <textarea 
+                            rows={3}
+                            value={newDocObjective} 
+                            onChange={(e) => setNewDocObjective(e.target.value)}
+                            placeholder="Descreva a finalidade padrão do documento..."
+                            className="w-full px-3 py-2 bg-white border border-gray-200 focus:ring-1 focus:ring-gray-905 rounded-xl text-xs font-semibold text-gray-800 outline-none resize-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold uppercase text-gray-500">Google Docs Template ID</label>
+                          <input 
+                            type="text" 
+                            value={newDocTemplateId} 
+                            onChange={(e) => setNewDocTemplateId(e.target.value)}
+                            placeholder="ID exclusivo do arquivo de template do Google Docs"
+                            className="w-full px-3 py-2 bg-white border border-gray-200 focus:ring-1 focus:ring-gray-905 rounded-xl text-xs font-semibold font-mono text-gray-800 outline-none"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold uppercase text-gray-500">Ordem Sugerida</label>
+                            <input 
+                              type="number" 
+                              value={newDocOrder} 
+                              onChange={(e) => setNewDocOrder(Number(e.target.value) || 1)}
+                              className="w-full px-3 py-2 bg-white border border-gray-200 focus:ring-1 focus:ring-gray-905 rounded-xl text-xs font-semibold text-gray-800 outline-none font-mono"
+                            />
+                          </div>
+
+                          <div className="flex flex-col justify-end pb-1.5 space-y-1">
+                            <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                checked={newDocRequired}
+                                onChange={(e) => setNewDocRequired(e.target.checked)}
+                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                              />
+                              <span className="font-bold text-[10px] uppercase text-gray-500">Obrigatório</span>
+                            </label>
+
+                            <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                checked={newDocVisible}
+                                onChange={(e) => setNewDocVisible(e.target.checked)}
+                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                              />
+                              <span className="font-bold text-[10px] uppercase text-gray-500">Visível Portal</span>
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!newDocName.trim()) {
+                                alert('O nome do documento é obrigatório.');
+                                return;
+                              }
+                              
+                              if (editingTemplateId) {
+                                // Update existing list item
+                                setDocumentTemplates(prev => prev.map(t => t.id === editingTemplateId ? {
+                                  ...t,
+                                  name: newDocName.trim(),
+                                  objective: newDocObjective.trim(),
+                                  templateId: newDocTemplateId.trim(),
+                                  order: newDocOrder,
+                                  required: newDocRequired,
+                                  visibleToClient: newDocVisible,
+                                } : t));
+                              } else {
+                                // Add a new document template
+                                const newId = newDocName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+                                if (documentTemplates.some(t => t.id === newId)) {
+                                  alert('Já existe um documento com esse nome/identificador.');
+                                  return;
+                                }
+                                const newDoc: DocumentTemplateConfig = {
+                                  id: newId,
+                                  name: newDocName.trim(),
+                                  objective: newDocObjective.trim(),
+                                  templateId: newDocTemplateId.trim(),
+                                  order: newDocOrder,
+                                  required: newDocRequired,
+                                  visibleToClient: newDocVisible,
+                                  active: true
+                                };
+                                setDocumentTemplates(prev => [...prev, newDoc]);
+                              }
+
+                              // Reset edit state
+                              setEditingTemplateId(null);
+                              setNewDocName('');
+                              setNewDocObjective('');
+                              setNewDocTemplateId('');
+                              setNewDocOrder(documentTemplates.length + 2);
+                              setNewDocRequired(false);
+                              setNewDocVisible(true);
+                            }}
+                            className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl cursor-pointer transition-colors text-center font-mono shadow-xs"
+                          >
+                            {editingTemplateId ? '✅ Aplicar Alteração' : '➕ Adicionar ao Listar'}
+                          </button>
+                          
+                          {(editingTemplateId || newDocName) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingTemplateId(null);
+                                setNewDocName('');
+                                setNewDocObjective('');
+                                setNewDocTemplateId('');
+                                setNewDocOrder(documentTemplates.length + 1);
+                                setNewDocRequired(false);
+                                setNewDocVisible(true);
+                              }}
+                              className="px-3 py-2.5 border border-gray-300 hover:bg-gray-100 text-gray-500 rounded-xl cursor-pointer text-[10px] uppercase font-bold animate-fadeIn"
+                            >
+                              Cancelar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
               </div>
             )}
 
