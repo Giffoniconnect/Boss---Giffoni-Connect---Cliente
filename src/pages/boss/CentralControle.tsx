@@ -468,6 +468,33 @@ export default function CentralControle() {
 
       const newLogsList = [logEntry, ...(masterFormData.masterEditorLogs || [])];
 
+      // Save full, independent audit log document to masterEditorLogs collection
+      try {
+        const docLogId = 'log_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+        await setDoc(doc(db, 'masterEditorLogs', docLogId), {
+          id: docLogId,
+          clientId: targetId,
+          caseId: '',
+          areaChanged: updatedDiffFields.length > 0 ? updatedDiffFields.join(', ') : 'Várias Áreas',
+          action: 'MASTER_EDITOR_SUBMIT',
+          previousValue: JSON.stringify({
+            slug: oldSlug,
+            active: previous.active,
+            visibleToClient: previous.visibleToClient
+          }),
+          newValue: JSON.stringify({
+            slug: newSlug,
+            active: masterFormData.active,
+            visibleToClient: masterFormData.visibleToClient
+          }),
+          changedBy: 'BOSS_PORTAL_ADMIN',
+          changedAt: rightNow,
+          reason: 'Sincronização manual via Editor do Painel'
+        });
+      } catch (logErr) {
+        console.warn("Aviso ao salvar log na coleção 'masterEditorLogs':", logErr);
+      }
+
       const syncedPayload: any = {
         ...previous,
         clientId: targetId,
@@ -1086,7 +1113,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                                 onClick={() => handleOpenMasterEditor(c)}
                                 className="px-2.5 py-1.5 bg-blue-650 hover:bg-blue-750 text-xs text-white rounded-lg font-bold cursor-pointer transition-colors"
                               >
-                                Editor Mestre
+                                Editor do Painel do Cliente
                               </button>
                               <button
                                 onClick={() => togglePortalSuspension(c, c.active === false)}
@@ -1992,7 +2019,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                 <div className="flex items-center gap-2">
                   <span className="px-2 py-0.5 bg-blue-500 text-white text-[10px] font-black uppercase rounded-md">MÓDULO DE DEPLOY MESTRE</span>
                   <h2 className="text-sm font-black tracking-tight font-sans uppercase">
-                    Editor Mestre do Portal do Cliente
+                    Editor do Painel do Cliente — {masterFormData.pf_nomeCompleto || masterFormData.pj_razaoSocial || ''}
                   </h2>
                 </div>
                 <p className="text-[11px] text-slate-400 font-medium mt-0.5">
@@ -2821,8 +2848,8 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                   <div className="space-y-4 animate-in fade-in duration-100">
                     <div className="flex items-center justify-between border-b pb-2">
                       <div>
-                        <h3 className="text-xs font-black uppercase text-gray-800">Verificar Integridade do Portal do Cliente</h3>
-                        <p className="text-[10px] text-gray-450 font-bold font-sans">Diagnóstico instantâneo de credenciais, slug, permissões e sincronizações do cliente.</p>
+                        <h3 className="text-xs font-black uppercase text-gray-800">Verificar Integridade do Painel do Cliente</h3>
+                        <p className="text-[10px] text-gray-450 font-bold font-sans">Diagnóstico completo automatizado de credenciais, slug, permissões, sincronizações e espelhamento.</p>
                       </div>
                       <button
                         type="button"
@@ -2831,79 +2858,183 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                           try {
                             const errors: any[] = [];
                             
-                            // Check 1: Existence of slug
+                            // Check 1: cliente existe em clients?
+                            const clientExists = clients.some(c => c.id === masterFormData.clientId);
+                            if (!clientExists) {
+                              errors.push({
+                                code: 'CLIENT_NOT_FOUND',
+                                message: 'Cliente não foi localizado no banco (coleção "clients").',
+                                severity: 'CRITICAL',
+                                fixable: false
+                              });
+                            }
+
+                            // Check 2: active está true?
+                            if (masterFormData.active !== true) {
+                              errors.push({
+                                code: 'INACTIVE_PORTAL',
+                                message: 'O portal deste cliente está desativado (campo active não é true).',
+                                severity: 'WARNING',
+                                fixable: true
+                              });
+                            }
+
+                            // Check 3: visibleToClient está true?
+                            if (masterFormData.visibleToClient !== true) {
+                              errors.push({
+                                code: 'NOT_VISIBLE_TO_CLIENT',
+                                message: 'A visibilidade do portal para o cliente está desligada (visibleToClient não é true).',
+                                severity: 'WARNING',
+                                fixable: true
+                              });
+                            }
+
+                            // Check 4: e-mail de login existe?
+                            if (!masterFormData.acesso_emailLogin) {
+                              errors.push({
+                                code: 'MISSING_EMAIL',
+                                message: 'Primeiro e-mail de login do cliente está ausente das configurações de acesso.',
+                                severity: 'CRITICAL',
+                                fixable: true
+                              });
+                            }
+
+                            // Check 5: senha existe?
+                            if (!masterFormData.acesso_senha) {
+                              errors.push({
+                                code: 'MISSING_PASSWORD',
+                                message: 'Nenhuma senha de acesso cadastrada ou visível nas chaves.',
+                                severity: 'CRITICAL',
+                                fixable: true
+                              });
+                            }
+
+                            // Check 6: clientSlug existe?
                             if (!masterFormData.slug) {
                               errors.push({
                                 code: 'NO_SLUG',
-                                message: 'Este cliente mestre não possui Slug de acesso cadastrado.',
-                                severity: 'CRITICAL'
+                                message: 'Este cliente mestre não possui Slug de acesso cadastrado (clientSlug vazio).',
+                                severity: 'CRITICAL',
+                                fixable: true
                               });
-                            } else {
-                              // Check 2: Existence of clientPortal mirroring document
-                              const portalSnap = await getDoc(doc(db, 'clientPortals', masterFormData.slug));
-                              if (!portalSnap.exists()) {
-                                errors.push({
-                                  code: 'MISSING_PORTAL_DOC',
-                                  message: `Documento de espelhamento clientPortals ausente para o slug "/${masterFormData.slug}".`,
-                                  severity: 'CRITICAL',
-                                  fixable: true
-                                });
-                              } else if (portalSnap.data()?.clientId !== masterFormData.clientId) {
-                                errors.push({
-                                  code: 'PORTAL_CLIENT_MISMATCH',
-                                  message: `O documento "/${masterFormData.slug}" aponta para outro clientId (${portalSnap.data()?.clientId}).`,
-                                  severity: 'CRITICAL',
-                                  fixable: true
-                                });
-                              }
                             }
 
-                            // Check 3: Existence of User document
+                            // Check 7: clientPortals existe?
+                            let portalDocExists = false;
+                            let portalDocClientId = '';
+                            if (masterFormData.slug) {
+                              const portalSnap = await getDoc(doc(db, 'clientPortals', masterFormData.slug));
+                              portalDocExists = portalSnap.exists();
+                              if (!portalDocExists) {
+                                errors.push({
+                                  code: 'MISSING_PORTAL_DOC',
+                                  message: `Documento de espelhamento em clientPortals/[${masterFormData.slug}] está ausente.`,
+                                  severity: 'CRITICAL',
+                                  fixable: true
+                                });
+                              } else {
+                                portalDocClientId = portalSnap.data()?.clientId || '';
+                              }
+                            } else {
+                              errors.push({
+                                code: 'MISSING_PORTAL_DOC_NO_SLUG',
+                                message: 'Impossível verificar clientPortals com slug vazio.',
+                                severity: 'CRITICAL',
+                                fixable: false
+                              });
+                            }
+
+                            // Check 8: users existe?
                             const userSnap = await getDoc(doc(db, 'users', masterFormData.clientId));
-                            if (!userSnap.exists()) {
+                            const userDocExists = userSnap.exists();
+                            let userDocClientId = '';
+                            let userDocSlug = '';
+                            let userData: any = null;
+                            if (!userDocExists) {
                               errors.push({
                                 code: 'MISSING_USER_DOC',
-                                message: `Documento de autenticação "users/${masterFormData.clientId}" ausente do provedor.`,
+                                message: `Documento de credenciais em users/[${masterFormData.clientId}] está ausente.`,
                                 severity: 'CRITICAL',
                                 fixable: true
                               });
                             } else {
-                              const userData = userSnap.data();
-                              if (userData.role !== 'client') {
-                                errors.push({
-                                  code: 'USER_ROLE_MISMATCH',
-                                  message: `A role do usuário (${userData.role}) está diferente de "client".`,
-                                  severity: 'WARNING',
-                                  fixable: true
-                                });
-                              }
-                              if (userData.clientSlug !== masterFormData.slug) {
-                                errors.push({
-                                  code: 'USER_SLUG_MISMATCH',
-                                  message: `Slug do usuário (${userData.clientSlug}) divergente do slug mestre (/${masterFormData.slug}).`,
-                                  severity: 'WARNING',
-                                  fixable: true
-                                });
-                              }
+                              userData = userSnap.data();
+                              userDocClientId = userData?.clientId || '';
+                              userDocSlug = userData?.clientSlug || '';
                             }
 
-                            // Check 4: PF Data & Birthdate consistency
-                            if (masterFormData.type === 'PF') {
-                              if (!masterFormData.pf_dataNascimento) {
-                                errors.push({
-                                  code: 'EMPTY_BIRTHDATE',
-                                  message: 'Data de nascimento do PF está vazia na Ficha.',
-                                  severity: 'WARNING',
-                                  fixable: true
-                                });
+                            // Check 9: clientId bate entre coleções?
+                            if (portalDocExists && portalDocClientId !== masterFormData.clientId) {
+                              errors.push({
+                                code: 'PORTAL_CLIENT_MISMATCH',
+                                message: `O documento em clientPortals/[${masterFormData.slug}] aponta para outro clientId (${portalDocClientId || 'nenhum'}).`,
+                                severity: 'CRITICAL',
+                                fixable: true
+                              });
+                            }
+                            if (userDocExists && userDocClientId && userDocClientId !== masterFormData.clientId) {
+                              errors.push({
+                                code: 'USER_CLIENT_MISMATCH',
+                                message: `O documento em users/[${masterFormData.clientId}] aponta para outro clientId (${userDocClientId}).`,
+                                severity: 'CRITICAL',
+                                fixable: true
+                              });
+                            }
+
+                            // Check 10: há casos vinculados?
+                            const linkedCases = cases.filter(ca => ca.clientId === masterFormData.clientId);
+                            if (linkedCases.length === 0) {
+                              errors.push({
+                                code: 'NO_LINKED_CASES',
+                                message: 'Nenhum Processo Judicial (Caso) está vinculado a este cliente no banco.',
+                                severity: 'WARNING',
+                                fixable: false
+                              });
+                            }
+
+                            // Check 11: há dados visíveis ao cliente?
+                            const hasVisibleCases = linkedCases.some(ca => ca.visibleToClient === true || ca.visibleToClient === undefined);
+                            const clientInfoReqs = infoRequests.filter(r => r.clientId === masterFormData.clientId);
+                            const clientEvidenceReqs = evidenceRequests.filter(e => e.clientId === masterFormData.clientId);
+                            const totalVisibleItems = (hasVisibleCases ? 1 : 0) + clientInfoReqs.length + clientEvidenceReqs.length;
+                            if (totalVisibleItems === 0 || masterFormData.visibleToClient !== true) {
+                              errors.push({
+                                code: 'NO_VISIBLE_DATA_TO_CLIENT',
+                                message: 'Este cliente possui zero painéis, processos ou requisições configuradas como visíveis.',
+                                severity: 'WARNING',
+                                fixable: true
+                              });
+                            }
+
+                            // Check 12: há divergência entre BOSS e Portal do Cliente?
+                            let hasDivergence = false;
+                            let divergenceDetails = [];
+                            if (userDocExists && userData) {
+                              const bossName = masterFormData.type === 'PF' ? masterFormData.pf_nomeCompleto : masterFormData.pj_razaoSocial;
+                              if (userData.name !== bossName) {
+                                hasDivergence = true;
+                                divergenceDetails.push(`Nome BOSS (${bossName}) diferente de Usuário (${userData.name})`);
                               }
-                              if (!masterFormData.pf_cpf) {
-                                errors.push({
-                                  code: 'EMPTY_CPF',
-                                  message: 'O CPF do cônjuge/titular PF está vazio na Ficha.',
-                                  severity: 'CRITICAL'
-                                });
+                              if (userData.email !== masterFormData.acesso_emailLogin) {
+                                hasDivergence = true;
+                                divergenceDetails.push(`E-mail BOSS (${masterFormData.acesso_emailLogin}) diferente de Usuário (${userData.email})`);
                               }
+                              if (userData.clientSlug !== masterFormData.slug) {
+                                hasDivergence = true;
+                                divergenceDetails.push(`Slug BOSS (${masterFormData.slug}) diferente de Usuário (${userData.clientSlug})`);
+                              }
+                              if (userData.senhaVisivelPreview !== masterFormData.acesso_senha) {
+                                hasDivergence = true;
+                                divergenceDetails.push('Senha BOSS diferente de Usuário');
+                              }
+                            }
+                            if (hasDivergence) {
+                              errors.push({
+                                code: 'BOSS_PORTAL_DIVERGENCE',
+                                message: `Dados divergentes entre BOSS e Portal de Acesso: ${divergenceDetails.join('; ')}.`,
+                                severity: 'WARNING',
+                                fixable: true
+                              });
                             }
 
                             setDiagResults(errors);
@@ -2916,9 +3047,9 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                             setLoading(false);
                           }
                         }}
-                        className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-black uppercase cursor-pointer flex items-center gap-1.5 shadow-sm"
+                        className="px-3.5 py-1.5 bg-indigo-650 hover:bg-indigo-750 text-white rounded-lg text-[10px] font-black uppercase cursor-pointer flex items-center gap-1.5 shadow-sm transition-colors"
                       >
-                        <RefreshCw className="w-3.5 h-3.5" /> Rodar Diagnóstico
+                        <RefreshCw className="w-3.5 h-3.5" /> Verificar Integridade do Painel do Cliente
                       </button>
                     </div>
 
@@ -2926,38 +3057,38 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                       <div className="text-center py-8 bg-gray-50 rounded-2xl border border-dashed border-gray-250">
                         <ShieldAlert className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                         <span className="text-[11px] text-gray-500 font-bold uppercase block">Pronto para Verificação de Integridade</span>
-                        <p className="text-[10px] text-gray-400 mt-1">Clique para executar varredura técnica de conectores e banco de dados.</p>
+                        <p className="text-[10px] text-gray-400 mt-1 font-medium">Clique no botão para executar a varredura das 12 regras de integridade do painel.</p>
                       </div>
                     ) : (
                       <div className="space-y-4">
                         <div className="flex items-center gap-3 p-3 rounded-xl bg-white border">
-                          <span className="text-[10px] font-black uppercase text-gray-400">STATUS GERAL DOCS:</span>
-                          <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase ${
-                            diagStatusGeral === 'Íntegro' ? 'bg-emerald-50 text-emerald-700' :
-                            diagStatusGeral === 'Erro crítico' ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'
+                          <span className="text-[10px] font-black uppercase text-gray-400">RESULTADO GERAL DO PAINEL:</span>
+                          <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase ${
+                            diagStatusGeral === 'Íntegro' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                            diagStatusGeral === 'Erro crítico' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
                           }`}>{diagStatusGeral}</span>
                         </div>
 
                         {diagResults.length === 0 ? (
-                          <div className="p-4 bg-emerald-50 text-emerald-805 border border-emerald-100 rounded-xl text-xs flex items-center gap-2">
-                            <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                          <div className="p-4 bg-emerald-50 text-emerald-850 border border-emerald-150 rounded-xl text-xs flex items-center gap-2">
+                            <CheckCircle className="w-4 h-4 text-emerald-650 flex-shrink-0" />
                             <div>
-                              <span className="font-extrabold uppercase block text-[11px]">Nenhum Erro Encontrado</span>
-                              <p className="text-[10px] text-emerald-700 mt-0.5">O slug, documento users e tabela de permissões estão 100% íntegros e sincronizados.</p>
+                              <span className="font-extrabold uppercase block text-[11px]">Painel Totalmente Íntegro</span>
+                              <p className="text-[10px] text-emerald-700 mt-0.5">Nenhuma falha de login, vínculos apagados ou espelhamento foi encontrada.</p>
                             </div>
                           </div>
                         ) : (
                           <div className="space-y-2">
                             {diagResults.map((item, index) => (
-                              <div key={index} className="p-3 bg-white border border-gray-150 rounded-xl flex items-start justify-between gap-3 text-xs">
+                              <div key={index} className="p-3 bg-white border border-gray-150 rounded-xl flex items-start justify-between gap-3 text-xs shadow-3xs">
                                 <div>
                                   <div className="flex items-center gap-1.5">
-                                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
-                                      item.severity === 'CRITICAL' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'
+                                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase border ${
+                                      item.severity === 'CRITICAL' ? 'bg-red-50 text-red-700 border-red-150' : 'bg-amber-50 text-amber-700 border-amber-150'
                                     }`}>{item.severity}</span>
-                                    <span className="font-mono text-[9px] text-gray-400">{item.code}</span>
+                                    <span className="font-mono text-[9px] text-gray-400 font-bold">{item.code}</span>
                                   </div>
-                                  <p className="text-[11px] text-gray-750 font-black mt-1 uppercase">{item.message}</p>
+                                  <p className="text-[11px] text-gray-755 font-bold mt-1 uppercase leading-snug">{item.message}</p>
                                 </div>
                                 {item.fixable && (
                                   <button
@@ -2966,7 +3097,64 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                                         setLoading(true);
                                         try {
                                           const nowStr = new Date().toISOString();
-                                          if (item.code === 'MISSING_PORTAL_DOC' || item.code === 'PORTAL_CLIENT_MISMATCH') {
+                                          
+                                          if (item.code === 'NOT_VISIBLE_TO_CLIENT' || item.code === 'NO_VISIBLE_DATA_TO_CLIENT') {
+                                            updateMasterField('visibleToClient', true);
+                                            await setDoc(doc(db, 'masterEditorLogs', 'log_fix_' + Date.now()), {
+                                              id: 'log_fix_' + Date.now(),
+                                              clientId: masterFormData.clientId,
+                                              areaChanged: 'Visibilidade',
+                                              action: 'FIX_VISIBLE_TO_CLIENT',
+                                              previousValue: 'false',
+                                              newValue: 'true',
+                                              changedBy: 'BOSS_PORTAL_ADMIN',
+                                              changedAt: nowStr,
+                                              reason: 'Ativação assistida de visibilidade de painel'
+                                            });
+                                            alert('A visibilidade do Portal foi ativada temporariamente! Salve o formulário para gravar na ficha.');
+                                          } 
+                                          else if (item.code === 'MISSING_EMAIL') {
+                                            const emailValue = prompt('Digite o e-mail de login correto:', masterFormData.pf_email || masterFormData.pj_emailEmpresa || 'cliente@giffoni.com');
+                                            if (emailValue) {
+                                              updateMasterField('acesso_emailLogin', emailValue);
+                                              await setDoc(doc(db, 'masterEditorLogs', 'log_fix_' + Date.now()), {
+                                                id: 'log_fix_' + Date.now(),
+                                                clientId: masterFormData.clientId,
+                                                areaChanged: 'Acesso',
+                                                action: 'FIX_EMAIL_LOGIN',
+                                                previousValue: masterFormData.acesso_emailLogin || '',
+                                                newValue: emailValue,
+                                                changedBy: 'BOSS_PORTAL_ADMIN',
+                                                changedAt: nowStr,
+                                                reason: 'Correção assistida de e-mail de login'
+                                              });
+                                              alert('E-mail atualizado provisoriamente. Salve o formulário para gravar no banco.');
+                                            }
+                                          } 
+                                          else if (item.code === 'MISSING_PASSWORD') {
+                                            const senhaValue = prompt('Digite a senha para acesso:', '123456');
+                                            if (senhaValue) {
+                                              updateMasterField('acesso_senha', senhaValue);
+                                              await setDoc(doc(db, 'masterEditorLogs', 'log_fix_' + Date.now()), {
+                                                id: 'log_fix_' + Date.now(),
+                                                clientId: masterFormData.clientId,
+                                                areaChanged: 'Acesso',
+                                                action: 'FIX_PASSWORD',
+                                                previousValue: masterFormData.acesso_senha || '',
+                                                newValue: senhaValue,
+                                                changedBy: 'BOSS_PORTAL_ADMIN',
+                                                changedAt: nowStr,
+                                                reason: 'Correção assistida de senha de login'
+                                              });
+                                              alert('Senha atualizada provisoriamente. Salve o formulário para gravar no banco.');
+                                            }
+                                          } 
+                                          else if (item.code === 'MISSING_PORTAL_DOC' || item.code === 'PORTAL_CLIENT_MISMATCH') {
+                                            if (!masterFormData.slug) {
+                                              alert('Erro: É necessário definir o slug de acesso primeiro.');
+                                              setLoading(false);
+                                              return;
+                                            }
                                             await setDoc(doc(db, 'clientPortals', masterFormData.slug), {
                                               clientId: masterFormData.clientId,
                                               slug: masterFormData.slug,
@@ -2974,27 +3162,119 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                                               createdAt: nowStr,
                                               updatedAt: nowStr
                                             });
-                                            alert('Documento clientPortals corrigido e vinculado!');
-                                          } else if (item.code === 'MISSING_USER_DOC' || item.code === 'USER_ROLE_MISMATCH' || item.code === 'USER_SLUG_MISMATCH') {
+                                            await setDoc(doc(db, 'masterEditorLogs', 'log_fix_' + Date.now()), {
+                                              id: 'log_fix_' + Date.now(),
+                                              clientId: masterFormData.clientId,
+                                              areaChanged: 'clientPortals',
+                                              action: 'RECREATE_PORTAL_LINK',
+                                              previousValue: 'Nenhum / Desalinhado',
+                                              newValue: masterFormData.slug,
+                                              changedBy: 'BOSS_PORTAL_ADMIN',
+                                              changedAt: nowStr,
+                                              reason: 'Vínculo do slug recriado assistidamente via integridade'
+                                            });
+                                            alert('Vínculo em clientPortals do slug recriado/corrigido com sucesso!');
+                                          } 
+                                          else if (item.code === 'MISSING_USER_DOC' || item.code === 'USER_CLIENT_MISMATCH') {
+                                            const correctEmail = masterFormData.acesso_emailLogin || masterFormData.pf_email || 'cliente@giffoni.com';
+                                            const correctSenha = masterFormData.acesso_senha || '123456';
                                             await setDoc(doc(db, 'users', masterFormData.clientId), {
-                                              email: masterFormData.acesso_emailLogin || 'cliente@giffoni.com',
+                                              email: correctEmail,
                                               role: 'client',
                                               clientId: masterFormData.clientId,
-                                              clientSlug: masterFormData.slug,
+                                              clientSlug: masterFormData.slug || '',
                                               name: masterFormData.type === 'PF' ? masterFormData.pf_nomeCompleto : masterFormData.pj_razaoSocial,
                                               status: masterFormData.acesso_statusAcesso || 'Ativo',
-                                              senhaVisivelPreview: masterFormData.acesso_senha || '123456',
+                                              senhaVisivelPreview: correctSenha,
                                               updatedAt: nowStr
                                             });
-                                            alert('Documento users de credenciais sincronizado com a fonte principal BOSS!');
-                                          } else if (item.code === 'EMPTY_BIRTHDATE') {
-                                            const bObj = prompt('Identificamos que pf_dataNascimento está vazio. Digite a data formato DD/MM/AAAA:', '12/12/1985');
-                                            if (bObj) {
-                                              updateMasterField('pf_dataNascimento', bObj);
-                                              alert('Data preenchida provisoriamente! Salve o formulário para gravar no banco.');
+                                            await setDoc(doc(db, 'masterEditorLogs', 'log_fix_' + Date.now()), {
+                                              id: 'log_fix_' + Date.now(),
+                                              clientId: masterFormData.clientId,
+                                              areaChanged: 'users',
+                                              action: 'RECREATE_USER_LINK',
+                                              previousValue: 'Nenhum / Desalinhado',
+                                              newValue: correctEmail,
+                                              changedBy: 'BOSS_PORTAL_ADMIN',
+                                              changedAt: nowStr,
+                                              reason: 'Vínculo em users de credenciais de login recriado'
+                                            });
+                                            alert('Vínculo em users de credenciais de login recriado com absoluto sucesso!');
+                                          } 
+                                          else if (item.code === 'NO_SLUG') {
+                                            const newSlugValue = prompt('Digite o novo slug único para este cliente:', masterFormData.pf_nomeCompleto ? masterFormData.pf_nomeCompleto.split(' ')[0].toLowerCase() : 'portal-cliente');
+                                            if (newSlugValue) {
+                                              updateMasterField('slug', newSlugValue);
+                                              await setDoc(doc(db, 'masterEditorLogs', 'log_fix_' + Date.now()), {
+                                                id: 'log_fix_' + Date.now(),
+                                                clientId: masterFormData.clientId,
+                                                areaChanged: 'Slug',
+                                                action: 'UPDATE_CLIENT_SLUG',
+                                                previousValue: masterFormData.slug || '',
+                                                newValue: newSlugValue,
+                                                changedBy: 'BOSS_PORTAL_ADMIN',
+                                                changedAt: nowStr,
+                                                reason: 'Atualização de slug assistida via integridade'
+                                              });
+                                              alert('Slug alterado provisoriamente. Salve o formulário para gravar na tabela!');
                                             }
+                                          } 
+                                          else if (item.code === 'BOSS_PORTAL_DIVERGENCE') {
+                                            const correctName = masterFormData.type === 'PF' ? masterFormData.pf_nomeCompleto : masterFormData.pj_razaoSocial;
+                                            const correctEmail = masterFormData.acesso_emailLogin || masterFormData.pf_email || 'cliente@giffoni.com';
+                                            const correctSenha = masterFormData.acesso_senha || '123456';
+                                            
+                                            await setDoc(doc(db, 'users', masterFormData.clientId), {
+                                              email: correctEmail,
+                                              role: 'client',
+                                              clientId: masterFormData.clientId,
+                                              clientSlug: masterFormData.slug || '',
+                                              name: correctName,
+                                              status: masterFormData.acesso_statusAcesso || 'Ativo',
+                                              senhaVisivelPreview: correctSenha,
+                                              updatedAt: nowStr
+                                            });
+
+                                            if (masterFormData.slug) {
+                                              await setDoc(doc(db, 'clientPortals', masterFormData.slug), {
+                                                clientId: masterFormData.clientId,
+                                                slug: masterFormData.slug,
+                                                active: masterFormData.active !== false,
+                                                createdAt: nowStr,
+                                                updatedAt: nowStr
+                                              });
+                                            }
+                                            
+                                            await setDoc(doc(db, 'masterEditorLogs', 'log_fix_' + Date.now()), {
+                                              id: 'log_fix_' + Date.now(),
+                                              clientId: masterFormData.clientId,
+                                              areaChanged: 'portalMirror',
+                                              action: 'REGENERATE_PORTAL_MIRROR',
+                                              previousValue: 'Divergências Cadastrais',
+                                              newValue: 'Sincronizado',
+                                              changedBy: 'BOSS_PORTAL_ADMIN',
+                                              changedAt: nowStr,
+                                              reason: 'Regeneração completa e alinhamento de credenciais e portalMirror'
+                                            });
+                                            alert('Portal Mirror e dados de login sincronizados e alinhados com sucesso!');
                                           }
-                                          // Trigger recalculate
+                                          else if (item.code === 'INACTIVE_PORTAL') {
+                                            updateMasterField('active', true);
+                                            await setDoc(doc(db, 'masterEditorLogs', 'log_fix_' + Date.now()), {
+                                              id: 'log_fix_' + Date.now(),
+                                              clientId: masterFormData.clientId,
+                                              areaChanged: 'Status',
+                                              action: 'REACTIVATE_PORTAL',
+                                              previousValue: 'false',
+                                              newValue: 'true',
+                                              changedBy: 'BOSS_PORTAL_ADMIN',
+                                              changedAt: nowStr,
+                                              reason: 'Reativação de portal desativado via verificação de integridade'
+                                            });
+                                            alert('Status de ativação definido como verdadeiro! Salve o formulário para persistir no cliente.');
+                                          }
+
+                                          // Trigger recalculate / filter out corrected item
                                           setDiagResults(prev => prev.filter(p => p.code !== item.code));
                                         } catch (fixErr: any) {
                                           alert('Erro na autocorreção: ' + fixErr.message);
@@ -3002,7 +3282,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                                           setLoading(false);
                                         }
                                     }}
-                                    className="px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100 rounded-lg text-[9px] font-black uppercase cursor-pointer"
+                                    className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-250 text-amber-700 rounded-lg text-[9px] font-black uppercase cursor-pointer transition-colors"
                                   >
                                     Corrigir Automaticamente
                                   </button>

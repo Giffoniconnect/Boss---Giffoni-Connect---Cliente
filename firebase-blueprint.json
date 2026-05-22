@@ -276,6 +276,24 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["caseId", "clientId", "title", "status"]
+    },
+    "MasterEditorLog": {
+      "title": "Master Editor Log",
+      "description": "Logs of changes made via the Master Client Editor area.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clientId": { "type": "string" },
+        "caseId": { "type": "string" },
+        "areaChanged": { "type": "string" },
+        "action": { "type": "string" },
+        "previousValue": { "type": "string" },
+        "newValue": { "type": "string" },
+        "changedBy": { "type": "string" },
+        "changedAt": { "type": "string", "format": "date-time" },
+        "reason": { "type": "string" }
+      },
+      "required": ["id", "clientId", "areaChanged", "action", "changedBy", "changedAt"]
     }
   },
   "firestore": {
@@ -330,6 +348,10 @@
     "settings": {
       "schema": "SystemSetting",
       "description": "Global settings parameters."
+    },
+    "masterEditorLogs": {
+      "schema": "MasterEditorLog",
+      "description": "Audit logs for changes made via the Master Client Editor."
     }
   }
 }

@@ -179,5 +179,12 @@ service cloud.firestore {
         request.resource.data.link.size() <= 2048
       ));
     }
+
+    // -------------------------------------------------------------------------
+    // MASTER EDITOR LOGS COLLECTION
+    // -------------------------------------------------------------------------
+    match /masterEditorLogs/{logId} {
+      allow read, write: if isAdmin();
+    }
   }
 }
