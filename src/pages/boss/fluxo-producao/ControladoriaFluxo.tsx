@@ -298,17 +298,17 @@ export default function ControladoriaFluxo() {
               <h4 className="text-base font-black text-gray-900 leading-tight">
                 {resolvedClientName}
               </h4>
-              <p className="text-[11px] text-gray-500 flex flex-wrap gap-x-3 items-center font-medium">
-                <span className="font-mono text-indigo-600 bg-indigo-50/60 px-2 py-0.5 rounded text-[10px] font-bold">
+              <p className="text-xs text-gray-700 flex flex-wrap gap-x-3 items-center font-medium">
+                <span className="font-mono text-indigo-600 bg-indigo-50/60 px-2 py-0.5 rounded text-xs font-bold font-mono">
                   {resolvedClientSlug}
                 </span>
                 <span>• Tipo Original: <strong className="text-gray-700">{caseObj?.registrationType || 'Não Definido'}</strong></span>
-                <span>• ID: <strong className="font-mono text-gray-650">{caseId}</strong></span>
+                <span>• ID: <strong className="font-mono text-gray-700">{caseId}</strong></span>
               </p>
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <span className="text-[10px] font-bold px-3 py-1.5 rounded-xl border border-gray-150 bg-white text-gray-700">
+              <span className="text-xs font-bold px-3 py-1.5 rounded-xl border border-gray-150 bg-white text-gray-705">
                 Fase de Fluxo: {caseObj?.productionStage || 'controladoria'}
               </span>
             </div>
@@ -321,7 +321,7 @@ export default function ControladoriaFluxo() {
             <div className="flex gap-3">
               <Flag size={20} className="text-amber-600 shrink-0 mt-0.5" />
               <div>
-                <h5 className="text-[10.5px] font-black uppercase text-amber-950 tracking-wider">Despacho Crítico e Devolução Ativa</h5>
+                <h5 className="text-sm font-black uppercase text-amber-950 tracking-wider font-mono">Despacho Crítico e Devolução Ativa</h5>
                 <p className="text-xs text-amber-900/80 leading-relaxed font-semibold">
                   Ao salvar com o status <strong>Devolvido com Pendência</strong>, o caso retornará imediatamente à etapa operacional selecionada abaixo e definirá o status geral interno como "Com pendência" faturada.
                 </p>
@@ -330,7 +330,7 @@ export default function ControladoriaFluxo() {
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 pt-1">
               <div className="w-full sm:w-auto">
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-amber-800 mb-1">Retornar para a etapa operacional:</label>
+                <label className="block text-xs font-bold uppercase tracking-wider text-amber-800 mb-1">Retornar para a etapa operacional:</label>
                 <select
                   value={controladoria.returnToStage}
                   onChange={(e) => handleChange('returnToStage', e.target.value)}
@@ -362,7 +362,7 @@ export default function ControladoriaFluxo() {
             <div className="flex gap-3 text-emerald-950">
               <ShieldCheck size={18} className="text-emerald-600 shrink-0 mt-0.5" />
               <div>
-                <h5 className="text-[10px] font-black uppercase tracking-wider">Aprovação de Qualidade de Trâmite</h5>
+                <h5 className="text-xs font-black uppercase tracking-wider">Aprovação de Qualidade de Trâmite</h5>
                 <p className="text-xs text-emerald-900/85 leading-relaxed font-semibold">
                   O trâmite foi aprovado. Selecione abaixo como deseja atualizar o <strong>status interno</strong> do escritório para exibição das equipes administrativas:
                 </p>
@@ -403,13 +403,13 @@ export default function ControladoriaFluxo() {
             </div>
             <div>
               <h3 className="text-sm font-black text-gray-900 uppercase tracking-tight">Parecer da Controladoria</h3>
-              <p className="text-[10.5px] text-gray-500 mt-0.5">Triagem de integridade documental e faturamento.</p>
+              <p className="text-xs text-gray-600 mt-0.5">Triagem de integridade documental e faturamento.</p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-extrabold uppercase tracking-wide text-gray-400">Auditor Responsável</label>
+              <label className="block text-xs font-extrabold uppercase tracking-wide text-gray-500">Auditor Responsável</label>
               <div className="relative">
                 <input
                   type="text"
@@ -423,7 +423,7 @@ export default function ControladoriaFluxo() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-extrabold uppercase tracking-wide text-gray-400">Data de Envio</label>
+              <label className="block text-xs font-extrabold uppercase tracking-wide text-gray-500">Data de Envio</label>
               <div className="relative">
                 <input
                   type="date"
@@ -436,7 +436,7 @@ export default function ControladoriaFluxo() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-extrabold uppercase tracking-wide text-gray-400">Data de Conferência</label>
+              <label className="block text-xs font-extrabold uppercase tracking-wide text-gray-500">Data de Conferência</label>
               <div className="relative">
                 <input
                   type="date"
@@ -451,7 +451,7 @@ export default function ControladoriaFluxo() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-extrabold uppercase tracking-wide text-gray-400">Despacho da Controladoria</label>
+              <label className="block text-xs font-extrabold uppercase tracking-wide text-gray-500">Despacho da Controladoria</label>
               <select
                 value={controladoria.status}
                 onChange={(e) => handleChange('status', e.target.value as any)}
@@ -469,7 +469,7 @@ export default function ControladoriaFluxo() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-extrabold uppercase tracking-wide text-gray-400">Pré-auditoria de Integridade</label>
+              <label className="block text-xs font-extrabold uppercase tracking-wide text-gray-500">Pré-auditoria de Integridade</label>
               <div className="flex items-center h-[38px]">
                 <label className="inline-flex items-center gap-3 cursor-pointer text-xs font-bold text-gray-700">
                   <input
@@ -485,7 +485,7 @@ export default function ControladoriaFluxo() {
           </div>
 
           <div className="space-y-2">
-            <label className="block text-[10px] font-extrabold uppercase tracking-wide text-gray-400">
+            <label className="block text-xs font-extrabold uppercase tracking-wide text-gray-500">
               Descobertas e Conformidade {isDevolvido ? '*' : ''}
             </label>
             <textarea
@@ -497,7 +497,7 @@ export default function ControladoriaFluxo() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-[10px] font-extrabold uppercase tracking-wide text-gray-400">Observações de Prontuário</label>
+            <label className="block text-xs font-extrabold uppercase tracking-wide text-gray-500">Observações de Prontuário</label>
             <textarea
               value={controladoria.notes}
               onChange={(e) => handleChange('notes', e.target.value)}

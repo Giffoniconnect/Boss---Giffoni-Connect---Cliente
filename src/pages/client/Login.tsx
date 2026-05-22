@@ -10,7 +10,7 @@ import { ChevronRight, LogIn, ShieldCheck } from 'lucide-react';
 export default function ClientLogin() {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const { loginWithGoogle, loading, user, isClient, profile } = useAuth();
+  const { loginWithGoogle, loading, user, isClient, profile, errorMsg } = useAuth();
   const [clientInfo, setClientInfo] = useState<any>(null);
   const [error, setError] = useState(false);
 
@@ -114,6 +114,11 @@ export default function ClientLogin() {
 
         <div className="bg-gray-50 p-8 rounded-[2.5rem] border border-gray-100 mb-8 shadow-sm">
            <p className="text-xs text-gray-400 mb-6 font-black uppercase tracking-widest text-center">Autenticação Segura</p>
+           {errorMsg && (
+             <div className="p-4 mb-4 bg-red-50 text-red-800 rounded-2xl text-xs border border-red-100 font-bold text-center leading-relaxed">
+               {errorMsg}
+             </div>
+           )}
            <button
             onClick={handleLogin}
             disabled={loading}

@@ -418,11 +418,11 @@ export default function Dashboard() {
         <div className="bg-white border border-gray-150 rounded-2xl p-6 space-y-4 shadow-3xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider">Setores Externos Mapeados</h3>
-              <span className="text-[9px] font-mono px-2 py-0.5 bg-gray-50 border border-gray-100 rounded text-gray-400">settings/sectors</span>
+              <h3 className="text-sm font-black uppercase text-gray-500 tracking-wider">Setores Externos Mapeados</h3>
+              <span className="text-xs font-mono px-2 py-0.5 bg-gray-50 border border-gray-100 rounded text-gray-500">settings/sectors</span>
             </div>
-            <p className="text-[10px] text-gray-400 mt-1 leading-normal">Status resumido dos links dos departamentos integrados.</p>
-
+            <p className="text-xs text-gray-500 mt-1 leading-normal">Status resumido dos links dos departamentos integrados.</p>
+ 
             <div className="mt-4 space-y-2">
               {sectors && Object.keys(sectors).filter(k => sectors[k] && sectors[k].trim() !== '').length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -436,7 +436,7 @@ export default function Dashboard() {
                           href={l}
                           target="_blank" 
                           rel="noopener noreferrer"
-                          className="text-[9px] text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 hover:bg-emerald-100 transition-all"
+                          className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 hover:bg-emerald-100 transition-all"
                         >
                           <span>Ativo</span>
                           <ArrowRight size={10} />
@@ -446,7 +446,7 @@ export default function Dashboard() {
                   })}
                 </div>
               ) : (
-                <div className="p-4 border border-dashed border-gray-200 rounded-xl text-center text-gray-400">
+                <div className="p-4 border border-dashed border-gray-200 rounded-xl text-center text-gray-550">
                   <p className="text-xs font-bold font-mono">Setores ainda não configurados.</p>
                 </div>
               )}
@@ -454,22 +454,22 @@ export default function Dashboard() {
           </div>
           <button
             onClick={() => navigate('/boss-giffoni-clientes/setores')}
-            className="w-full mt-4 inline-flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-750 text-[10px] font-bold py-2.5 rounded-xl border border-gray-150 transition-all"
+            className="w-full mt-4 inline-flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-800 text-sm font-bold py-2.5 rounded-xl border border-gray-150 transition-all"
           >
             <span>Gerenciar Setores</span>
             <ArrowRight size={12} />
           </button>
         </div>
-
+ 
         {/* CONNECTORS BLOCK */}
         <div className="bg-white border border-gray-150 rounded-2xl p-6 space-y-4 shadow-3xs flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider">Módulos & Conectores Digitais</h3>
-              <span className="text-[9px] font-mono px-2 py-0.5 bg-gray-50 border border-gray-100 rounded text-gray-400">settings/connectors</span>
+              <h3 className="text-sm font-black uppercase text-gray-500 tracking-wider">Módulos & Conectores Digitais</h3>
+              <span className="text-xs font-mono px-2 py-0.5 bg-gray-50 border border-gray-100 rounded text-gray-500">settings/connectors</span>
             </div>
-            <p className="text-[10px] text-gray-400 mt-1 leading-normal">Verificação de integridade das integrações para o Portal.</p>
-
+            <p className="text-xs text-gray-500 mt-1 leading-normal">Verificação de integridade das integrações para o Portal.</p>
+ 
             <div className="mt-4">
               {connectors ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -484,12 +484,12 @@ export default function Dashboard() {
                     const isConfigured = connectors[item.key] && (connectors[item.key].active === true || connectors[item.key].configured === true || connectors[item.key].value || Object.keys(connectors[item.key]).length > 0);
                     return (
                       <div key={item.key} className="p-2.5 bg-gray-50/50 rounded-xl border border-gray-100 flex flex-col justify-between gap-1.5">
-                        <span className="text-[10.5px] font-bold text-gray-700 truncate">{item.label}</span>
+                        <span className="text-sm font-bold text-gray-700 truncate">{item.label}</span>
                         <div>
                           {isConfigured ? (
-                            <span className="inline-flex text-[8.5px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-100 px-1.5 py-0.5 rounded">Ativo</span>
+                            <span className="inline-flex text-xs font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-100 px-1.5 py-0.5 rounded">Ativo</span>
                           ) : (
-                            <span className="inline-flex text-[8.5px] font-semibold bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded">Pendente</span>
+                            <span className="inline-flex text-xs font-semibold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Pendente</span>
                           )}
                         </div>
                       </div>
@@ -497,7 +497,7 @@ export default function Dashboard() {
                   })}
                 </div>
               ) : (
-                <div className="p-4 border border-dashed border-gray-200 rounded-xl text-center text-gray-400">
+                <div className="p-4 border border-dashed border-gray-200 rounded-xl text-center text-gray-550">
                   <p className="text-xs font-bold font-mono">Conectores ainda não configurados.</p>
                 </div>
               )}
@@ -505,13 +505,13 @@ export default function Dashboard() {
           </div>
           <button
             onClick={() => navigate('/boss-giffoni-clientes/configuracoes')}
-            className="w-full mt-4 inline-flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-750 text-[10px] font-bold py-2.5 rounded-xl border border-gray-150 transition-all font-sans"
+            className="w-full mt-4 inline-flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-800 text-sm font-bold py-2.5 rounded-xl border border-gray-150 transition-all font-sans"
           >
             <span>Configurar Conectores</span>
             <ArrowRight size={12} />
           </button>
         </div>
-
+ 
       </div>
 
     </div>

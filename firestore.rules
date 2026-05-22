@@ -38,7 +38,7 @@ service cloud.firestore {
     // USERS AND INVITES
     // -------------------------------------------------------------------------
     match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin() || resource.data.email == request.auth.token.email);
       allow write: if isAdmin() || (isSignedIn() && request.auth.uid == userId && (
         // Allow self-registration if document doesn't exist
         !exists(/databases/$(database)/documents/users/$(userId))

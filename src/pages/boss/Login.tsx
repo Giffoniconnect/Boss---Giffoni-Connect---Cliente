@@ -5,7 +5,7 @@ import { motion } from 'motion/react';
 import { Lock, LogIn, ShieldCheck, LogOut } from 'lucide-react';
 
 export default function BossLogin() {
-  const { loginWithGoogle, loading, user, isAdmin, logout } = useAuth();
+  const { loginWithGoogle, loading, user, isAdmin, logout, errorMsg } = useAuth();
   const navigate = useNavigate();
 
   const handleLogin = async () => {
@@ -31,7 +31,7 @@ export default function BossLogin() {
               </div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">Login BOSS</h1>
               <p className="font-semibold text-blue-600">Sessão administrativa já ativa.</p>
-              <p className="text-sm text-gray-400 mt-2">Logado como: {user.email}</p>
+              <p className="text-sm text-gray-600 mt-2">Logado como: {user.email}</p>
             </div>
 
             <div className="space-y-3 pt-4">
@@ -66,6 +66,11 @@ export default function BossLogin() {
               <div className="p-4 bg-blue-50 text-blue-800 rounded-2xl text-sm border border-blue-100">
                 <strong>Ambiente de Demonstração:</strong> Use o botão abaixo para simular o acesso administrativo. Em produção, este portal utiliza Firebase Auth.
               </div>
+              {errorMsg && (
+                <div className="p-4 bg-red-50 text-red-800 rounded-2xl text-sm border border-red-100 font-semibold leading-relaxed">
+                  {errorMsg}
+                </div>
+              )}
             </div>
 
             <button
@@ -88,7 +93,7 @@ export default function BossLogin() {
         <div className="mt-8 pt-8 border-t border-gray-100 text-center">
           <button 
             onClick={() => navigate('/')}
-            className="text-sm font-medium text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-sm font-semibold text-gray-650 hover:text-gray-900 transition-colors"
           >
             Voltar para Início
           </button>

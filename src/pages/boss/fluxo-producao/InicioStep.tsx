@@ -197,7 +197,7 @@ export default function InicioStep({ onSelectAction, onSetLoading }: InicioStepP
                 >
                   <div>
                     <p className="text-xs font-extrabold text-purple-950">{c.name}</p>
-                    <p className="text-[10px] font-mono text-purple-400">{c.slug}</p>
+                    <p className="text-xs font-mono text-purple-500">{c.slug}</p>
                   </div>
                   <UserPlus size={16} className="text-purple-400" />
                 </div>
@@ -239,14 +239,14 @@ export default function InicioStep({ onSelectAction, onSetLoading }: InicioStepP
                     className="bg-white p-3 border border-emerald-100 rounded-2xl hover:border-emerald-600 hover:shadow-sm cursor-pointer transition-all flex flex-col justify-between gap-1"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] uppercase font-black tracking-widest text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
+                      <span className="text-xs uppercase font-black tracking-widest text-emerald-650 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
                         {c.productionStage || 'Início'}
                       </span>
-                      <span className="text-[10px] font-mono text-gray-400">{c.registrationType || 'Ação'}</span>
+                      <span className="text-xs font-mono text-gray-500">{c.registrationType || 'Ação'}</span>
                     </div>
                     <div>
                       <p className="text-xs font-black text-emerald-950 uppercase">{c.title || 'Sem título'}</p>
-                      <p className="text-[10px] text-gray-500 font-medium leading-none">Cliente: {clientObj?.name || 'Não identificado'}</p>
+                      <p className="text-xs text-gray-600 font-medium leading-none">Cliente: {clientObj?.name || 'Não identificado'}</p>
                     </div>
                   </div>
                 );

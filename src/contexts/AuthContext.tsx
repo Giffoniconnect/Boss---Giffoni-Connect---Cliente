@@ -9,6 +9,8 @@ interface UserProfile {
   email: string;
   role: UserRole;
   clientId?: string;
+  clientSlug?: string;
+  name?: string;
 }
 
 interface AuthContextType {
@@ -17,6 +19,8 @@ interface AuthContextType {
   loading: boolean;
   isAdmin: boolean;
   isClient: boolean;
+  errorMsg: string | null;
+  setErrorMsg: (msg: string | null) => void;
   logout: () => Promise<void>;
   loginWithGoogle: (role?: UserRole) => Promise<void>;
 }
@@ -27,37 +31,78 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const resolveUserProfile = async (firebaseUser: FirebaseUser, requestedRole?: UserRole): Promise<UserProfile | null> => {
+    try {
+      // 1. Check by UID directly
+      const docRef = doc(db, 'users', firebaseUser.uid);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        return docSnap.data() as UserProfile;
+      }
+
+      const email = firebaseUser.email;
+      if (!email) return null;
+
+      // 2. Check by Email if no UID profile exists (Case-insensitive matching)
+      let foundData: any = null;
+      
+      const q1 = query(collection(db, 'users'), where('email', '==', email));
+      const snap1 = await getDocs(q1);
+      
+      if (!snap1.empty) {
+        foundData = snap1.docs[0].data();
+      } else {
+        const q2 = query(collection(db, 'users'), where('email', '==', email.toLowerCase()));
+        const snap2 = await getDocs(q2);
+        if (!snap2.empty) {
+          foundData = snap2.docs[0].data();
+        }
+      }
+
+      if (foundData) {
+        const mergedProfile = {
+          ...foundData,
+          uid: firebaseUser.uid,
+          updatedAt: serverTimestamp()
+        };
+        await setDoc(docRef, mergedProfile);
+        return mergedProfile as UserProfile;
+      }
+
+      // 3. New User / Bootstrap admin
+      if (requestedRole || email === 'direito.rgr@gmail.com') {
+        const newProfile: UserProfile = {
+          email: email,
+          role: requestedRole || (email === 'direito.rgr@gmail.com' ? 'boss_admin' : 'client'),
+        };
+        await setDoc(docRef, {
+          ...newProfile,
+          createdAt: serverTimestamp()
+        });
+        return newProfile;
+      }
+
+      throw new Error("Seu e-mail não está cadastrado neste portal fático. Solicite acesso ao administrador BOSS.");
+    } catch (e: any) {
+      console.error("Erro ao resolver perfil:", e);
+      throw e;
+    }
+  };
 
   useEffect(() => {
     return onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
+      setErrorMsg(null);
       if (firebaseUser) {
         try {
-          const docRef = doc(db, 'users', firebaseUser.uid);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            setProfile(docSnap.data() as UserProfile);
-          } else {
-            // Check if it's the bootstrap admin
-            // BOOTSTRAP ADMIN DE PREVIEW — revisar antes de produção real.
-            if (firebaseUser.email === 'direito.rgr@gmail.com') {
-              const bootstrapProfile: UserProfile = {
-                email: firebaseUser.email,
-                role: 'boss_admin'
-              };
-              try {
-                await setDoc(docRef, {
-                  ...bootstrapProfile,
-                  createdAt: serverTimestamp()
-                });
-              } catch (writeErr) {
-                console.error("Erro ao auto-registrar o admin no banco:", writeErr);
-              }
-              setProfile(bootstrapProfile);
-            }
-          }
-        } catch (error) {
-          console.error("Error fetching profile:", error);
+          const matchedProfile = await resolveUserProfile(firebaseUser);
+          setProfile(matchedProfile);
+        } catch (error: any) {
+          setErrorMsg(error.message || "Erro de permissão no Firebase");
+          setProfile(null);
         }
       } else {
         setProfile(null);
@@ -68,6 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithGoogle = async (role?: UserRole) => {
     setLoading(true);
+    setErrorMsg(null);
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
@@ -75,51 +121,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const result = await signInWithPopup(auth, provider);
       const newUser = result.user;
 
-      // 1. Check by UID directly
-      const docRef = doc(db, 'users', newUser.uid);
-      const docSnap = await getDoc(docRef);
-
-      if (docSnap.exists()) {
-        setProfile(docSnap.data() as UserProfile);
-        return;
+      const matchedProfile = await resolveUserProfile(newUser, role);
+      if (!matchedProfile) {
+        throw new Error("Não foi possível carregar seu perfil no sistema.");
       }
-
-      // 2. Check by Email if no UID profile exists (Mapping legacy/invited users)
-      const usersQ = query(collection(db, 'users'), where('email', '==', newUser.email));
-      const usersSnap = await getDocs(usersQ);
-      
-      if (!usersSnap.empty) {
-        const foundData = usersSnap.docs[0].data() as UserProfile;
-        // Migration: Link the UID to the email record
-        await setDoc(docRef, {
-          ...foundData,
-          uid: newUser.uid,
-          updatedAt: serverTimestamp()
-        });
-        setProfile(foundData);
-        return;
-      }
-
-      // 3. New User / Bootstrap admin
-      if (role || newUser.email === 'direito.rgr@gmail.com') {
-        const newProfile: UserProfile = {
-          email: newUser.email || '',
-          role: role || (newUser.email === 'direito.rgr@gmail.com' ? 'boss_admin' : 'client'),
-        };
-        await setDoc(docRef, {
-          ...newProfile,
-          createdAt: serverTimestamp()
-        });
-        setProfile(newProfile);
-      }
-    } catch (error) {
+      setProfile(matchedProfile);
+    } catch (error: any) {
       console.error("Login falhou:", error);
+      setErrorMsg(error.message || "Falha na autenticação via Google");
+      // Clean up auth session if it failed profile check
+      await signOut(auth);
+      setProfile(null);
+      setUser(null);
     } finally {
       setLoading(false);
     }
   };
 
   const logout = async () => {
+    setErrorMsg(null);
+    setProfile(null);
     await signOut(auth);
   };
 
@@ -129,6 +150,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loading,
     isAdmin: profile?.role === 'boss_admin' || user?.email === 'direito.rgr@gmail.com',
     isClient: profile?.role === 'client',
+    errorMsg,
+    setErrorMsg,
     logout,
     loginWithGoogle
   };

@@ -156,7 +156,7 @@ export default function ServicoStep({ clientId, slug, caseId, onNext, onSetLoadi
                 <p className="text-xs text-gray-500 leading-relaxed font-semibold">{srv.desc}</p>
                 <div className="flex items-center gap-1.5 pt-1.5">
                   <Eye size={12} className="text-blue-500" />
-                  <span className="text-[10px] text-blue-700 font-extrabold uppercase tracking-widest">
+                  <span className="text-xs text-blue-700 font-extrabold uppercase tracking-widest">
                     Status Público: {srv.statusPublico}
                   </span>
                 </div>

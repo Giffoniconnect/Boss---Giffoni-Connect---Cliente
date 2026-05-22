@@ -543,7 +543,7 @@ export default function FinanceiroFluxo() {
           <div className="p-4 bg-amber-50 border border-amber-205 rounded-2xl text-amber-900 text-xs space-y-1 animate-fadeIn">
             <div className="flex gap-2 items-center">
               <AlertTriangle size={16} className="text-amber-600" />
-              <h5 className="font-bold uppercase tracking-wider text-[10px]">Alerta do Relatório de Integridade</h5>
+              <h5 className="font-bold uppercase tracking-wider text-xs">Alerta do Relatório de Integridade</h5>
             </div>
             <p className="font-medium leading-relaxed">
               Nenhum registro financeiro vinculado a este caso. O relatório de integridade apontará atenção.
@@ -579,7 +579,7 @@ export default function FinanceiroFluxo() {
                 <div className="p-10 border-2 border-dashed border-gray-150 rounded-2xl text-center text-gray-400 flex flex-col items-center justify-center gap-2">
                   <Coins size={32} className="text-gray-300" />
                   <span className="text-xs font-semibold">Sem registros financeiros estruturados</span>
-                  <p className="text-[10px] text-gray-400 max-w-xs leading-relaxed">Adicione cobranças, parcelas de honorários, ou custas administrativas para guiar o portal do cliente.</p>
+                  <p className="text-xs text-gray-550 max-w-xs leading-relaxed">Adicione cobranças, parcelas de honorários, ou custas administrativas para guiar o portal do cliente.</p>
                 </div>
               ) : (
                 <div className="space-y-3.5">
@@ -596,7 +596,7 @@ export default function FinanceiroFluxo() {
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-extrabold text-gray-900">{fee.chargeType}</span>
-                            <span className={`inline-flex items-center px-1.5 py-0.5 border text-[8px] font-extrabold uppercase rounded tracking-wider ${getStatusBadgeStyles(fee.financialStatus)}`}>
+                            <span className={`inline-flex items-center px-1.5 py-0.5 border text-xs font-extrabold uppercase rounded tracking-wider ${getStatusBadgeStyles(fee.financialStatus)}`}>
                               {fee.financialStatus.replace('_', ' ')}
                             </span>
                           </div>
@@ -605,14 +605,14 @@ export default function FinanceiroFluxo() {
                             {formatCurrency(fee.totalAmount)}
                           </div>
 
-                          <div className="text-[10px] text-gray-500 space-y-0.5">
+                          <div className="text-xs text-gray-500 space-y-0.5">
                             <div>Meio: <span className="font-semibold text-gray-700">{fee.paymentMethod}</span> ({fee.installments}x)</div>
-                            {fee.firstDueDate && <div>Vencimento: <span className="font-semibold text-gray-700 font-mono">{new Date(fee.firstDueDate).toLocaleDateString('pt-BR')}</span></div>}
+                            {fee.firstDueDate && <div>Vencimento: <span className="font-semibold text-gray-705 font-mono">{new Date(fee.firstDueDate).toLocaleDateString('pt-BR')}</span></div>}
                           </div>
                         </div>
 
                         <div className="flex flex-col items-end gap-1.5 shrink-0">
-                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 border text-[8px] font-black uppercase rounded tracking-wider ${
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 border text-xs font-black uppercase rounded tracking-wider ${
                             fee.visibleToClient 
                               ? 'bg-emerald-50 text-emerald-700 border-emerald-150' 
                               : 'bg-amber-50 text-amber-700 border-amber-200'
@@ -621,7 +621,7 @@ export default function FinanceiroFluxo() {
                             <span>{fee.visibleToClient ? 'Público' : 'Rascunho'}</span>
                           </span>
 
-                          <span className="text-[9px] font-black uppercase text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-150 font-mono">
+                          <span className="text-xs font-black uppercase text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-150 font-mono">
                             {fee.paymentProvider}
                           </span>
                         </div>
