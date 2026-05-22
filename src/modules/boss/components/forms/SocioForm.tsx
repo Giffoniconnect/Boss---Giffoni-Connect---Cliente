@@ -62,6 +62,8 @@ export const SocioForm: React.FC<SocioFormProps> = ({ data, onChange }) => {
 
     if (name === 'socio_nomeCompleto') {
       newValue = value.toUpperCase();
+    } else if (name === 'socio_profissao' || name === 'socio_nacionalidade' || name === 'socio_cargo') {
+      newValue = value.charAt(0).toUpperCase() + value.slice(1);
     } else if (name === 'socio_cpf') {
       newValue = formatCPF(value);
     } else if (name === 'socio_cep') {

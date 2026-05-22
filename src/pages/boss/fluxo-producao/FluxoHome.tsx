@@ -86,17 +86,26 @@ export default function FluxoHome() {
 
   return (
     <BossLayout>
-      <div className="mb-8">
-        <div className="flex items-center gap-3">
-          <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Fluxo de Produção</h2>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 border border-gray-150 rounded-full text-gray-750 text-xs font-bold uppercase tracking-wider">
-            Arquitetura Pré-Configurada
-          </span>
+      <div id="fluxo-producao-home">
+        <style dangerouslySetInnerHTML={{__html: `
+          #fluxo-producao-home h4 {
+            font-size: 20px !important;
+          }
+          #fluxo-producao-home p {
+            font-size: 15px !important;
+          }
+        `}} />
+        <div className="mb-8">
+          <div className="flex items-center gap-3">
+            <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Fluxo de Production</h2>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 border border-gray-150 rounded-full text-gray-750 text-xs font-bold uppercase tracking-wider">
+              Arquitetura Pré-Configurada
+            </span>
+          </div>
+          <p className="text-sm text-gray-500 mt-1">
+            Gerenciamento técnico unificado de cadastros, documentos, relatórios e protocolo de casos do escritório.
+          </p>
         </div>
-        <p className="text-sm text-gray-500 mt-1">
-          Gerenciamento técnico unificado de cadastros, documentos, relatórios e protocolo de casos do escritório.
-        </p>
-      </div>
 
       {/* THREE CORE CALL TO ACTION CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
@@ -181,6 +190,7 @@ export default function FluxoHome() {
             );
           })}
         </div>
+      </div>
       </div>
     </BossLayout>
   );

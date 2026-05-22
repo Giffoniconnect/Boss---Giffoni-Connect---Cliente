@@ -62,6 +62,8 @@ export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
 
     if (name === 'pf_nomeCompleto') {
       newValue = value.toUpperCase();
+    } else if (name === 'pf_profissao' || name === 'pf_nacionalidade') {
+      newValue = value.charAt(0).toUpperCase() + value.slice(1);
     } else if (name === 'pf_cpf') {
       newValue = formatCPF(value);
     } else if (name === 'pf_cep') {
