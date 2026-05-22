@@ -88,7 +88,7 @@ export default function FluxoHome() {
     <BossLayout>
       <div className="mb-8">
         <div className="flex items-center gap-3">
-          <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Fluxo de Production</h2>
+          <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Fluxo de Produção</h2>
           <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 border border-gray-150 rounded-full text-gray-750 text-xs font-bold uppercase tracking-wider">
             Arquitetura Pré-Configurada
           </span>

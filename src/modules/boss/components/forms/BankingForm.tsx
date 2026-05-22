@@ -28,7 +28,7 @@ export const BankingForm: React.FC<BankingFormProps> = ({ data, onChange, client
   return (
     <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider">BLOCO dadosBancariosOpcional</h3>
+        <h3 className="text-[18px] font-bold text-gray-900 uppercase tracking-wider">BLOCO dados Bancários Opcional</h3>
         <label className="flex items-center gap-2 cursor-pointer">
           <input 
             type="checkbox"
@@ -60,6 +60,25 @@ export const BankingForm: React.FC<BankingFormProps> = ({ data, onChange, client
                 placeholder="Insira a chave PIX"
               />
             </div>
+            
+            <div>
+              <Input 
+                label="Qual Banco pertence esta chave pix?" 
+                name="bancario_bancoPix" 
+                value={data.bancario_bancoPix || ''} 
+                onChange={handleChange} 
+                placeholder="Ex: Nubank, Inter..."
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Input 
+                label="Quem é o titular da conta Pix?" 
+                name="bancario_titularPix" 
+                value={data.bancario_titularPix || ''} 
+                onChange={handleChange} 
+                placeholder="Nome completo do titular"
+              />
+            </div>
           </div>
 
           <Input 
@@ -84,7 +103,7 @@ export const BankingForm: React.FC<BankingFormProps> = ({ data, onChange, client
 
           <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between px-1">
-              <label className="block text-xs font-bold text-gray-500">Titular da Conta</label>
+              <label className="block text-[15px] font-bold text-gray-500">Titular da Conta</label>
               <label className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 cursor-pointer">
                 <input 
                   type="checkbox" 
@@ -113,7 +132,7 @@ export const BankingForm: React.FC<BankingFormProps> = ({ data, onChange, client
 
 const Input = ({ label, ...props }: any) => (
   <div>
-    <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">{label}</label>
+    <label className="block text-[15px] font-bold text-gray-500 mb-1 ml-1">{label}</label>
     <input
       {...props}
       className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-emerald-100 focus:bg-white outline-none transition-all placeholder:text-gray-300"
@@ -123,7 +142,7 @@ const Input = ({ label, ...props }: any) => (
 
 const Select = ({ label, options, ...props }: any) => (
   <div>
-    <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">{label}</label>
+    <label className="block text-[15px] font-bold text-gray-500 mb-1 ml-1">{label}</label>
     <select
       {...props}
       className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-emerald-100 focus:bg-white outline-none transition-all"

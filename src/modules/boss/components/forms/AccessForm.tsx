@@ -15,7 +15,7 @@ export const AccessForm: React.FC<AccessFormProps> = ({ data, onChange }) => {
 
   return (
     <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-      <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-6">BLOCO acessoSistema</h3>
+      <h3 className="text-[18px] font-bold text-gray-900 uppercase tracking-wider mb-6">BLOCO ACESSO SISTEMA PJ</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Input 
           label="E-mail de Login" 
@@ -69,7 +69,7 @@ export const AccessForm: React.FC<AccessFormProps> = ({ data, onChange }) => {
 
 const Input = ({ label, ...props }: any) => (
   <div>
-    <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">{label}</label>
+    <label className="block text-[15px] font-bold text-gray-500 mb-1 ml-1">{label}</label>
     <input
       {...props}
       className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-gray-100 focus:bg-white outline-none transition-all placeholder:text-gray-300"
@@ -79,7 +79,7 @@ const Input = ({ label, ...props }: any) => (
 
 const Select = ({ label, options, ...props }: any) => (
   <div>
-    <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">{label}</label>
+    <label className="block text-[15px] font-bold text-gray-500 mb-1 ml-1">{label}</label>
     <select
       {...props}
       className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-gray-100 focus:bg-white outline-none transition-all"

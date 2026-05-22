@@ -63,24 +63,23 @@ export const PJForm: React.FC<PJFormProps> = ({ data, onChange }) => {
   return (
     <div className="space-y-6">
       <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-        <h3 className="text-sm font-bold text-purple-600 uppercase tracking-wider mb-6">BLOCO pjDadosEmpresa</h3>
+        <h3 className="text-[18px] font-bold text-purple-600 uppercase tracking-wider mb-6">BLOCO pjDadosEmpresa</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input label="CNPJ (Smart)" name="pj_cnpj" value={data.pj_cnpj || ''} onChange={handleChange} onBlur={handleCNPJBlur} placeholder="00.000.000/0000-00" required />
           <Input label="Razão Social" name="pj_razaoSocial" value={data.pj_razaoSocial || ''} onChange={handleChange} className="uppercase" required />
           <Input label="Nome Fantasia" name="pj_nomeFantasia" value={data.pj_nomeFantasia || ''} onChange={handleChange} className="uppercase" />
-          <Input label="Inscrição Estadual" name="pj_inscricaoEstadual" value={data.pj_inscricaoEstadual || ''} onChange={handleChange} />
         </div>
       </div>
 
       <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-        <h3 className="text-sm font-bold text-purple-600 uppercase tracking-wider mb-6">BLOCO pjContatoEmpresa</h3>
+        <h3 className="text-[18px] font-bold text-purple-600 uppercase tracking-wider mb-6">BLOCO pjContatoEmpresa</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input label="E-mail da Empresa" name="pj_emailEmpresa" type="email" value={data.pj_emailEmpresa || ''} onChange={handleChange} />
           <Input label="Telefone da Empresa" name="pj_telefoneEmpresa" value={data.pj_telefoneEmpresa || ''} onChange={handleChange} placeholder="(00) 9 0000-0000" />
           
           <div className="flex flex-col gap-1 md:col-span-2">
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-bold text-gray-500 ml-1">WhatsApp Empresa</label>
+              <label className="block text-[15px] font-bold text-gray-500 ml-1">WhatsApp Empresa</label>
               <label className="flex items-center gap-1.5 text-[10px] font-bold text-purple-600 cursor-pointer">
                 <input 
                   type="checkbox" 
@@ -105,7 +104,7 @@ export const PJForm: React.FC<PJFormProps> = ({ data, onChange }) => {
       </div>
 
       <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-        <h3 className="text-sm font-bold text-purple-600 uppercase tracking-wider mb-6">BLOCO pjEnderecoEmpresa</h3>
+        <h3 className="text-[18px] font-bold text-purple-600 uppercase tracking-wider mb-6">BLOCO pjEnderecoEmpresa</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Input label="CEP (Smart)" name="pj_cepEmpresa" value={data.pj_cepEmpresa || ''} onChange={handleChange} onBlur={handleCEPBlur} placeholder="00000-000" />
           <div className="md:col-span-2">
@@ -120,7 +119,7 @@ export const PJForm: React.FC<PJFormProps> = ({ data, onChange }) => {
       </div>
 
       <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-        <h3 className="text-sm font-bold text-purple-600 uppercase tracking-wider mb-6">BLOCO pjRedesSociaisEmpresa</h3>
+        <h3 className="text-[18px] font-bold text-purple-600 uppercase tracking-wider mb-6">BLOCO pjRedesSociaisEmpresa</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Input label="Instagram" name="pj_instagramEmpresa" value={data.pj_instagramEmpresa || ''} onChange={handleChange} />
           <Input label="Facebook" name="pj_facebookEmpresa" value={data.pj_facebookEmpresa || ''} onChange={handleChange} />
@@ -133,7 +132,7 @@ export const PJForm: React.FC<PJFormProps> = ({ data, onChange }) => {
 
 const Input = ({ label, ...props }: any) => (
   <div>
-    <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">{label}</label>
+    <label className="block text-[15px] font-bold text-gray-500 mb-1 ml-1">{label}</label>
     <input
       {...props}
       className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-100 focus:bg-white outline-none transition-all placeholder:text-gray-300"

@@ -116,6 +116,8 @@ export default function CadastroFluxo() {
     bancario_possuiDadosBancarios: false,
     bancario_tipoChavePix: '',
     bancario_chavePix: '',
+    bancario_bancoPix: '',
+    bancario_titularPix: '',
     bancario_titularEhCliente: false,
     bancario_titularConta: '',
     bancario_banco: '',
@@ -718,7 +720,7 @@ export default function CadastroFluxo() {
                   <Icon size={18} />
                 </div>
                 <div>
-                  <h4 className="font-bold text-xs tracking-tight uppercase font-sans">{p.label}</h4>
+                  <h4 className="font-bold text-[18px] tracking-tight uppercase font-sans">{p.label}</h4>
                   <p className={`text-[10px] leading-relaxed mt-1 ${isSelected ? 'text-gray-300' : 'text-gray-400'}`}>
                     {p.desc}
                   </p>

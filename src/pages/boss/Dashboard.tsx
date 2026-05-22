@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { BossLayout } from '../../components/Layout';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { 
@@ -244,7 +245,23 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-8 animate-fade-in" id="boss-dashboard">
+    <BossLayout>
+      <div className="space-y-8 animate-fade-in" id="boss-dashboard">
+        <style dangerouslySetInnerHTML={{__html: `
+          #boss-dashboard span {
+            font-size: 20px !important;
+            display: inline-block;
+            max-width: 100%;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            word-break: break-word;
+            line-height: 1.2 !important;
+            letter-spacing: -0.025em !important;
+          }
+          #boss-dashboard p {
+            font-size: 15px !important;
+          }
+        `}} />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold text-gray-950 tracking-tight">Painel de Métricas Corporativas</h1>
@@ -515,5 +532,6 @@ export default function Dashboard() {
       </div>
 
     </div>
+    </BossLayout>
   );
 }

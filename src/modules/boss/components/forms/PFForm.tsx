@@ -99,7 +99,7 @@ export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
   return (
     <div className="space-y-6">
       <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-        <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider mb-6">BLOCO pfDadosPessoais</h3>
+        <h3 className="text-[18px] font-bold text-blue-600 uppercase tracking-wider mb-6">BLOCO pfDadosPessoais</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input label="Nome Completo" name="pf_nomeCompleto" value={data.pf_nomeCompleto || ''} onChange={handleChange} className="uppercase" required />
           <AutocompleteInput 
@@ -124,7 +124,7 @@ export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
           
           <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between">
-              <label className="block text-xs font-bold text-gray-500 ml-1">RG</label>
+              <label className="block text-[15px] font-bold text-gray-500 ml-1">RG</label>
               <label className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 cursor-pointer">
                 <input 
                   type="checkbox" 
@@ -149,14 +149,14 @@ export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
       </div>
 
       <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-        <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider mb-6">BLOCO pfContato</h3>
+        <h3 className="text-[18px] font-bold text-blue-600 uppercase tracking-wider mb-6">BLOCO pfContato</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Input label="E-mail" name="pf_email" type="email" value={data.pf_email || ''} onChange={handleChange} required />
           <Input label="Telefone" name="pf_telefone" value={data.pf_telefone || ''} onChange={handleChange} placeholder="(00) 9 0000-0000" />
           
           <div className="flex flex-col gap-1 md:col-span-2">
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-bold text-gray-500 ml-1">WhatsApp</label>
+              <label className="block text-[15px] font-bold text-gray-500 ml-1">WhatsApp</label>
               <label className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 cursor-pointer">
                 <input 
                   type="checkbox" 
@@ -181,7 +181,7 @@ export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
       </div>
 
       <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-        <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider mb-6">BLOCO pfEndereco</h3>
+        <h3 className="text-[18px] font-bold text-blue-600 uppercase tracking-wider mb-6">BLOCO pfEndereco</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Input label="CEP (Smart)" name="pf_cep" value={data.pf_cep || ''} onChange={handleChange} onBlur={handleCEPBlur} placeholder="00000-000" />
           <div className="md:col-span-2">
@@ -196,7 +196,7 @@ export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
       </div>
 
       <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
-        <h3 className="text-sm font-bold text-blue-600 uppercase tracking-wider mb-6">BLOCO pfRedesSociais</h3>
+        <h3 className="text-[18px] font-bold text-blue-600 uppercase tracking-wider mb-6">BLOCO pfRedesSociais</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Input label="Instagram" name="pf_instagram" value={data.pf_instagram || ''} onChange={handleChange} />
           <Input label="Facebook" name="pf_facebook" value={data.pf_facebook || ''} onChange={handleChange} />
@@ -209,7 +209,7 @@ export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
 
 const Input = ({ label, ...props }: any) => (
   <div>
-    <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">{label}</label>
+    <label className="block text-[15px] font-bold text-gray-500 mb-1 ml-1">{label}</label>
     <input
       {...props}
       className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-100 focus:bg-white outline-none transition-all placeholder:text-gray-300"
@@ -247,7 +247,7 @@ const AutocompleteInput = ({ label, suggestions, value, onChange, name, ...props
 
   return (
     <div className="relative">
-      <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">{label}</label>
+      <label className="block text-[15px] font-bold text-gray-500 mb-1 ml-1">{label}</label>
       <div className="relative">
         {suggestion && (
           <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none select-none px-0.5 py-px">
@@ -270,7 +270,7 @@ const AutocompleteInput = ({ label, suggestions, value, onChange, name, ...props
 
 const Select = ({ label, options, ...props }: any) => (
   <div>
-    <label className="block text-xs font-bold text-gray-500 mb-1 ml-1">{label}</label>
+    <label className="block text-[15px] font-bold text-gray-500 mb-1 ml-1">{label}</label>
     <select
       {...props}
       className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-100 focus:bg-white outline-none transition-all"
