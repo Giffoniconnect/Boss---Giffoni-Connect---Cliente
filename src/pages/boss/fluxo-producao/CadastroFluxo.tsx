@@ -142,6 +142,8 @@ export default function CadastroFluxo() {
   const [filteredCases, setFilteredCases] = useState<any[]>([]);
   const [casesQuery, setCasesQuery] = useState('');
   const [loadingCases, setLoadingCases] = useState(false);
+  const [incompleteClients, setIncompleteClients] = useState<any[]>([]);
+  const [filteredIncompleteClients, setFilteredIncompleteClients] = useState<any[]>([]);
 
   // Interactive draft warning Modal/Overlay State
   const [missingModalFields, setMissingModalFields] = useState<string[]>([]);
@@ -286,8 +288,31 @@ export default function CadastroFluxo() {
         return c.status === 'rascunho' || ['em_producao', 'com_pendencias', 'pausado'].includes(c.productionStatus);
       });
 
+      // Load clients for incomplete draft detection
+      const clientsSnap = await getDocs(collection(db, 'clients'));
+      const incomplete: any[] = [];
+      clientsSnap.forEach((docSnap) => {
+        const data = docSnap.data();
+        const missingFields = data.missingFields || [];
+        const isMinIncomplete = 
+          data.cadastroIncompleto === true ||
+          data.portalStatus === 'nao_criado' ||
+          (data.active === false && missingFields.length > 0);
+
+        if (isMinIncomplete) {
+          incomplete.push({
+            id: docSnap.id,
+            clientId: data.clientId || docSnap.id,
+            type: data.type || 'PF',
+            ...data
+          });
+        }
+      });
+
       setCasesList(filtered);
       setFilteredCases(filtered);
+      setIncompleteClients(incomplete);
+      setFilteredIncompleteClients(incomplete);
     } catch (err) {
       console.error(err);
       setError('Erro ao carregar lista de fluxos ativos.');
@@ -301,9 +326,11 @@ export default function CadastroFluxo() {
     setCasesQuery(val);
     if (!val.trim()) {
       setFilteredCases(casesList);
+      setFilteredIncompleteClients(incompleteClients);
       return;
     }
     const lower = val.toLowerCase();
+    
     const filtered = casesList.filter(c => {
       return (
         c.clientName.toLowerCase().includes(lower) ||
@@ -313,6 +340,25 @@ export default function CadastroFluxo() {
       );
     });
     setFilteredCases(filtered);
+
+    const filteredIncomplete = incompleteClients.filter(c => {
+      const pfData = c.pfData || c.pfDadosPessoais || {};
+      const pjData = c.pjData || c.pjDadosEmpresa || {};
+      const name = c.type === 'PF' ? (pfData.pf_nomeCompleto || '') : (pjData.pj_razaoSocial || '');
+      const docVal = c.type === 'PF' ? (pfData.pf_cpf || '') : (pjData.pj_cnpj || '');
+      const email = c.type === 'PF' ? (pfData.pf_email || '') : (pjData.pj_emailEmpresa || '');
+      const phone = c.type === 'PF' ? (pfData.pf_telefone || '') : (pjData.pj_telefoneEmpresa || '');
+      const slugVal = c.slug || '';
+
+      return (
+        name.toLowerCase().includes(lower) ||
+        docVal.toLowerCase().includes(lower) ||
+        email.toLowerCase().includes(lower) ||
+        phone.toLowerCase().includes(lower) ||
+        slugVal.toLowerCase().includes(lower)
+      );
+    });
+    setFilteredIncompleteClients(filteredIncomplete);
   };
 
   // Missing Fields calculation
@@ -822,34 +868,42 @@ export default function CadastroFluxo() {
                 <div className="flex gap-3 items-start">
                   <ShieldAlert size={18} className="text-amber-600 shrink-0 mt-0.5" />
                   <div className="space-y-1">
-                    <h5 className="text-xs font-black uppercase tracking-wider font-sans">Alerta Técnico: Documento já cadastrado!</h5>
+                    <h5 className="text-xs font-black uppercase tracking-wider font-sans text-amber-900">Cliente já cadastrado</h5>
                     <p className="text-xs leading-relaxed font-semibold">
-                      O CPF/CNPJ digitado já existe no banco de dados. Caso deseje criar um processo vinculado, use o caminho &quot;Novo Caso&quot;.
+                      Este CPF/CNPJ já existe na base. Você pode criar um novo caso para este cliente ou editar o cadastro existente.
                     </p>
-                    <div className="pt-3 font-mono text-[10px] space-y-0.5 text-amber-900">
-                      <div><span className="font-bold">Cliente:</span> {
+                    <div className="pt-3 font-mono text-[10.5px] space-y-1 text-amber-900">
+                      <div><span className="font-bold text-amber-950">Cliente:</span> {
                         foundDuplicateClient.type === 'PF' 
                           ? (foundDuplicateClient.pfDadosPessoais?.pf_nomeCompleto || foundDuplicateClient.pfData?.pf_nomeCompleto)
                           : (foundDuplicateClient.pjDadosEmpresa?.pj_razaoSocial || foundDuplicateClient.pjData?.pj_razaoSocial)
                       }</div>
-                      <div><span className="font-bold">ID do Sistema:</span> {foundDuplicateClient.clientId}</div>
-                      <div><span className="font-bold">E-mail:</span> {
+                      <div><span className="font-bold text-amber-950">E-mail:</span> {
                         foundDuplicateClient.type === 'PF'
                           ? (foundDuplicateClient.pfDadosPessoais?.pf_email || foundDuplicateClient.pfData?.pf_email)
                           : (foundDuplicateClient.pjDadosEmpresa?.pj_emailEmpresa || foundDuplicateClient.pjData?.pj_emailEmpresa)
                       }</div>
-                      <div><span className="font-bold">Slug Seguro:</span> {foundDuplicateClient.slug}</div>
+                      <div><span className="font-bold text-amber-950">Endereço de Acesso:</span> /{foundDuplicateClient.slug}</div>
                     </div>
                   </div>
                 </div>
 
-                <div className="pt-2 flex justify-end">
+                <div className="pt-2 flex flex-wrap gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => handleLoadClientForEditing(foundDuplicateClient)}
+                    className="inline-flex items-center gap-1.5 bg-white border border-amber-250 text-amber-900 hover:bg-amber-100/50 font-bold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer"
+                  >
+                    <Edit2 size={13} />
+                    <span>Editar cadastro existente</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/tipo-producao?clientId=${foundDuplicateClient.clientId}`)}
-                    className="inline-flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm"
+                    className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer"
                   >
-                    <span>Criar novo caso para esse cliente</span>
+                    <span>Criar novo caso</span>
                     <ArrowRight size={13} />
                   </button>
                 </div>
@@ -985,61 +1039,128 @@ export default function CadastroFluxo() {
             )}
 
             {/* DETAILED RESUME CARD OF THE SELECTED CLIENT */}
-            {selectedClientForCase && (
-              <div className="bg-gray-50 border border-gray-150 rounded-2xl p-5 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
-                <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-                  <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono">Resumo Cadastral do Cliente Selecionado</h4>
-                  <button
-                    type="button"
-                    onClick={() => handleLoadClientForEditing(selectedClientForCase)}
-                    className="inline-flex items-center gap-1 text-[10px] font-black uppercase bg-white border border-gray-200 hover:border-gray-400 text-gray-700 px-3 py-1.5 rounded-lg transition-all cursor-pointer"
-                  >
-                    <Edit2 size={10} />
-                    <span>Editar cadastro antes de continuar</span>
-                  </button>
-                </div>
+            {selectedClientForCase && (() => {
+              const scPF = selectedClientForCase.pfDadosPessoais || selectedClientForCase.pfData || {};
+              const scPJ = selectedClientForCase.pjDadosEmpresa || selectedClientForCase.pjData || {};
+              const scName = selectedClientForCase.type === 'PF' 
+                ? (scPF.pf_nomeCompleto || 'Sem Nome') 
+                : (scPJ.pj_razaoSocial || 'Sem Razão Social');
+              const scDoc = selectedClientForCase.type === 'PF' 
+                ? (scPF.pf_cpf || 'Não Informado') 
+                : (scPJ.pj_cnpj || 'Não Informado');
+              const scEmail = selectedClientForCase.type === 'PF' 
+                ? (scPF.pf_email || 'Não Informado') 
+                : (scPJ.pj_emailEmpresa || 'Não Informado');
+              const scPhone = selectedClientForCase.type === 'PF' 
+                ? (scPF.pf_telefone || 'Não Informado') 
+                : (scPJ.pj_telefoneEmpresa || 'Não Informado');
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <span className="text-[10px] font-bold text-gray-400 block">Tipo de Inquilino:</span>
-                    <span className="font-extrabold text-gray-800 uppercase font-mono">{selectedClientForCase.type}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-gray-400 block">Status de Acesso ao Portal:</span>
-                    <span className={`inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider mt-0.5 ${
-                      selectedClientForCase.portalStatus === 'criado' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                    }`}>
-                      {selectedClientForCase.portalStatus || 'nao_criado'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-gray-400 block">Status de Ativação Geral:</span>
-                    <span className={`inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider mt-0.5 ${
-                      selectedClientForCase.active !== false ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-                    }`}>
-                      {selectedClientForCase.active !== false ? 'Ativo' : 'Suspenso / Inativo'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-gray-400 block">Slug do Portal:</span>
-                    <span className="font-bold text-indigo-650 font-mono block">/{selectedClientForCase.slug || 'ausente'}</span>
-                  </div>
-                </div>
-
-                {/* Warning message if client has no portal */}
-                {(!selectedClientForCase.portalStatus || selectedClientForCase.portalStatus === 'nao_criado') && (
-                  <div className="p-4 bg-amber-50/60 border border-amber-100 rounded-xl text-amber-900 text-xs flex gap-3 items-start">
-                    <Info size={16} className="text-amber-650 shrink-0 mt-0.5" />
+              return (
+                <div id="selected-client-detailed-card" className="bg-white border border-gray-150 rounded-2xl p-6 shadow-2xs space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-3">
                     <div>
-                      <p className="font-bold leading-normal">Cliente ainda não possui Portal do Cliente criado.</p>
-                      <p className="text-[10px] text-amber-800 mt-0.5 leading-normal">
-                        É possível criar o caso, mas o cliente não terá acesso externo até a criação do portal.
-                      </p>
+                      <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono">Ficha Cadastral do Cliente Selecionado</h4>
                     </div>
                   </div>
-                )}
-              </div>
-            )}
+
+                  {/* 3 BLOCKS GRID */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    
+                    {/* Bloco 1: Identificação */}
+                    <div className="space-y-3 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 block border-b border-gray-100 pb-1 font-mono">1. Identificação</span>
+                      <div className="space-y-2">
+                        <div>
+                          <span className="text-[10px] text-gray-400 block font-semibold mb-0.5">Nome / Razão Social:</span>
+                          <span className="text-xs font-bold text-gray-900 block leading-tight">{scName}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-gray-400 block font-semibold mb-0.5">Tipo de Cliente:</span>
+                          <span className="text-xs font-bold text-gray-800 uppercase font-mono">{selectedClientForCase.type === 'PF' ? 'Pessoa Física (PF)' : 'Pessoa Jurídica (PJ)'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bloco 2: Documento e Contato */}
+                    <div className="space-y-3 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 block border-b border-gray-100 pb-1 font-mono">2. Documento e Contato</span>
+                      <div className="space-y-2">
+                        <div>
+                          <span className="text-[10px] text-gray-400 block font-semibold mb-0.5">{selectedClientForCase.type === 'PF' ? 'CPF:' : 'CNPJ:'}</span>
+                          <span className="text-xs font-bold text-gray-800 font-mono">{scDoc}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-gray-400 block font-semibold mb-0.5">E-mail:</span>
+                          <span className="text-xs font-bold text-gray-800 truncate block">{scEmail}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-gray-400 block font-semibold mb-0.5">Telefone:</span>
+                          <span className="text-xs font-bold text-gray-850 font-mono">{scPhone}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bloco 3: Portal e Acesso */}
+                    <div className="space-y-3 bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 block border-b border-gray-100 pb-1 font-mono">3. Portal e Acesso</span>
+                      <div className="space-y-2">
+                        <div>
+                          <span className="text-[10px] text-gray-400 block font-semibold mb-0.5">Acesso ao Portal:</span>
+                          <span className={`inline-flex px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider mt-1 ${
+                            selectedClientForCase.portalStatus === 'criado' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100'
+                          }`}>
+                            {selectedClientForCase.portalStatus === 'criado' ? 'Criado / Ativo' : 'Não Criado'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-gray-400 block font-semibold mb-0.5">Status de Ativação Geral:</span>
+                          <span className={`inline-flex px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider mt-1 ${
+                            selectedClientForCase.active !== false ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-700 border border-rose-100'
+                          }`}>
+                            {selectedClientForCase.active !== false ? 'Regular' : 'Inativo / Bloqueado'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-gray-400 block font-semibold mb-0.5">Slug do Portal:</span>
+                          <span className="text-xs font-bold text-indigo-650 font-mono block">/{selectedClientForCase.slug || 'ausente'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Bloco 4: Ações e Rodapé */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-gray-100">
+                    <div className="text-[9.5px] text-gray-400 font-mono">
+                      <span>id do sistema: </span>
+                      <span className="text-gray-500 font-bold">{selectedClientForCase.clientId}</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleLoadClientForEditing(selectedClientForCase)}
+                      className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase bg-gray-50 border border-gray-200 hover:border-gray-400 hover:bg-gray-100 text-gray-700 px-4 py-2.5 rounded-xl transition-all cursor-pointer"
+                    >
+                      <Edit2 size={11} />
+                      <span>Editar cadastro antes de continuar</span>
+                    </button>
+                  </div>
+
+                  {/* Warning message if client has no portal */}
+                  {(!selectedClientForCase.portalStatus || selectedClientForCase.portalStatus === 'nao_criado') && (
+                    <div className="p-4 bg-amber-50/60 border border-amber-100 rounded-xl text-amber-900 text-xs flex gap-3 items-start animate-fadeIn">
+                      <Info size={16} className="text-amber-650 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold leading-normal">Cliente ainda não possui Portal do Cliente criado.</p>
+                        <p className="text-[10px] text-amber-800 mt-0.5 leading-normal">
+                          É possível criar o caso, mas o cliente não terá acesso externo até a criação do portal.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* ACTION FOOTER */}
             <div className="flex sm:justify-end border-t border-gray-150 pt-6">
@@ -1063,7 +1184,7 @@ export default function CadastroFluxo() {
               <div>
                 <h4 className="text-xs font-black uppercase text-gray-700 tracking-wider font-sans">Retomar Fluxos Incompletos / Ativos</h4>
                 <p className="text-[10px] text-gray-400 leading-relaxed mt-1">
-                  Enencontre rascunhos de produção ou procedimentos em andamento para continuar seu preenchimento fático.
+                  Encontre rascunhos de produção ou procedimentos em andamento para continuar seu preenchimento fático.
                 </p>
               </div>
 
@@ -1083,44 +1204,136 @@ export default function CadastroFluxo() {
             {loadingCases ? (
               <div className="p-12 text-center text-gray-400 flex flex-col items-center justify-center gap-3">
                 <Loader2 className="animate-spin text-gray-500" size={24} />
-                <span className="text-xs font-bold font-mono">Indexando casos ativos...</span>
+                <span className="text-xs font-bold font-mono">Indexando fluxos e cadastros...</span>
               </div>
-            ) : filteredCases.length > 0 ? (
-              <div className="border border-gray-150 rounded-2xl overflow-hidden bg-white divide-y divide-gray-100 shadow-3xs">
-                {filteredCases.map((c) => (
-                  <div
-                    key={c.id}
-                    className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 hover:bg-gray-50/50 transition-all"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide bg-blue-50 border border-blue-100 text-blue-700">
-                          {c.status || 'Rascunho'}
-                        </span>
-                        <span className="text-[10px] text-gray-400 font-mono">[{c.id}]</span>
-                      </div>
-                      <h4 className="text-xs font-bold text-gray-900 tracking-tight font-sans">{c.clientName}</h4>
-                      <div className="text-[10.5px] text-gray-400 leading-relaxed">
-                        Procedimento: <span className="font-bold text-gray-600">{c.actionCategory || c.actionType || 'Geral'}</span> • Etapa atual: <span className="font-bold text-indigo-650 uppercase tracking-wide font-mono text-[9px]">{c.productionStage || 'Início'}</span>
-                      </div>
-                    </div>
-                    
-                    <button
-                      type="button"
-                      onClick={() => handleContinueCase(c)}
-                      className="inline-flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2.5 rounded-xl font-bold transition-all text-xs cursor-pointer self-start sm:self-center"
-                    >
-                      <span>Retomar de Onde Parou</span>
-                      <ArrowRight size={13} />
-                    </button>
-                  </div>
-                ))}
+            ) : (filteredIncompleteClients.length === 0 && filteredCases.length === 0) ? (
+              <div className="p-12 border border-dashed border-gray-250 rounded-2xl text-center text-gray-455 bg-gray-50/20">
+                <Info size={24} className="mx-auto mb-2 text-gray-300" />
+                <p className="text-xs font-bold text-gray-500">Nenhum cadastro incompleto ou fluxo em andamento encontrado.</p>
+                <p className="text-[10px] text-gray-400 leading-relaxed max-w-sm mx-auto mt-1">Todos os processos encontram-se concluídos ou não há casos registrados sob esta consulta fática.</p>
               </div>
             ) : (
-              <div className="p-12 border border-dashed border-gray-250 rounded-2xl text-center text-gray-450 bg-gray-50/20">
-                <Info size={24} className="mx-auto mb-2 text-gray-300" />
-                <p className="text-xs font-bold text-gray-500">Nenhum fluxo em rascunho correspondente.</p>
-                <p className="text-[10px] text-gray-400 leading-relaxed max-w-sm mx-auto mt-1">Todos os processos encontram-se concluídos ou não há casos registrados sob esta consulta fática.</p>
+              <div className="space-y-8">
+                {/* 1. Cadastros de Clientes Incompletos */}
+                {filteredIncompleteClients.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono">Cadastros de Clientes Incompletos</span>
+                      <span className="bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono">
+                        {filteredIncompleteClients.length}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {filteredIncompleteClients.map((client) => {
+                        const pfDoc = client.pfData || client.pfDadosPessoais || {};
+                        const pjDoc = client.pjData || client.pjDadosEmpresa || {};
+                        const name = client.type === 'PF' 
+                          ? (pfDoc.pf_nomeCompleto || 'Sem nome') 
+                          : (pjDoc.pj_razaoSocial || 'Sem razão social');
+                        const docVal = client.type === 'PF' ? pfDoc.pf_cpf : pjDoc.pj_cnpj;
+                        const email = client.type === 'PF' ? pfDoc.pf_email : pjDoc.pj_emailEmpresa;
+                        const missing = client.missingFields || [];
+
+                        return (
+                          <div
+                            key={client.clientId}
+                            className="p-5 border border-gray-150 rounded-2xl bg-white hover:border-gray-200 transition-all flex flex-col justify-between gap-4 shadow-3xs"
+                          >
+                            <div className="space-y-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <h4 className="text-xs font-bold text-gray-955 tracking-tight font-sans line-clamp-1">{name}</h4>
+                                <span className="inline-flex text-[8.5px] font-black uppercase tracking-wider bg-amber-50 border border-amber-100 text-amber-700 px-1.5 py-0.5 rounded shrink-0">
+                                  Cadastro Incompleto
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-2 text-[11px] text-gray-500">
+                                <div>
+                                  <span className="text-[10px] text-gray-400 block font-semibold">Tipo:</span>
+                                  <span className="font-bold text-gray-800">{client.type === 'PF' ? 'Pessoa Física (PF)' : 'Pessoa Jurídica (PJ)'}</span>
+                                </div>
+                                {docVal && (
+                                  <div>
+                                    <span className="text-[10px] text-gray-400 block font-semibold">{client.type === 'PF' ? 'CPF:' : 'CNPJ:'}</span>
+                                    <span className="font-bold text-gray-800 font-mono text-[10.5px]">{docVal}</span>
+                                  </div>
+                                )}
+                                {email && (
+                                  <div className="sm:col-span-2">
+                                    <span className="text-[10px] text-gray-400 block font-semibold">E-mail:</span>
+                                    <span className="font-bold text-gray-800 truncate block">{email}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {missing.length > 0 && (
+                                <div className="pt-2.5 border-t border-gray-100">
+                                  <span className="text-[9px] text-gray-400 font-black block uppercase tracking-wider mb-1 font-mono">Campos Faltantes:</span>
+                                  <span className="text-[10px] text-amber-750 font-semibold leading-normal">
+                                    {missing.join(', ')}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleLoadClientForEditing(client)}
+                              className="w-full inline-flex items-center justify-center gap-1.5 bg-gray-950 hover:bg-black text-white px-4 py-2.5 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-3xs"
+                            >
+                              <span>Continuar cadastro</span>
+                              <ArrowRight size={13} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Fluxos de Casos em Andamento */}
+                {filteredCases.length > 0 && (
+                  <div className="space-y-4 pt-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono">Fluxos de Casos em Andamento</span>
+                      <span className="bg-blue-100 text-blue-900 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                        {filteredCases.length}
+                      </span>
+                    </div>
+
+                    <div className="border border-gray-150 rounded-2xl overflow-hidden bg-white divide-y divide-gray-100 shadow-3xs">
+                      {filteredCases.map((c) => (
+                        <div
+                          key={c.id}
+                          className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 hover:bg-gray-50/50 transition-all"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wide bg-blue-50 border border-blue-100 text-blue-700">
+                                {c.status || 'Rascunho'}
+                              </span>
+                              <span className="text-[10px] text-gray-400 font-mono">[{c.id}]</span>
+                            </div>
+                            <h4 className="text-xs font-bold text-gray-900 tracking-tight font-sans">{c.clientName}</h4>
+                            <div className="text-[10.5px] text-gray-400 leading-relaxed">
+                              Procedimento: <span className="font-bold text-gray-600">{c.actionCategory || c.actionType || 'Geral'}</span> • Etapa atual: <span className="font-bold text-indigo-650 uppercase tracking-wide font-mono text-[9px]">{c.productionStage || 'Início'}</span>
+                            </div>
+                          </div>
+                          
+                          <button
+                            type="button"
+                            onClick={() => handleContinueCase(c)}
+                            className="inline-flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2.5 rounded-xl font-bold transition-all text-xs cursor-pointer self-start sm:self-center"
+                          >
+                            <span>Retomar de Onde Parou</span>
+                            <ArrowRight size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
