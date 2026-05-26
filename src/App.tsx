@@ -10,6 +10,7 @@ import BossConfiguracoes from './pages/boss/Configuracoes';
 import BossSetores from './pages/boss/Setores';
 import CentralControle from './pages/boss/CentralControle';
 import BossPortalClientePreview from './pages/boss/PortalClientePreview';
+import BossEditorPainelCliente from './pages/boss/EditorPainelCliente';
 
 // Modular Production Flow
 import FluxoHome from './pages/boss/fluxo-producao/FluxoHome';
@@ -219,6 +220,14 @@ export default function App() {
               element={
                 <ProtectedRoute role="boss_admin">
                   <CentralControle />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/boss-giffoni-clientes/editor-painel-cliente/:clientId" 
+              element={
+                <ProtectedRoute role="boss_admin">
+                  <BossEditorPainelCliente />
                 </ProtectedRoute>
               } 
             />

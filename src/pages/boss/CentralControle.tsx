@@ -1419,6 +1419,12 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                               Editar
                             </button>
                             <button
+                              onClick={() => navigate(`/boss-giffoni-clientes/editor-painel-cliente/${c.id}`)}
+                              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-[15px] text-white rounded-xl font-extrabold cursor-pointer transition-colors shadow-sm shadow-indigo-100"
+                            >
+                              Editar Painel do Cliente
+                            </button>
+                            <button
                               onClick={() => togglePortalSuspension(c, c.active === false)}
                               className={`px-3.5 py-2 rounded-xl text-[15px] font-extrabold uppercase tracking-wide cursor-pointer transition-all ${
                                 c.active !== false 
