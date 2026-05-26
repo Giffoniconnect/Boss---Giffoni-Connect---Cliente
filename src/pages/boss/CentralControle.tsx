@@ -16,7 +16,7 @@ import {
   Sliders, Search, User, Users, Briefcase, DollarSign, Compass, 
   Activity, ShieldAlert, AlertTriangle, CheckCircle, Copy, ExternalLink, 
   RefreshCw, Plus, Calendar, MessageSquare, Clock, FileText, Check, XCircle,
-  Trash2
+  Trash2, Highlighter, Eraser
 } from 'lucide-react';
 
 type TabId = 'clientes' | 'casos' | 'slugs' | 'usuarios' | 'financeiro' | 'solicitacoes' | 'agenda' | 'edrp' | 'integridade';
@@ -61,6 +61,58 @@ export default function CentralControle() {
   const [diagResults, setDiagResults] = useState<any[]>([]);
   const [diagStatusGeral, setDiagStatusGeral] = useState<'Íntegro' | 'Atenção' | 'Erro crítico' | null>(null);
   const [diagRun, setDiagRun] = useState(false);
+
+  // Modo Sublinhador (Highlighter Mode)
+  const [highlighterActive, setHighlighterActive] = useState(false);
+  const [selectedDetailBlock, setSelectedDetailBlock] = useState<any>(null);
+
+  const handleMouseUp = () => {
+    if (!highlighterActive) return;
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+    
+    try {
+      const range = selection.getRangeAt(0);
+
+      // Evitar quebrar inputs, botões, textareas, links e formulários
+      let parent: Node | null = range.commonAncestorContainer;
+      if (parent.nodeType === Node.TEXT_NODE) {
+        parent = parent.parentNode;
+      }
+      
+      if (parent instanceof HTMLElement) {
+        const isInteractive = parent.closest('button, input, textarea, select, a, [role="button"], [class*="cursor-pointer"]');
+        if (isInteractive) {
+          selection.removeAllRanges();
+          return;
+        }
+      }
+
+      // Criar o wrapper span com a classe de marcação visual
+      const span = document.createElement('span');
+      span.className = 'highlight-marker bg-yellow-100 border-b-2 border-yellow-500 rounded-sm font-semibold select-text';
+      
+      range.surroundContents(span);
+    } catch (e) {
+      console.warn('Seleção cruza múltiplos elementos complexos, impossível sublinhar diretamente:', e);
+    }
+    
+    selection.removeAllRanges();
+  };
+
+  const handleClearHighlights = () => {
+    const highlights = document.querySelectorAll('.highlight-marker');
+    highlights.forEach(el => {
+      const parent = el.parentNode;
+      if (parent) {
+        while (el.firstChild) {
+          parent.insertBefore(el.firstChild, el);
+        }
+        parent.removeChild(el);
+      }
+    });
+    alert('Todas as marcações temporárias do painel foram limpas!');
+  };
 
   const loadAllCollections = async () => {
     setLoading(true);
@@ -817,30 +869,41 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
     }
   };
 
-  const handleDeleteClient = async (client: any) => {
+  const handleConfirmDeleteClient = async () => {
+    if (!clientToDelete) return;
     setIsDeletingClient(true);
     try {
-      // 1. Delete client document
-      await deleteDoc(doc(db, 'clients', client.id));
-      
+      const targetId = clientToDelete.id;
+      const slug = clientToDelete.slug;
+
+      // 1. Delete client documents
+      await deleteDoc(doc(db, 'clients', targetId));
+      await deleteDoc(doc(db, 'clientes', targetId));
+      await deleteDoc(doc(db, 'users', targetId));
+      await deleteDoc(doc(db, 'users_invites', targetId));
+      await deleteDoc(doc(db, 'credenciaisCliente', targetId));
+
       // 2. Delete slug/portal mapping
-      if (client.slug) {
-        await deleteDoc(doc(db, 'clientPortals', client.slug));
+      if (slug) {
+        await deleteDoc(doc(db, 'clientPortals', slug));
       }
 
-      // 3. Optional invites delete
-      try {
-        await deleteDoc(doc(db, 'users_invites', client.id));
-      } catch (e) {
-        // Safe to ignore
-      }
+      // 3. Delete linked cases & casos
+      const casesToDelete = cases.filter(ca => ca.clientId === targetId || ca.clienteId === targetId);
+      const deletePromises: Promise<void>[] = [];
+      casesToDelete.forEach(ca => {
+        deletePromises.push(deleteDoc(doc(db, 'cases', ca.id)));
+        deletePromises.push(deleteDoc(doc(db, 'casos', ca.id)));
+      });
+      await Promise.all(deletePromises);
 
-      alert(`Cadastro de "${getClientDisplayName(client.id)}" e seus acessos foram excluídos definitivamente do banco de dados.`);
+      alert(`Cadastro de "${getClientDisplayName(targetId)}" e seus acessos foram excluídos definitivamente do banco de dados.`);
       setClientToDelete(null);
+      setSafeDeleteWarning(null);
       await loadAllCollections();
-    } catch (err) {
-      console.error('Erro ao excluir cliente:', err);
-      alert('Falha ao excluir cliente. Verifique as permissões de acesso ao banco.');
+    } catch (err: any) {
+      console.error('Erro ao excluir cliente completo:', err);
+      alert(`Falha ao excluir cliente completo: ${err.message || err}`);
     } finally {
       setIsDeletingClient(false);
     }
@@ -850,7 +913,12 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
 
   return (
     <BossLayout>
-      <div className="space-y-6 font-sans select-none max-w-7xl mx-auto">
+      <div 
+        className={`space-y-6 font-sans max-w-7xl mx-auto transition-all duration-300 ${
+          highlighterActive ? 'select-text cursor-crosshair bg-yellow-50/10' : 'select-none'
+        }`}
+        onMouseUp={handleMouseUp}
+      >
         
         {/* Dynamic Admin Header */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-gray-150 pb-6">
@@ -864,7 +932,30 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 mb-2 lg:mb-0">
+            {/* Modo Sublinhador buttons group */}
+            <button
+              type="button"
+              onClick={() => setHighlighterActive(!highlighterActive)}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer border transition-all ${
+                highlighterActive 
+                  ? 'bg-amber-500 hover:bg-amber-600 border-amber-600 text-white shadow-sm ring-2 ring-amber-200' 
+                  : 'bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-800'
+              }`}
+            >
+              <Highlighter size={13} className={highlighterActive ? "animate-pulse" : ""} />
+              <span>{highlighterActive ? 'Sublinhador: ATIVO' : 'Modo Sublinhador'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleClearHighlights}
+              className="px-3.5 py-2 bg-white border border-gray-200 hover:bg-rose-50 hover:text-rose-600 rounded-xl text-xs font-bold text-gray-700 flex items-center gap-1.5 cursor-pointer transition-colors"
+              title="Limpar todas as marcações temporárias de realce de texto"
+            >
+              <Eraser size={13} />
+              <span>Limpar Marcações</span>
+            </button>
+
             <button
               onClick={() => {
                 loadAllCollections();
@@ -1029,122 +1120,208 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
             
             {/* ABA 1: CLIENTES */}
             {activeTab === 'clientes' && (
-              <div className="bg-white border border-gray-150 rounded-2xl shadow-3xs overflow-hidden">
-                <table className="w-full text-left border-collapse min-w-[900px]">
-                  <thead className="bg-gray-50 border-b border-gray-100 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                    <tr>
-                      <th className="py-3 px-4">Nome / Empresa</th>
-                      <th className="py-3">CPF/CNPJ</th>
-                      <th className="py-3">Acesso E-mail</th>
-                      <th className="py-3">Contato Telefone</th>
-                      <th className="py-3">Slug</th>
-                      <th className="py-3">Instância ID</th>
-                      <th className="py-3">Status</th>
-                      <th className="py-3 text-right pr-4">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 text-xs text-gray-700">
-                    {displayedClients.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="py-8 text-center text-gray-400 italic">Nenhum cliente cadastrado atende aos critérios descritos.</td>
-                      </tr>
-                    ) : (
-                      displayedClients.map(c => {
-                        const clientName = getClientDisplayName(c.id);
-                        const numCasos = cases.filter(ca => ca.clientId === c.id).length;
-                        return (
-                          <tr key={c.id} className="hover:bg-gray-50/40">
-                            <td className="py-4 px-4">
-                              <span className="font-extrabold text-gray-900 block">{clientName}</span>
-                              <span className="text-xs text-indigo-600 font-bold block mt-1 font-mono">{numCasos} processo(s) vinculado(s)</span>
-                              <div className="flex flex-wrap gap-1.5 mt-2">
+              <div className="space-y-6">
+                {displayedClients.length === 0 ? (
+                  <div className="bg-white border border-gray-150 rounded-2xl p-10 text-center text-gray-500 italic text-[16px]">
+                    Nenhum cliente cadastrado atende aos critérios descritos.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {displayedClients.map(c => {
+                      const clientName = getClientDisplayName(c.id);
+                      const numCasos = cases.filter(ca => ca.clientId === c.id).length;
+                      return (
+                        <div 
+                          key={c.id} 
+                          className="bg-white border border-gray-200/90 rounded-[24px] p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between gap-6 hover:border-indigo-200"
+                        >
+                          {/* TOP HEADER: Nome do cliente, Processos, e Status GERAL */}
+                          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 border-b border-gray-100 pb-5">
+                            <div className="space-y-2">
+                              <h3 className="text-[19px] md:text-[20px] font-black text-gray-900 tracking-tight leading-tight">
+                                {clientName}
+                              </h3>
+                              <span className="text-[15px] text-indigo-600 font-bold block font-mono">
+                                {numCasos} processo(s) vinculado(s)
+                              </span>
+                              
+                              {/* Status do Portal & Integridade */}
+                              <div className="flex flex-wrap gap-2 mt-2">
                                 {c.portalStatus === 'criado' ? (
-                                  <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded text-xs font-bold">Portal criado</span>
+                                  <span className="px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg text-[13px] font-bold">
+                                    Portal criado
+                                  </span>
                                 ) : (
-                                  <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-100 rounded text-xs font-bold">Portal não criado</span>
+                                  <span className="px-3 py-1 bg-amber-50 text-amber-850 border border-amber-100 rounded-lg text-[13px] font-bold">
+                                    Portal não criado
+                                  </span>
                                 )}
                                 {c.cadastroIncompleto === true ? (
-                                  <span className="px-2 py-0.5 bg-red-50 text-red-700 border border-red-100 rounded text-xs font-bold" title={c.missingFields && c.missingFields.length > 0 ? `Campos faltantes: ${c.missingFields.join(', ')}` : 'Cadastro incompleto'}>
+                                  <span 
+                                    className="px-3 py-1 bg-rose-50 text-rose-700 border border-rose-100 rounded-lg text-[13px] font-bold" 
+                                    title={c.missingFields && c.missingFields.length > 0 ? `Campos faltantes: ${c.missingFields.join(', ')}` : 'Cadastro incompleto'}
+                                  >
                                     Cadastro incompleto
                                   </span>
                                 ) : (
-                                  <span className="px-2 py-0.5 bg-green-50 text-green-700 border border-green-150 rounded text-xs font-bold">Cadastro completo</span>
+                                  <span className="px-3 py-1 bg-green-50 text-green-700 border border-green-150 rounded-lg text-[13px] font-bold">
+                                    Cadastro completo
+                                  </span>
                                 )}
                               </div>
                               {c.cadastroIncompleto === true && c.missingFields && c.missingFields.length > 0 && (
-                                <span className="text-xs text-gray-500 block mt-1 leading-normal font-sans">Falta: {c.missingFields.join(', ')}</span>
+                                <span className="text-[14px] text-rose-600 block mt-1 font-semibold">
+                                  Falta preencher: {c.missingFields.join(', ')}
+                                </span>
                               )}
-                            </td>
-                            <td className="py-4 font-mono font-semibold">{getClientDocument(c)}</td>
-                            <td className="py-4 text-gray-500">{getClientEmail(c)}</td>
-                            <td className="py-4 text-gray-500">{getClientPhone(c)}</td>
-                            <td className="py-4 font-mono font-bold text-indigo-650">/{c.slug || 'sem-slug'}</td>
-                            <td className="py-4 font-mono text-xs text-gray-500">{c.id}</td>
-                            <td className="py-4">
-                              <span className={`px-2 py-0.5 rounded text-xs font-black uppercase tracking-wider ${
-                                c.active !== false ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                            </div>
+                            
+                            <div className="sm:text-right shrink-0">
+                              <span className={`inline-block px-4 py-1.5 rounded-full text-[15px] font-black uppercase tracking-wider ${
+                                c.active !== false 
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-250' 
+                                  : 'bg-rose-50 text-rose-700 border border-rose-250'
                               }`}>
                                 {c.active !== false ? 'Ativo' : 'Suspenso'}
                               </span>
-                            </td>
-                            <td className="py-4 text-right pr-4 space-x-1.5 whitespace-nowrap">
-                              <button
-                                onClick={() => navigate(`/boss-giffoni-clientes/clientes/${c.id}`)}
-                                className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-250 text-xs font-bold text-gray-750 rounded-lg cursor-pointer"
-                              >
-                                Abrir
-                              </button>
-                              <button
-                                onClick={() => navigate(`/boss-giffoni-clientes/portal-cliente-preview/${c.id}`)}
-                                className="px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-xs font-bold text-purple-700 rounded-lg cursor-pointer"
-                              >
-                                Preview
-                              </button>
-                              <button
-                                onClick={() => {
-                                  const link = portalSettings?.link || 'https://aistudio.google.com/apps/93c62126-a17f-4c18-8bc7-d327df1ca6b5?showPreview=true&showAssistant=true';
-                                  window.open(link, '_blank');
-                                }}
-                                className="px-2.5 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-xs font-bold text-gray-700 rounded-lg cursor-pointer"
-                              >
-                                App Externo
-                              </button>
-                              <button
-                                onClick={() => handleOpenMasterEditor(c)}
-                                className="px-2.5 py-1.5 bg-blue-650 hover:bg-blue-750 text-xs text-white rounded-lg font-bold cursor-pointer transition-colors"
-                              >
-                                Editor do Painel do Cliente
-                              </button>
-                              <button
-                                onClick={() => togglePortalSuspension(c, c.active === false)}
-                                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide cursor-pointer ${
-                                  c.active !== false ? 'bg-amber-50 hover:bg-amber-100 text-amber-700' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-750'
-                                }`}
-                              >
-                                {c.active !== false ? 'Suspender' : 'Reativar'}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setActiveTab('integridade');
-                                  setSearchTerm(c.slug || '');
-                                }}
-                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-xs text-slate-700 rounded-lg cursor-pointer font-bold"
-                              >
-                                Integridade
-                              </button>
-                              <button
-                                onClick={() => setClientToDelete(c)}
-                                className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-xs text-red-600 rounded-lg font-bold cursor-pointer"
-                              >
-                                Excluir
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
+                            </div>
+                          </div>
+
+                          {/* BODY BLOCKS: Identificação, Contato, Portal */}
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[15px] text-gray-750">
+                            {/* Bloco 1: Identificação */}
+                            <div 
+                              onClick={() => setSelectedDetailBlock({ client: c, type: 'identificacao' })}
+                              className="bg-gray-50/70 p-4 rounded-2xl border border-gray-100 space-y-2 flex flex-col justify-between hover:bg-indigo-50/25 hover:border-indigo-300 hover:scale-[1.01] cursor-pointer transition-all duration-200"
+                              title="Clique para ver detalhes de Identificação"
+                            >
+                              <div>
+                                <span className="text-[12px] font-bold text-gray-400 uppercase tracking-widest block mb-1">
+                                  Identificação
+                                </span>
+                                <span className="text-[13px] font-medium text-gray-500 block">CPF / CNPJ</span>
+                                <code className="font-mono text-[15px] font-bold text-gray-900 block truncate">
+                                  {getClientDocument(c) || 'Não informado'}
+                                </code>
+                              </div>
+                              <div className="pt-2 border-t border-gray-200/50">
+                                <span className="text-[13px] font-medium text-gray-500 block">Instância ID</span>
+                                <code className="font-mono text-[14px] text-gray-650 block select-all bg-white px-1.5 py-0.5 rounded border border-gray-150 truncate" title={c.id}>
+                                  {c.id}
+                                </code>
+                              </div>
+                            </div>
+
+                            {/* Bloco 2: Contato */}
+                            <div 
+                              onClick={() => setSelectedDetailBlock({ client: c, type: 'contato' })}
+                              className="bg-gray-50/70 p-4 rounded-2xl border border-gray-100 space-y-2 flex flex-col justify-between hover:bg-indigo-50/25 hover:border-indigo-300 hover:scale-[1.01] cursor-pointer transition-all duration-200"
+                              title="Clique para ver detalhes de Contato"
+                            >
+                              <div>
+                                <span className="text-[12px] font-bold text-gray-400 uppercase tracking-widest block mb-1">
+                                  Contato
+                                </span>
+                                <span className="text-[13px] font-medium text-gray-500 block">E-mail de Acesso</span>
+                                <span className="text-[15px] font-semibold text-gray-900 block truncate" title={getClientEmail(c)}>
+                                  {getClientEmail(c) || 'Não cadastrado'}
+                                </span>
+                              </div>
+                              <div className="pt-2 border-t border-gray-200/50">
+                                <span className="text-[13px] font-medium text-gray-500 block">Telefone Celular</span>
+                                <span className="text-[15px] font-semibold text-gray-900 block truncate">
+                                  {getClientPhone(c) || 'Não cadastrado'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Bloco 3: Portal config */}
+                            <div 
+                              onClick={() => setSelectedDetailBlock({ client: c, type: 'portal' })}
+                              className="bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100/50 space-y-2 flex flex-col justify-between hover:bg-indigo-50/70 hover:border-indigo-300 hover:scale-[1.01] cursor-pointer transition-all duration-200"
+                              title="Clique para ver detalhes de Configurações Portal"
+                            >
+                              <div>
+                                <span className="text-[12px] font-bold text-indigo-400 uppercase tracking-widest block mb-1">
+                                  Configurações Portal
+                                </span>
+                                <span className="text-[13px] font-medium text-gray-500 block">Endereço Slug</span>
+                                <span className="font-mono font-bold text-indigo-650 text-[15px] block truncate">
+                                  /{c.slug || 'sem-slug'}
+                                </span>
+                              </div>
+                              <div className="pt-2 border-t border-indigo-100/50">
+                                <span className="text-[14px] font-medium text-gray-500 block">Status de Acesso</span>
+                                <span className="text-[15px] font-bold text-indigo-900 block">
+                                  {c.portalAtivo !== false ? 'Habilitado' : 'Suspenso'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* ACTIONS FOOTER ROWS BAR */}
+                          <div className="border-t border-gray-100 pt-4 flex flex-wrap gap-2 justify-end">
+                            <button
+                              onClick={() => navigate(`/boss-giffoni-clientes/clientes/${c.id}`)}
+                              className="px-3.5 py-2 hover:bg-gray-100 text-[15px] font-extrabold text-gray-750 bg-gray-50 border border-gray-200 rounded-xl cursor-pointer transition-colors"
+                            >
+                              Abrir
+                            </button>
+                            <button
+                              onClick={() => navigate(`/boss-giffoni-clientes/portal-cliente-preview/${c.id}`)}
+                              className="px-3.5 py-2 bg-purple-50 hover:bg-purple-100 text-[15px] font-extrabold text-purple-700 rounded-xl cursor-pointer transition-colors"
+                            >
+                              Preview
+                            </button>
+                            <button
+                              onClick={() => {
+                                const link = portalSettings?.link || 'https://aistudio.google.com/apps/93c62126-a17f-4c18-8bc7-d327df1ca6b5?showPreview=true&showAssistant=true';
+                                window.open(link, '_blank');
+                              }}
+                              className="px-3.5 py-2 bg-white border border-gray-250 hover:bg-gray-55 text-[15px] font-extrabold text-gray-700 rounded-xl cursor-pointer transition-colors shadow-2xs"
+                            >
+                              App Externo
+                            </button>
+                            <button
+                              onClick={() => handleOpenMasterEditor(c)}
+                              className="px-3.5 py-2 bg-blue-650 hover:bg-blue-750 text-[15px] text-white rounded-xl font-extrabold cursor-pointer transition-colors shadow-sm shadow-blue-100"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => togglePortalSuspension(c, c.active === false)}
+                              className={`px-3.5 py-2 rounded-xl text-[15px] font-extrabold uppercase tracking-wide cursor-pointer transition-all ${
+                                c.active !== false 
+                                  ? 'bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-200/50' 
+                                  : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-850 border border-emerald-200/50'
+                              }`}
+                            >
+                              {c.active !== false ? 'Suspender' : 'Reativar'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setActiveTab('integridade');
+                                setSearchTerm(c.slug || '');
+                              }}
+                              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-[15px] text-slate-700 rounded-xl cursor-pointer font-extrabold transition-colors"
+                            >
+                              Integridade
+                            </button>
+                            <button
+                              onClick={() => {
+                                setClientToDelete(c);
+                                setSafeDeleteWarning(c.id);
+                              }}
+                              className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-[15px] text-red-600 rounded-xl font-extrabold cursor-pointer transition-colors"
+                            >
+                              Excluir
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1941,8 +2118,344 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
 
       </div>
 
+      {/* Detalhamento de Informações Modal */}
+      {selectedDetailBlock && (() => {
+        const { client, type } = selectedDetailBlock;
+        const clientName = getClientDisplayName(client.id);
+        const pf = client.pfDadosPessoais || client.pfData || {};
+        const pj = client.pjDadosEmpresa || client.pjData || {};
+        const socio = client.socioDadosPessoais || client.socioData || {};
+        const access = client.acessoSistema || {};
+        const bancario = client.bancarioDadosBancarios || client.bancarioData || {};
+
+        return (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-3xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+            <div className="bg-white rounded-[24px] w-full max-w-2xl border border-gray-150 shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200 overflow-hidden">
+              
+              {/* Header */}
+              <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-indigo-50/25">
+                <div className="space-y-1">
+                  <span className="text-[11px] font-black uppercase tracking-widest text-indigo-650 block">Detalhamento Operacional</span>
+                  <h3 className="font-black text-gray-950 text-lg md:text-xl leading-tight">
+                    {type === 'identificacao' && '📂 Dados de Identificação'}
+                    {type === 'contato' && '📞 Contatos & Endereço'}
+                    {type === 'portal' && '🌐 Configurações & Acesso Portal'}
+                  </h3>
+                  <p className="text-xs text-gray-500 font-medium">
+                    Cliente: <span className="font-extrabold text-gray-800">{clientName}</span> 
+                    (ID: <code className="font-mono bg-white px-1 py-0.5 rounded text-[10px] border ml-1">{client.id}</code>)
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDetailBlock(null)}
+                  className="w-10 h-10 bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 rounded-xl flex items-center justify-center font-bold text-sm cursor-pointer shadow-2xs transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="p-6 overflow-y-auto space-y-6 text-[14px] text-gray-700 leading-relaxed font-sans">
+                
+                {type === 'identificacao' && (
+                  <div className="space-y-5">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-100">
+                        <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest block mb-0.5">Tipo de Pessoa</span>
+                        <span className="text-[15px] font-bold text-indigo-900">{client.type === 'PJ' ? 'Pessoa Jurídica (PJ)' : 'Pessoa Física (PF)'}</span>
+                      </div>
+                      <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-100">
+                        <span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest block mb-0.5">Status Geral</span>
+                        <span className={`text-[15px] font-bold uppercase tracking-wider ${client.active !== false ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {client.active !== false ? 'Ativo' : 'Suspenso'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {client.type === 'PJ' ? (
+                      <div className="space-y-5">
+                        <div className="bg-indigo-50/15 p-4 rounded-xl border border-indigo-100/30 space-y-3">
+                          <h4 className="font-bold text-[14px] text-indigo-950 border-b pb-1.5 border-indigo-100/50">Empresa (Dados PJ)</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[13px]">
+                            <div>
+                              <span className="text-gray-450 block">Razão Social</span>
+                              <span className="font-bold text-[15px] text-gray-900">{pj.pj_razaoSocial || 'Não informado'}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-450 block">Nome Fantasia</span>
+                              <span className="font-bold text-[15px] text-gray-900">{pj.pj_nomeFantasia || 'Não informado'}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-455 block">CNPJ</span>
+                              <span className="font-mono font-bold text-[15px] text-gray-900">{pj.pj_cnpj || 'Não informado'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-3">
+                          <h4 className="font-bold text-[14px] text-gray-800 border-b pb-1.5 border-gray-200">Sócio Administrador</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[13px]">
+                            <div>
+                              <span className="text-gray-455 block">Nome Completo</span>
+                              <span className="font-semibold text-[14px] text-gray-900">{socio.socio_nomeCompleto || 'Não informado'}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-455 block">CPF / RG</span>
+                              <span className="font-mono font-semibold text-[14px] text-gray-900">
+                                {socio.socio_cpf || 'S/ CPF'} / {socio.socio_rg || 'S/ RG'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-gray-455 block">Nascimento / Profissão</span>
+                              <span className="font-semibold text-[14px] text-gray-900">
+                                {socio.socio_dataNascimento || 'S/ nascimento'} — {socio.socio_profissao || 'S/ profissão'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-indigo-50/15 p-4 rounded-xl border border-indigo-100/30 space-y-3">
+                        <h4 className="font-bold text-[14px] text-indigo-950 border-b pb-1.5 border-indigo-100/50">Dados Pessoais (PF)</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[13px]">
+                          <div>
+                            <span className="text-gray-450 block">Nome Completo</span>
+                            <span className="font-bold text-[15px] text-gray-900">{pf.pf_nomeCompleto || 'Não informado'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-450 block">CPF / RG</span>
+                            <span className="font-mono font-bold text-[15px] text-gray-900">
+                              {pf.pf_cpf || 'Não informado'} {pf.pf_rg ? ` / RG ${pf.pf_rg}` : ''}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-450 block">Data de Nascimento</span>
+                            <span className="font-semibold text-[14px] text-gray-900">{pf.pf_dataNascimento || 'Não informado'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-450 block">Nacionalidade / Estado Civil</span>
+                            <span className="font-semibold text-[14px] text-gray-900">{pf.pf_nacionalidade || 'Brasileira'} — {pf.pf_estadoCivil || 'Não informado'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-450 block">Profissão</span>
+                            <span className="font-semibold text-[14px] text-gray-900">{pf.pf_profissao || 'Não informado'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {type === 'contato' && (
+                  <div className="space-y-5">
+                    <div className="bg-indigo-50/15 p-4 rounded-xl border border-indigo-100/30 space-y-3">
+                      <h4 className="font-bold text-[14px] text-indigo-950 border-b pb-1.5 border-indigo-100/50">Informações de Contato</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[13px]">
+                        <div>
+                          <span className="text-gray-450 block">E-mail Operacional</span>
+                          <span className="font-bold text-[14px] text-gray-900 break-all select-all">{getClientEmail(client) || 'Não informado'}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-450 block">Telefone / Celular</span>
+                          <span className="font-bold text-[14px] text-gray-900 select-all">{getClientPhone(client) || 'Não informado'}</span>
+                        </div>
+                        {client.type === 'PJ' ? (
+                          <>
+                            <div>
+                              <span className="text-gray-450 block">Email da Empresa</span>
+                              <span className="font-semibold text-[14px] text-gray-900 break-all">{pj.pj_emailEmpresa || 'Não informado'}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-450 block">Whatsapp Empresa</span>
+                              <span className="font-semibold text-[14px] text-gray-900">{pj.pj_whatsappEmpresa || 'Não informado'}</span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div>
+                              <span className="text-gray-450 block">E-mail Pessoal</span>
+                              <span className="font-semibold text-[14px] text-gray-900 break-all">{pf.pf_email || 'Não informado'}</span>
+                            </div>
+                            <div>
+                              <span className="text-gray-450 block">Whatsapp Pessoal</span>
+                              <span className="font-semibold text-[14px] text-gray-900">{pf.pf_whatsapp || 'Não informado'}</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-3">
+                      <h4 className="font-bold text-[14px] text-gray-800 border-b pb-1.5 border-gray-200">Endereço Cadastral</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[13px]">
+                        <div className="md:col-span-2">
+                          <span className="text-gray-455 block">CEP</span>
+                          <span className="font-mono font-bold text-[14px] text-gray-900">{client.type === 'PJ' ? pj.pj_cepEmpresa : pf.pf_cep || 'Não informado'}</span>
+                        </div>
+                        <div className="md:col-span-2">
+                          <span className="text-gray-455 block">Endereço Completo</span>
+                          <span className="font-semibold text-[14px] text-gray-900">
+                            {client.type === 'PJ' 
+                              ? `${pj.pj_enderecoEmpresa || ''} ${pj.pj_bairroEmpresa ? ` - Bairro ${pj.pj_bairroEmpresa}` : ''}`
+                              : `${pf.pf_endereco || ''}${pf.pf_numero ? `, nº ${pf.pf_numero}` : ''}${pf.pf_bairro ? ` - Bairro ${pf.pf_bairro}` : ''}`}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-455 block">Cidade / Município</span>
+                          <span className="font-semibold text-[14px] text-gray-900">
+                            {client.type === 'PJ' ? pj.pj_cidadeEmpresa : pf.pf_cidade || 'Não informado'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-455 block">Estado / UF</span>
+                          <span className="font-semibold text-[14px] text-gray-900">
+                            {client.type === 'PJ' ? pj.pj_estadoEmpresa : pf.pf_estado || 'Não informado'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {type === 'portal' && (
+                  <div className="space-y-5">
+                    <div className="bg-indigo-50/15 p-4 rounded-xl border border-indigo-100/30 space-y-3">
+                      <h4 className="font-bold text-[14px] text-indigo-950 border-b pb-1.5 border-indigo-100/50">Dados de Credencial de Acesso</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[13px]">
+                        <div>
+                          <span className="text-gray-450 block">Endereço Slug (URL Portal)</span>
+                          <span className="font-mono font-black text-[15px] text-indigo-650">/{client.slug || 'sem-slug'}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-450 block">Acesso ao Portal</span>
+                          <span className="font-bold text-[14px] text-indigo-900">
+                            {client.portalAtivo !== false ? 'Habilitado/Ativo' : 'Suspenso/Inativo'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-450 block">E-mail de Login</span>
+                          <span className="font-semibold font-mono text-[14px] text-gray-900 select-all">{access.acesso_emailLogin || client.email || 'Não informado'}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-455 block">Senha Temporária / Atual</span>
+                          <code className="font-mono font-bold text-[14px] text-gray-900 bg-white px-1.5 py-0.5 rounded border border-gray-150 inline-block leading-none mt-1 select-all">
+                            {access.acesso_senha || client.senhaVisivelPreview || 'Não configurada'}
+                          </code>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-3">
+                      <h4 className="font-bold text-[14px] text-gray-800 border-b pb-1.5 border-gray-200">Links de Pastas & Documentos</h4>
+                      <div className="text-[13px] space-y-2">
+                        <div>
+                          <span className="text-gray-455 block mb-1">Pasta no Google Drive</span>
+                          {client.gdriveUrl ? (
+                            <a 
+                              href={client.gdriveUrl} 
+                              target="_blank" 
+                              rel="noreferrer" 
+                              className="text-indigo-600 font-bold hover:underline inline-flex items-center gap-1 bg-white border px-3 py-1.5 rounded-lg shadow-3xs"
+                            >
+                              Abrir Pasta no Drive <ExternalLink size={13} />
+                            </a>
+                          ) : (
+                            <span className="text-gray-400 italic">Nenhuma pasta do Google Drive associada</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-3">
+                      <h4 className="font-bold text-[14px] text-gray-850 border-b pb-1.5 border-gray-200">Módulos Ativos do Cliente</h4>
+                      <div className="grid grid-cols-2 gap-3 text-[12px] font-semibold text-gray-750">
+                        <div className="flex items-center gap-2 bg-white p-2 border border-gray-150 rounded-lg">
+                          <CheckCircle size={15} className={client.showDashboard !== false ? "text-emerald-500" : "text-gray-300"} />
+                          <span>Dashboard</span>
+                        </div>
+                        <div className="flex items-center gap-2 bg-white p-2 border border-gray-150 rounded-lg">
+                          <CheckCircle size={15} className={client.showCadastros !== false ? "text-emerald-500" : "text-gray-300"} />
+                          <span>Cadastros</span>
+                        </div>
+                        <div className="flex items-center gap-2 bg-white p-2 border border-gray-150 rounded-lg">
+                          <CheckCircle size={15} className={client.showCasos !== false ? "text-emerald-500" : "text-gray-300"} />
+                          <span>Processos</span>
+                        </div>
+                        <div className="flex items-center gap-2 bg-white p-2 border border-gray-150 rounded-lg">
+                          <CheckCircle size={15} className={client.showProvas !== false ? "text-emerald-500" : "text-gray-300"} />
+                          <span>Módulo Provas</span>
+                        </div>
+                        <div className="flex items-center gap-2 bg-white p-2 border border-gray-150 rounded-lg">
+                          <CheckCircle size={15} className={client.showInformacoes !== false ? "text-emerald-500" : "text-gray-300"} />
+                          <span>Módulo Solicitações</span>
+                        </div>
+                        <div className="flex items-center gap-2 bg-white p-2 border border-gray-150 rounded-lg">
+                          <CheckCircle size={15} className={client.showAudiencias !== false ? "text-emerald-500" : "text-gray-300"} />
+                          <span>Agenda Audiências</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-3">
+                      <h4 className="font-bold text-[14px] text-gray-800 border-b pb-1.5 border-gray-200">Configurações Financeiras</h4>
+                      {bancario.bancario_possuiDadosBancarios ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[13px]">
+                          <div>
+                            <span className="text-gray-455 block">Banco</span>
+                            <span className="font-semibold text-gray-900">{bancario.bancario_banco || 'Não informado'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-455 block">Tipo / Chave PIX</span>
+                            <span className="font-mono font-bold text-gray-900 select-all">({bancario.bancario_tipoChavePix || 'Chave'}) {bancario.bancario_chavePix || 'Não informado'}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-455 block">Conta / Agência</span>
+                            <span className="font-mono font-medium text-gray-900">
+                              Ag: {bancario.bancario_agencia || 'S/A'} - Conta: {bancario.bancario_conta || 'S/C'} ({bancario.bancario_tipoConta || 'Corrente'})
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-gray-455 block">Titular</span>
+                            <span className="font-semibold text-gray-900 truncate block">{bancario.bancario_titularConta || bancario.bancario_titularPix || 'Cliente'}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-[13px] text-gray-450 italic">Nenhum dado bancário ou chave PIX cadastrado para este cliente.</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 bg-gray-50 border-t border-gray-150 flex items-center justify-end gap-3 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleOpenMasterEditor(client);
+                    setSelectedDetailBlock(null);
+                  }}
+                  className="px-4.5 py-2 bg-blue-650 hover:bg-blue-750 text-white text-xs font-bold rounded-xl shadow-sm cursor-pointer transition-colors"
+                >
+                  Abrir no Editor do Cliente
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDetailBlock(null)}
+                  className="px-4.5 py-2 bg-gray-200 hover:bg-gray-250 text-gray-800 text-xs font-bold rounded-xl cursor-pointer transition-colors"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Safety Warning dialog modal */}
-      {safeDeleteWarning && (
+      {safeDeleteWarning && !clientToDelete && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-3xs flex items-center justify-center p-4 z-50">
           <div className="bg-white p-6 rounded-2xl w-full max-w-md border border-gray-100 shadow-xl space-y-4 text-center">
             <ShieldAlert size={44} className="text-indigo-650 mx-auto" />
@@ -1972,15 +2485,18 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
               <p className="text-xs text-gray-500 leading-relaxed font-sans">
                 Você tem certeza de que deseja remover <span className="font-extrabold text-gray-950">"{getClientDisplayName(clientToDelete.id)}"</span> (ID: <code className="font-mono bg-gray-50 px-1 py-0.5 rounded text-[11px]">{clientToDelete.id}</code>)?
               </p>
-              <div className="bg-red-50/50 border border-red-100/65 rounded-xl p-3 text-left text-[11px] text-red-700 font-medium leading-relaxed font-sans">
+              <div className="bg-red-50/50 border border-red-100/65 rounded-xl p-3 text-left text-[11px] text-red-750 font-semibold leading-relaxed font-sans">
                 <span className="font-black block mb-0.5 uppercase tracking-wide text-[10px]">Atenção:</span>
-                Esta ação apagará permanentemente o cadastro do cliente, a configuração de rotas/portais e impedirá acessos futuros de forma irreversível.
+                Esta ação excluirá o cliente, seu acesso ao portal, credenciais, slug e casos vinculados. Esta ação não poderá ser desfeita.
               </div>
             </div>
             <div className="flex gap-3">
               <button
                 type="button"
-                onClick={() => setClientToDelete(null)}
+                onClick={() => {
+                  setClientToDelete(null);
+                  setSafeDeleteWarning(null);
+                }}
                 disabled={isDeletingClient}
                 className="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 active:scale-[0.98] text-gray-700 rounded-xl font-bold text-xs transition-all cursor-pointer disabled:opacity-55"
               >
@@ -1988,7 +2504,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
               </button>
               <button
                 type="button"
-                onClick={() => handleDeleteClient(clientToDelete)}
+                onClick={handleConfirmDeleteClient}
                 disabled={isDeletingClient}
                 className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 active:scale-[0.98] text-white rounded-xl font-bold text-xs transition-all cursor-pointer shadow-md shadow-red-100 flex items-center justify-center gap-2 disabled:opacity-55"
               >
