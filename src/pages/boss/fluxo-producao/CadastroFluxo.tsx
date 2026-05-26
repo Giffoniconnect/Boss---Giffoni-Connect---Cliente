@@ -630,6 +630,22 @@ export default function CadastroFluxo() {
         updatedAt: rightNow
       });
 
+      await setDoc(doc(db, 'credenciaisCliente', targetId), {
+        id: targetId,
+        clienteId: targetId,
+        slug: slug,
+        login: formData.acesso_emailLogin.toLowerCase().trim(),
+        senha: formData.acesso_senha,
+        password: formData.acesso_senha,
+        ativo: true,
+        criadoEm: rightNow,
+        atualizadoEm: rightNow,
+        ultimoAcesso: null,
+        tentativasFalhas: 0,
+        bloqueadoEm: null,
+        observacoes: 'Credencial criada automaticamente pelo Portal bOSS'
+      });
+
       // 3. Save to users collection
       await setDoc(doc(db, 'users', targetId), {
         email: formData.acesso_emailLogin,
