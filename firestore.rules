@@ -191,7 +191,7 @@ service cloud.firestore {
     // CREDENCIAIS CLIENTE COLLECTION (PORTAL CLIENT AUTHENTICATION)
     // -------------------------------------------------------------------------
     match /credenciaisCliente/{credId} {
-      allow read: if true; // Public read permitted for authentication
+      allow read: if true;
       allow write: if isAdmin();
     }
 
@@ -199,9 +199,15 @@ service cloud.firestore {
     // CLIENTES COLLECTION (CLIENT PORTAL READ COMPATIBILITY)
     // -------------------------------------------------------------------------
     match /clientes/{clientId} {
-      allow read: if isAdmin()
-        || resource.data.get('portalAtivo', false) == true
-        || resource.data.get('status', '') == 'active';
+      allow read: if resource.data.get('portalAtivo', false) == true
+        || resource.data.get('status', '') == 'active'
+        || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Compatibility rule specifically for clientes/id/{clientId} paths
+    match /clientes/id/{clientId} {
+      allow read: if true;
       allow write: if isAdmin();
     }
 
@@ -209,9 +215,9 @@ service cloud.firestore {
     // CASOS COLLECTION (CASE READ COMPATIBILITY)
     // -------------------------------------------------------------------------
     match /casos/{casoId} {
-      allow read: if isAdmin()
-        || resource.data.get('visivelParaCliente', false) == true
-        || resource.data.get('visibleToClient', false) == true;
+      allow read: if resource.data.get('visivelParaCliente', false) == true
+        || resource.data.get('visibleToClient', false) == true
+        || isAdmin();
       allow write: if isAdmin();
     }
   }
