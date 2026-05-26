@@ -710,16 +710,48 @@ export default function CentralControle() {
         });
       }
 
+      // Action 1: Create or update credenciaisCliente/{targetId}
+      await setDoc(doc(db, 'credenciaisCliente', targetId), {
+        id: targetId,
+        clienteId: targetId,
+        slug: newSlug,
+        login: masterFormData.acesso_emailLogin.toLowerCase().trim(),
+        senha: masterFormData.acesso_senha,
+        password: masterFormData.acesso_senha,
+        ativo: masterFormData.active !== false,
+        atualizadoEm: rightNow,
+        criadoEm: previous.createdAt || previous.criadoEm || rightNow,
+        ultimoAcesso: previous.ultimoAcesso || null,
+        tentativasFalhas: previous.tentativasFalhas || 0,
+        bloqueadoEm: previous.bloqueadoEm || null,
+        observacoes: 'Credencial sincronizada pelo Editor Mestre da Central de Controle'
+      }, { merge: true });
+
+      // Action 2: Update users/{targetId} using merge: true
       await setDoc(doc(db, 'users', targetId), {
-        email: masterFormData.acesso_emailLogin,
-        role: 'client',
+        email: masterFormData.acesso_emailLogin.toLowerCase().trim(),
+        role: "client",
         clientId: targetId,
         clientSlug: newSlug,
-        name: masterFormData.type === 'PF' ? masterFormData.pf_nomeCompleto : masterFormData.pj_razaoSocial,
-        status: masterFormData.acesso_statusAcesso,
+        name: masterFormData.pf_nomeCompleto || masterFormData.pj_razaoSocial,
+        status: masterFormData.acesso_statusAcesso || "ativo",
         senhaVisivelPreview: masterFormData.acesso_senha,
         updatedAt: rightNow
-      });
+      }, { merge: true });
+
+      // Action 3: Guarantee clientes/{targetId} with specified fields using merge: true
+      await setDoc(doc(db, 'clientes', targetId), {
+        id: targetId,
+        clientId: targetId,
+        slug: newSlug,
+        nome: masterFormData.pf_nomeCompleto || masterFormData.pj_razaoSocial,
+        name: masterFormData.pf_nomeCompleto || masterFormData.pj_razaoSocial,
+        email: masterFormData.acesso_emailLogin.toLowerCase().trim(),
+        status: "active",
+        portalAtivo: true,
+        atualizadoEm: rightNow,
+        updatedAt: rightNow
+      }, { merge: true });
 
       alert('Toda alteração gravada e espelhada no Portal do Cliente com sucesso! Log técnico de auditoria adicionado.');
       setSelectedMasterClient(null);
@@ -727,6 +759,104 @@ export default function CentralControle() {
     } catch (err: any) {
       console.error(err);
       alert(`Falha ao salvar no Editor Mestre do Portal: ${err.message || err}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForceSyncClient = async (c: any) => {
+    setLoading(true);
+    try {
+      const rightNow = new Date().toISOString();
+      const targetId = c.id;
+      const slug = c.slug || '';
+      
+      const emailLogin = c.acessoSistema?.acesso_emailLogin || c.email || '';
+      const password = c.acessoSistema?.acesso_senha || c.senhaVisivelPreview || '';
+      const name = c.type === 'PF' 
+        ? (c.pfDadosPessoais?.pf_nomeCompleto || c.pfData?.pf_nomeCompleto || 'Sem Nome')
+        : (c.pjDadosEmpresa?.pj_razaoSocial || c.pjData?.pj_razaoSocial || 'Sem Razão Social');
+        
+      if (!emailLogin) {
+        alert('Erro: O cliente não possui e-mail de login configurado no cadastro de acesso.');
+        setLoading(false);
+        return;
+      }
+      if (!password) {
+        alert('Erro: O cliente não possui senha configurada no cadastro.');
+        setLoading(false);
+        return;
+      }
+      if (!slug) {
+        alert('Erro: O cliente não possui slug de portal configurado.');
+        setLoading(false);
+        return;
+      }
+
+      // 1. clients - update clients document to ensure matches
+      await setDoc(doc(db, 'clients', targetId), {
+        email: emailLogin,
+        slug: slug,
+        senhaVisivelPreview: password,
+        updatedAt: rightNow
+      }, { merge: true });
+
+      // 2. clientes - update clientes document
+      await setDoc(doc(db, 'clientes', targetId), {
+        id: targetId,
+        clientId: targetId,
+        slug: slug,
+        nome: name,
+        name: name,
+        email: emailLogin.toLowerCase().trim(),
+        status: "active",
+        portalAtivo: true,
+        atualizadoEm: rightNow,
+        updatedAt: rightNow
+      }, { merge: true });
+
+      // 3. users - update users/targetId (for login lookup/roles)
+      await setDoc(doc(db, 'users', targetId), {
+        email: emailLogin.toLowerCase().trim(),
+        role: "client",
+        clientId: targetId,
+        clientSlug: slug,
+        name: name,
+        status: c.acessoSistema?.acesso_statusAcesso || "ativo",
+        senhaVisivelPreview: password,
+        updatedAt: rightNow
+      }, { merge: true });
+
+      // 4. credenciaisCliente - update credentials lookup
+      await setDoc(doc(db, 'credenciaisCliente', targetId), {
+        id: targetId,
+        clienteId: targetId,
+        slug: slug,
+        login: emailLogin.toLowerCase().trim(),
+        senha: password,
+        password: password,
+        ativo: c.active !== false,
+        atualizadoEm: rightNow,
+        criadoEm: c.createdAt || c.criadoEm || rightNow,
+        ultimoAcesso: c.ultimoAcesso || null,
+        tentativasFalhas: c.tentativasFalhas || 0,
+        bloqueadoEm: c.bloqueadoEm || null,
+        observacoes: 'Credencial sincronizada pelo Editor Mestre da Central de Controle'
+      }, { merge: true });
+
+      // 5. clientPortals - update/set clientPortals
+      await setDoc(doc(db, 'clientPortals', slug), {
+        clientId: targetId,
+        slug: slug,
+        active: c.active !== false,
+        updatedAt: rightNow
+      }, { merge: true });
+
+      alert('Acesso do Portal do Cliente recriado com sucesso. Use o e-mail e senha exibidos no cadastro.');
+      loadAllCollections();
+    } catch (err: any) {
+      console.error(err);
+      alert(`Erro na sincronização do portal: ${err.message || err}`);
     } finally {
       setLoading(false);
     }
@@ -1306,6 +1436,13 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                               className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-[15px] text-slate-700 rounded-xl cursor-pointer font-extrabold transition-colors"
                             >
                               Integridade
+                            </button>
+                            <button
+                              onClick={() => handleForceSyncClient(c)}
+                              className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-[15px] text-indigo-750 border border-indigo-200 rounded-xl cursor-pointer font-extrabold transition-colors"
+                              title="Sincronizar credenciais e recriar acessos do portal"
+                            >
+                              Recriar acesso do Portal
                             </button>
                             <button
                               onClick={() => {
