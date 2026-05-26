@@ -220,5 +220,23 @@ service cloud.firestore {
         || isAdmin();
       allow write: if isAdmin();
     }
+
+    // -------------------------------------------------------------------------
+    // AUDIENCIAS, PERICIAS, REUNIOES COLLECTIONS (CLIENT PORTAL READS)
+    // -------------------------------------------------------------------------
+    match /audiencias/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /pericias/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /reunioes/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
   }
 }
