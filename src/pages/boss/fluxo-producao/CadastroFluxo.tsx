@@ -621,6 +621,40 @@ export default function CadastroFluxo() {
       // 1. Save main clients document
       await setDoc(doc(db, 'clients', targetId), payload);
 
+      await setDoc(doc(db, 'clientes', targetId), {
+        id: targetId,
+        clientId: targetId,
+        slug: slug,
+        nome: mainName,
+        name: mainName,
+        tipoPessoa: clientType,
+        type: clientType,
+        cpf: clientType === 'PF' ? (pfBlock.pf_cpf || '') : '',
+        cnpj: clientType === 'PJ' ? (pjBlock.pj_cnpj || '') : '',
+        cpfCnpj: clientType === 'PF' ? (pfBlock.pf_cpf || '') : (pjBlock.pj_cnpj || ''),
+        email: clientType === 'PF'
+          ? (pfBlock.pf_email || formData.acesso_emailLogin)
+          : (pjBlock.pj_emailEmpresa || formData.acesso_emailLogin),
+        telefone: clientType === 'PF'
+          ? (pfBlock.pf_telefone || pfBlock.pf_whatsapp || '')
+          : (pjBlock.pj_telefoneEmpresa || pjBlock.pj_whatsappEmpresa || ''),
+        phone: clientType === 'PF'
+          ? (pfBlock.pf_telefone || pfBlock.pf_whatsapp || '')
+          : (pjBlock.pj_telefoneEmpresa || pjBlock.pj_whatsappEmpresa || ''),
+        endereco: clientType === 'PF'
+          ? (pfBlock.pf_endereco || '')
+          : (pjBlock.pj_enderecoEmpresa || ''),
+        address: clientType === 'PF'
+          ? (pfBlock.pf_endereco || '')
+          : (pjBlock.pj_enderecoEmpresa || ''),
+        status: 'active',
+        portalAtivo: true,
+        criadoEm: rightNow,
+        atualizadoEm: rightNow,
+        createdAt: rightNow,
+        updatedAt: rightNow
+      });
+
       // 2. Save clientPortals registry mapping (guaranteed active: true)
       await setDoc(doc(db, 'clientPortals', slug), {
         clientId: targetId,
