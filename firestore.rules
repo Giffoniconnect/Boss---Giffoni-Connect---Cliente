@@ -186,5 +186,52 @@ service cloud.firestore {
     match /masterEditorLogs/{logId} {
       allow read, write: if isAdmin();
     }
+
+    // -------------------------------------------------------------------------
+    // CREDENCIAIS CLIENTE COLLECTION (PORTAL CLIENT AUTHENTICATION)
+    // -------------------------------------------------------------------------
+    match /credenciaisCliente/{credId} {
+      allow read: if true; // Public read permitted for authentication
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // CLIENTES COLLECTION (CLIENT PORTAL READ COMPATIBILITY)
+    // -------------------------------------------------------------------------
+    match /clientes/{clientId} {
+      function isOwnCliente() {
+        return isSignedIn() && (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId == clientId ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId == resource.data.clientId
+        );
+      }
+
+      allow read: if isAdmin() || isOwnCliente();
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // CASOS COLLECTION (CASE READ COMPATIBILITY)
+    // -------------------------------------------------------------------------
+    match /casos/{casoId} {
+      function belongsToUserCaso() {
+        let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+        return isSignedIn() && (
+          isAdmin() || (
+            userDoc.role == 'client' && (
+              resource.data.clientId == userDoc.clientId || 
+              resource.data.clienteId == userDoc.clientId
+            )
+          )
+        );
+      }
+      function isCasoVisible() {
+        return resource.data.get('visivelParaCliente', false) == true || 
+               resource.data.get('visibleToClient', false) == true;
+      }
+
+      allow read: if isAdmin() || (belongsToUserCaso() && isCasoVisible());
+      allow write: if isAdmin();
+    }
   }
 }

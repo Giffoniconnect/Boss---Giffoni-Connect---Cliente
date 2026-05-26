@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import FluxoStepLayout from './components/FluxoStepLayout';
 import { 
@@ -335,6 +335,42 @@ export default function DadosCaso() {
 
     try {
       await updateDoc(doc(db, 'cases', caseId!), payload);
+      
+      await setDoc(doc(db, 'casos', caseId!), {
+        id: caseId,
+        caseId: caseId,
+        clienteId: caseObj.clientId,
+        clientId: caseObj.clientId,
+        title: payload.title,
+        titulo: payload.title,
+        adverseParty: payload.adverseParty,
+        parteContraria: payload.adverseParty,
+        caseType: payload.caseType,
+        tipo: payload.caseType,
+        description: payload.description,
+        descricao: payload.description,
+        priority: payload.priority,
+        prioridade: payload.priority,
+        responsibleLawyer: payload.responsibleLawyer,
+        advogadoResponsavel: payload.responsibleLawyer,
+        visibleToClient: payload.visibleToClient,
+        visivelParaCliente: payload.visibleToClient,
+        statusInterno: payload.statusInterno,
+        statusPublicoCliente: payload.statusPublicoCliente,
+        status: payload.status,
+        processNumber: payload.processNumber || '',
+        numeroProcesso: payload.processNumber || '',
+        tribunal: payload.tribunal || '',
+        court: payload.court || '',
+        vara: payload.court || '',
+        district: payload.district || '',
+        comarca: payload.district || '',
+        updatedAt: payload.updatedAt,
+        atualizadoEm: payload.updatedAt,
+        createdAt: caseObj.createdAt || new Date().toISOString(),
+        criadoEm: caseObj.createdAt || new Date().toISOString()
+      }, { merge: true });
+
       setSuccess('Dados salvos na base com excelência operacional!');
       setCaseObj({ ...caseObj, ...payload });
       return true;
