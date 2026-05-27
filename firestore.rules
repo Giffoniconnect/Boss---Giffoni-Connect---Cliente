@@ -128,7 +128,7 @@ service cloud.firestore {
     }
 
     match /caseFinancials/{finId} {
-      allow read: if isAdmin() || (isSignedIn() && canAccessCase(resource.data.caseId) && isVisibleToClient(resource.data));
+      allow read: if isAdmin() || resource.data.get('visibleToClient', false) == true || (isSignedIn() && canAccessCase(resource.data.caseId) && isVisibleToClient(resource.data));
       allow write: if isAdmin();
     }
 
@@ -147,7 +147,7 @@ service cloud.firestore {
         return isAdmin() || (userDoc.role == 'client' && data.clientId == userDoc.clientId && data.get('visibleToClient', false) == true);
       }
 
-      allow read: if isSignedIn() && canAccessRequest(resource.data);
+      allow read: if isAdmin() || resource.data.get('visibleToClient', false) == true || (isSignedIn() && canAccessRequest(resource.data));
       allow create: if isAdmin();
       allow update: if (isAdmin()) || (isSignedIn() && canAccessRequest(resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answer', 'status', 'updatedAt']));
       allow delete: if isAdmin();
@@ -162,10 +162,25 @@ service cloud.firestore {
         return isAdmin() || (userDoc.role == 'client' && data.clientId == userDoc.clientId && data.get('visibleToClient', false) == true);
       }
 
-      allow read: if isSignedIn() && canAccessEvidenceRequest(resource.data);
+      allow read: if isAdmin() || resource.data.get('visibleToClient', false) == true || (isSignedIn() && canAccessEvidenceRequest(resource.data));
       allow create: if isAdmin();
       allow update: if (isAdmin()) || (isSignedIn() && canAccessEvidenceRequest(resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['files', 'status', 'updatedAt']));
       allow delete: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // CASE TIMELINE COLLECTION
+    // -------------------------------------------------------------------------
+    match /caseTimeline/{timelineId} {
+      allow read: if isAdmin() || resource.data.get('publicVisible', false) == true;
+      allow write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
+    // OPERATIONAL TASKS COLLECTION
+    // -------------------------------------------------------------------------
+    match /operationalTasks/{taskId} {
+      allow read, write: if isAdmin();
     }
 
     // -------------------------------------------------------------------------

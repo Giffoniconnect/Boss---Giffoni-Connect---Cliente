@@ -32,9 +32,9 @@ export default function EditorPainelCliente() {
   const [logs, setLogs] = useState<any[]>([]);
   
   // UI Tabs & sub-states
-  const [activeTab, setActiveTab] = useState<'overview' | 'cadastro' | 'casos' | 'visibilidade' | 'timeline' | 'logs'>('overview');
+  const [activeTab, setActiveTab ] = useState<'overview' | 'cadastro' | 'casos' | 'visibilidade' | 'timeline' | 'logs'>('overview');
   const [selectedCase, setSelectedCase] = useState<any>(null);
-  const [activeCaseTab, setActiveCaseTab] = useState<'dados' | 'informacoes' | 'provas' | 'financeiro' | 'edrp' | 'controladoria'>('dados');
+  const [activeCaseTab, setActiveCaseTab] = useState<'dados' | 'experiencia' | 'informacoes' | 'provas' | 'financeiro' | 'edrp' | 'controladoria' | 'timeline_caso' | 'visibilidade_caso'>('dados');
   
   // Form State - Client Detail
   const [formData, setFormData] = useState<any>({});
@@ -45,6 +45,49 @@ export default function EditorPainelCliente() {
   const [evidenceRequests, setEvidenceRequests] = useState<any[]>([]);
   const [financials, setFinancials] = useState<any[]>([]);
   
+  // Case Experience details (Roadmap)
+  const [caseExperience, setCaseExperience] = useState<any>({
+    currentPhase: '',
+    currentPhaseLabel: '',
+    progressPercentage: 0,
+    estimatedDurationDays: 120,
+    estimatedDurationLabel: 'Prazo médio estimado',
+    phaseStartedAt: '',
+    publicPhaseDescription: '',
+    nextPublicStep: '',
+    expectationNotice: 'O prazo pode variar conforme o Tribunal, volume processual e necessidade de manifestações adicionais.'
+  });
+
+  // Case Priority details (Home Priority)
+  const [casePriority, setCasePriority] = useState<any>({
+    priorityLevel: 'informative',
+    priorityTitle: '',
+    priorityDescription: '',
+    priorityActionLabel: '',
+    priorityActionRoute: '',
+    priorityVisible: false
+  });
+
+  // Case Timeline events array
+  const [caseTimelineEvents, setCaseTimelineEvents] = useState<any[]>([]);
+
+  // Selection list for public micro-updates
+  const [selectedQuickMicroValue, setSelectedQuickMicroValue] = useState<string>('A equipe realizou nova revisão técnica do seu caso.');
+
+  // Custom case timeline manual event state
+  const [customCaseTimelineEvent, setCustomCaseTimelineEvent] = useState({
+    title: '',
+    description: '',
+    eventDate: '',
+    eventType: 'atendimento',
+    originType: 'BOSS_INTERNAL',
+    publicVisible: true,
+    automatic: false,
+    icon: 'Activity',
+    color: 'indigo',
+    priority: 'medium'
+  });
+
   // New modal/forms states
   const [newInfoReq, setNewInfoReq] = useState({ title: '', question: '', visibleToClient: true, status: 'pending', internalNotes: '' });
   const [newEvidenceReq, setNewEvidenceReq] = useState({ title: '', description: '', documentType: '', visibleToClient: true, status: 'pending', deadline: '', internalNotes: '' });
@@ -201,8 +244,48 @@ export default function EditorPainelCliente() {
       priority: c.priority || 'média',
       visibleToClient: c.visibleToClient !== false,
       visivelParaCliente: c.visivelParaCliente !== false,
+      statusPublicoCliente: c.statusPublicoCliente || '',
       edrp: c.edrp || {},
       controladoria: c.controladoria || {}
+    });
+
+    // Populate roadmap & priority states with defaults if empty
+    const roadmap = c.clientExperience || {};
+    setCaseExperience({
+      currentPhase: roadmap.currentPhase || '',
+      currentPhaseLabel: roadmap.currentPhaseLabel || '',
+      progressPercentage: roadmap.progressPercentage !== undefined ? Number(roadmap.progressPercentage) : 0,
+      estimatedDurationDays: roadmap.estimatedDurationDays !== undefined ? Number(roadmap.estimatedDurationDays) : 120,
+      estimatedDurationLabel: roadmap.estimatedDurationLabel || 'Prazo médio estimado',
+      phaseStartedAt: roadmap.phaseStartedAt || '',
+      publicPhaseDescription: roadmap.publicPhaseDescription || '',
+      nextPublicStep: roadmap.nextPublicStep || '',
+      expectationNotice: roadmap.expectationNotice || 'O prazo pode variar conforme o Tribunal, volume processual e necessidade de manifestações adicionais.'
+    });
+
+    const cp = c.clientPriority || {};
+    setCasePriority({
+      priorityLevel: cp.priorityLevel || 'informative',
+      priorityTitle: cp.priorityTitle || '',
+      priorityDescription: cp.priorityDescription || '',
+      priorityActionLabel: cp.priorityActionLabel || '',
+      priorityActionRoute: cp.priorityActionRoute || '',
+      priorityVisible: cp.priorityVisible === true
+    });
+
+    // Reset quick selection items or manual entry
+    setSelectedQuickMicroValue('A equipe realizou nova revisão técnica do seu caso.');
+    setCustomCaseTimelineEvent({
+      title: '',
+      description: '',
+      eventDate: new Date().toISOString().split('T')[0],
+      eventType: 'atendimento',
+      originType: 'BOSS_INTERNAL',
+      publicVisible: true,
+      automatic: false,
+      icon: 'Activity',
+      color: 'indigo',
+      priority: 'medium'
     });
 
     // Load related requests
@@ -215,6 +298,16 @@ export default function EditorPainelCliente() {
 
       const finSnap = await getDocs(query(collection(db, 'caseFinancials'), where('caseId', '==', c.id)));
       setFinancials(finSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+      // Fetch Case Timeline Events
+      const timelineSnap = await getDocs(query(collection(db, 'caseTimeline'), where('caseId', '==', c.id)));
+      const timelineList = timelineSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a: any, b: any) => {
+          const dateA = a.eventDate || a.createdAt || '';
+          const dateB = b.eventDate || b.createdAt || '';
+          return dateB.localeCompare(dateA);
+        });
+      setCaseTimelineEvents(timelineList);
     } catch (err) {
       console.error('Erro ao buscar dados dependentes do caso:', err);
     }
@@ -487,6 +580,237 @@ export default function EditorPainelCliente() {
     }
   };
 
+  // Helper to create direct timeline events linked to the case in the "caseTimeline" collection
+  const createCaseTimelineEventDirect = async (fields: {
+    title: string;
+    description: string;
+    eventType: string;
+    originType: string;
+    publicVisible: boolean;
+    automatic: boolean;
+    icon?: string;
+    color?: string;
+    priority?: string;
+    eventDate?: string;
+  }) => {
+    if (!selectedCase) return null;
+    const eventId = 'case_ev_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+    const rightNow = new Date().toISOString();
+    const payload = {
+      id: eventId,
+      clientId: clientId || '',
+      caseId: selectedCase.id,
+      title: fields.title,
+      description: fields.description,
+      eventDate: fields.eventDate || new Date().toISOString().split('T')[0],
+      eventType: fields.eventType,
+      originType: fields.originType,
+      publicVisible: fields.publicVisible,
+      automatic: fields.automatic,
+      editedByBoss: !fields.automatic,
+      icon: fields.icon || 'Activity',
+      color: fields.color || 'indigo',
+      priority: fields.priority || 'medium',
+      createdAt: rightNow,
+      updatedAt: rightNow
+    };
+
+    try {
+      await setDoc(doc(db, 'caseTimeline', eventId), payload);
+      setCaseTimelineEvents(prev => [payload, ...prev]);
+      await addAuditLog('Timeline do Caso', 'CREATE_CASE_TIMELINE_EVENT', {}, payload);
+      return payload;
+    } catch (e: any) {
+      console.error('Erro ao adicionar evento na timeline do caso:', e);
+      return null;
+    }
+  };
+
+  // Helper to create or update an operational task linked to this case
+  const syncOperationalTask = async (params: {
+    sourceType: string;
+    sourceId: string;
+    title: string;
+    description: string;
+    sector: string;
+    priority: string;
+    dueDate?: string;
+  }) => {
+    if (!selectedCase) return;
+    const taskId = `${params.sourceType}_${params.sourceId}`;
+    const docRef = doc(db, 'operationalTasks', taskId);
+    const rightNow = new Date().toISOString();
+
+    try {
+      const existingSnap = await getDoc(docRef);
+      if (existingSnap.exists()) {
+        const existingData = existingSnap.data() || {};
+        const payload = {
+          ...existingData,
+          title: params.title,
+          description: params.description,
+          sector: params.sector,
+          priority: params.priority,
+          dueDate: params.dueDate || existingData.dueDate || '',
+          updatedAt: rightNow
+        };
+        await setDoc(docRef, payload, { merge: true });
+      } else {
+        const payload = {
+          id: taskId,
+          clientId: clientId || '',
+          caseId: selectedCase.id,
+          sourceType: params.sourceType,
+          sourceId: params.sourceId,
+          title: params.title,
+          description: params.description,
+          sector: params.sector,
+          priority: params.priority,
+          status: 'pending',
+          dueDate: params.dueDate || '',
+          assignedTo: '',
+          createdAt: rightNow,
+          updatedAt: rightNow,
+          visibleToClient: false
+        };
+        await setDoc(docRef, payload);
+      }
+    } catch (e) {
+      console.error('Erro ao sincronizar tarefa operacional:', e);
+    }
+  };
+
+  // Delete Case Timeline Event
+  const handleDeleteCaseTimelineEvent = async (eventId: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta atualização pública do caso?')) return;
+    try {
+      await deleteDoc(doc(db, 'caseTimeline', eventId));
+      setCaseTimelineEvents(prev => prev.filter(ev => ev.id !== eventId));
+      await addAuditLog('Timeline do Caso', 'DELETE_CASE_TIMELINE_EVENT', { id: eventId }, {});
+      alert('Evento da timeline excluído com sucesso.');
+    } catch (e: any) {
+      alert('Erro ao excluir evento: ' + e.message);
+    }
+  };
+
+  // ACTION: SAVE CLIENT EXPERIENCE & PRIORITY ROADMAP
+  const handleSaveClientExperienceAndPriority = async () => {
+    if (!selectedCase) return;
+    setSaving(true);
+    try {
+      const rightNow = new Date().toISOString();
+      const clientExperience = {
+        currentPhase: caseExperience.currentPhase || '',
+        currentPhaseLabel: caseExperience.currentPhaseLabel || '',
+        progressPercentage: Number(caseExperience.progressPercentage) || 0,
+        estimatedDurationDays: Number(caseExperience.estimatedDurationDays) || 120,
+        estimatedDurationLabel: caseExperience.estimatedDurationLabel || 'Prazo médio estimado',
+        phaseStartedAt: caseExperience.phaseStartedAt || '',
+        publicPhaseDescription: caseExperience.publicPhaseDescription || '',
+        nextPublicStep: caseExperience.nextPublicStep || '',
+        expectationNotice: caseExperience.expectationNotice || 'O prazo pode variar conforme o Tribunal, volume processual e necessidade de manifestações adicionais.'
+      };
+
+      const clientPriority = {
+        priorityLevel: casePriority.priorityLevel || 'informative',
+        priorityTitle: casePriority.priorityTitle || '',
+        priorityDescription: casePriority.priorityDescription || '',
+        priorityActionLabel: casePriority.priorityActionLabel || '',
+        priorityActionRoute: casePriority.priorityActionRoute || '',
+        priorityVisible: casePriority.priorityVisible === true
+      };
+
+      const updatedCaseObj = {
+        ...selectedCase,
+        clientExperience,
+        clientPriority,
+        updatedAt: rightNow
+      };
+
+      // Save inside cases/{caseId}
+      await setDoc(doc(db, 'cases', selectedCase.id), updatedCaseObj, { merge: true });
+      // Save inside casos/{caseId}
+      await setDoc(doc(db, 'casos', selectedCase.id), updatedCaseObj, { merge: true });
+
+      await addAuditLog('Caso do Cliente - Experiência & Prioridade', 'UPDATE_CASE_EXPERIENCE_PRIORITY', {
+        clientExperience: selectedCase.clientExperience,
+        clientPriority: selectedCase.clientPriority
+      }, {
+        clientExperience,
+        clientPriority
+      });
+
+      setSelectedCase(updatedCaseObj);
+      // Update local cases list
+      setCases(prev => prev.map(c => c.id === selectedCase.id ? updatedCaseObj : c));
+      alert('Configurações da Experiência do Cliente salvas com sucesso!');
+    } catch (err: any) {
+      console.error(err);
+      alert('Erro ao salvar experiência do cliente: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ACTION: QUICK MICRO-UPDATE EVENT GENERATION
+  const handleGenerateQuickMicro = async () => {
+    if (!selectedCase) return;
+    try {
+      await createCaseTimelineEventDirect({
+        title: selectedQuickMicroValue,
+        description: 'Andamento de monitoramento ativo verificado pela equipe.',
+        eventType: 'acompanhamento',
+        originType: 'BOSS_INTERNAL',
+        publicVisible: true,
+        automatic: false,
+        icon: 'Activity',
+        color: 'emerald',
+        priority: 'medium'
+      });
+      alert('Microatualização pública gerada e publicada com sucesso!');
+    } catch (e: any) {
+      alert('Erro ao gerar microatualização: ' + e.message);
+    }
+  };
+
+  // ACTION: MANUAL UNIQUE TIMELINE EVENT GENERATION
+  const handleCreateCustomCaseTimelineEvent = async () => {
+    if (!selectedCase) return;
+    if (!customCaseTimelineEvent.title) {
+      alert('Por favor, informe um título para o evento.');
+      return;
+    }
+    try {
+      await createCaseTimelineEventDirect({
+        title: customCaseTimelineEvent.title,
+        description: customCaseTimelineEvent.description || '',
+        eventType: customCaseTimelineEvent.eventType,
+        originType: customCaseTimelineEvent.originType,
+        publicVisible: customCaseTimelineEvent.publicVisible,
+        automatic: false,
+        icon: customCaseTimelineEvent.icon,
+        color: customCaseTimelineEvent.color,
+        priority: customCaseTimelineEvent.priority,
+        eventDate: customCaseTimelineEvent.eventDate
+      });
+      setCustomCaseTimelineEvent({
+        title: '',
+        description: '',
+        eventDate: new Date().toISOString().split('T')[0],
+        eventType: 'atendimento',
+        originType: 'BOSS_INTERNAL',
+        publicVisible: true,
+        automatic: false,
+        icon: 'Activity',
+        color: 'indigo',
+        priority: 'medium'
+      });
+      alert('Evento da timeline do caso publicado com sucesso!');
+    } catch (e: any) {
+      alert('Erro ao publicar evento na timeline do caso: ' + e.message);
+    }
+  };
+
   // ACTION: CREATE INFO REQUEST
   const handleCreateInfoReq = async () => {
     if (!selectedCase) return;
@@ -509,7 +833,28 @@ export default function EditorPainelCliente() {
       setInfoRequests(prev => [...prev, createdItem]);
       setNewInfoReq({ title: '', question: '', visibleToClient: true, status: 'pending', internalNotes: '' });
 
+      // Create automatic timeline event for caseTimeline API
+      await createCaseTimelineEventDirect({
+        title: "Nova solicitação de informação",
+        description: "Precisamos de uma informação complementar para dar continuidade ao seu caso.",
+        eventType: "documento",
+        originType: "SYSTEM_EVENT",
+        publicVisible: payload.visibleToClient !== false,
+        automatic: true
+      });
+
       await addAuditLog('Solicitação de Informações do Caso', 'CREATE_INFO_REQ', {}, createdItem);
+      
+      // Sync operational task for Controladoria
+      await syncOperationalTask({
+        sourceType: 'INFO_REQUEST',
+        sourceId: createdItem.id,
+        title: "Acompanhar resposta de informação do cliente",
+        description: `Solicitação: ${createdItem.title}. Aguardando resposta do cliente.`,
+        sector: "controladoria",
+        priority: "important"
+      });
+
       alert('Solicitação de informação enviada!');
     } catch (e: any) {
       console.error(e);
@@ -569,7 +914,29 @@ export default function EditorPainelCliente() {
       setEvidenceRequests(prev => [...prev, createdItem]);
       setNewEvidenceReq({ title: '', description: '', documentType: '', visibleToClient: true, status: 'pending', deadline: '', internalNotes: '' });
 
+      // Create automatic timeline event for caseTimeline API
+      await createCaseTimelineEventDirect({
+        title: "Novo documento solicitado",
+        description: "Precisamos que você envie um documento para continuidade do seu caso.",
+        eventType: "documento",
+        originType: "SYSTEM_EVENT",
+        publicVisible: payload.visibleToClient !== false,
+        automatic: true
+      });
+
       await addAuditLog('Solicitação de Provas', 'CREATE_EVIDENCE_REQ', {}, createdItem);
+
+      // Sync operational task for Controladoria
+      await syncOperationalTask({
+        sourceType: 'EVIDENCE_REQUEST',
+        sourceId: createdItem.id,
+        title: "Acompanhar envio de prova/documento pelo cliente",
+        description: `Item: ${createdItem.title}. Tipo: ${createdItem.documentType}. Prazo limite: ${createdItem.deadline || 'Sem prazo'}.`,
+        sector: "controladoria",
+        priority: "urgent",
+        dueDate: createdItem.deadline
+      });
+
       alert('Solicitação de provas/documentos adicionada com sucesso!');
     } catch (e: any) {
       console.error(e);
@@ -612,9 +979,9 @@ export default function EditorPainelCliente() {
       const payload = {
         clientId: clientId,
         caseId: selectedCase.id,
-        totalValue: parseFloat(newFin.totalValue) || 0,
-        paidValue: parseFloat(newFin.paidValue) || 0,
-        pendingValue: parseFloat(newFin.pendingValue) || 0,
+        totalValue: newFin.totalValue === 'Não possuo' ? 'Não possuo' : (parseFloat(newFin.totalValue) || 0),
+        paidValue: newFin.paidValue === 'Não possuo' ? 'Não possuo' : (parseFloat(newFin.paidValue) || 0),
+        pendingValue: newFin.pendingValue === 'Não possuo' ? 'Não possuo' : (parseFloat(newFin.pendingValue) || 0),
         status: newFin.status || 'pendente',
         paymentMethod: newFin.paymentMethod,
         paymentLink: newFin.paymentLink || '',
@@ -630,7 +997,31 @@ export default function EditorPainelCliente() {
       setFinancials(prev => [...prev, createdItem]);
       setNewFin({ totalValue: '', paidValue: '', pendingValue: '', status: 'pendente', paymentMethod: 'PIX', paymentLink: '', dueDate: '', observations: '', visibleToClient: true });
       
+      // Create automatic timeline event for caseTimeline API
+      if (payload.visibleToClient) {
+        await createCaseTimelineEventDirect({
+          title: "Nova informação financeira disponível",
+          description: "Há uma nova informação financeira disponível no seu painel.",
+          eventType: "financeiro",
+          originType: "FINANCIAL_EVENT",
+          publicVisible: true,
+          automatic: true
+        });
+      }
+
       await addAuditLog('Financeiro do Caso', 'CREATE_FINANCIAL', {}, createdItem);
+
+      // Sync operational task for Financeiro
+      await syncOperationalTask({
+        sourceType: 'FINANCIAL',
+        sourceId: createdItem.id,
+        title: "Acompanhar pendência financeira do cliente",
+        description: `Fatura de valor pendente de ${typeof createdItem.pendingValue === 'number' ? `R$ ${createdItem.pendingValue}` : createdItem.pendingValue}. Status: ${createdItem.status}. Vencimento: ${createdItem.dueDate || 'Sem data'}.`,
+        sector: "financeiro",
+        priority: "important",
+        dueDate: createdItem.dueDate
+      });
+
       alert('Registro financeiro adicionado com sucesso!');
     } catch (e: any) {
       console.error(e);
@@ -666,7 +1057,11 @@ export default function EditorPainelCliente() {
         responsibleEDRP: caseFormData.edrp?.responsibleEDRP || '',
         nextAction: caseFormData.edrp?.nextAction || '',
         internalNotes: caseFormData.edrp?.internalNotes || '',
-        visibleToClient: caseFormData.edrp?.visibleToClient !== false
+        visibleToClient: caseFormData.edrp?.visibleToClient !== false,
+        publicTitle: caseFormData.edrp?.publicTitle || '',
+        publicDescription: caseFormData.edrp?.publicDescription || '',
+        publicVisible: caseFormData.edrp?.publicVisible !== false,
+        generatePublicTimelineEvent: false // Reset after execution
       };
 
       await updateDoc(doc(db, 'cases', selectedCase.id), { edrp: updatedEdrp });
@@ -676,7 +1071,42 @@ export default function EditorPainelCliente() {
       setSelectedCase(updatedCaseObj);
       setCases(prev => prev.map(c => c.id === selectedCase.id ? updatedCaseObj : c));
 
+      // Generate public event in caseTimeline if toggle was checked
+      if (caseFormData.edrp?.generatePublicTimelineEvent && caseFormData.edrp?.publicTitle) {
+        await createCaseTimelineEventDirect({
+          title: caseFormData.edrp.publicTitle,
+          description: caseFormData.edrp.publicDescription || 'O bloco de métricas de andamento processual foi atualizado.',
+          eventType: 'documento',
+          originType: 'BOSS_INTERNAL',
+          publicVisible: caseFormData.edrp.publicVisible !== false,
+          automatic: false
+        });
+      }
+
+      setCaseFormData(prev => ({
+        ...prev,
+        edrp: {
+          ...prev.edrp,
+          ...updatedEdrp,
+          generatePublicTimelineEvent: false
+        }
+      }));
+
       await addAuditLog('Caso do Cliente - Bloco EDRP', 'UPDATE_EDRP', prevEdrp, updatedEdrp);
+
+      // Create/update operational task for EDRP next action
+      if (updatedEdrp.nextAction && updatedEdrp.nextAction.trim() !== '') {
+        const clientName = formData.pf_nomeCompleto || formData.pj_razaoSocial || client?.name || client?.nome || 'Cliente';
+        await syncOperationalTask({
+          sourceType: 'EDRP_NEXT',
+          sourceId: selectedCase.id,
+          title: `Ação operacional EDRP - ${clientName}`,
+          description: `Próxima ação: ${updatedEdrp.nextAction}. Responsável: ${updatedEdrp.responsibleEDRP || 'Pendente'}.`,
+          sector: 'edrp',
+          priority: 'important'
+        });
+      }
+
       alert('Bloco EDRP salvo com sucesso!');
     } catch (e: any) {
       alert('Erro ao salvar EDRP: ' + e.message);
@@ -700,7 +1130,11 @@ export default function EditorPainelCliente() {
         currentAction: caseFormData.controladoria?.currentAction || '',
         nextAction: caseFormData.controladoria?.nextAction || '',
         internalNotes: caseFormData.controladoria?.internalNotes || '',
-        visibleToClient: caseFormData.controladoria?.visibleToClient !== false
+        visibleToClient: caseFormData.controladoria?.visibleToClient !== false,
+        publicTitle: caseFormData.controladoria?.publicTitle || '',
+        publicDescription: caseFormData.controladoria?.publicDescription || '',
+        publicVisible: caseFormData.controladoria?.publicVisible !== false,
+        generatePublicTimelineEvent: false // Reset after execution
       };
 
       await updateDoc(doc(db, 'cases', selectedCase.id), { controladoria: updatedControladoria });
@@ -710,7 +1144,43 @@ export default function EditorPainelCliente() {
       setSelectedCase(updatedCaseObj);
       setCases(prev => prev.map(c => c.id === selectedCase.id ? updatedCaseObj : c));
 
+      // Generate public event in caseTimeline if toggle was checked
+      if (caseFormData.controladoria?.generatePublicTimelineEvent && caseFormData.controladoria?.publicTitle) {
+        await createCaseTimelineEventDirect({
+          title: caseFormData.controladoria.publicTitle,
+          description: caseFormData.controladoria.publicDescription || 'A controladoria interna emitiu uma nova providência pública.',
+          eventType: 'tribunal',
+          originType: 'BOSS_INTERNAL',
+          publicVisible: caseFormData.controladoria.publicVisible !== false,
+          automatic: false
+        });
+      }
+
+      setCaseFormData(prev => ({
+        ...prev,
+        controladoria: {
+          ...prev.controladoria,
+          ...updatedControladoria,
+          generatePublicTimelineEvent: false
+        }
+      }));
+
       await addAuditLog('Caso do Cliente - Bloco Controladoria', 'UPDATE_CONTROLADORIA', prevControladoria, updatedControladoria);
+
+      // Create/update operational task for Controladoria next level actions
+      if ((updatedControladoria.nextAction && updatedControladoria.nextAction.trim() !== '') || (updatedControladoria.fatalDeadline && updatedControladoria.fatalDeadline.trim() !== '')) {
+        const clientName = formData.pf_nomeCompleto || formData.pj_razaoSocial || client?.name || client?.nome || 'Cliente';
+        await syncOperationalTask({
+          sourceType: 'CONTROLADORIA_NEXT',
+          sourceId: selectedCase.id,
+          title: `Providência Controladoria - ${clientName}`,
+          description: `Mapeado na controladoria. Próxima ação: ${updatedControladoria.nextAction || 'Sem ação cadastrada'}. Prazo fatal: ${updatedControladoria.fatalDeadline || 'Sem prazo'}.`,
+          sector: 'controladoria',
+          priority: 'urgent',
+          dueDate: updatedControladoria.fatalDeadline
+        });
+      }
+
       alert('Bloco de Controladoria salvo com sucesso!');
     } catch (e: any) {
       alert('Erro ao salvar Controladoria: ' + e.message);
@@ -1236,23 +1706,31 @@ export default function EditorPainelCliente() {
                           </div>
 
                           {/* Secondary Internal Nav Tabs */}
-                          <div className="bg-white border-b px-4 py-2.5 flex flex-wrap gap-1">
+                          <div className="bg-white border-b p-4 flex flex-wrap gap-2.5">
                             {[
-                              { id: 'dados', label: '📂 Dados Básicos' },
-                              { id: 'informacoes', label: '💬 Solicitar Informações' },
-                              { id: 'provas', label: '🧪 Pedidos de Provas' },
-                              { id: 'financeiro', label: '💰 Financeiro Caso' },
-                              { id: 'edrp', label: '📈 Métricas EDRP' },
-                              { id: 'controladoria', label: '⚖️ Controladoria' }
-                            ].map((tab) => (
-                              <button
-                                key={tab.id}
-                                onClick={() => setActiveCaseTab(tab.id as any)}
-                                className={`px-3.5 py-1.5 rounded-lg text-[11px] font-black uppercase transition-all cursor-pointer ${activeCaseTab === tab.id ? 'bg-indigo-50 border border-indigo-200 text-indigo-800 font-bold' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'}`}
-                              >
-                                {tab.label}
-                              </button>
-                            ))}
+                              { id: 'dados', label: 'Dados do caso', icon: Briefcase },
+                              { id: 'experiencia', label: 'Experiência do Cliente', icon: Activity },
+                              { id: 'informacoes', label: 'Solicitação de informações', icon: ListTodo },
+                              { id: 'provas', label: 'Solicitação de provas', icon: FileText },
+                              { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
+                              { id: 'edrp', label: 'EDRP', icon: Shield },
+                              { id: 'controladoria', label: 'Controladoria', icon: AlertCircle },
+                              { id: 'timeline_caso', label: 'Timeline pública', icon: Clock },
+                              { id: 'visibilidade_caso', label: 'Visibilidade', icon: User }
+                            ].map((tab) => {
+                              const IconComp = tab.icon;
+                              const isChosen = activeCaseTab === tab.id;
+                              return (
+                                <button
+                                  key={tab.id}
+                                  onClick={() => setActiveCaseTab(tab.id as any)}
+                                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[15px] font-bold uppercase transition-all cursor-pointer ${isChosen ? 'bg-indigo-650 text-white shadow-sm font-extrabold' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'}`}
+                                >
+                                  <IconComp className="w-5 h-5 shrink-0" />
+                                  <span>{tab.label}</span>
+                                </button>
+                              );
+                            })}
                           </div>
 
                           {/* Nested Case Action Panels */}
@@ -1442,9 +1920,60 @@ export default function EditorPainelCliente() {
                                 <div className="p-4 bg-gray-50 border rounded-2xl space-y-3">
                                   <span className="text-[11px] font-black uppercase text-gray-850 block">Lançamento de Fatura do Caso</span>
                                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                                    <input type="text" placeholder="Valor Total" value={newFin.totalValue} onChange={(e) => setNewFin({...newFin, totalValue: e.target.value})} className="p-2 border rounded-xl outline-none" />
-                                    <input type="text" placeholder="Valor Pago" value={newFin.paidValue} onChange={(e) => setNewFin({...newFin, paidValue: e.target.value})} className="p-2 border rounded-xl outline-none" />
-                                    <input type="text" placeholder="Valor Pendente" value={newFin.pendingValue} onChange={(e) => setNewFin({...newFin, pendingValue: e.target.value})} className="p-2 border rounded-xl outline-none" />
+                                    <div className="flex items-center gap-1.5 bg-white border rounded-xl px-2">
+                                      <input type="text" placeholder="Valor Total" value={newFin.totalValue} onChange={(e) => setNewFin({...newFin, totalValue: e.target.value})} className="w-full py-2 outline-none border-none text-xs bg-transparent" />
+                                      <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
+                                        <input 
+                                          type="checkbox" 
+                                          checked={newFin.totalValue === 'Não possuo'} 
+                                          onChange={(e) => {
+                                            setNewFin({
+                                              ...newFin, 
+                                              totalValue: e.target.checked ? 'Não possuo' : ''
+                                            });
+                                          }} 
+                                          className="w-3.5 h-3.5 rounded border-gray-300"
+                                        />
+                                        Não possuo
+                                      </label>
+                                    </div>
+
+                                    <div className="flex items-center gap-1.5 bg-white border rounded-xl px-2">
+                                      <input type="text" placeholder="Valor Pago" value={newFin.paidValue} onChange={(e) => setNewFin({...newFin, paidValue: e.target.value})} className="w-full py-2 outline-none border-none text-xs bg-transparent" />
+                                      <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
+                                        <input 
+                                          type="checkbox" 
+                                          checked={newFin.paidValue === 'Não possuo'} 
+                                          onChange={(e) => {
+                                            setNewFin({
+                                              ...newFin, 
+                                              paidValue: e.target.checked ? 'Não possuo' : ''
+                                            });
+                                          }} 
+                                          className="w-3.5 h-3.5 rounded border-gray-300"
+                                        />
+                                        Não possuo
+                                      </label>
+                                    </div>
+
+                                    <div className="flex items-center gap-1.5 bg-white border rounded-xl px-2">
+                                      <input type="text" placeholder="Valor Pendente" value={newFin.pendingValue} onChange={(e) => setNewFin({...newFin, pendingValue: e.target.value})} className="w-full py-2 outline-none border-none text-xs bg-transparent" />
+                                      <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
+                                        <input 
+                                          type="checkbox" 
+                                          checked={newFin.pendingValue === 'Não possuo'} 
+                                          onChange={(e) => {
+                                            setNewFin({
+                                              ...newFin, 
+                                              pendingValue: e.target.checked ? 'Não possuo' : ''
+                                            });
+                                          }} 
+                                          className="w-3.5 h-3.5 rounded border-gray-300"
+                                        />
+                                        Não possuo
+                                      </label>
+                                    </div>
+
                                     <select value={newFin.status} onChange={(e) => setNewFin({...newFin, status: e.target.value})} className="p-2 border rounded-xl outline-none bg-white">
                                       <option value="pendente">Pendente</option>
                                       <option value="pago">Pago</option>
@@ -1470,10 +1999,14 @@ export default function EditorPainelCliente() {
                                       <div key={f.id} className="pt-3 flex justify-between items-center text-xs">
                                         <div className="space-y-1">
                                           <div className="flex items-center gap-2">
-                                            <span className="font-extrabold text-indigo-950">R$ {f.totalValue?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                            <span className="font-extrabold text-indigo-950">
+                                              {typeof f.totalValue === 'number' ? `R$ ${f.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : f.totalValue}
+                                            </span>
                                             <span className={`px-2 py-0.2 rounded-full text-[9px] uppercase font-black ${f.status === 'pago' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-600'}`}>{f.status}</span>
                                           </div>
-                                          <p className="text-gray-500 font-medium">Pago: R$ {f.paidValue || 0} | Vence em: {f.dueDate || 'À vista'}</p>
+                                          <p className="text-gray-500 font-medium">
+                                            Pago: {typeof f.paidValue === 'number' ? `R$ ${f.paidValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : f.paidValue} | Vence em: {f.dueDate || 'À vista'}
+                                          </p>
                                         </div>
                                         <button onClick={() => handleDeleteFinancial(f.id)} className="p-1.5 border border-red-150 rounded-lg text-red-600 hover:bg-rose-50 cursor-pointer">
                                           <Trash2 className="w-4 h-4" />
@@ -1534,6 +2067,33 @@ export default function EditorPainelCliente() {
                                     <label className="block text-gray-455 font-bold mb-1 uppercase">Observações Internas EDRP</label>
                                     <textarea value={caseFormData.edrp?.internalNotes || ''} onChange={(e) => setCaseFormData({...caseFormData, edrp: { ...caseFormData.edrp, internalNotes: e.target.value}})} className="w-full p-2.5 border rounded-2xl h-16 resize-none" />
                                   </div>
+
+                                  <div className="md:col-span-2 border-t pt-4 mt-2 space-y-4">
+                                    <span className="text-[11px] font-black uppercase text-indigo-800 block">Campos Públicos EDRP (Refletidos no Portal do Cliente)</span>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <div>
+                                        <label className="block text-gray-500 font-bold mb-1 uppercase">Título Público EDRP</label>
+                                        <input type="text" placeholder="Ex: Fase de Elaboração de Peça Concluída" value={caseFormData.edrp?.publicTitle || ''} onChange={(e) => setCaseFormData({...caseFormData, edrp: { ...caseFormData.edrp, publicTitle: e.target.value}})} className="w-full p-2 border rounded-xl outline-none" />
+                                      </div>
+                                      <div>
+                                        <label className="block text-gray-500 font-bold mb-1 uppercase">Descrição Pública EDRP</label>
+                                        <input type="text" placeholder="Ex: Nossos especialistas concluíram a estruturação e revisão do caso." value={caseFormData.edrp?.publicDescription || ''} onChange={(e) => setCaseFormData({...caseFormData, edrp: { ...caseFormData.edrp, publicDescription: e.target.value}})} className="w-full p-2 border rounded-xl outline-none" />
+                                      </div>
+                                      <div className="flex items-center gap-1.5 font-bold pt-2">
+                                        <label className="flex items-center gap-1.5 font-bold cursor-pointer">
+                                          <input type="checkbox" checked={caseFormData.edrp?.publicVisible !== false} onChange={(e) => setCaseFormData({...caseFormData, edrp: { ...caseFormData.edrp, publicVisible: e.target.checked}})} className="rounded border-gray-350 w-4 h-4" />
+                                          Permitir visualização pública destes campos
+                                        </label>
+                                      </div>
+                                      <div className="flex items-center gap-1.5 font-bold pt-2">
+                                        <label className="flex items-center gap-1.5 font-bold cursor-pointer text-indigo-700">
+                                          <input type="checkbox" checked={caseFormData.edrp?.generatePublicTimelineEvent === true} onChange={(e) => setCaseFormData({...caseFormData, edrp: { ...caseFormData.edrp, generatePublicTimelineEvent: e.target.checked}})} className="rounded border-indigo-350 w-4 h-4" />
+                                          Gerar marco na Timeline Pública ao salvar
+                                        </label>
+                                      </div>
+                                    </div>
+                                  </div>
+
                                   <div className="md:col-span-2 flex items-center pt-2">
                                     <label className="flex items-center gap-1.5 font-bold cursor-pointer">
                                       <input type="checkbox" checked={caseFormData.edrp?.visibleToClient !== false} onChange={(e) => setCaseFormData({...caseFormData, edrp: { ...caseFormData.edrp, visibleToClient: e.target.checked}})} className="rounded border-gray-350 w-4 h-4" />
@@ -1588,11 +2148,304 @@ export default function EditorPainelCliente() {
                                     <label className="block text-gray-450 font-bold mb-1">Notas de Controladoria</label>
                                     <textarea value={caseFormData.controladoria?.internalNotes || ''} onChange={(e) => setCaseFormData({...caseFormData, controladoria: { ...caseFormData.controladoria, internalNotes: e.target.value}})} className="w-full p-2.5 border rounded-2xl h-16 resize-none" />
                                   </div>
+
+                                  <div className="md:col-span-2 border-t pt-4 mt-2 space-y-4">
+                                    <span className="text-[11px] font-black uppercase text-indigo-800 block">Campos Públicos Controladoria (Refletidos no Portal do Cliente)</span>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      <div>
+                                        <label className="block text-gray-500 font-bold mb-1 uppercase">Título Público Controladoria</label>
+                                        <input type="text" placeholder="Ex: Entrada em fase de auditoria e contagem de prazos" value={caseFormData.controladoria?.publicTitle || ''} onChange={(e) => setCaseFormData({...caseFormData, controladoria: { ...caseFormData.controladoria, publicTitle: e.target.value}})} className="w-full p-2 border rounded-xl outline-none" />
+                                      </div>
+                                      <div>
+                                        <label className="block text-gray-500 font-bold mb-1 uppercase">Descrição Pública Controladoria</label>
+                                        <input type="text" placeholder="Ex: O tribunal abriu prazo e a equipe de controladores está revisando as providências." value={caseFormData.controladoria?.publicDescription || ''} onChange={(e) => setCaseFormData({...caseFormData, controladoria: { ...caseFormData.controladoria, publicDescription: e.target.value}})} className="w-full p-2 border rounded-xl outline-none" />
+                                      </div>
+                                      <div className="flex items-center gap-1.5 font-bold pt-2">
+                                        <label className="flex items-center gap-1.5 font-bold cursor-pointer">
+                                          <input type="checkbox" checked={caseFormData.controladoria?.publicVisible !== false} onChange={(e) => setCaseFormData({...caseFormData, controladoria: { ...caseFormData.controladoria, publicVisible: e.target.checked}})} className="rounded border-gray-350 w-4 h-4" />
+                                          Permitir visualização pública destes campos
+                                        </label>
+                                      </div>
+                                      <div className="flex items-center gap-1.5 font-bold pt-2">
+                                        <label className="flex items-center gap-1.5 font-bold cursor-pointer text-indigo-700">
+                                          <input type="checkbox" checked={caseFormData.controladoria?.generatePublicTimelineEvent === true} onChange={(e) => setCaseFormData({...caseFormData, controladoria: { ...caseFormData.controladoria, generatePublicTimelineEvent: e.target.checked}})} className="rounded border-indigo-350 w-4 h-4" />
+                                          Gerar marco na Timeline Pública ao salvar
+                                        </label>
+                                      </div>
+                                    </div>
+                                  </div>
+
                                   <div className="md:col-span-2 pt-2">
                                     <label className="flex items-center gap-1.5 font-bold cursor-pointer">
                                       <input type="checkbox" checked={caseFormData.controladoria?.visibleToClient !== false} onChange={(e) => setCaseFormData({...caseFormData, controladoria: { ...caseFormData.controladoria, visibleToClient: e.target.checked}})} className="rounded border-gray-350 w-4 h-4" />
                                       Visível para o cliente no portal
                                     </label>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* CASE INNER TAB: EXPERIÊNCIA DO CLIENTE */}
+                            {activeCaseTab === 'experiencia' && (
+                              <div className="space-y-6 animate-in fade-in duration-100">
+                                <div className="flex justify-between items-center border-b pb-3">
+                                  <div>
+                                    <h3 className="text-[18px] font-black uppercase text-gray-800 text-slate-800">Construtor da Experiência do Cliente</h3>
+                                    <p className="text-xs text-gray-400">Configure o Roadmap visual interativo e a prioridade automática que o cliente verá na Home.</p>
+                                  </div>
+                                  <button onClick={handleSaveClientExperienceAndPriority} className="px-5 py-2.5 bg-indigo-650 hover:bg-indigo-750 text-white rounded-xl text-xs font-black uppercase tracking-wide cursor-pointer transition-colors shadow-xs">
+                                    Salvar Experiência & Roadmap
+                                  </button>
+                                </div>
+
+                                {/* Bloco A: Roadmap Visual */}
+                                <div className="p-6 bg-gray-50 border border-gray-100 rounded-2xl space-y-4">
+                                  <div className="flex items-center gap-2 border-b pb-2">
+                                    <Activity className="w-5 h-5 text-indigo-600" />
+                                    <span className="text-[15px] font-black uppercase text-indigo-800">A) Roadmap Visual do Caso</span>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-bold text-gray-650">
+                                    <div>
+                                      <label className="block text-gray-500 mb-1 uppercase text-[12px]">Fase Atual Interna (id)</label>
+                                      <input type="text" placeholder="Ex: peticao_inicial" value={caseExperience.currentPhase || ''} onChange={(e) => setCaseExperience({...caseExperience, currentPhase: e.target.value})} className="w-full p-2.5 bg-white border border-gray-200 rounded-xl outline-none" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-gray-500 mb-1 uppercase text-[12px]">Fase Atual para o Cliente (Label)</label>
+                                      <input type="text" placeholder="Ex: Petição Inicial Elaborada" value={caseExperience.currentPhaseLabel || ''} onChange={(e) => setCaseExperience({...caseExperience, currentPhaseLabel: e.target.value})} className="w-full p-2.5 bg-white border border-gray-200 rounded-xl outline-none" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-gray-500 mb-1 uppercase text-[12px]">Porcentagem de Progresso ({caseExperience.progressPercentage || 0}%)</label>
+                                      <input type="range" min="0" max="100" value={caseExperience.progressPercentage || 0} onChange={(e) => setCaseExperience({...caseExperience, progressPercentage: Number(e.target.value)})} className="w-full h-2 bg-gray-250 rounded-lg appearance-none cursor-pointer mt-4" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-gray-500 mb-1 uppercase text-[12px]">Prazo Médio Estimado (Dias)</label>
+                                      <input type="number" placeholder="Ex: 120" value={caseExperience.estimatedDurationDays || 120} onChange={(e) => setCaseExperience({...caseExperience, estimatedDurationDays: Number(e.target.value)})} className="w-full p-2.5 bg-white border border-gray-200 rounded-xl outline-none" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-gray-500 mb-1 uppercase text-[12px]">Subtítulo / Sufixo do Prazo</label>
+                                      <input type="text" value={caseExperience.estimatedDurationLabel || ''} onChange={(e) => setCaseExperience({...caseExperience, estimatedDurationLabel: e.target.value})} className="w-full p-2.5 bg-white border border-gray-200 rounded-xl outline-none" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-gray-500 mb-1 uppercase text-[12px]">Data Inicial da Fase Atual</label>
+                                      <input type="date" value={caseExperience.phaseStartedAt || ''} onChange={(e) => setCaseExperience({...caseExperience, phaseStartedAt: e.target.value})} className="w-full p-2.5 bg-white border border-gray-200 rounded-xl outline-none text-gray-650 font-mono" />
+                                    </div>
+                                    <div className="md:col-span-3">
+                                      <label className="block text-gray-500 mb-1 uppercase text-[12px]">Descrição Detalhada e Amigável da Fase Atual</label>
+                                      <textarea placeholder="O que está acontecendo agora de forma compreensível para o cliente..." value={caseExperience.publicPhaseDescription || ''} onChange={(e) => setCaseExperience({...caseExperience, publicPhaseDescription: e.target.value})} className="w-full p-3 bg-white border border-gray-200 rounded-xl h-20 resize-none outline-none" />
+                                    </div>
+                                    <div className="md:col-span-3">
+                                      <label className="block text-gray-500 mb-1 uppercase text-[12px]">Próximo Passo / Próxima Expectativa Pública</label>
+                                      <input type="text" placeholder="Ex: Intimação da parte contrária para apresentar defesa pública" value={caseExperience.nextPublicStep || ''} onChange={(e) => setCaseExperience({...caseExperience, nextPublicStep: e.target.value})} className="w-full p-2.5 bg-white border border-gray-200 rounded-xl outline-none" />
+                                    </div>
+                                    <div className="md:col-span-3">
+                                      <label className="block text-gray-500 mb-1 uppercase text-[12px]">Alerta / Nota de Expectativa Contratual</label>
+                                      <textarea placeholder="Ex: O prazo pode variar conforme o Tribunal e andamento..." value={caseExperience.expectationNotice || ''} onChange={(e) => setCaseExperience({...caseExperience, expectationNotice: e.target.value})} className="w-full p-3 bg-white border border-gray-200 rounded-xl h-16 resize-none outline-none" />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Bloco B: Prioridade Automática Home */}
+                                <div className="p-6 bg-gray-50 border border-gray-100 rounded-2xl space-y-4">
+                                  <div className="flex items-center gap-2 border-b pb-2">
+                                    <AlertCircle className="w-5 h-5 text-indigo-650" />
+                                    <span className="text-[15px] font-black uppercase text-indigo-805">B) Card de Atenção com Ação (Prioridades Automáticas na Home)</span>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-bold text-gray-650">
+                                    <div>
+                                      <label className="block text-gray-500 mb-1 uppercase text-[12px]">Status Visual / Classificação</label>
+                                      <select value={casePriority.priorityLevel || 'informative'} onChange={(e) => setCasePriority({...casePriority, priorityLevel: e.target.value})} className="w-full p-2.5 bg-white border border-gray-200 rounded-xl outline-none">
+                                        <option value="danger">Vermelho (Crítico / Ação Obrigatória)</option>
+                                        <option value="warning">Amarelo (Atenção / Pendência Suave)</option>
+                                        <option value="success">Verde (Sucesso / Atualização Relevante)</option>
+                                        <option value="informative">Azul (Informativo Geral)</option>
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="block text-gray-500 mb-1 uppercase text-[12px]">Título do Card de Atenção</label>
+                                      <input type="text" placeholder="Ex: Assinatura Eletrônica pendente!" value={casePriority.priorityTitle || ''} onChange={(e) => setCasePriority({...casePriority, priorityTitle: e.target.value})} className="w-full p-2.5 bg-white border border-gray-200 rounded-xl outline-none" />
+                                    </div>
+                                    <div className="md:col-span-2">
+                                      <label className="block text-gray-500 mb-1 uppercase text-[12px]">Descrição da Prioridade</label>
+                                      <textarea placeholder="O que o cliente precisa saber ou fazer imediatamente..." value={casePriority.priorityDescription || ''} onChange={(e) => setCasePriority({...casePriority, priorityDescription: e.target.value})} className="w-full p-3 bg-white border border-gray-200 rounded-xl h-16 resize-none outline-none" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-gray-500 mb-1 uppercase text-[12px]">Texto do Botão de Ação</label>
+                                      <input type="text" placeholder="Ex: Assinar Contrato Agora" value={casePriority.priorityActionLabel || ''} onChange={(e) => setCasePriority({...casePriority, priorityActionLabel: e.target.value})} className="w-full p-2.5 bg-white border border-gray-200 rounded-xl outline-none" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-gray-500 mb-1 uppercase text-[12px]">Destino da Rota no Portal (Router Link)</label>
+                                      <input type="text" placeholder="Ex: /documentos" value={casePriority.priorityActionRoute || ''} onChange={(e) => setCasePriority({...casePriority, priorityActionRoute: e.target.value})} className="w-full p-2.5 bg-white border border-gray-200 rounded-xl outline-none" />
+                                    </div>
+                                    <div className="md:col-span-2 pt-2">
+                                      <label className="flex items-center gap-1.5 font-bold cursor-pointer">
+                                        <input type="checkbox" checked={casePriority.priorityVisible === true} onChange={(e) => setCasePriority({...casePriority, priorityVisible: e.target.checked})} className="rounded border-gray-350 w-4 h-4" />
+                                        Ativar e exibir este alerta de prioridade mestre na Home do Portal
+                                      </label>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* CASE INNER TAB: TIMELINE PÚBLICA DO CASO */}
+                            {activeCaseTab === 'timeline_caso' && (
+                              <div className="space-y-6 animate-in fade-in duration-100">
+                                <div className="border-b pb-3">
+                                  <h3 className="text-[18px] font-black uppercase text-gray-800 text-slate-800">Timeline Pública do Caso (Refletida no Painel)</h3>
+                                  <p className="text-xs text-gray-400">Publique marcos interativos e microatualizações de monitoramento ativo exclusivos para este caso.</p>
+                                </div>
+
+                                {/* Bloco 1: Micro-Public Updates rápidas */}
+                                <div className="p-5 bg-indigo-50/50 border border-indigo-100/55 rounded-2xl space-y-4">
+                                  <span className="text-[13px] font-black uppercase text-indigo-900 block">D) Microatualizações Públicas Prontas (Escolha Rápida)</span>
+                                  <div className="flex flex-wrap items-end gap-3 text-xs">
+                                    <div className="flex-1 min-w-[280px]">
+                                      <label className="block text-gray-500 font-bold mb-1 uppercase">Selecione o Modelo de Andamento</label>
+                                      <select value={selectedQuickMicroValue} onChange={(e) => setSelectedQuickMicroValue(e.target.value)} className="w-full p-2.5 bg-white border border-gray-200 rounded-xl outline-none font-bold text-gray-700">
+                                        <option value="A equipe realizou nova revisão técnica do seu caso.">“A equipe realizou nova revisão técnica do seu caso.”</option>
+                                        <option value="Seguimos acompanhando movimentações do Tribunal.">“Seguimos acompanhando movimentações do Tribunal.”</option>
+                                        <option value="A controladoria revisou o andamento do processo.">“A controladoria revisou o andamento do processo.”</option>
+                                        <option value="A documentação foi conferida pela equipe.">“A documentação foi conferida pela equipe.”</option>
+                                        <option value="O caso permanece em monitoramento active.">“O caso permanece em monitoramento ativo.”</option>
+                                      </select>
+                                    </div>
+                                    <button onClick={handleGenerateQuickMicro} className="px-5 py-2.5 bg-indigo-650 hover:bg-indigo-750 text-white rounded-xl font-bold uppercase tracking-wide cursor-pointer text-xs flex items-center gap-1.5 shadow-xs shrink-0 self-end">
+                                      <Activity className="w-4 h-4" /> Gerar microatualização pública
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Bloco 2: Criar Evento Manual na Timeline */}
+                                <div className="p-6 bg-white border border-gray-200 rounded-2xl space-y-4 shadow-2xs">
+                                  <span className="text-[13px] font-black uppercase text-indigo-900 block font-black text-slate-800">Criar Evento Manual na Timeline do Caso</span>
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-bold text-gray-650 font-bold">
+                                    <div className="md:col-span-2">
+                                      <label className="block text-gray-450 mb-1 uppercase text-[11px]">Título do Evento</label>
+                                      <input type="text" placeholder="Ex: Juntada de Petição de Manifestação" value={customCaseTimelineEvent.title} onChange={(e) => setCustomCaseTimelineEvent({...customCaseTimelineEvent, title: e.target.value})} className="w-full p-2.5 bg-white border border-gray-200 rounded-xl outline-none" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-gray-450 mb-1 uppercase text-[11px]">Data do Evento</label>
+                                      <input type="date" value={customCaseTimelineEvent.eventDate} onChange={(e) => setCustomCaseTimelineEvent({...customCaseTimelineEvent, eventDate: e.target.value})} className="w-full p-2.5 bg-white border border-gray-200 rounded-xl outline-none font-mono text-gray-600" />
+                                    </div>
+                                    <div className="md:col-span-3">
+                                      <label className="block text-gray-450 mb-1 uppercase text-[11px]">Descrição Pública</label>
+                                      <textarea placeholder="Explicação compreensível sobre esta etapa que ficará visível ao cliente..." value={customCaseTimelineEvent.description} onChange={(e) => setCustomCaseTimelineEvent({...customCaseTimelineEvent, description: e.target.value})} className="w-full p-3 bg-white border border-gray-200 rounded-xl h-16 resize-none outline-none" />
+                                    </div>
+                                    <div>
+                                      <label className="block text-gray-450 mb-1 uppercase text-[11px]">Categoria / Tipo de Evento</label>
+                                      <select value={customCaseTimelineEvent.eventType} onChange={(e) => setCustomCaseTimelineEvent({...customCaseTimelineEvent, eventType: e.target.value})} className="w-full p-2.5 bg-white border border-gray-200 rounded-xl outline-none">
+                                        <option value="atendimento">Atendimento Geral</option>
+                                        <option value="tribunal">Tribunal / Decisão / Despacho</option>
+                                        <option value="documento">Análise de Peça / Documento</option>
+                                        <option value="financeiro">Financeiro / Pagamento</option>
+                                        <option value="acordo">Acordo Judicial / Conciliação</option>
+                                        <option value="liminar">Medida Liminar / Urgência</option>
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="block text-gray-455 mb-1 uppercase text-[11px]">Cor Visual do Marcador</label>
+                                      <select value={customCaseTimelineEvent.color} onChange={(e) => setCustomCaseTimelineEvent({...customCaseTimelineEvent, color: e.target.value})} className="w-full p-2.5 bg-white border border-gray-200 rounded-xl outline-none">
+                                        <option value="indigo">Indigo (Padrão)</option>
+                                        <option value="emerald">Verde (Sucesso)</option>
+                                        <option value="amber">Amarelo (Atenção)</option>
+                                        <option value="rose">Vermelho (Crítico)</option>
+                                        <option value="sky">Azul Claro (Informativo)</option>
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="block text-gray-455 mb-1 uppercase text-[11px]">Ícone Correspondente</label>
+                                      <select value={customCaseTimelineEvent.icon} onChange={(e) => setCustomCaseTimelineEvent({...customCaseTimelineEvent, icon: e.target.value})} className="w-full p-2.5 bg-white border border-gray-200 rounded-xl outline-none">
+                                        <option value="Activity">Pulso / Atividade</option>
+                                        <option value="Briefcase">Caso / Pasta</option>
+                                        <option value="FileText">Documento / Petição</option>
+                                        <option value="CheckCircle">Visto / Saneado</option>
+                                        <option value="DollarSign">Cifrão / Financeiro</option>
+                                        <option value="Scale">Balança da Justiça</option>
+                                      </select>
+                                    </div>
+                                    <div className="md:col-span-3 flex items-center justify-between pt-2">
+                                      <label className="flex items-center gap-1.5 font-bold cursor-pointer">
+                                        <input type="checkbox" checked={customCaseTimelineEvent.publicVisible === true} onChange={(e) => setCustomCaseTimelineEvent({...customCaseTimelineEvent, publicVisible: e.target.checked})} className="rounded border-gray-350 w-4 h-4" />
+                                        Tornar este evento público e visível imediatamente no Portal
+                                      </label>
+                                      <button onClick={handleCreateCustomCaseTimelineEvent} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold uppercase transition-all cursor-pointer">
+                                        Publicar Novo Evento de Timeline
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Bloco 3: Lista de Eventos Cadastrados */}
+                                <div className="space-y-3">
+                                  <span className="text-[13px] font-black uppercase text-gray-700 block font-bold text-slate-800">Histórico de Eventos e Marcos de Timeline do Caso</span>
+                                  {caseTimelineEvents.length === 0 ? (
+                                    <div className="p-8 text-center bg-gray-50 border border-dashed rounded-2xl text-gray-400 font-bold">
+                                      Nenhum marco cadastrado na timeline pública deste caso.
+                                    </div>
+                                  ) : (
+                                    <div className="divide-y border rounded-2xl overflow-hidden bg-white shadow-2xs">
+                                      {caseTimelineEvents.map((ev) => (
+                                        <div key={ev.id} className="p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-gray-50 transition-colors">
+                                          <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                              <span className={`w-2.5 h-2.5 rounded-full bg-${ev.color || 'indigo'}-500`} />
+                                              <span className="font-extrabold text-gray-805 text-[13px]">{ev.title}</span>
+                                              <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono uppercase font-semibold">{ev.eventType}</span>
+                                              {ev.automatic && <span className="text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-md font-bold">AUTOMÁTICO</span>}
+                                            </div>
+                                            <p className="text-gray-500 font-semibold text-xs">{ev.description}</p>
+                                            <div className="text-[10px] text-gray-400 font-mono">
+                                              Data do Evento: <b className="text-gray-500">{ev.eventDate}</b> | Modificado em: {new Date(ev.updatedAt || ev.createdAt).toLocaleString()}
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-2 self-end md:self-center shrink-0">
+                                            <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-lg ${ev.publicVisible ? 'bg-emerald-55 text-emerald-750 border border-emerald-100' : 'bg-rose-55 text-rose-750 border border-rose-100'}`}>
+                                              {ev.publicVisible ? 'Visível' : 'Oculto'}
+                                            </span>
+                                            <button onClick={() => handleDeleteCaseTimelineEvent(ev.id)} className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg cursor-pointer transition-colors" title="Excluir da Timeline">
+                                              <Trash2 className="w-4 h-4" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* CASE INNER TAB: VISIBILIDADE DO CASO */}
+                            {activeCaseTab === 'visibilidade_caso' && (
+                              <div className="space-y-6 animate-in fade-in duration-100">
+                                <div className="flex justify-between items-center border-b pb-3">
+                                  <div>
+                                    <h3 className="text-[18px] font-black uppercase text-gray-800 text-slate-800">Controle de Visibilidade do Caso</h3>
+                                    <p className="text-xs text-gray-400">Gerencie se este caso estará acessível para o Portal do Cliente de forma mestre.</p>
+                                  </div>
+                                  <button onClick={handleSaveCaseData} className="px-5 py-2.5 bg-indigo-650 hover:bg-indigo-750 text-white rounded-xl text-xs font-black uppercase tracking-wide cursor-pointer transition-colors shadow-xs">
+                                    Salvar Alterações de Visibilidade
+                                  </button>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 font-bold">
+                                  {/* Toggle 1: visibleToClient */}
+                                  <div className="p-6 bg-white border border-gray-250 rounded-2xl shadow-3xs flex items-start gap-4">
+                                    <input type="checkbox" id="visibleToClient" checked={caseFormData.visibleToClient !== false} onChange={(e) => setCaseFormData({...caseFormData, visibleToClient: e.target.checked})} className="mt-1.5 rounded border-gray-350 w-5 h-5 shrink-0 cursor-pointer" />
+                                    <div className="space-y-1">
+                                      <label htmlFor="visibleToClient" className="text-[15px] font-black text-gray-805 uppercase cursor-pointer block">Caso Visível para o Cliente</label>
+                                      <p className="text-xs text-gray-500 font-bold">Toma efeito mestre se o caso e detalhes secundários podem ser visualizados na lista do Portal.</p>
+                                    </div>
+                                  </div>
+
+                                  {/* Toggle 2: visivelParaCliente */}
+                                  <div className="p-6 bg-white border border-gray-250 rounded-2xl shadow-3xs flex items-start gap-4">
+                                    <input type="checkbox" id="visivelParaCliente" checked={caseFormData.visivelParaCliente !== false} onChange={(e) => setCaseFormData({...caseFormData, visivelParaCliente: e.target.checked})} className="mt-1.5 rounded border-gray-350 w-5 h-5 shrink-0 cursor-pointer" />
+                                    <div className="space-y-1">
+                                      <label htmlFor="visivelParaCliente" className="text-[15px] font-black text-gray-805 uppercase cursor-pointer block">Permitir Visualização Ativa (visivelParaCliente)</label>
+                                      <p className="text-xs text-gray-500 font-bold">Mapeamento adicional para compatibilidade total com os flags do Portal legado.</p>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
