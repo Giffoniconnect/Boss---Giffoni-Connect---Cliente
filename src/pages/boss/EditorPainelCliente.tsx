@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   doc, 
   getDoc, 
@@ -17,7 +18,7 @@ import { BossLayout } from '../../components/Layout';
 import { 
   ArrowLeft, Save, ExternalLink, Shield, User, Briefcase, 
   Activity, ListTodo, Plus, Trash2, CheckCircle, Clock, DollarSign, 
-  ChevronRight, AlertCircle, FileText, Send, Loader2
+  ChevronRight, AlertCircle, FileText, Send, Loader2, Gavel
 } from 'lucide-react';
 
 export default function EditorPainelCliente() {
@@ -246,7 +247,9 @@ export default function EditorPainelCliente() {
       visivelParaCliente: c.visivelParaCliente !== false,
       statusPublicoCliente: c.statusPublicoCliente || '',
       edrp: c.edrp || {},
-      controladoria: c.controladoria || {}
+      controladoria: c.controladoria || {},
+      technicalCategory: c.technicalCategory || '',
+      subCategory: c.subCategory || ''
     });
 
     // Populate roadmap & priority states with defaults if empty
@@ -558,6 +561,8 @@ export default function EditorPainelCliente() {
         priority: caseFormData.priority,
         visibleToClient: caseFormData.visibleToClient,
         visivelParaCliente: caseFormData.visivelParaCliente,
+        technicalCategory: caseFormData.technicalCategory || '',
+        subCategory: caseFormData.subCategory || '',
         updatedAt: rightNow
       };
 
@@ -1506,62 +1511,216 @@ export default function EditorPainelCliente() {
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
                       <div>
                         <label className="block text-gray-400 font-bold mb-1">Nome Completo</label>
-                        <input type="text" value={formData.pf_nomeCompleto} onChange={(e) => setFormData({...formData, pf_nomeCompleto: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
+                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
+                          <input type="text" value={formData.pf_nomeCompleto} onChange={(e) => setFormData({...formData, pf_nomeCompleto: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
+                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={formData.pf_nomeCompleto === 'Não possuo'} 
+                              onChange={(e) => setFormData({...formData, pf_nomeCompleto: e.target.checked ? 'Não possuo' : ''})} 
+                              className="w-3.5 h-3.5 rounded border-gray-300"
+                            />
+                            Não possuo
+                          </label>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-gray-400 font-bold mb-1">CPF</label>
-                        <input type="text" value={formData.pf_cpf} onChange={(e) => setFormData({...formData, pf_cpf: e.target.value})} className="w-full p-2 border rounded-lg outline-none" placeholder="000.000.000-00" />
+                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
+                          <input type="text" value={formData.pf_cpf} onChange={(e) => setFormData({...formData, pf_cpf: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" placeholder="000.000.000-00" />
+                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={formData.pf_cpf === 'Não possuo'} 
+                              onChange={(e) => setFormData({...formData, pf_cpf: e.target.checked ? 'Não possuo' : ''})} 
+                              className="w-3.5 h-3.5 rounded border-gray-300"
+                            />
+                            Não possuo
+                          </label>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-gray-400 font-bold mb-1">RG</label>
-                        <input type="text" value={formData.pf_rg} onChange={(e) => setFormData({...formData, pf_rg: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
+                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
+                          <input type="text" value={formData.pf_rg} onChange={(e) => setFormData({...formData, pf_rg: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
+                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={formData.pf_rg === 'Não possuo'} 
+                              onChange={(e) => setFormData({...formData, pf_rg: e.target.checked ? 'Não possuo' : ''})} 
+                              className="w-3.5 h-3.5 rounded border-gray-300"
+                            />
+                            Não possuo
+                          </label>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-gray-400 font-bold mb-1">Data Nascimento</label>
-                        <input type="text" value={formData.pf_dataNascimento} onChange={(e) => setFormData({...formData, pf_dataNascimento: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
+                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
+                          <input type="text" value={formData.pf_dataNascimento} onChange={(e) => setFormData({...formData, pf_dataNascimento: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
+                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={formData.pf_dataNascimento === 'Não possuo'} 
+                              onChange={(e) => setFormData({...formData, pf_dataNascimento: e.target.checked ? 'Não possuo' : ''})} 
+                              className="w-3.5 h-3.5 rounded border-gray-300"
+                            />
+                            Não possuo
+                          </label>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-gray-400 font-bold mb-1">Nacionalidade</label>
-                        <input type="text" value={formData.pf_nacionalidade} onChange={(e) => setFormData({...formData, pf_nacionalidade: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
+                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
+                          <input type="text" value={formData.pf_nacionalidade} onChange={(e) => setFormData({...formData, pf_nacionalidade: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
+                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={formData.pf_nacionalidade === 'Não possuo'} 
+                              onChange={(e) => setFormData({...formData, pf_nacionalidade: e.target.checked ? 'Não possuo' : ''})} 
+                              className="w-3.5 h-3.5 rounded border-gray-300"
+                            />
+                            Não possuo
+                          </label>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-gray-400 font-bold mb-1">Profissão</label>
-                        <input type="text" value={formData.pf_profissao} onChange={(e) => setFormData({...formData, pf_profissao: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
+                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
+                          <input type="text" value={formData.pf_profissao} onChange={(e) => setFormData({...formData, pf_profissao: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
+                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={formData.pf_profissao === 'Não possuo'} 
+                              onChange={(e) => setFormData({...formData, pf_profissao: e.target.checked ? 'Não possuo' : ''})} 
+                              className="w-3.5 h-3.5 rounded border-gray-300"
+                            />
+                            Não possuo
+                          </label>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-gray-400 font-bold mb-1">Estado Civil</label>
-                        <input type="text" value={formData.pf_estadoCivil} onChange={(e) => setFormData({...formData, pf_estadoCivil: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
+                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
+                          <input type="text" value={formData.pf_estadoCivil} onChange={(e) => setFormData({...formData, pf_estadoCivil: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
+                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={formData.pf_estadoCivil === 'Não possuo'} 
+                              onChange={(e) => setFormData({...formData, pf_estadoCivil: e.target.checked ? 'Não possuo' : ''})} 
+                              className="w-3.5 h-3.5 rounded border-gray-300"
+                            />
+                            Não possuo
+                          </label>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-gray-400 font-bold mb-1">E-mail Alternativo</label>
-                        <input type="text" value={formData.pf_email} onChange={(e) => setFormData({...formData, pf_email: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
+                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
+                          <input type="text" value={formData.pf_email} onChange={(e) => setFormData({...formData, pf_email: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
+                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={formData.pf_email === 'Não possuo'} 
+                              onChange={(e) => setFormData({...formData, pf_email: e.target.checked ? 'Não possuo' : ''})} 
+                              className="w-3.5 h-3.5 rounded border-gray-300"
+                            />
+                            Não possuo
+                          </label>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-gray-400 font-bold mb-1">Telefone</label>
-                        <input type="text" value={formData.pf_telefone} onChange={(e) => setFormData({...formData, pf_telefone: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
+                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
+                          <input type="text" value={formData.pf_telefone} onChange={(e) => setFormData({...formData, pf_telefone: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
+                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={formData.pf_telefone === 'Não possuo'} 
+                              onChange={(e) => setFormData({...formData, pf_telefone: e.target.checked ? 'Não possuo' : ''})} 
+                              className="w-3.5 h-3.5 rounded border-gray-300"
+                            />
+                            Não possuo
+                          </label>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-gray-400 font-bold mb-1">WhatsApp</label>
-                        <input type="text" value={formData.pf_whatsapp} onChange={(e) => setFormData({...formData, pf_whatsapp: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
+                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
+                          <input type="text" value={formData.pf_whatsapp} onChange={(e) => setFormData({...formData, pf_whatsapp: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
+                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={formData.pf_whatsapp === 'Não possuo'} 
+                              onChange={(e) => setFormData({...formData, pf_whatsapp: e.target.checked ? 'Não possuo' : ''})} 
+                              className="w-3.5 h-3.5 rounded border-gray-300"
+                            />
+                            Não possuo
+                          </label>
+                        </div>
                       </div>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
                       <div>
                         <label className="block text-gray-400 font-bold mb-1">Razão Social</label>
-                        <input type="text" value={formData.pj_razaoSocial} onChange={(e) => setFormData({...formData, pj_razaoSocial: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
+                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
+                          <input type="text" value={formData.pj_razaoSocial} onChange={(e) => setFormData({...formData, pj_razaoSocial: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
+                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={formData.pj_razaoSocial === 'Não possuo'} 
+                              onChange={(e) => setFormData({...formData, pj_razaoSocial: e.target.checked ? 'Não possuo' : ''})} 
+                              className="w-3.5 h-3.5 rounded border-gray-300"
+                            />
+                            Não possuo
+                          </label>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-gray-400 font-bold mb-1">Nome Fantasia</label>
-                        <input type="text" value={formData.pj_nomeFantasia} onChange={(e) => setFormData({...formData, pj_nomeFantasia: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
+                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
+                          <input type="text" value={formData.pj_nomeFantasia} onChange={(e) => setFormData({...formData, pj_nomeFantasia: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
+                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={formData.pj_nomeFantasia === 'Não possuo'} 
+                              onChange={(e) => setFormData({...formData, pj_nomeFantasia: e.target.checked ? 'Não possuo' : ''})} 
+                              className="w-3.5 h-3.5 rounded border-gray-300"
+                            />
+                            Não possuo
+                          </label>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-gray-400 font-bold mb-1">CNPJ</label>
-                        <input type="text" value={formData.pj_cnpj} onChange={(e) => setFormData({...formData, pj_cnpj: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
+                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
+                          <input type="text" value={formData.pj_cnpj} onChange={(e) => setFormData({...formData, pj_cnpj: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
+                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={formData.pj_cnpj === 'Não possuo'} 
+                              onChange={(e) => setFormData({...formData, pj_cnpj: e.target.checked ? 'Não possuo' : ''})} 
+                              className="w-3.5 h-3.5 rounded border-gray-300"
+                            />
+                            Não possuo
+                          </label>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-gray-400 font-bold mb-1">Telefone Empresa</label>
-                        <input type="text" value={formData.pj_telefoneEmpresa} onChange={(e) => setFormData({...formData, pj_telefoneEmpresa: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
+                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
+                          <input type="text" value={formData.pj_telefoneEmpresa} onChange={(e) => setFormData({...formData, pj_telefoneEmpresa: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
+                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
+                            <input 
+                              type="checkbox" 
+                              checked={formData.pj_telefoneEmpresa === 'Não possuo'} 
+                              onChange={(e) => setFormData({...formData, pj_telefoneEmpresa: e.target.checked ? 'Não possuo' : ''})} 
+                              className="w-3.5 h-3.5 rounded border-gray-300"
+                            />
+                            Não possuo
+                          </label>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1739,9 +1898,155 @@ export default function EditorPainelCliente() {
                             {/* CASE INNER TAB 1: BASIC FIELDS */}
                             {activeCaseTab === 'dados' && (
                               <div className="space-y-4 animate-in fade-in duration-100 text-xs text-gray-700">
+                                
+                                {/* Categorização Técnica da Demanda */}
+                                <div className="p-5 bg-gray-50/50 border border-gray-150 rounded-2xl space-y-4">
+                                  <div className="flex items-center gap-2 border-b pb-2">
+                                    <Shield className="w-5 h-5 text-indigo-600" />
+                                    <div>
+                                      <span className="text-xs font-black uppercase text-gray-800 block">Categorização Técnica da Demanda</span>
+                                      <p className="text-[10px] text-gray-400 font-medium">Selecione o tipo de rito e modalidade operacional deste caso.</p>
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Card: Judicial */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCaseFormData({
+                                          ...caseFormData,
+                                          technicalCategory: 'Judicial',
+                                          subCategory: 'Petição Inicial a ajuizar'
+                                        });
+                                      }}
+                                      className={`p-4 text-left rounded-xl border-2 transition-all flex items-start gap-4 cursor-pointer select-none ${
+                                        caseFormData.technicalCategory === 'Judicial'
+                                          ? 'bg-indigo-50/60 border-indigo-600 shadow-2xs'
+                                          : 'bg-white border-gray-200 hover:border-gray-300'
+                                      }`}
+                                    >
+                                      <div className={`p-2 rounded-lg ${caseFormData.technicalCategory === 'Judicial' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'}`}>
+                                        <Gavel className="w-5 h-5" />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <span className={`text-xs font-black uppercase block ${caseFormData.technicalCategory === 'Judicial' ? 'text-indigo-950' : 'text-gray-750'}`}>Judicial</span>
+                                        <span className="text-[10px] text-gray-400 font-medium block">Rito sob tutela jurisdicional do Poder Judiciário.</span>
+                                      </div>
+                                    </button>
+
+                                    {/* Card: Extrajudicial */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCaseFormData({
+                                          ...caseFormData,
+                                          technicalCategory: 'Extrajudicial',
+                                          subCategory: 'Requerimento Administrativo'
+                                        });
+                                      }}
+                                      className={`p-4 text-left rounded-xl border-2 transition-all flex items-start gap-4 cursor-pointer select-none ${
+                                        caseFormData.technicalCategory === 'Extrajudicial'
+                                          ? 'bg-purple-50/60 border-purple-600 shadow-2xs'
+                                          : 'bg-white border-gray-200 hover:border-gray-300'
+                                      }`}
+                                    >
+                                      <div className={`p-2 rounded-lg ${caseFormData.technicalCategory === 'Extrajudicial' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-500'}`}>
+                                        <FileText className="w-5 h-5" />
+                                      </div>
+                                      <div className="space-y-1">
+                                        <span className={`text-xs font-black uppercase block ${caseFormData.technicalCategory === 'Extrajudicial' ? 'text-purple-950' : 'text-gray-750'}`}>Extrajudicial</span>
+                                        <span className="text-[10px] text-gray-400 font-medium block">Rito resolvido pela via extrajudicial ou administrativa.</span>
+                                      </div>
+                                    </button>
+                                  </div>
+
+                                  {/* Sub-cards based on Technical Category Selection */}
+                                  <AnimatePresence mode="wait">
+                                    {caseFormData.technicalCategory === 'Judicial' && (
+                                      <motion.div
+                                        key="judicial-sub"
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -10 }}
+                                        className="mt-4 pt-3 border-t border-dashed border-gray-200"
+                                      >
+                                        <span className="text-[10px] font-black uppercase text-gray-400 block mb-2">Selecione o Rito Judicial</span>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                          {/* Subcard A: Petição Inicial a ajuizar */}
+                                          <button
+                                            type="button"
+                                            onClick={() => setCaseFormData({ ...caseFormData, subCategory: 'Petição Inicial a ajuizar' })}
+                                            className={`p-3 text-left rounded-lg border-1.5 transition-all cursor-pointer select-none ${
+                                              caseFormData.subCategory === 'Petição Inicial a ajuizar'
+                                                ? 'bg-indigo-50 border-indigo-600 font-bold text-indigo-950 shadow-2xs'
+                                                : 'bg-white border-gray-200 hover:border-gray-300 text-gray-650'
+                                            }`}
+                                          >
+                                            <div className="flex items-center justify-between">
+                                              <span className="text-xs font-extrabold">Petição Inicial a ajuizar</span>
+                                              {caseFormData.subCategory === 'Petição Inicial a ajuizar' && <CheckCircle className="w-4 h-4 text-indigo-600 shrink-0" />}
+                                            </div>
+                                            <p className="text-[10px] text-gray-400 font-medium mt-1">Fase inicial de estruturação pré-ajuizamento.</p>
+                                          </button>
+
+                                          {/* Subcard B: Processo judicial em Andamento */}
+                                          <button
+                                            type="button"
+                                            onClick={() => setCaseFormData({ ...caseFormData, subCategory: 'Processo judicial em Andamento' })}
+                                            className={`p-3 text-left rounded-lg border-1.5 transition-all cursor-pointer select-none ${
+                                              caseFormData.subCategory === 'Processo judicial em Andamento'
+                                                ? 'bg-indigo-50 border-indigo-600 font-bold text-indigo-950 shadow-2xs'
+                                                : 'bg-white border-gray-200 hover:border-gray-300 text-gray-650'
+                                            }`}
+                                          >
+                                            <div className="flex items-center justify-between">
+                                              <span className="text-xs font-extrabold">Processo judicial em Andamento</span>
+                                              {caseFormData.subCategory === 'Processo judicial em Andamento' && <CheckCircle className="w-4 h-4 text-indigo-600 shrink-0" />}
+                                            </div>
+                                            <p className="text-[10px] text-gray-400 font-medium mt-1">Ação judicial já distribuída e em andamento.</p>
+                                          </button>
+                                        </div>
+                                      </motion.div>
+                                    )}
+
+                                    {caseFormData.technicalCategory === 'Extrajudicial' && (
+                                      <motion.div
+                                        key="extrajudicial-sub"
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -10 }}
+                                        className="mt-4 pt-3 border-t border-dashed border-gray-200"
+                                      >
+                                        <span className="text-[10px] font-black uppercase text-gray-400 block mb-2">Procedimento Administrativo / Extrajudicial</span>
+                                        <div className="grid grid-cols-1 gap-3">
+                                          {/* Subcard C: Requerimento Administrativo */}
+                                          <button
+                                            type="button"
+                                            onClick={() => setCaseFormData({ ...caseFormData, subCategory: 'Requerimento Administrativo' })}
+                                            className={`p-3 text-left rounded-lg border-1.5 transition-all cursor-pointer select-none flex items-center justify-between ${
+                                              caseFormData.subCategory === 'Requerimento Administrativo'
+                                                ? 'bg-purple-50 border-purple-600 font-bold text-purple-950 shadow-2xs'
+                                                : 'bg-white border-gray-250 hover:border-gray-350 text-gray-650'
+                                            }`}
+                                          >
+                                            <div>
+                                              <span className="text-xs font-extrabold">Requerimento Administrativo</span>
+                                              <p className="text-[10px] text-gray-400 font-medium mt-1">Negociação, acordo extrajudicial ou solicitação administrativa em órgãos.</p>
+                                            </div>
+                                            {caseFormData.subCategory === 'Requerimento Administrativo' && <CheckCircle className="w-4 h-4 text-purple-600 shrink-0" />}
+                                          </button>
+                                        </div>
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                   <div>
-                                    <label className="block text-gray-400 font-bold mb-1 uppercase">Título Público</label>
+                                    <label className="block text-gray-400 font-bold mb-1 uppercase">
+                                      <span className="text-indigo-600 font-black">{clientNameRaw}</span> — Título Público
+                                    </label>
                                     <input type="text" value={caseFormData.title} onChange={(e) => setCaseFormData({...caseFormData, title: e.target.value})} className="w-full p-2 border.5 rounded-xl outline-none" />
                                   </div>
                                   <div>
