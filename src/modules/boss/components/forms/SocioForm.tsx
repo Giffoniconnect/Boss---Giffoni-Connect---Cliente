@@ -150,25 +150,27 @@ export const SocioForm: React.FC<SocioFormProps> = ({ data, onChange }) => {
           <Input label="CPF (com máscara)" name="socio_cpf" value={data.socio_cpf || ''} onChange={handleChange} placeholder="000.000.000-00" required />
           
           <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <label className="block text-[15px] font-bold text-gray-500 ml-1">RG</label>
-              <label className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 cursor-pointer">
+            <label className="block text-[15px] font-bold text-gray-500 ml-1">RG</label>
+            <div className="flex items-center gap-3 w-full">
+              <div className="relative flex-1 min-w-0">
+                <input
+                  name="socio_rg"
+                  value={data.socio_rg || ''}
+                  onChange={handleChange}
+                  disabled={data.socio_rg === 'RG novo'}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-emerald-100 focus:bg-white outline-none transition-all placeholder:text-gray-300 disabled:opacity-60"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-xs font-bold text-emerald-600 cursor-pointer select-none shrink-0 border border-emerald-100 bg-emerald-50/50 hover:bg-emerald-55 px-3.5 py-3 rounded-xl transition-all">
                 <input 
                   type="checkbox" 
                   checked={data.socio_rg === 'RG novo'} 
                   onChange={handleRGNew}
-                  className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                  className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
                 />
                 RG novo
               </label>
             </div>
-            <input
-              name="socio_rg"
-              value={data.socio_rg || ''}
-              onChange={handleChange}
-              disabled={data.socio_rg === 'RG novo'}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-emerald-100 focus:bg-white outline-none transition-all placeholder:text-gray-300 disabled:opacity-60"
-            />
           </div>
 
           <Input label="Data de Nascimento" name="socio_dataNascimento" type="text" placeholder="DD/MM/AAAA" value={data.socio_dataNascimento || ''} onChange={handleChange} />

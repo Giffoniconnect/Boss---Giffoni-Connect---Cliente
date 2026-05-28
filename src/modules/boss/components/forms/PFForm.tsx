@@ -150,25 +150,27 @@ export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
           <Input label="CPF (com máscara)" name="pf_cpf" value={data.pf_cpf || ''} onChange={handleChange} placeholder="000.000.000-00" required />
           
           <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <label className="block text-[15px] font-bold text-gray-500 ml-1">RG</label>
-              <label className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 cursor-pointer">
+            <label className="block text-[15px] font-bold text-gray-500 ml-1">RG</label>
+            <div className="flex items-center gap-3 w-full">
+              <div className="relative flex-1 min-w-0">
+                <input
+                  name="pf_rg"
+                  value={data.pf_rg || ''}
+                  onChange={handleChange}
+                  disabled={data.pf_rg === 'RG novo'}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-100 focus:bg-white outline-none transition-all placeholder:text-gray-300 disabled:opacity-60"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-xs font-bold text-blue-600 cursor-pointer select-none shrink-0 border border-blue-100 bg-blue-50/50 hover:bg-blue-50 px-3.5 py-3 rounded-xl transition-all">
                 <input 
                   type="checkbox" 
                   checked={data.pf_rg === 'RG novo'} 
                   onChange={handleRGNew}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
                 />
                 RG novo
               </label>
             </div>
-            <input
-              name="pf_rg"
-              value={data.pf_rg || ''}
-              onChange={handleChange}
-              disabled={data.pf_rg === 'RG novo'}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-100 focus:bg-white outline-none transition-all placeholder:text-gray-300 disabled:opacity-60"
-            />
           </div>
 
           <Input label="Data de Nascimento" name="pf_dataNascimento" type="text" placeholder="DD/MM/AAAA" value={data.pf_dataNascimento || data.pf_nascimento || ''} onChange={handleChange} />
@@ -224,10 +226,104 @@ export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
 
       <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
         <h3 className="text-[18px] font-bold text-blue-600 uppercase tracking-wider mb-6">BLOCO pfRedesSociais</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Input label="Instagram" name="pf_instagram" value={data.pf_instagram || ''} onChange={handleChange} />
-          <Input label="Facebook" name="pf_facebook" value={data.pf_facebook || ''} onChange={handleChange} />
-          <Input label="TikTok" name="pf_tiktok" value={data.pf_tiktok || ''} onChange={handleChange} />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          
+          {/* Instagram */}
+          <div className="flex flex-col gap-1 w-full">
+            <label className="block text-[15px] font-bold text-gray-500 mb-1 ml-1">Instagram</label>
+            <div className="flex items-center gap-2.5 w-full">
+              <div className="relative flex-1 min-w-0">
+                <input
+                  name="pf_instagram"
+                  value={data.pf_instagram || ''}
+                  onChange={handleChange}
+                  disabled={data.pf_instagram === 'Não possuo'}
+                  placeholder="@usuario"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-105 focus:bg-white outline-none transition-all placeholder:text-gray-300 disabled:opacity-60"
+                />
+              </div>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-blue-600 cursor-pointer select-none shrink-0 border border-blue-105 bg-blue-50/50 hover:bg-blue-50 px-3 py-3 rounded-xl transition-all h-[46px] sm:h-[52px]">
+                <input 
+                  type="checkbox" 
+                  checked={data.pf_instagram === 'Não possuo'} 
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      onChange({ ...data, pf_instagram: 'Não possuo' });
+                    } else {
+                      onChange({ ...data, pf_instagram: '' });
+                    }
+                  }}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                />
+                Não possuo
+              </label>
+            </div>
+          </div>
+
+          {/* Facebook */}
+          <div className="flex flex-col gap-1 w-full">
+            <label className="block text-[15px] font-bold text-gray-500 mb-1 ml-1">Facebook</label>
+            <div className="flex items-center gap-2.5 w-full">
+              <div className="relative flex-1 min-w-0">
+                <input
+                  name="pf_facebook"
+                  value={data.pf_facebook || ''}
+                  onChange={handleChange}
+                  disabled={data.pf_facebook === 'Não possuo'}
+                  placeholder="link/usuario"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-105 focus:bg-white outline-none transition-all placeholder:text-gray-300 disabled:opacity-60"
+                />
+              </div>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-blue-600 cursor-pointer select-none shrink-0 border border-blue-105 bg-blue-50/50 hover:bg-blue-50 px-3 py-3 rounded-xl transition-all h-[46px] sm:h-[52px]">
+                <input 
+                  type="checkbox" 
+                  checked={data.pf_facebook === 'Não possuo'} 
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      onChange({ ...data, pf_facebook: 'Não possuo' });
+                    } else {
+                      onChange({ ...data, pf_facebook: '' });
+                    }
+                  }}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                />
+                Não possuo
+              </label>
+            </div>
+          </div>
+
+          {/* TikTok */}
+          <div className="flex flex-col gap-1 w-full">
+            <label className="block text-[15px] font-bold text-gray-500 mb-1 ml-1">TikTok</label>
+            <div className="flex items-center gap-2.5 w-full">
+              <div className="relative flex-1 min-w-0">
+                <input
+                  name="pf_tiktok"
+                  value={data.pf_tiktok || ''}
+                  onChange={handleChange}
+                  disabled={data.pf_tiktok === 'Não possuo'}
+                  placeholder="@usuario"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-105 focus:bg-white outline-none transition-all placeholder:text-gray-300 disabled:opacity-60"
+                />
+              </div>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-blue-600 cursor-pointer select-none shrink-0 border border-blue-105 bg-blue-50/50 hover:bg-blue-50 px-3 py-3 rounded-xl transition-all h-[46px] sm:h-[52px]">
+                <input 
+                  type="checkbox" 
+                  checked={data.pf_tiktok === 'Não possuo'} 
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      onChange({ ...data, pf_tiktok: 'Não possuo' });
+                    } else {
+                      onChange({ ...data, pf_tiktok: '' });
+                    }
+                  }}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                />
+                Não possuo
+              </label>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
