@@ -140,12 +140,11 @@ export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
           <div className="md:col-span-1">
             <Select label="Estado Civil" name="pf_estadoCivil" value={data.pf_estadoCivil || ''} onChange={handleChange} options={ESTADOS_CIVIS} />
           </div>
-          <AutocompleteInput 
+          <ProfessionAutocompleteInput 
             label="Profissão" 
             name="pf_profissao" 
             value={data.pf_profissao || ''} 
             onChange={handleChange} 
-            suggestions={PROFISSOES_SUGESTOES}
           />
           
           <Input label="CPF (com máscara)" name="pf_cpf" value={data.pf_cpf || ''} onChange={handleChange} placeholder="000.000.000-00" required />
@@ -304,8 +303,118 @@ const Select = ({ label, options, ...props }: any) => (
       className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-100 focus:bg-white outline-none transition-all"
     >
       {options.map((opt: string) => (
-        <option key={opt} value={opt}>{opt || 'Selecione...'}</option>
+         <option key={opt} value={opt}>{opt || 'Selecione...'}</option>
       ))}
     </select>
   </div>
 );
+
+const ProfessionAutocompleteInput = ({ label, value, onChange, name, ...props }: any) => {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const [filtered, setFiltered] = React.useState<string[]>([]);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [highlightedIndex, setHighlightedIndex] = React.useState(0);
+
+  const professionsList = [
+    'Advogado', 'Advogada', 'Administrador', 'Administradora', 'Empresário', 'Empresária',
+    'Comerciante', 'Autônomo', 'Autônoma', 'Aposentado', 'Aposentada', 'Pensionista',
+    'Professor', 'Professora', 'Médico', 'Médica', 'Enfermeiro', 'Enfermeira',
+    'Engenheiro', 'Engenheira', 'Contador', 'Contadora', 'Motorista', 'Caminhoneiro',
+    'Produtor Rural', 'Trabalhador Rural', 'Estudante', 'Do Lar', 'Servidor Público',
+    'Servidora Pública', 'Técnico em Enfermagem', 'Auxiliar Administrativo', 'Pedreiro',
+    'Eletricista', 'Mecânico', 'Vendedor', 'Vendedora', 'Bancário', 'Bancária',
+    'Militar', 'Policial', 'Vigilante', 'Diarista', 'Empregada Doméstica',
+    'Desempregado', 'Desempregada'
+  ];
+
+  React.useEffect(() => {
+    if (!value || value.trim() === '') {
+      setFiltered([]);
+      setIsOpen(false);
+      return;
+    }
+
+    const query = value.toLowerCase().trim();
+    const matches = professionsList.filter(prof => 
+      prof.toLowerCase().includes(query)
+    );
+
+    setFiltered(matches);
+    setIsOpen(matches.length > 0);
+    setHighlightedIndex(0);
+  }, [value]);
+
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectProfession = (selected: string) => {
+    onChange({ target: { name, value: selected } });
+    setIsOpen(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isOpen) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex(prev => (prev + 1) % filtered.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex(prev => (prev - 1 + filtered.length) % filtered.length);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (filtered[highlightedIndex]) {
+        selectProfession(filtered[highlightedIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      setIsOpen(false);
+    }
+  };
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <label className="block text-[15px] font-bold text-gray-500 mb-1 ml-1">{label}</label>
+      <input
+        {...props}
+        name={name}
+        value={value}
+        onChange={onChange}
+        onKeyDown={handleKeyDown}
+        onFocus={() => {
+          if (value && value.trim() !== '') {
+            const query = value.toLowerCase().trim();
+            const matches = professionsList.filter(prof => prof.toLowerCase().includes(query));
+            setFiltered(matches);
+            setIsOpen(matches.length > 0);
+          }
+        }}
+        autoComplete="off"
+        className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-105 focus:bg-white outline-none transition-all placeholder:text-gray-300"
+      />
+
+      {isOpen && (
+        <ul className="absolute z-50 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white border border-gray-250 rounded-xl shadow-lg divide-y divide-gray-55">
+          {filtered.map((prof, index) => (
+            <li
+              key={prof}
+              onClick={() => selectProfession(prof)}
+              onMouseEnter={() => setHighlightedIndex(index)}
+              className={`px-4 py-2 text-xs font-semibold cursor-pointer transition-colors ${
+                index === highlightedIndex ? 'bg-orange-500 text-white font-extrabold' : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              {prof}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
