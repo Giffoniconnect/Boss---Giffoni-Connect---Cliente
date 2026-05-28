@@ -35,14 +35,15 @@ export default function PendenciasFluxo() {
   // Load cases and incomplete clients from firebase
   const [casesList, setCasesList] = useState<any[]>([]);
   const [incompleteClients, setIncompleteClients] = useState<any[]>([]);
+  const [allClients, setAllClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
 
   // Search filter
   const [resumeSearchQuery, setResumeSearchQuery] = useState('');
 
-  // Selected category state
-  const [selectedCategory, setSelectedCategory] = useState<string>('cadastro');
+  // Selected category state - defaults to the first category: cadastro_pendente
+  const [selectedCategory, setSelectedCategory] = useState<string>('cadastro_pendente');
 
   // Load pending/active flows
   useEffect(() => {
@@ -52,15 +53,16 @@ export default function PendenciasFluxo() {
         const snapshots = await getDocs(collection(db, 'cases'));
         const clSnap = await getDocs(collection(db, 'clients'));
         
-        const allClients: any[] = clSnap.docs.map(d => ({
+        const allClientsFetched: any[] = clSnap.docs.map(d => ({
           clientId: d.id,
           ...d.data()
         }));
+        setAllClients(allClientsFetched);
 
         const list: any[] = [];
         snapshots.forEach((docSnap) => {
           const data = docSnap.data();
-          const matchedCli = allClients.find(cl => cl.clientId === data.clientId);
+          const matchedCli = allClientsFetched.find(cl => cl.clientId === data.clientId);
           
           let clientName = 'Cliente não identificado';
           if (matchedCli) {
@@ -83,7 +85,7 @@ export default function PendenciasFluxo() {
 
         // Filter for incomplete clients
         const incomplete: any[] = [];
-        allClients.forEach((cli) => {
+        allClientsFetched.forEach((cli) => {
           const missingFields = cli.missingFields || [];
           const isIncomplete = 
             cli.cadastroIncompleto === true ||
@@ -112,20 +114,86 @@ export default function PendenciasFluxo() {
     fetchProductionFlows();
   }, [retryCount]);
 
-  const handleContinueCase = (c: any) => {
-    const routeStage = c.productionStage || 'dados-caso';
-    let pagePath = 'dados-caso';
-    const s = routeStage.toLowerCase();
+  // Safe Inference heuristically when productionStage is missing or empty
+  const inferStage = (c: any): string => {
+    const s = (c.productionStage || '').toLowerCase().trim();
     
-    if (s === 'dados-caso' || s === 'dadoscaso') pagePath = 'dados-caso';
-    else if (s === 'solicitacoes-informacoes' || s === 'solicitacoessextra' || s === 'solicitacoesinformacoes') pagePath = 'solicitacoes-informacoes';
-    else if (s === 'solicitacoes-provas' || s === 'solicitacoesprovas') pagePath = 'solicitacoes-provas';
-    else if (s === 'financeiro') pagePath = 'financeiro';
-    else if (s === 'edrp') pagePath = 'edrp';
-    else if (s === 'revisao' || s === 'revisaoteconica' || s === 'revisao-tecnica') pagePath = 'revisao';
-    else if (s === 'protocolo') pagePath = 'protocolo';
-    else if (s === 'controladoria') pagePath = 'controladoria';
-    else if (s === 'relatorio-integridade' || s === 'relatoriointegridade') pagePath = 'relatorio-integridade';
+    if (s) {
+      if (s === 'cadastro' || s === 'cadastro_cliente' || s === 'cadastro-cliente') {
+        return 'cadastro_pendente';
+      }
+      if (s === 'dados-caso' || s === 'dadoscaso' || s === 'dados_caso' || s === 'entrevista') {
+        return 'entrevista_pendente';
+      }
+      if (s === 'tipo-producao' || s === 'tipo_producao' || s === 'tipo_servico' || s === 'tiposervico' || s === 'tipo-servico') {
+        return 'tipo_servico_pendente';
+      }
+      if (s === 'solicitacoes-provas' || s === 'solicitacoesprovas' || s === 'coleta_provas' || s === 'provas') {
+        return 'provas_pendentes';
+      }
+      if (s === 'solicitacoes-informacoes' || s === 'solicitacoessextra' || s === 'solicitacoesinformacoes' || s === 'coleta_informacoes') {
+        return 'informacoes_pendentes';
+      }
+      if (s === 'estruturacao' || s === 'estruturacaostep' || s === 'estruturacao_step') {
+        return 'estruturacao_pendente';
+      }
+      if (s === 'financeiro' || s === 'financeiro_step') {
+        return 'financeiro_pendente';
+      }
+      if (s === 'edrp' || s === 'edrp_fluxo') {
+        return 'edrp_pendente';
+      }
+      if (s === 'revisao' || s === 'revisaotecnica' || s === 'revisao-tecnica' || s === 'revisao_tecnica' || s === 'delegacao') {
+        return 'revisao_pendente';
+      }
+      if (s === 'protocolo' || s === 'protocolo_step') {
+        return 'protocolo_pendente';
+      }
+      if (s === 'controladoria' || s === 'controladoriastep') {
+        return 'controladoria_pendente';
+      }
+      if (s === 'relatorio_integridade' || s === 'relatorio-integridade' || s === 'relatoriointegridade' || s === 'integridade') {
+        return 'integridade_pendente';
+      }
+    }
+
+    // Heuristic inference based on active fields
+    if (c.pendingDocs || c.missingDocs) {
+      return 'entrevista_pendente';
+    }
+    if (!c.actionType && !c.actionCategory) {
+      if (c.facts || c.aboutCase || c.resumeBriefing) {
+        return 'tipo_servico_pendente';
+      }
+      return 'entrevista_pendente';
+    }
+    if (c.collectProvasStatus === 'pendente' || (c.pendingProvasCount && c.pendingProvasCount > 0)) {
+      return 'provas_pendentes';
+    }
+    if (c.financeiroStatus === 'pendente' || c.financialPending === true || c.billingPending) {
+      return 'financeiro_pendente';
+    }
+
+    // Default fallback to "Integridade Pendente" on lack of sufficient info
+    return 'integridade_pendente';
+  };
+
+  const handleContinueCase = (c: any) => {
+    if (!c.id) return;
+    const inferredKey = inferStage(c);
+    let pagePath = 'dados-caso';
+    
+    if (inferredKey === 'entrevista_pendente') pagePath = 'dados-caso';
+    else if (inferredKey === 'tipo_servico_pendente') pagePath = 'tipo-producao';
+    else if (inferredKey === 'provas_pendentes') pagePath = 'solicitacoes-provas';
+    else if (inferredKey === 'informacoes_pendentes') pagePath = 'solicitacoes-informacoes';
+    else if (inferredKey === 'estruturacao_pendente') pagePath = 'edrp';
+    else if (inferredKey === 'financeiro_pendente') pagePath = 'financeiro';
+    else if (inferredKey === 'edrp_pendente') pagePath = 'edrp';
+    else if (inferredKey === 'revisao_pendente') pagePath = 'revisao';
+    else if (inferredKey === 'protocolo_pendente') pagePath = 'protocolo';
+    else if (inferredKey === 'controladoria_pendente') pagePath = 'controladoria';
+    else if (inferredKey === 'integridade_pendente') pagePath = 'relatorio-integridade';
 
     navigate(`/boss-giffoni-clientes/fluxo-producao/${c.id}/${pagePath}`);
   };
@@ -134,11 +202,11 @@ export default function PendenciasFluxo() {
     navigate(`/boss-giffoni-clientes/fluxo-producao/cadastro?editClientId=${clientId}`);
   };
 
-  // Map 11 specific categories of pendencies
+  // Map 12 specific categories of pendencies with strict OSM styles
   const categoriesMetadata = [
     {
-      key: 'cadastro',
-      label: 'Pendências de Cadastro',
+      key: 'cadastro_pendente',
+      label: 'Cadastro Pendente',
       description: 'Qualificação fática e cadastro do contratante pendente de preenchimento ou aprovação.',
       icon: UserPlus,
       color: 'border-blue-100 hover:border-blue-400',
@@ -146,215 +214,195 @@ export default function PendenciasFluxo() {
       tagColor: 'bg-blue-100 text-blue-800'
     },
     {
-      key: 'documentos',
-      label: 'Pendências de Documentos',
-      description: 'Envio de contratos, procurações ou comprovantes pessoais pendentes na pasta.',
-      icon: FileDigit,
-      color: 'border-amber-100 hover:border-amber-400',
-      activeColor: 'bg-amber-50/70 border-amber-500 text-amber-900',
-      tagColor: 'bg-amber-100 text-amber-800'
+      key: 'entrevista_pendente',
+      label: 'Entrevista Pendente',
+      description: 'Preenchimento de entrevista, briefing ou dados iniciais (5W2H) do caso contratado.',
+      icon: ClipboardList,
+      color: 'border-sky-100 hover:border-sky-450',
+      activeColor: 'bg-sky-50 border-sky-600 text-sky-950',
+      tagColor: 'bg-sky-200 text-sky-850'
     },
     {
-      key: 'provas',
-      label: 'Pendências de Provas',
-      description: 'Anexação de relatórios fáticos, certidões públicas ou histórico probatório exigido.',
-      icon: CheckSquare,
-      color: 'border-emerald-100 hover:border-emerald-400',
-      activeColor: 'bg-emerald-50/70 border-emerald-500 text-emerald-900',
-      tagColor: 'bg-emerald-100 text-emerald-800'
-    },
-    {
-      key: 'informacoes',
-      label: 'Pendências de Informações Complementares',
-      description: 'Esclarecimento adicional, datas chaves ou respostas a questionamentos (5W2H).',
-      icon: FileQuestion,
+      key: 'tipo_servico_pendente',
+      label: 'Tipo de Serviço Pendente',
+      description: 'Definição e enquadramento das teses produtivas ou modalidade de enquadramento contratual.',
+      icon: Layers,
       color: 'border-indigo-100 hover:border-indigo-400',
-      activeColor: 'bg-indigo-50/70 border-indigo-500 text-indigo-900',
+      activeColor: 'bg-indigo-50/70 border-indigo-600 text-indigo-950',
       tagColor: 'bg-indigo-100 text-indigo-800'
     },
     {
-      key: 'prazo',
-      label: 'Pendências de Prazo',
-      description: 'Vencimentos contratuais, prazos peremptórios legais ou urgência de distribuição.',
-      icon: Clock,
-      color: 'border-red-100 hover:border-red-400',
-      activeColor: 'bg-red-50/70 border-red-500 text-red-900',
-      tagColor: 'bg-red-100 text-red-800'
+      key: 'provas_pendentes',
+      label: 'Provas Pendentes',
+      description: 'Coleta fática de relatórios, prints de contatos ou extratos obrigatórios à tese mestre.',
+      icon: CheckSquare,
+      color: 'border-emerald-100 hover:border-emerald-400',
+      activeColor: 'bg-emerald-50/70 border-emerald-600 text-emerald-950',
+      tagColor: 'bg-emerald-100 text-emerald-800'
     },
     {
-      key: 'pericia',
-      label: 'Pendências de Perícia',
-      description: 'Laudos de assistência, relatórios de controle de tempo, peritos ou cálculos específicos.',
-      icon: Layers,
+      key: 'informacoes_pendentes',
+      label: 'Informações Pendentes',
+      description: 'Informações extras solicitadas ao cliente em fase de entrevista refinada.',
+      icon: FileQuestion,
       color: 'border-teal-100 hover:border-teal-400',
-      activeColor: 'bg-teal-50/70 border-teal-500 text-teal-900',
-      tagColor: 'bg-teal-100 text-teal-800'
+      activeColor: 'bg-teal-50/70 border-teal-600 text-teal-905',
+      tagColor: 'bg-teal-100 text-teal-805'
     },
     {
-      key: 'audiencia',
-      label: 'Pendências de Audiência',
-      description: 'Sincronização de conciliações, instruções agendadas pelo setor de controladoria.',
-      icon: Calendar,
+      key: 'estruturacao_pendente',
+      label: 'Estruturação Pendente',
+      description: 'Análise estrutural, preparação de escopo e design da tese de produção.',
+      icon: Cpu,
+      color: 'border-purple-100 hover:border-purple-400',
+      activeColor: 'bg-purple-50/70 border-purple-600 text-purple-950',
+      tagColor: 'bg-purple-100 text-purple-800'
+    },
+    {
+      key: 'financeiro_pendente',
+      label: 'Financeiro Pendente',
+      description: 'Vencimentos contratuais, parcelamentos pendentes ou faturamento de custas de guias.',
+      icon: CreditCard,
       color: 'border-pink-100 hover:border-pink-400',
-      activeColor: 'bg-pink-50/70 border-pink-500 text-pink-900',
+      activeColor: 'bg-pink-50/70 border-pink-500 text-pink-950',
       tagColor: 'bg-pink-100 text-pink-800'
     },
     {
-      key: 'financeiro',
-      label: 'Pendências Financeiras',
-      description: 'Faturamento de custas, aprovação de guias, parcelamentos ou honorários.',
-      icon: CreditCard,
-      color: 'border-rose-100 hover:border-rose-400',
-      activeColor: 'bg-rose-50/70 border-rose-500 text-rose-900',
+      key: 'edrp_pendente',
+      label: 'EDRP Pendente',
+      description: 'Estudo de Defesa e Resultados Possíveis mestre do caso sob conformidade técnica.',
+      icon: Sparkles,
+      color: 'border-orange-100 hover:border-orange-450',
+      activeColor: 'bg-orange-50/70 border-orange-500 text-orange-950',
+      tagColor: 'bg-orange-100 text-orange-800'
+    },
+    {
+      key: 'revisao_pendente',
+      label: 'Revisão Pendente',
+      description: 'Revisão técnica fática de textos, dados mestre e formatação técnica por mentor.',
+      icon: Eye,
+      color: 'border-amber-100 hover:border-amber-400',
+      activeColor: 'bg-amber-50/70 border-amber-500 text-amber-955',
+      tagColor: 'bg-amber-100 text-amber-850'
+    },
+    {
+      key: 'protocolo_pendente',
+      label: 'Protocolo Pendente',
+      description: 'Distribuição e protocolo final com consolidação fática do número processual.',
+      icon: ShieldCheck,
+      color: 'border-rose-100 hover:border-rose-450',
+      activeColor: 'bg-rose-50 border-rose-500 text-rose-950',
       tagColor: 'bg-rose-100 text-rose-800'
     },
     {
-      key: 'revisao',
-      label: 'Pendências de Revisão',
-      description: 'Revisão técnica de petição inicial, dados mestre e formatação por mentor.',
-      icon: Eye,
+      key: 'controladoria_pendente',
+      label: 'Controladoria Pendente',
+      description: 'Triagem de prazos iniciais e controle mestre dos links processuais.',
+      icon: Layers,
       color: 'border-cyan-100 hover:border-cyan-400',
-      activeColor: 'bg-cyan-50/70 border-cyan-500 text-cyan-900',
+      activeColor: 'bg-cyan-50 border-cyan-500 text-cyan-950',
       tagColor: 'bg-cyan-100 text-cyan-800'
     },
     {
-      key: 'protocolo',
-      label: 'Pendências de Protocolo',
-      description: 'Distribuição final da peça, protocolo judicial e fornecimento do número de processo.',
-      icon: ShieldCheck,
-      color: 'border-sky-100 hover:border-sky-400',
-      activeColor: 'bg-sky-50/70 border-sky-500 text-sky-900',
-      tagColor: 'bg-sky-100 text-sky-800'
-    },
-    {
-      key: 'controladoria',
-      label: 'Pendências de Controladoria',
-      description: 'Vínculos sistêmicos finais, integrações no Todoist e transição para o Tribunal.',
-      icon: Cpu,
-      color: 'border-purple-100 hover:border-purple-400',
-      activeColor: 'bg-purple-50/70 border-purple-500 text-purple-900',
-      tagColor: 'bg-purple-100 text-purple-800'
+      key: 'integridade_pendente',
+      label: 'Integridade Pendente',
+      description: 'Incoerência estrutural séria de dados processuais ou preechimento vital.',
+      icon: AlertTriangle,
+      color: 'border-slate-350 hover:border-red-400',
+      activeColor: 'bg-slate-900 border-red-500 text-white',
+      tagColor: 'bg-red-500 text-white font-black'
     }
   ];
 
-  // Populate dynamic items grouped by the 11 categories
+  // Populate dynamic items grouped by the 12 categories
   const categoriesMap = useMemo(() => {
     const map: Record<string, any[]> = {
-      cadastro: [],
-      documentos: [],
-      provas: [],
-      informacoes: [],
-      prazo: [],
-      pericia: [],
-      audiencia: [],
-      financeiro: [],
-      revisao: [],
-      protocolo: [],
-      controladoria: []
+      cadastro_pendente: [],
+      entrevista_pendente: [],
+      tipo_servico_pendente: [],
+      provas_pendentes: [],
+      informacoes_pendentes: [],
+      estruturacao_pendente: [],
+      financeiro_pendente: [],
+      edrp_pendente: [],
+      revisao_pendente: [],
+      protocolo_pendente: [],
+      controladoria_pendente: [],
+      integridade_pendente: []
     };
 
-    // 1. Incomplete clients map to cadastro
-    map.cadastro = incompleteClients.map(cli => ({
+    // 1. Incomplete clients map directly to cadastro_pendente
+    map.cadastro_pendente = incompleteClients.map(cli => ({
       ...cli,
       type: 'client',
       title: cli.name,
-      subtitle: `Slug: /${cli.slug}`,
+      subtitle: `Slug: /${cli.slug || ''}`,
       stageLabel: 'Cadastro do Cliente',
       badge: 'Incompleto',
       badgeStyle: 'bg-red-50 text-red-700 border-red-150',
-      go: () => handleEditIncompleteClient(cli.id)
+      actionLabel: 'Retomar Cadastro',
+      go: () => navigate(`/boss-giffoni-clientes/fluxo-producao/cadastro?editClientId=${cli.id}`)
     }));
 
-    // 2. Map active cases into respective categories
-    casesList.forEach(c => {
-      const s = (c.productionStage || '').toLowerCase();
-      const clientName = c.clientName || 'Contratante';
-
-      const caseItem = {
-        ...c,
-        type: 'case',
-        subtitle: `Cliente: ${clientName}`,
-        stageLabel: `Etapa: ${c.productionStage || 'Dados Inicial'}`,
-        badge: c.status === 'rascunho' ? 'Rascunho' : 'Ativo',
-        badgeStyle: c.status === 'rascunho' ? 'bg-amber-50 text-amber-700 border-amber-150' : 'bg-emerald-50 text-emerald-700 border-emerald-150',
-        go: () => handleContinueCase(c)
-      };
-
-      // Documentos pendentes
-      if (!s || s === 'dados-caso' || s === 'dadoscaso' || c.pendingDocs || c.missingDocs) {
-        map.documentos.push({ ...caseItem, sectionLabel: 'Documentos Pendentes' });
-      }
-      
-      // Provas pendentes
-      if (s === 'solicitacoes-provas' || s === 'solicitacoesprovas' || s === 'coleta_provas') {
-        map.provas.push({ ...caseItem, sectionLabel: 'Coleta de Provas' });
-      }
-
-      // Informações complementary pendentes
-      if (s === 'solicitacoes-informacoes' || s === 'solicitacoessextra' || s === 'solicitacoesinformacoes' || s === 'coleta_informacoes') {
-        map.informacoes.push({ ...caseItem, sectionLabel: 'Informações pendentes' });
-      }
-
-      // Prazo pendências
-      if (c.priority === 'urgente' || c.deadline || s === 'protocolo' || c.urgent || c.pendingDeadline) {
-        map.prazo.push({ ...caseItem, sectionLabel: 'Prazo Limite' });
-      }
-
-      // Perícia pendências
-      if (s === 'edrp' || c.pericia || c.periciaStatus || s === 'relatorio-integridade') {
-        map.pericia.push({ ...caseItem, sectionLabel: 'Cálculo/Perito' });
-      }
-
-      // Audiência pendências
-      if (s === 'controladoria' || c.audiencia || c.audienciaStatus) {
-        map.audiencia.push({ ...caseItem, sectionLabel: 'Sincronização de Data' });
-      }
-
-      // Financeiro pendências
-      if (s === 'financeiro' || c.financialPending || c.financeiro) {
-        map.financeiro.push({ ...caseItem, sectionLabel: 'Validação Faturamento' });
-      }
-
-      // Revisão pendências
-      if (s === 'revisao' || s === 'revisaoteconica' || s === 'revisao-tecnica') {
-        map.revisao.push({ ...caseItem, sectionLabel: 'Revisão Técnica' });
-      }
-
-      // Protocolo pendências
-      if (s === 'protocolo') {
-        map.protocolo.push({ ...caseItem, sectionLabel: 'Distribuição Mapeada' });
-      }
-
-      // Controladoria pendências
-      if (s === 'controladoria') {
-        map.controladoria.push({ ...caseItem, sectionLabel: 'Integrações Ativas' });
-      }
+    // 2. Identify clients that are NOT incomplete, but don't have any cases, map them to entrevista_pendente
+    const nonIncompleteClients = allClients.filter(cli => {
+      return !incompleteClients.some(ic => ic.id === cli.clientId);
     });
 
-    // Fallback unmapped cases
-    casesList.forEach(c => {
-      const hasDirectCategory = Object.keys(map).some(key => {
-        if (key === 'cadastro') return false;
-        return map[key].some(item => item.id === c.id);
-      });
+    nonIncompleteClients.forEach(cli => {
+      const hasCase = casesList.some(c => c.clientId === cli.clientId);
+      if (!hasCase) {
+        const clientName = cli.type === 'PF'
+          ? (cli.pfDadosPessoais?.pf_nomeCompleto || cli.pfData?.pf_nomeCompleto || 'Cliente PF')
+          : (cli.pjDadosEmpresa?.pj_razaoSocial || cli.pjData?.pj_razaoSocial || 'Cliente PJ');
 
-      if (!hasDirectCategory) {
-        const clientName = c.clientName || 'Contratante';
-        map.documentos.push({
-          ...c,
-          type: 'case',
-          subtitle: `Cliente: ${clientName}`,
-          stageLabel: `Atual: ${c.productionStage || 'Início'}`,
-          badge: 'Automático',
-          badgeStyle: 'bg-gray-100 text-gray-700 border-gray-200',
-          go: () => handleContinueCase(c),
-          sectionLabel: 'Triagem Inicial'
+        map.entrevista_pendente.push({
+          id: cli.clientId,
+          clientId: cli.clientId,
+          caseId: null,
+          type: 'client_no_case',
+          title: clientName,
+          subtitle: `Código: #${cli.clientId} • Slug: /${cli.slug || ''}`,
+          stageLabel: 'Sem caso vinculado',
+          badge: 'Sem Caso',
+          badgeStyle: 'bg-amber-100 text-amber-800 border-amber-305',
+          sectionLabel: 'Cadastro Realizado',
+          details: 'Cadastro existe, mas ainda não há caso vinculado.',
+          actionLabel: 'Criar/retomar novo caso',
+          isNoCase: true,
+          go: () => navigate(`/boss-giffoni-clientes/fluxo-producao/cadastro?editClientId=${cli.clientId}`)
         });
       }
     });
 
+    // 3. Map active cases into respective categories using inferStage()
+    casesList.forEach(c => {
+      const inferredKey = inferStage(c);
+      const clientName = c.clientName || 'Contratante';
+      const isRascunho = c.status === 'rascunho';
+
+      const caseItem = {
+        ...c,
+        type: 'case',
+        title: clientName,
+        subtitle: `Caso #${c.id} • ${c.actionCategory || c.actionType || 'Sem tipo definido'}`,
+        stageLabel: `Fase: ${c.productionStage || 'Início'}`,
+        badge: isRascunho ? 'Rascunho' : 'Ativo',
+        badgeStyle: isRascunho ? 'bg-amber-150 text-amber-700 border-amber-300' : 'bg-emerald-50 text-emerald-700 border-emerald-150',
+        sectionLabel: 'Fluxo Retomado',
+        actionLabel: 'Continuar',
+        go: () => handleContinueCase(c)
+      };
+
+      if (map[inferredKey]) {
+        map[inferredKey].push(caseItem);
+      } else {
+        map.integridade_pendente.push(caseItem);
+      }
+    });
+
     return map;
-  }, [casesList, incompleteClients]);
+  }, [casesList, incompleteClients, allClients]);
 
   // Apply search query filters
   const filteredCategoriesMap = useMemo(() => {
@@ -491,9 +539,9 @@ export default function PendenciasFluxo() {
                           }`}>
                             <CatIcon size={15} />
                           </div>
-                          <div className="min-w-0">
-                            <h5 className="font-bold truncate max-w-[130px] text-gray-900">{cat.label}</h5>
-                            <p className="text-[9.5px] text-gray-400 truncate mt-0.5">{cat.description}</p>
+                          <div className="min-w-0 leading-tight">
+                            <h5 className="font-extrabold text-xs text-gray-900 leading-snug break-words">{cat.label}</h5>
+                            <p className="text-[9.5px] text-gray-400 mt-0.5 leading-snug break-words">{cat.description}</p>
                           </div>
                         </div>
 
@@ -578,15 +626,20 @@ export default function PendenciasFluxo() {
                                 {item.title || 'Incompleto'}
                               </h5>
                               <p className="text-[10px] text-gray-500 truncate">{item.subtitle}</p>
+                              {item.isNoCase && item.details && (
+                                <div className="mt-1.5 p-2 bg-amber-50/80 border border-amber-200 text-amber-805 text-[10px] font-semibold rounded-lg leading-tight">
+                                  {item.details}
+                                </div>
+                              )}
                             </div>
 
                             <button
                               type="button"
                               onClick={item.go}
-                              className="shrink-0 bg-gray-905 hover:bg-black text-white hover:scale-103 py-1.5 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-all shadow-3xs"
+                              className="shrink-0 bg-gray-950 hover:bg-black text-white hover:scale-105 py-1.5 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-all shadow-3xs"
                               id={`resume-action-${item.id}`}
                             >
-                              Retomar
+                              {item.actionLabel || 'Retomar'}
                               <ChevronRight size={11} />
                             </button>
                           </div>
