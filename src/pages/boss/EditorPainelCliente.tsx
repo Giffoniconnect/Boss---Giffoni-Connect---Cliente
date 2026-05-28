@@ -1471,32 +1471,6 @@ export default function EditorPainelCliente() {
                     <Save className="w-3.5 h-3.5" /> Salvar Cadastro do Cliente
                   </button>
                 </div>
-
-                <div className="flex justify-end bg-gray-100 p-0.5 rounded-lg w-fit ms-auto mb-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFormData({...formData, type: 'PF'});
-                    }}
-                    className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${
-                      formData.type === 'PF' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
-                    }`}
-                  >
-                    Pessoa Física (PF)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFormData({...formData, type: 'PJ'});
-                    }}
-                    className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${
-                      formData.type === 'PJ' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
-                    }`}
-                  >
-                    Pessoa Jurídica (PJ)
-                  </button>
-                </div>
-
                 {/* Dynamic Sub-form inclusion with styling similar to CadastroFluxo */}
                 <div className="boss-form-breathable space-y-8 animate-in fade-in duration-300">
                   <style>{`
