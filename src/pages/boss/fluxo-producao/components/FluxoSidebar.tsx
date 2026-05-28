@@ -125,8 +125,18 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
     if (stepId === 'dados-caso') {
       if (!caseObj) return 'uninitiated';
       
-      // Determine if they completed every 10 minimal items:
-      const completeValue = !!(
+      const isNewComplete = !!(
+        caseObj.entrevistaPadrao?.trim() &&
+        caseObj.checklist5w2h?.oQue === true &&
+        caseObj.checklist5w2h?.quem === true &&
+        caseObj.checklist5w2h?.onde === true &&
+        caseObj.checklist5w2h?.quando === true &&
+        caseObj.checklist5w2h?.como === true &&
+        caseObj.checklist5w2h?.porque === true &&
+        caseObj.checklist5w2h?.comoResolver === true
+      );
+
+      const isLegacyComplete = !!(
         caseObj.basesFaticas?.trim() &&
         caseObj.description?.trim() &&
         caseObj.fatosAbordagem?.trim() &&
@@ -139,10 +149,21 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
         caseObj.comoPretendeResolver?.trim()
       );
 
-      if (completeValue) return 'complete';
+      const isComplete = isNewComplete || isLegacyComplete;
+      if (isComplete) return 'complete';
 
-      // If they have written at least some text, it is incomplete; otherwise, uninitiated.
-      const started = !!(
+      const isNewStarted = !!(
+        caseObj.entrevistaPadrao?.trim() ||
+        caseObj.checklist5w2h?.oQue === true ||
+        caseObj.checklist5w2h?.quem === true ||
+        caseObj.checklist5w2h?.onde === true ||
+        caseObj.checklist5w2h?.quando === true ||
+        caseObj.checklist5w2h?.como === true ||
+        caseObj.checklist5w2h?.porque === true ||
+        caseObj.checklist5w2h?.comoResolver === true
+      );
+
+      const isLegacyStarted = !!(
         caseObj.basesFaticas?.trim() ||
         caseObj.description?.trim() ||
         caseObj.fatosAbordagem?.trim() ||
@@ -155,6 +176,7 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
         caseObj.comoPretendeResolver?.trim()
       );
 
+      const started = isNewStarted || isLegacyStarted;
       return started ? 'incomplete' : 'uninitiated';
     }
 

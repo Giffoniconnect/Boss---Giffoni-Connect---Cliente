@@ -15,25 +15,15 @@ import {
   Activity,
   User,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  ClipboardList,
+  Check,
+  X,
+  HelpCircle,
+  Sparkles,
+  BookOpen
 } from 'lucide-react';
 import { flowRoutes } from './utils/flowRoutes';
-
-// Multi-functional map of internal status -> suggested public status for client
-const statusMapping: Record<string, string> = {
-  'Rascunho': 'Cadastro interno em andamento.',
-  'Entrevista pendente': 'Aguardando complementação de informações.',
-  'Em produção': 'Seu caso está em análise e preparação.',
-  'Com pendência': 'Há pendências necessárias para avanço do caso.',
-  'Em estruturação': 'Seu caso está em estruturação técnica.',
-  'Aguardando revisão': 'Seu caso está em revisão interna.',
-  'Em revisão': 'Seu caso está em revisão jurídica.',
-  'Aprovado para protocolo': 'Seu caso está pronto para o próximo protocolo.',
-  'Aguardando protocolo': 'Seu caso aguarda protocolo.',
-  'Protocolado': 'Seu caso foi protocolado.',
-  'Em controladoria': 'Seu caso está em acompanhamento processual.',
-  'Arquivado': 'Atendimento encerrado/arquivado.'
-};
 
 interface MiniRichEditorProps {
   id: string;
@@ -43,7 +33,7 @@ interface MiniRichEditorProps {
   isMissing: boolean;
 }
 
-// Mini Rich Text Editor in compliance with Solution 3
+// Mini Rich Text Editor in compliance with legal writing standards
 function MiniRichEditor({ id, value, onChange, placeholder, isMissing }: MiniRichEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
 
@@ -87,7 +77,7 @@ function MiniRichEditor({ id, value, onChange, placeholder, isMissing }: MiniRic
         <button
           type="button"
           onClick={() => applyCommand('backColor', 'yellow')}
-          className="px-2.5 py-1.5 text-[11px] text-gray-800 hover:bg-yellow-100 border border-yellow-200 rounded-lg transition-all bg-yellow-50 flex items-center gap-1.5 cursor-pointer font-bold"
+          className="px-2.5 py-1.5 text-[11px] text-gray-800 hover:bg-yellow-105 border border-yellow-250 rounded-lg transition-all bg-yellow-50 flex items-center gap-1.5 cursor-pointer font-bold animate-pulse"
           title="Marca-texto amarelo"
         >
           <span className="w-3.5 h-3.5 bg-yellow-400 border border-yellow-500 rounded-md shrink-0 block" />
@@ -101,21 +91,21 @@ function MiniRichEditor({ id, value, onChange, placeholder, isMissing }: MiniRic
               applyCommand('backColor', 'transparent');
             } catch (e) {}
           }}
-          className="px-3 py-1.5 text-[11px] text-red-600 hover:bg-red-50 border border-red-100 hover:border-red-200 rounded-lg transition-all font-bold ml-auto cursor-pointer"
+          className="px-3 py-1.5 text-[11px] text-red-600 hover:bg-red-50 border border-red-105 hover:border-red-200 rounded-lg transition-all font-bold ml-auto cursor-pointer"
           title="Limpar marcação"
         >
           Limpar formatação
         </button>
       </div>
 
-      {/* Editor Main Canvas - Styled like clean judicial pages in compliance with Solution 3 */}
+      {/* Editor Canvas Styled with Classical Times New Roman and Left Margin Recess */}
       <div
         ref={editorRef}
         contentEditable
         onInput={handleInput}
         onBlur={handleInput}
         onPaste={handlePaste}
-        className="outline-none min-h-[160px] p-6 text-gray-900 bg-white"
+        className="outline-none min-h-[220px] p-6 text-gray-900 bg-white"
         style={{
           fontFamily: '"Times New Roman", Times, serif',
           fontSize: '12pt',
@@ -129,6 +119,53 @@ function MiniRichEditor({ id, value, onChange, placeholder, isMissing }: MiniRic
   );
 }
 
+const statusMapping: Record<string, string> = {
+  'Rascunho': 'Cadastro interno em andamento.',
+  'Entrevista pendente': 'Aguardando complementação de informações.',
+  'Em produção': 'Seu caso está em análise e preparação.',
+  'Com pendência': 'Há pendências necessárias para avanço do caso.',
+  'Em estruturação': 'Seu caso está em estruturação técnica.',
+  'Aguardando revisão': 'Seu caso está em revisão interna.',
+  'Em revisão': 'Seu caso está em revisão jurídica.',
+  'Aprovado para protocolo': 'Seu caso está pronto para o próximo protocolo.',
+  'Aguardando protocolo': 'Seu caso aguarda protocolo.',
+  'Protocolado': 'Seu caso foi protocolado.',
+  'Em controladoria': 'Seu caso está em acompanhamento processual.',
+  'Arquivado': 'Atendimento encerrado/arquivado.'
+};
+
+const statusConcepts: Record<string, string> = {
+  'Rascunho': 'Cadastro inicial e estruturação fática em andamento interno.',
+  'Entrevista pendente': 'Dados fáticos/5W2H ainda incompletos. Aguardando entrevista.',
+  'Em produção': 'A equipe de assessores está trabalhando ativamente no caso.',
+  'Com pendência': 'Necessário intervir para sanar incongruência ou falta de dados.',
+  'Em estruturação': 'Análise técnica de viabilidade jurídica do caso.',
+  'Aguardando revisão': 'O rascunho da peça/projeto de requerimento foi finalizado.',
+  'Em revisão': 'Os defensores seniores analisam a viabilidade jurídica fina.',
+  'Aprovado para protocolo': 'Tudo validado! O caso está apto a ser protocolado.',
+  'Aguardando protocolo': 'Enviado para o rito final de protocolo processual.',
+  'Protocolado': 'Ação distribuída ou requerimento protocolado oficialmente.',
+  'Em controladoria': 'O caso está sob monitoramento ativo de prazos e trâmite.',
+  'Arquivado': 'Trâmite encerrado definitivamente no escritório.'
+};
+
+interface Checklist5W2HState {
+  oQue: boolean;
+  oQueObs: string;
+  quem: boolean;
+  quemObs: string;
+  onde: boolean;
+  ondeObs: string;
+  quando: boolean;
+  quandoObs: string;
+  como: boolean;
+  comoObs: string;
+  porque: boolean;
+  porqueObs: string;
+  comoResolver: boolean;
+  comoResolverObs: string;
+}
+
 export default function DadosCaso() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
@@ -139,32 +176,45 @@ export default function DadosCaso() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Tab State (Solution 2)
+  const [selectedTab, setSelectedTab] = useState<'padrao' | 'estruturada'>('padrao');
+
   // Loaded assets
   const [client, setClient] = useState<any>(null);
   const [caseObj, setCaseObj] = useState<any>(null);
 
-  // Narrative inputs (mini word editor)
+  // Core input mapping
+  const [entrevistaPadrao, setEntrevistaPadrao] = useState('');
+  
+  // Backward preservation memory
   const [basesFaticas, setBasesFaticas] = useState('');
-  const [description, setDescription] = useState(''); // detail narrative
+  const [description, setDescription] = useState(''); 
   const [fatosAbordagem, setFatosAbordagem] = useState('');
 
-  // 5W2H input states
-  const [oQueAconteceu, setOQueAconteceu] = useState('');
-  const [quemParticipou, setQuemParticipou] = useState('');
-  const [ondeAconteceu, setOndeAconteceu] = useState('');
-  const [quandoAconteceu, setQuandoAconteceu] = useState('');
-  const [comoAconteceu, setComoAconteceu] = useState('');
-  const [porQueAconteceu, setPorQueAconteceu] = useState('');
-  const [comoPretendeResolver, setComoPretendeResolver] = useState('');
+  // 5W2H Checklist boolean states
+  const [checklist, setChecklist] = useState<Checklist5W2HState>({
+    oQue: false,
+    oQueObs: '',
+    quem: false,
+    quemObs: '',
+    onde: false,
+    ondeObs: '',
+    quando: false,
+    quandoObs: '',
+    como: false,
+    comoObs: '',
+    porque: false,
+    porqueObs: '',
+    comoResolver: false,
+    comoResolverObs: ''
+  });
 
-  // Core administrative inputs
-  const [title, setTitle] = useState('');
-  
-  // Separated classification inputs
+  // Administrative classification (Retained silently to avoid data loss)
   const [materia, setMateria] = useState('');
   const [ramo, setRamo] = useState('');
   const [tipoAcao, setTipoAcao] = useState('');
 
+  const [title, setTitle] = useState('');
   const [priority, setPriority] = useState('media');
   const [responsibleLawyer, setResponsibleLawyer] = useState('');
   const [visibleToClient, setVisibleToClient] = useState(true);
@@ -172,7 +222,6 @@ export default function DadosCaso() {
   const [statusPublicoCliente, setStatusPublicoCliente] = useState('');
   const [isPublicStatusManuallyEdited, setIsPublicStatusManuallyEdited] = useState(false);
 
-  // Options
   const statusInternoOptions = [
     'Rascunho',
     'Entrevista pendente',
@@ -208,7 +257,7 @@ export default function DadosCaso() {
         const data = caseSnap.data();
         setCaseObj(data);
 
-        // Core inputs
+        // Core fields
         setTitle(data.title || '');
         setPriority(data.priority || 'media');
         setResponsibleLawyer(data.responsibleLawyer || '');
@@ -217,24 +266,61 @@ export default function DadosCaso() {
         setStatusPublicoCliente(data.statusPublicoCliente || '');
         setIsPublicStatusManuallyEdited(data.isPublicStatusManuallyEdited === true);
 
-        // Separated classification fields
+        // Reconcile and migrate narrative blocks safely (Solution 1)
+        const loadedEntrevista = data.entrevistaPadrao || '';
+        if (loadedEntrevista) {
+          setEntrevistaPadrao(loadedEntrevista);
+        } else {
+          // Perform silent, clear migration concatenation of old blocks
+          const tempParts: string[] = [];
+          
+          if (data.description?.trim()) {
+            tempParts.push(`<p><strong>Histórico / Descrição Inicial:</strong><br/>${data.description}</p>`);
+          } else if (data.descricaoDet?.trim()) {
+            tempParts.push(`<p><strong>Histórico / Descrição Inicial:</strong><br/>${data.descricaoDet}</p>`);
+          }
+
+          if (data.basesFaticas?.trim()) {
+            tempParts.push(`<p><strong>Bases Fáticas:</strong><br/>${data.basesFaticas}</p>`);
+          }
+
+          if (data.fatosAbordagem?.trim()) {
+            tempParts.push(`<p><strong>Fatos de Abordagem:</strong><br/>${data.fatosAbordagem}</p>`);
+          }
+
+          setEntrevistaPadrao(tempParts.join('<br/>'));
+        }
+
+        // Keep local backups of legacy fields
+        setBasesFaticas(data.basesFaticas || '');
+        setDescription(data.description || '');
+        setFatosAbordagem(data.fatosAbordagem || '');
+
+        // Load 5W2H Checklist safely (Solution 3)
+        const checkSrc = data.checklist5w2h || {};
+        setChecklist({
+          oQue: checkSrc.oQue === true,
+          oQueObs: checkSrc.oQueObs || '',
+          quem: checkSrc.quem === true,
+          quemObs: checkSrc.quemObs || '',
+          onde: checkSrc.onde === true,
+          ondeObs: checkSrc.ondeObs || '',
+          quando: checkSrc.quando === true,
+          quandoObs: checkSrc.quandoObs || '',
+          como: checkSrc.como === true,
+          comoObs: checkSrc.comoObs || '',
+          porque: checkSrc.porque === true,
+          porqueObs: checkSrc.porqueObs || '',
+          comoResolver: checkSrc.comoResolver === true,
+          comoResolverObs: checkSrc.comoResolverObs || ''
+        });
+
+        // Retain classifications silently so we do not break any other screens
         setMateria(data.materia || (data.caseType ? data.caseType.split('/')[0]?.trim() : ''));
         setRamo(data.ramo || (data.caseType ? data.caseType.split('/')[1]?.trim() : ''));
         setTipoAcao(data.tipoAcao || (data.caseType ? data.caseType.split('/')[2]?.trim() : ''));
 
-        // Load 5W2H & main narrative paragraphs safely
-        setBasesFaticas(data.basesFaticas || '');
-        setDescription(data.description || '');
-        setFatosAbordagem(data.fatosAbordagem || '');
-        setOQueAconteceu(data.oQueAconteceu || '');
-        setQuemParticipou(data.quemParticipou || '');
-        setOndeAconteceu(data.ondeAconteceu || '');
-        setQuandoAconteceu(data.quandoAconteceu || '');
-        setComoAconteceu(data.comoAconteceu || '');
-        setPorQueAconteceu(data.porQueAconteceu || '');
-        setComoPretendeResolver(data.comoPretendeResolver || data.encaminhamentoEsperado || '');
-
-        // Client lookup
+        // Client info lookup
         if (data.clientId) {
           const clientSnap = await getDoc(doc(db, 'clients', data.clientId));
           if (clientSnap.exists()) {
@@ -243,7 +329,7 @@ export default function DadosCaso() {
         }
       } catch (err: any) {
         console.error(err);
-        setError(`Erro crítico ao carregar registros do caso: ${err.message || err}`);
+        setError(`Erro crítico ao carregar fasticidade do caso: ${err.message || err}`);
       } finally {
         setFetching(false);
       }
@@ -252,7 +338,7 @@ export default function DadosCaso() {
     loadCaseData();
   }, [caseId]);
 
-  // Handle automatic Suggested Public Status mapping on Internal Status alteration
+  // Suggested Public Status triggers on status altering
   const handleStatusInternoChange = (newVal: string) => {
     setStatusInterno(newVal);
     if (!isPublicStatusManuallyEdited) {
@@ -273,32 +359,42 @@ export default function DadosCaso() {
     setIsPublicStatusManuallyEdited(false);
   };
 
-  // Check 5W2H completeness status
+  // Check 5W2H Completeness Criteria: (Solution 3 / Checklist + Entrevista)
   const is5W2HComplete = !!(
-    basesFaticas.trim() &&
-    description.trim() &&
-    fatosAbordagem.trim() &&
-    oQueAconteceu.trim() &&
-    quemParticipou.trim() &&
-    ondeAconteceu.trim() &&
-    quandoAconteceu.trim() &&
-    comoAconteceu.trim() &&
-    porQueAconteceu.trim() &&
-    comoPretendeResolver.trim()
+    entrevistaPadrao.trim() &&
+    checklist.oQue &&
+    checklist.quem &&
+    checklist.onde &&
+    checklist.quando &&
+    checklist.como &&
+    checklist.porque &&
+    checklist.comoResolver
   );
 
   const is5W2HStarted = !!(
-    basesFaticas.trim() ||
-    description.trim() ||
-    fatosAbordagem.trim() ||
-    oQueAconteceu.trim() ||
-    quemParticipou.trim() ||
-    ondeAconteceu.trim() ||
-    quandoAconteceu.trim() ||
-    comoAconteceu.trim() ||
-    porQueAconteceu.trim() ||
-    comoPretendeResolver.trim()
+    entrevistaPadrao.trim() ||
+    checklist.oQue ||
+    checklist.quem ||
+    checklist.onde ||
+    checklist.quando ||
+    checklist.como ||
+    checklist.porque ||
+    checklist.comoResolver
   );
+
+  const handleChecklistToggle = (field: keyof Checklist5W2HState) => {
+    setChecklist(prev => ({
+      ...prev,
+      [field]: !prev[field]
+    }));
+  };
+
+  const handleChecklistObsChange = (field: keyof Checklist5W2HState, value: string) => {
+    setChecklist(prev => ({
+      ...prev,
+      [`${field}Obs`]: value
+    }));
+  };
 
   const validateDraft = (): boolean => {
     setError(null);
@@ -313,21 +409,19 @@ export default function DadosCaso() {
     if (!validateDraft()) return false;
 
     setSaving(true);
+    setError(null);
     setSuccess(null);
 
-    // Calculate backward-compatible multi-classification fields
+    // Keep combined structure
     const combinedCaseType = [materia.trim(), ramo.trim(), tipoAcao.trim()].filter(Boolean).join(' / ');
-
-    // status resolution
     let currentStatusValue = caseObj?.status || 'active';
     if (currentStatusValue === 'rascunho' && title.trim()) {
       currentStatusValue = 'ativo';
     }
 
-    // productionStatus: complete -> em_producao, incomplete -> com_pendencias
     const computedProductionStatus = is5W2HComplete ? 'em_producao' : 'com_pendencias';
-
     const timestamp = new Date().toISOString();
+
     const payload: any = {
       title: title.trim(),
       caseType: combinedCaseType,
@@ -335,18 +429,31 @@ export default function DadosCaso() {
       ramo: ramo.trim(),
       tipoAcao: tipoAcao.trim(),
       
-      // Store all 5W2H narrative blocks
-      basesFaticas: basesFaticas.trim(),
-      description: description.trim(),
-      fatosAbordagem: fatosAbordagem.trim(),
-      oQueAconteceu: oQueAconteceu.trim(),
-      quemParticipou: quemParticipou.trim(),
-      ondeAconteceu: ondeAconteceu.trim(),
-      quandoAconteceu: quandoAconteceu.trim(),
-      comoAconteceu: comoAconteceu.trim(),
-      porQueAconteceu: porQueAconteceu.trim(),
-      comoPretendeResolver: comoPretendeResolver.trim(),
+      // Store consolidated fields
+      entrevistaPadrao: entrevistaPadrao.trim(),
+      checklist5w2h: {
+        oQue: checklist.oQue,
+        oQueObs: checklist.oQueObs,
+        quem: checklist.quem,
+        quemObs: checklist.quemObs,
+        onde: checklist.onde,
+        ondeObs: checklist.ondeObs,
+        quando: checklist.quando,
+        quandoObs: checklist.quandoObs,
+        como: checklist.como,
+        comoObs: checklist.comoObs,
+        porque: checklist.porque,
+        porqueObs: checklist.porqueObs,
+        comoResolver: checklist.comoResolver,
+        comoResolverObs: checklist.comoResolverObs
+      },
 
+      // Mirror / Fallback backup storage (Solution 1 and 3)
+      description: entrevistaPadrao.trim(), // espelhamento
+      basesFaticas: basesFaticas,
+      fatosAbordagem: fatosAbordagem,
+
+      // UI variables
       priority,
       responsibleLawyer: responsibleLawyer.trim(),
       visibleToClient,
@@ -365,10 +472,10 @@ export default function DadosCaso() {
     }
 
     try {
-      // 1. Maintain primary cases collection persistence
+      // 1. Primary updates
       await updateDoc(doc(db, 'cases', caseId!), payload);
       
-      // 2. Maintain mirrored list cases collection persistence
+      // 2. Mirrored legacy lists update
       await setDoc(doc(db, 'casos', caseId!), {
         id: caseId,
         caseId: caseId,
@@ -397,12 +504,12 @@ export default function DadosCaso() {
         criadoEm: caseObj.createdAt || new Date().toISOString()
       }, { merge: true });
 
-      setSuccess('Dados salvos na faticidade operacional com primor técnico!');
+      setSuccess('Entrevista Padrão e Checklist 5W2H salvos com primor operacional!');
       setCaseObj({ ...caseObj, ...payload });
       return true;
     } catch (err: any) {
       console.error(err);
-      setError(`Erro ao gravar dados fáticos mestre: ${err.message || err}`);
+      setError(`Erro ao gravar dados da entrevista: ${err.message || err}`);
       return false;
     } finally {
       setSaving(false);
@@ -427,7 +534,6 @@ export default function DadosCaso() {
     }
   };
 
-  // Return blocked UI if caseId is empty
   if (!caseId) {
     return (
       <div className="p-8 max-w-xl mx-auto mt-20 bg-white border border-red-200 rounded-3xl shadow-sm text-center">
@@ -461,24 +567,24 @@ export default function DadosCaso() {
               </p>
             )}
             <p className="text-xs text-gray-500 mt-1">
-              Esboce a base de fatos reais do caso jurídicamente relevante e preencha o questionário metodológico.
+              Registre a narrativa consolidada da entrevista e confira os fatos obrigatórios no checklist de auditoria 5W2H.
             </p>
           </div>
 
           <div className="shrink-0 flex items-center gap-2">
             {!is5W2HComplete && is5W2HStarted ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-amber-800 text-[10px] font-black uppercase tracking-wider font-sans">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-amber-800 text-[10px] font-black uppercase tracking-wider font-sans animate-pulse">
                 <AlertTriangle size={11} className="text-amber-500" />
-                Entrevista Incompleta
+                Incompetência / Pendências
               </span>
             ) : is5W2HComplete ? (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 rounded-full text-emerald-800 text-[10px] font-black uppercase tracking-wider font-sans">
                 <CheckCircle2 size={11} className="text-emerald-500" />
-                Fatos Consolidados
+                Entrevista Pronta
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-50 border border-gray-200 rounded-full text-gray-500 text-[10px] font-bold uppercase tracking-wider font-sans">
-                Aguardando Preenchimento
+                Aguardando Cadastro
               </span>
             )}
           </div>
@@ -505,219 +611,204 @@ export default function DadosCaso() {
             <span className="text-xs font-bold font-mono uppercase tracking-widest text-gray-500">Sincronizando Histórico Fático...</span>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-8">
 
-            {/* IF INCOMPLETE WARNING CARD (Solution 6) */}
+            {/* IF INCOMPLETE WARNING CARD */}
             {!is5W2HComplete && is5W2HStarted && (
               <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 text-sm flex gap-3 items-start animate-fadeIn">
                 <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
                 <div className="space-y-1">
                   <h5 className="font-bold text-xs uppercase tracking-wider">Aviso de Integralidade Fática</h5>
                   <p className="leading-relaxed text-xs">
-                    Entrevista 5W2H incompleta. Você pode navegar livremente pelas próximas etapas, mas esta pendência continuará registrada no painel administrativo até o preenchimento de todos os 10 fatores mínimos destacados abaixo com borda vermelha.
+                    Entrevista ou checklist pendente. Você pode navegar livremente pelo fluxo, mas esta etapa constará como pendente no painel de controle e na lateral até que a narrativa principal seja redigida e todas as 7 perguntas do checklist de auditoria abaixo sejam conferidas.
                   </p>
                 </div>
               </div>
             )}
 
-            {/* ORDEM REORGANIZADA DA TELA (Solution 2 & Series) */}
+            {/* PART 1: CARDS DE SELEÇÃO DE TIPO (Solution 2) */}
+            <div className="space-y-3">
+              <label className="text-xs font-black uppercase text-gray-650 tracking-wide block">
+                Modalidade de Entrevista
+              </label>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Entrevista Padrão Card */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedTab('padrao')}
+                  className={`p-5 rounded-2xl border text-left transition-all duration-200 cursor-pointer ${
+                    selectedTab === 'padrao'
+                      ? 'border-gray-950 bg-white shadow-xs'
+                      : 'border-gray-150 bg-gray-50/50 opacity-80 hover:bg-gray-50 hover:opacity-100'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wider font-mono text-gray-900 flex items-center gap-1.5">
+                      <FileText size={14} className="text-gray-950" />
+                      Entrevista Padrão
+                    </span>
+                    <span className="px-1.5 py-0.5 bg-neutral-100 border border-neutral-200 text-neutral-800 text-[9px] font-black rounded-sm tracking-wider uppercase">
+                      Ativo
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-2 leading-relaxed">
+                    Escrita livre do histórico fático consolidado do cliente, unificando dados, contextualização e fatos da abordagem.
+                  </p>
+                </button>
 
-            {/* PART 1: BASES FÁTICAS */}
-            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-4">
+                {/* Entrevistas Estruturadas Card */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedTab('estruturada')}
+                  className={`p-5 rounded-2xl border text-left transition-all duration-200 cursor-pointer relative overflow-hidden ${
+                    selectedTab === 'estruturada'
+                      ? 'border-indigo-600 bg-indigo-50/10 shadow-xs ring-1 ring-indigo-600'
+                      : 'border-gray-150 bg-gray-50/50 opacity-80 hover:bg-gray-50 hover:opacity-100'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wider font-mono text-gray-600 flex items-center gap-1.5">
+                      <ClipboardList size={14} className="text-gray-400" />
+                      Roteiros Estruturados
+                    </span>
+                    <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-800 text-[9px] font-black rounded-sm tracking-wider uppercase">
+                      Em breve
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
+                    Formulários e questionários guiados inteligentes baseados nas teses mais recorrentes do escritório (trabalhista, previdenciário, consumidor).
+                  </p>
+                </button>
+              </div>
+
+              {selectedTab === 'estruturada' && (
+                <div className="p-4 bg-indigo-50 border border-indigo-150 rounded-2xl text-indigo-950 text-xs flex gap-3 items-center animate-fadeIn">
+                  <Sparkles size={16} className="text-indigo-600 shrink-0" />
+                  <span>
+                    <strong>Integração futura:</strong> As entrevistas estruturadas serão disponibilizadas em módulos subsequentes do giga app. Por favor, utilize o editor da <strong>Entrevista Padrão</strong> para registrar o caso atual.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* PART 2: UNIFIED NARRATIVE EDITOR (Solution 1 & 6) */}
+            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-4 shadow-xs">
               <div className="flex justify-between items-start border-b border-gray-100 pb-3 flex-wrap gap-2">
                 <div>
-                  <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">1. Bases Fáticas Informativas da Estruturação Inicial do Caso</h4>
-                  <p className="text-[11px] text-gray-400 mt-0.5">Visão mestre sobre a lide e os pressupostos de atuação.</p>
+                  <h4 className="text-sm font-extrabold text-gray-900 tracking-tight flex items-center gap-2">
+                    <BookOpen size={16} className="text-gray-700" />
+                    <span>Registro da Entrevista Padrão</span>
+                  </h4>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Laudo descritivo do atendimento de fasticidade principal da lide.</p>
                 </div>
-                {!basesFaticas.trim() && (
+                {!entrevistaPadrao.trim() && (
                   <span className="text-[10px] text-red-500 font-bold uppercase tracking-wider px-2 py-0.5 bg-red-50 rounded-md">Pendente *</span>
                 )}
               </div>
+              
               <MiniRichEditor 
-                id="basesFaticas"
-                value={basesFaticas}
-                onChange={setBasesFaticas}
-                placeholder="Insira as bases fáticas resumidas de inicialização fática da lide..." 
-                isMissing={!basesFaticas.trim()}
+                id="entrevistaPadrao"
+                value={entrevistaPadrao}
+                onChange={setEntrevistaPadrao}
+                placeholder="Insira a narrativa fática do atendimento, transcrição da entrevista e documentos correspondentes apresentados..." 
+                isMissing={!entrevistaPadrao.trim()}
               />
             </div>
 
-            {/* PART 2: DESCRIÇÃO DETALHADA */}
-            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-4">
-              <div className="flex justify-between items-start border-b border-gray-100 pb-3 flex-wrap gap-2">
-                <div>
-                  <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">2. Descrição Detalhada</h4>
-                  <p className="text-[11px] text-gray-400 mt-0.5">Narrativa minuciosa dos acontecimentos ocorridos cronologicamente.</p>
-                </div>
-                {!description.trim() && (
-                  <span className="text-[10px] text-red-500 font-bold uppercase tracking-wider px-2 py-0.5 bg-red-50 rounded-md">Pendente *</span>
-                )}
-              </div>
-              <MiniRichEditor 
-                id="description"
-                value={description}
-                onChange={setDescription}
-                placeholder="Insira a descrição detalhada e técnica da lide..." 
-                isMissing={!description.trim()}
-              />
-            </div>
-
-            {/* PART 3: FATOS DE ABORDAGEM */}
-            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-4">
-              <div className="flex justify-between items-start border-b border-gray-100 pb-3 flex-wrap gap-2">
-                <div>
-                  <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">3. Fatos de Abordagem</h4>
-                  <p className="text-[11px] text-gray-400 mt-0.5">Elementos de destaque e conexões de argumentação inicial.</p>
-                </div>
-                {!fatosAbordagem.trim() && (
-                  <span className="text-[10px] text-red-500 font-bold uppercase tracking-wider px-2 py-0.5 bg-red-50 rounded-md">Pendente *</span>
-                )}
-              </div>
-              <MiniRichEditor 
-                id="fatosAbordagem"
-                value={fatosAbordagem}
-                onChange={setFatosAbordagem}
-                placeholder="Esclareça os fatos de abordagem e as nuances para a petição jurídica secundária..." 
-                isMissing={!fatosAbordagem.trim()}
-              />
-            </div>
-
-            {/* PART 4: ENTREVISTA 5W2H */}
-            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-6">
+            {/* PART 3: AUDIT 5W2H CHECKLISTS (Solution 3) */}
+            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-5 shadow-xs">
               <div className="border-b border-gray-100 pb-3">
-                <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">4. Questionário Fático Operacional (5W2H)</h4>
-                <p className="text-[11px] text-gray-400 mt-0.5">Indispensáveis para a tese mestre da inicial ou do rito administrativo.</p>
+                <h4 className="text-sm font-extrabold text-gray-900 tracking-tight flex items-center gap-2">
+                  <ClipboardList size={16} className="text-indigo-600" />
+                  <span>Módulo de Auditoria de Faticidade • Checklist 5W2H</span>
+                </h4>
+                <p className="text-[11px] text-gray-400 mt-0.5">Fatores mínimos de verificação para controle de qualidade da petição inicial ou requerimento administrativo.</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-4">
                 
-                {/* 5W1H - O que aconteceu */}
-                <div className="space-y-1.5 md:col-span-2">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-extrabold uppercase text-gray-600 tracking-wide">O que aconteceu? (What) *</label>
-                    {!oQueAconteceu.trim() && <span className="text-[9px] font-black text-red-500 uppercase bg-red-50 px-1.5 py-0.5 rounded">Faltando</span>}
-                  </div>
-                  <textarea 
-                    rows={3}
-                    value={oQueAconteceu}
-                    onChange={(e) => setOQueAconteceu(e.target.value)}
-                    placeholder="Especifique o objeto ou fato ocorrido sob lide."
-                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none resize-none focus:bg-white focus:ring-1 ${
-                      !oQueAconteceu.trim() ? 'border-red-200 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-gray-900 focus:border-gray-900'
-                    }`}
-                  />
-                </div>
+                {/* CHECKLIST ITEMS LIST */}
+                {[
+                  { key: 'oQue', label: 'O Quê?', question: 'Foi colhido e esclarecido tudo o que de fato aconteceu no caso?', placeholder: 'Descreva observações curtas sobre o fato ocorrido (ex: Danos morais após negativa de atendimento no hospital).' },
+                  { key: 'quem', label: 'Quem?', question: 'Foram identificadas e qualificadas todas as pessoas envolvidas ou testemunhas?', placeholder: 'Obs (ex: Informações completas do preposto e uma testemunha ocular).' },
+                  { key: 'onde', label: 'Onde?', question: 'O local exato dos fatos (físico ou eletrônico) foi devidamente mapeado?', placeholder: 'Obs (ex: Contrato via app corporativo, IP logado informado).' },
+                  { key: 'quando', label: 'Quando?', question: 'As datas, prazos contratuais e marcos temporais estão esclarecidos?', placeholder: 'Obs (ex: Fato ocorrido em 12/03/2026, prazo final reclamação 11/04).' },
+                  { key: 'como', label: 'Como?', question: 'A mecânica fática ou a forma como se sucederam os fatos foi compreendida?', placeholder: 'Obs (ex: Bloqueio súbito de conta após mudança unilateral de diretriz).' },
+                  { key: 'porque', label: 'Por Quê?', question: 'A causa motriz ou a motivação/origem técnica da lide foi investigada?', placeholder: 'Obs (ex: Desconhecimento do termo de uso, cobrança e restrição indevida).' },
+                  { key: 'comoResolver', label: 'Como pretende resolver?', question: 'O proveito financeiro ou encaminhamento esperado pelo cliente está nítido?', placeholder: 'Obs (ex: Restituição do saldo retido e indenização por cerceamento).' },
+                ].map((item) => {
+                  const booleanVal = (checklist as any)[item.key] === true;
+                  const obsVal = (checklist as any)[`${item.key}Obs`] || '';
 
-                {/* 5W2H - Quem participou */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-extrabold uppercase text-gray-600 tracking-wide">Quem participou? (Who) *</label>
-                    {!quemParticipou.trim() && <span className="text-[9px] font-black text-red-500 uppercase bg-red-50 px-1.5 py-0.5 rounded">Faltando</span>}
-                  </div>
-                  <textarea 
-                    rows={2}
-                    value={quemParticipou}
-                    onChange={(e) => setQuemParticipou(e.target.value)}
-                    placeholder="Identifique sujeitos, testemunhas e agentes ativos/passivos."
-                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none resize-none focus:bg-white focus:ring-1 ${
-                      !quemParticipou.trim() ? 'border-red-200 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-gray-900 focus:border-gray-900'
-                    }`}
-                  />
-                </div>
+                  return (
+                    <div 
+                      key={item.key} 
+                      className={`p-4 rounded-2xl border transition-all duration-150 flex flex-col sm:flex-row gap-4 items-start ${
+                        booleanVal 
+                          ? 'border-emerald-150 bg-emerald-55/15' 
+                          : 'border-red-150 bg-red-50/15'
+                      }`}
+                    >
+                      {/* Check interaction column */}
+                      <div className="flex items-center gap-2 shrink-0 select-none">
+                        <button
+                          type="button"
+                          onClick={() => handleChecklistToggle(item.key as keyof Checklist5W2HState)}
+                          className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
+                            booleanVal
+                              ? 'bg-emerald-600 border-emerald-500 text-white shadow-xs'
+                              : 'bg-white border-red-200 text-red-500 hover:bg-red-50'
+                          }`}
+                        >
+                          {booleanVal ? <Check size={18} className="stroke-[3.5px]" /> : <X size={18} className="stroke-[3.5px]" />}
+                        </button>
+                        
+                        <div className="text-center sm:hidden text-lg">
+                          {booleanVal ? '✅' : '❌'}
+                        </div>
+                      </div>
 
-                {/* 5W3H - Onde aconteceu */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-extrabold uppercase text-gray-600 tracking-wide">Onde aconteceu? (Where) *</label>
-                    {!ondeAconteceu.trim() && <span className="text-[9px] font-black text-red-500 uppercase bg-red-50 px-1.5 py-0.5 rounded">Faltando</span>}
-                  </div>
-                  <textarea 
-                    rows={2}
-                    value={ondeAconteceu}
-                    onChange={(e) => setOndeAconteceu(e.target.value)}
-                    placeholder="Local físico, meios digitais ou fáticos de materialização."
-                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none resize-none focus:bg-white focus:ring-1 ${
-                      !ondeAconteceu.trim() ? 'border-red-200 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-gray-900 focus:border-gray-900'
-                    }`}
-                  />
-                </div>
+                      {/* Content column */}
+                      <div className="space-y-1.5 flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                            booleanVal ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                          }`}>
+                            {item.label}
+                          </span>
+                          <span className="hidden sm:inline text-xs">
+                            {booleanVal 
+                              ? <span className="text-emerald-700 font-bold flex items-center gap-0.5">✅ Conferido</span>
+                              : <span className="text-red-700 font-bold flex items-center gap-0.5">❌ Conferir pendência</span>
+                            }
+                          </span>
+                        </div>
+                        
+                        <p className="text-xs font-bold text-gray-800 leading-relaxed font-sans">
+                          {item.question}
+                        </p>
 
-                {/* 5W4H - Quando aconteceu */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-extrabold uppercase text-gray-600 tracking-wide">Quando aconteceu? (When) *</label>
-                    {!quandoAconteceu.trim() && <span className="text-[9px] font-black text-red-500 uppercase bg-red-50 px-1.5 py-0.5 rounded">Faltando</span>}
-                  </div>
-                  <textarea 
-                    rows={2}
-                    value={quandoAconteceu}
-                    onChange={(e) => setQuandoAconteceu(e.target.value)}
-                    placeholder="Data, prazos e momentos cronológicos de ocorrência."
-                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none resize-none focus:bg-white focus:ring-1 ${
-                      !quandoAconteceu.trim() ? 'border-red-200 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-gray-900 focus:border-gray-900'
-                    }`}
-                  />
-                </div>
-
-                {/* 5W5H - Como aconteceu */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-extrabold uppercase text-gray-600 tracking-wide">Como aconteceu? (How) *</label>
-                    {!comoAconteceu.trim() && <span className="text-[9px] font-black text-red-500 uppercase bg-red-50 px-1.5 py-0.5 rounded">Faltando</span>}
-                  </div>
-                  <textarea 
-                    rows={2}
-                    value={comoAconteceu}
-                    onChange={(e) => setComoAconteceu(e.target.value)}
-                    placeholder="Forma ou modalidade técnica de ocorrência jurídica."
-                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none resize-none focus:bg-white focus:ring-1 ${
-                      !comoAconteceu.trim() ? 'border-red-200 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-gray-900 focus:border-gray-900'
-                    }`}
-                  />
-                </div>
-
-                {/* 5W6H - Por que aconteceu */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-extrabold uppercase text-gray-600 tracking-wide">Por que aconteceu? (Why) *</label>
-                    {!porQueAconteceu.trim() && <span className="text-[9px] font-black text-red-500 uppercase bg-red-50 px-1.5 py-0.5 rounded">Faltando</span>}
-                  </div>
-                  <textarea 
-                    rows={2}
-                    value={porQueAconteceu}
-                    onChange={(e) => setPorQueAconteceu(e.target.value)}
-                    placeholder="Motivos motivadores, imperativos legais ou fáticos lesionados."
-                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none resize-none focus:bg-white focus:ring-1 ${
-                      !porQueAconteceu.trim() ? 'border-red-200 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-gray-900 focus:border-gray-900'
-                    }`}
-                  />
-                </div>
-
-                {/* 5W7H - Como pretende resolver */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <label className="text-xs font-extrabold uppercase text-gray-600 tracking-wide">Encaminhamento Esperado / Como pretende resolver? *</label>
-                    {!comoPretendeResolver.trim() && <span className="text-[9px] font-black text-red-500 uppercase bg-red-50 px-1.5 py-0.5 rounded">Faltando</span>}
-                  </div>
-                  <textarea 
-                    rows={2}
-                    value={comoPretendeResolver}
-                    onChange={(e) => setComoPretendeResolver(e.target.value)}
-                    placeholder="Objetivo pretendido pelo autor em face da lide."
-                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none resize-none focus:bg-white focus:ring-1 ${
-                      !comoPretendeResolver.trim() ? 'border-red-200 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-gray-900 focus:border-gray-900'
-                    }`}
-                  />
-                </div>
+                        <input 
+                          type="text"
+                          value={obsVal}
+                          onChange={(e) => handleChecklistObsChange(item.key as keyof Checklist5W2HState, e.target.value)}
+                          placeholder={item.placeholder}
+                          className="w-full bg-white/70 border border-gray-200 focus:bg-white focus:border-gray-950 px-3.5 py-2 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
 
               </div>
             </div>
 
-            {/* PART 5: TÍTULO DO CASO */}
-            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-4">
+            {/* PART 4: OPERATIONAL CASE TITLE */}
+            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-4 shadow-xs">
               <div className="border-b border-gray-100 pb-3">
-                <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">5. Título Operacional do Caso</h4>
-                <p className="text-[11px] text-gray-400 mt-0.5 font-sans">Título identificador para controle interno de pautas processuais.</p>
+                <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">Título Operacional do Caso</h4>
+                <p className="text-[11px] text-gray-400 mt-0.5 font-sans">Identificação curta usada na gestão interna de pautas processuais.</p>
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-bold uppercase text-gray-650 tracking-wide block">Título do Caso *</label>
@@ -733,60 +824,110 @@ export default function DadosCaso() {
               </div>
             </div>
 
-            {/* PART 6, 7 & 8: MATÉRIA, RAMO E TIPO DE AÇÃO (Solutions separated) */}
-            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-5">
+            {/* PART 5 & 6: CONTROLE, VISIBILIDADE & STATUS INTERNO INTEGRADO (Solution 5) */}
+            <div className="bg-white border border-gray-150 rounded-3xl p-6 space-y-6 shadow-xs">
               <div className="border-b border-gray-100 pb-3">
-                <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">6 / 7 / 8. Enquadramento Jurídico e Classificação</h4>
-                <p className="text-[11px] text-gray-400 mt-0.5">Campos separados para garantir robustez e consistência taxonômica.</p>
+                <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">Controle de Status e Transparência do Cliente</h4>
+                <p className="text-[11px] text-gray-400 mt-0.5">Gestão técnica de status de produção e publicação correspondente na timeline do cliente.</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
-                {/* MATÉRIA */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase text-gray-650 tracking-wide block">Matéria (Ex: Direito do Consumidor, Civil) *</label>
-                  <input 
-                    type="text" 
-                    value={materia} 
-                    onChange={(e) => setMateria(e.target.value)}
-                    placeholder="Direito do Consumidor" 
-                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 focus:bg-white focus:ring-1 transition-all outline-none ${
-                      !materia.trim() ? 'border-red-100 focus:ring-red-450 focus:border-red-450' : 'border-gray-200 focus:ring-gray-950'
-                    }`}
-                  />
+                {/* Embedded Internal Status Column with Concept & Suggestions */}
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
+                      <Activity size={12} className="text-indigo-600" />
+                      <span>Status Interno de Produção *</span>
+                    </label>
+                    <p className="text-[11px] text-gray-400 leading-relaxed">Status restrito à equipe técnica interna.</p>
+                    <select
+                      value={statusInterno}
+                      onChange={(e) => handleStatusInternoChange(e.target.value)}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none cursor-pointer"
+                    >
+                      {statusInternoOptions.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* CONCEPT BOX PLACED IMMEDIATELY UNDER THE SELECTION DROPDOWN (Solution 5) */}
+                  <div className="p-4 bg-gray-50 rounded-2xl border border-gray-150 space-y-2.5">
+                    <div className="flex items-center gap-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest leading-none">
+                      <Info size={12} className="text-indigo-600" />
+                      <span>Conceito & Prática Corporativa</span>
+                    </div>
+
+                    <p className="text-xs text-gray-700 leading-relaxed font-sans">
+                      Conceito do status <strong className="text-gray-900 font-bold">"{statusInterno}"</strong>: <br/>
+                      <span className="text-gray-650 font-medium italic">"{statusConcepts[statusInterno] || 'Fase de análise interna.'}"</span>
+                    </p>
+
+                    <p className="text-xs text-gray-750 font-medium leading-none font-mono border-t border-gray-100 pt-2 flex items-center gap-1">
+                      <span>Sugestão à timeline:</span>
+                      <strong className="text-indigo-700">"{statusMapping[statusInterno] || ''}"</strong>
+                    </p>
+
+                    {isPublicStatusManuallyEdited && (
+                      <button
+                        type="button"
+                        onClick={handleRestoreStatusSuggestion}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-100 hover:bg-indigo-150 text-indigo-700 font-extrabold rounded-lg text-[10px] transition-all cursor-pointer w-full justify-center border border-indigo-200"
+                      >
+                        <RefreshCw size={10} className="animate-spin-once" />
+                        Restaturar sugestão automática
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {/* RAMO */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase text-gray-650 tracking-wide block">Ramo (Ex: Contratos, Responsabilidade Civil) *</label>
-                  <input 
-                    type="text" 
-                    value={ramo} 
-                    onChange={(e) => setRamo(e.target.value)}
-                    placeholder="Contratos Bancários" 
-                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 focus:bg-white focus:ring-1 transition-all outline-none ${
-                      !ramo.trim() ? 'border-red-100 focus:ring-red-450 focus:border-red-450' : 'border-gray-200 focus:ring-gray-950'
-                    }`}
-                  />
-                </div>
+                {/* Visible to client and manual public status */}
+                <div className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
+                      <User size={12} className="text-indigo-600" />
+                      <span>Exibir no Portal do Cliente?</span>
+                    </label>
+                    <p className="text-[11px] text-gray-400 leading-relaxed">Define se o caso fica visível ou opaco no portal do cliente.</p>
+                    <div className="flex items-center gap-3 py-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setVisibleToClient(!visibleToClient)}
+                        className={`w-12 h-6 flex items-center rounded-full p-0.5 transition-all outline-none duration-250 cursor-pointer ${
+                          visibleToClient ? 'bg-emerald-600 justify-end' : 'bg-gray-200 justify-start'
+                        }`}
+                      >
+                        <div className="w-5 h-5 bg-white rounded-full shadow-sm" />
+                      </button>
+                      <span className="text-xs font-bold text-gray-700">
+                        {visibleToClient ? 'Visível (Indicado)' : 'Ocultado ao cliente'}
+                      </span>
+                    </div>
+                  </div>
 
-                {/* TIPO DE AÇÃO */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase text-gray-650 tracking-wide block">Tipo de Ação / Tipo de Caso *</label>
-                  <input 
-                    type="text" 
-                    value={tipoAcao} 
-                    onChange={(e) => setTipoAcao(e.target.value)}
-                    placeholder="Declaratória de Inexistência" 
-                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 focus:bg-white focus:ring-1 transition-all outline-none ${
-                      !tipoAcao.trim() ? 'border-red-100 focus:ring-red-450 focus:border-red-450' : 'border-gray-200 focus:ring-gray-950'
-                    }`}
-                  />
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
+                      <span>Status Público do Cliente (Timeline do Portal) *</span>
+                    </label>
+                    
+                    <p className="text-[11px] text-gray-400 leading-relaxed">
+                      Texto exibido para o cliente logado no portal.
+                    </p>
+                    
+                    <input
+                      type="text"
+                      value={statusPublicoCliente}
+                      onChange={handlePublicStatusChange}
+                      placeholder="Defina as palavras do status público..."
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                    />
+                  </div>
                 </div>
 
               </div>
 
-              {/* Extra technical parameters */}
+              {/* Extra hidden parameters for completeness and alignment */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-3 border-t border-gray-100">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold uppercase text-gray-650 tracking-wide">Prioridade da Demanda</label>
@@ -811,102 +952,6 @@ export default function DadosCaso() {
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
                   />
                 </div>
-              </div>
-            </div>
-
-            {/* PART 9: CONTROLE E VISIBILIDADE OPERACIONAL (Solution 5) */}
-            <div className="bg-white border border-gray-150 rounded-3xl p-6 space-y-6 shadow-xs">
-              <div className="border-b border-gray-100 pb-3">
-                <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">9. Controle e Visibilidade Operacional</h4>
-                <p className="text-[11px] text-gray-400 mt-0.5">Sincronização de transparência entre a equipe mestre e a timeline do cliente.</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
-                {/* Status Interno de Produção - Solution 5 */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
-                    <Activity size={12} className="text-indigo-600" />
-                    <span>Status Interno de Produção *</span>
-                  </label>
-                  <p className="text-[11px] text-gray-400 leading-relaxed">Status mestre restrito ao BOSS e assessores internos.</p>
-                  <select
-                    value={statusInterno}
-                    onChange={(e) => handleStatusInternoChange(e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none cursor-pointer"
-                  >
-                    {statusInternoOptions.map((opt) => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Exibir no Portal do Cliente (Visible to client toggle) */}
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
-                    <User size={12} className="text-indigo-600" />
-                    <span>Exibir no Portal do Cliente?</span>
-                  </label>
-                  <p className="text-[11px] text-gray-400 leading-relaxed">Garante ou opacifica a visibilidade geral do caso.</p>
-                  <div className="flex items-center gap-3 py-1">
-                    <button
-                      type="button"
-                      onClick={() => setVisibleToClient(!visibleToClient)}
-                      className={`w-12 h-6 flex items-center rounded-full p-0.5 transition-all outline-none duration-250 cursor-pointer ${
-                        visibleToClient ? 'bg-emerald-600 justify-end' : 'bg-gray-200 justify-start'
-                      }`}
-                    >
-                      <div className="w-5 h-5 bg-white rounded-full shadow-xs" />
-                    </button>
-                    <span className="text-xs font-bold text-gray-700">
-                      {visibleToClient ? 'Visível (Indicado)' : 'Ocultado para o cliente'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Status Público do Cliente - Solution 5 */}
-                <div className="space-y-2 col-span-1 md:col-span-2">
-                  <div className="flex justify-between items-center flex-wrap gap-2">
-                    <label className="text-xs font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
-                      <span>Status Público do Cliente (Timeline do Portal) *</span>
-                    </label>
-                    
-                    {isPublicStatusManuallyEdited && (
-                      <button
-                        type="button"
-                        onClick={handleRestoreStatusSuggestion}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-800 border border-indigo-150 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
-                      >
-                        <RefreshCw size={10} />
-                        Restaurar sugestão automática
-                      </button>
-                    )}
-                  </div>
-                  
-                  <p className="text-[11px] text-gray-400 leading-relaxed">
-                    Anotação descritiva atualizada de transparência na timeline do cliente.
-                  </p>
-                  
-                  <input
-                    type="text"
-                    value={statusPublicoCliente}
-                    onChange={handlePublicStatusChange}
-                    placeholder="Defina as palavras do status operacional..."
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
-                  />
-                  
-                  <div className="p-3 bg-gray-50 rounded-2xl border border-gray-150 space-y-1.5 mt-2">
-                    <div className="flex items-center gap-1 text-[10px] font-bold text-gray-500 uppercase tracking-wide">
-                      <Info size={11} className="text-grey-400" />
-                      <span>Conceito associado ao status interno atual:</span>
-                    </div>
-                    <p className="text-xs text-gray-700 leading-relaxed font-sans">
-                      Status Interno: <strong className="text-gray-900 font-bold">"{statusInterno}"</strong> • 
-                      Sugestão automática da timeline pública: <strong className="text-indigo-700 font-bold">"{statusMapping[statusInterno] || ''}"</strong>
-                    </p>
-                  </div>
-                </div>
-
               </div>
             </div>
 
@@ -944,7 +989,7 @@ export default function DadosCaso() {
                   type="button"
                   disabled={saving}
                   onClick={handleSaveAndExit}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-950 text-gray-900 px-6 py-3 rounded-xl font-bold transition-all text-sm hover:bg-gray-50 cursor-pointer"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-250 text-gray-700 px-6 py-3 rounded-xl font-bold transition-all text-sm hover:bg-gray-50 cursor-pointer"
                 >
                   <span>Salvar e Sair</span>
                 </button>

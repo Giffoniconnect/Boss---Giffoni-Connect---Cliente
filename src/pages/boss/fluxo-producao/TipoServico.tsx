@@ -128,9 +128,20 @@ export default function TipoServico() {
             if (match) setSelectedService(match.id);
 
             // Check for completeness of the 5W2H interview
-            const is5W2HComplete = !!(
+            const isNewComplete = !!(
+              data.entrevistaPadrao?.trim() &&
+              data.checklist5w2h?.oQue === true &&
+              data.checklist5w2h?.quem === true &&
+              data.checklist5w2h?.onde === true &&
+              data.checklist5w2h?.quando === true &&
+              data.checklist5w2h?.como === true &&
+              data.checklist5w2h?.porque === true &&
+              data.checklist5w2h?.comoResolver === true
+            );
+
+            const isLegacyComplete = !!(
               data.basesFaticas?.trim() &&
-              (data.description?.trim() || data.descricaoDet?.trim()) &&
+              (data.description?.trim() || data.descricaoDet?.trim() || data.descricao?.trim()) &&
               data.fatosAbordagem?.trim() &&
               data.oQueAconteceu?.trim() &&
               data.quemParticipou?.trim() &&
@@ -141,7 +152,20 @@ export default function TipoServico() {
               (data.comoPretendeResolver?.trim() || data.encaminhamentoEsperado?.trim())
             );
 
-            const isStarted = !!(
+            const is5W2HComplete = isNewComplete || isLegacyComplete;
+
+            const isNewStarted = !!(
+              data.entrevistaPadrao?.trim() ||
+              data.checklist5w2h?.oQue === true ||
+              data.checklist5w2h?.quem === true ||
+              data.checklist5w2h?.onde === true ||
+              data.checklist5w2h?.quando === true ||
+              data.checklist5w2h?.como === true ||
+              data.checklist5w2h?.porque === true ||
+              data.checklist5w2h?.comoResolver === true
+            );
+
+            const isLegacyStarted = !!(
               data.basesFaticas?.trim() ||
               data.description?.trim() ||
               data.descricaoDet?.trim() ||
@@ -155,6 +179,8 @@ export default function TipoServico() {
               data.comoPretendeResolver?.trim() ||
               data.encaminhamentoEsperado?.trim()
             );
+
+            const isStarted = isNewStarted || isLegacyStarted;
 
             if (!is5W2HComplete && isStarted) {
               setIsEntrevistaIncomplete(true);
