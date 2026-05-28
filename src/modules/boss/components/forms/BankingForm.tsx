@@ -290,16 +290,25 @@ export const BankingForm: React.FC<BankingFormProps> = ({ data, onChange, client
                     <Input label="Conta" name="bancario_conta" value={data.bancario_conta || ''} onChange={handleChange} />
                   </div>
 
-                  <Select 
-                    label="Tipo de Conta" 
-                    name="bancario_tipoConta" 
-                    value={data.bancario_tipoConta || ''} 
-                    onChange={handleChange} 
-                    options={ACCOUNT_TYPES} 
-                  />
+                  <div className="flex flex-col gap-1 w-full">
+                    <div className="flex items-center min-h-[24px] px-1 mb-1">
+                      <label className="block text-[15px] font-bold text-gray-500">Tipo de Conta</label>
+                    </div>
+                    <select
+                      name="bancario_tipoConta" 
+                      value={data.bancario_tipoConta || ''} 
+                      onChange={handleChange}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-emerald-100 focus:bg-white outline-none transition-all text-sm h-[46px]"
+                    >
+                      <option value="">Selecione...</option>
+                      {ACCOUNT_TYPES.map((opt: string) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </div>
 
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center justify-between px-1">
+                  <div className="flex flex-col gap-1 w-full">
+                    <div className="flex items-center justify-between min-h-[24px] px-1 mb-1">
                       <label className="block text-[15px] font-bold text-gray-500">Titular da Conta</label>
                       <label className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-emerald-600 cursor-pointer select-none">
                         <input 
@@ -318,7 +327,7 @@ export const BankingForm: React.FC<BankingFormProps> = ({ data, onChange, client
                       onChange={handleChange}
                       disabled={data.bancario_titularEhCliente}
                       placeholder="Nome do titular"
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-emerald-100 focus:bg-white outline-none transition-all placeholder:text-gray-300 disabled:opacity-60 text-sm"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-emerald-100 focus:bg-white outline-none transition-all placeholder:text-gray-300 disabled:opacity-60 text-sm h-[46px]"
                     />
                   </div>
                 </div>
