@@ -20,7 +20,10 @@ import {
   CheckCircle2, 
   ShieldCheck,
   User,
-  Building2
+  Building2,
+  FolderOpen,
+  ExternalLink,
+  Activity
 } from 'lucide-react';
 import { flowRoutes } from './utils/flowRoutes';
 import { normalizeCpfCnpj, isValidCpf, isValidCnpj } from './utils/documentUtils';
@@ -35,6 +38,8 @@ export default function EditarCadastroCliente() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  const [driveNotice, setDriveNotice] = useState<boolean>(false);
 
   const [clientId, setClientId] = useState<string | null>(null);
   const [clientType, setClientType] = useState<'PF' | 'PJ' | null>(null);
@@ -119,6 +124,13 @@ export default function EditarCadastroCliente() {
     bancario_agencia: '',
     bancario_numeroConta: '',
     bancario_operacao: '',
+
+    // Google Drive optional fields
+    googleDriveClientFolderStatus: 'aguardando',
+    googleDriveClientFolderUrl: '',
+    googleDriveClientFolderId: '',
+    googleDriveClientFolderLogFalha: '',
+    googleDriveClientFolderUpdatedAt: '',
   });
 
   const [initialFormData, setInitialFormData] = useState<any>(null);
@@ -219,7 +231,12 @@ export default function EditarCadastroCliente() {
           acesso_statusAcesso: accessFields.acesso_statusAcesso || 'pendente',
           acesso_senha: accessFields.acesso_senha || clientData.senhaVisivelPreview || '',
           acesso_confirmarSenha: accessFields.acesso_senha || clientData.senhaVisivelPreview || '',
-          ...bankingFields
+          ...bankingFields,
+          googleDriveClientFolderStatus: clientData.googleDriveClientFolderStatus || 'aguardando',
+          googleDriveClientFolderUrl: clientData.googleDriveClientFolderUrl || '',
+          googleDriveClientFolderId: clientData.googleDriveClientFolderId || '',
+          googleDriveClientFolderLogFalha: clientData.googleDriveClientFolderLogFalha || '',
+          googleDriveClientFolderUpdatedAt: clientData.googleDriveClientFolderUpdatedAt || ''
         };
         setFormData(loadedState);
         setInitialFormData(loadedState);
@@ -344,6 +361,11 @@ export default function EditarCadastroCliente() {
           acesso_statusAcesso: formData.acesso_statusAcesso || 'pendente',
           acesso_senha: formData.acesso_senha || ''
         },
+        googleDriveClientFolderStatus: formData.googleDriveClientFolderStatus || 'aguardando',
+        googleDriveClientFolderUrl: formData.googleDriveClientFolderUrl || '',
+        googleDriveClientFolderId: formData.googleDriveClientFolderId || '',
+        googleDriveClientFolderLogFalha: formData.googleDriveClientFolderLogFalha || '',
+        googleDriveClientFolderUpdatedAt: formData.googleDriveClientFolderUpdatedAt || '',
         missingFields: missing,
         cadastroIncompleto: missing.length > 0
       };
@@ -420,7 +442,10 @@ export default function EditarCadastroCliente() {
         status: 'active',
         portalAtivo: isPortalReady,
         atualizadoEm: rightNow,
-        updatedAt: rightNow
+        updatedAt: rightNow,
+        googleDriveClientFolderStatus: formData.googleDriveClientFolderStatus || 'aguardando',
+        googleDriveClientFolderUrl: formData.googleDriveClientFolderUrl || '',
+        googleDriveClientFolderId: formData.googleDriveClientFolderId || ''
       });
 
       if (isPortalReady) {
@@ -476,6 +501,17 @@ export default function EditarCadastroCliente() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSimulateDriveStatus = (status: 'aguardando' | 'criada' | 'falha', url: string, id: string, log: string) => {
+    setFormData((prev: any) => ({
+      ...prev,
+      googleDriveClientFolderStatus: status,
+      googleDriveClientFolderUrl: url,
+      googleDriveClientFolderId: id,
+      googleDriveClientFolderLogFalha: log,
+      googleDriveClientFolderUpdatedAt: status !== 'aguardando' ? new Date().toISOString() : ''
+    }));
   };
 
   if (loading) {
@@ -644,6 +680,170 @@ export default function EditarCadastroCliente() {
                   onChange={(d) => setFormData(d)} 
                   clientName={clientType === 'PF' ? (formData.pf_nomeCompleto || '') : (formData.pj_razaoSocial || '')}
                 />
+              </div>
+
+              {/* GOOGLE DRIVE AUTOMATION PANEL */}
+              <div className="border-t border-gray-100 pt-6">
+                <div className="border border-gray-150 rounded-3xl p-6 bg-gray-50/40 space-y-4 shadow-xs">
+                  <div className="flex items-center gap-2.5 border-b border-gray-150 pb-3">
+                    <FolderOpen className="text-indigo-600" size={18} />
+                    <div>
+                      <h3 className="text-xs font-black uppercase text-gray-955 tracking-wider font-mono m-0 border-b-0 p-0 mb-0" style={{ borderBottom: 'none', marginBottom: 0, paddingBottom: 0 }}>
+                        Automação Google Drive — Pasta do Cliente
+                      </h3>
+                      <p className="text-[11px] text-gray-400 font-medium leading-tight mt-0.5">
+                        Gerenciamento da estrutura operacional de arquivos no Google Drive corporativo.
+                      </p>
+                    </div>
+                  </div>
+
+                  {driveNotice && (
+                    <div className="p-3 bg-indigo-50 border border-indigo-200 text-indigo-955 rounded-xl text-xs flex items-center justify-between font-semibold animate-in fade-in duration-200">
+                      <div className="flex items-center gap-2">
+                        <Activity className="text-indigo-600 animate-pulse" size={14} />
+                        <span>Integração Google Drive será ativada em build futuro.</span>
+                      </div>
+                      <button 
+                        type="button" 
+                        onClick={() => setDriveNotice(false)} 
+                        className="text-indigo-400 hover:text-indigo-600 font-bold ml-2 text-xs"
+                      >
+                        Fechar
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-1">
+                    <div className="space-y-4">
+                      <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block font-mono">
+                        Status da Automação
+                      </span>
+
+                      {formData.googleDriveClientFolderStatus === 'criada' && (
+                        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 text-xs flex items-center gap-2 font-semibold">
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                          <span>Pasta criada com sucesso</span>
+                        </div>
+                      )}
+
+                      {formData.googleDriveClientFolderStatus === 'falha' && (
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-950 text-xs flex flex-col gap-2 font-semibold">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                            <span>Falha na criação da pasta</span>
+                          </div>
+                          {formData.googleDriveClientFolderLogFalha && (
+                            <div className="w-full bg-red-100/50 p-2.5 rounded-lg border border-red-250 text-red-900 font-mono text-[11px] max-h-32 overflow-y-auto break-all">
+                              {formData.googleDriveClientFolderLogFalha}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {formData.googleDriveClientFolderStatus === 'aguardando' && (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs flex items-center gap-2 font-semibold">
+                          <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                          <span>Aguardando criação</span>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setDriveNotice(true)}
+                        className="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-750 text-white font-extrabold px-4 py-2.5 rounded-xl transition-all text-xs cursor-pointer shadow-xs"
+                      >
+                        Criar pasta do cliente no Google Drive
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block font-mono">
+                        Metadados da Pasta
+                      </span>
+
+                      <div className="space-y-2.5">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block">
+                            URL da Pasta (googleDriveClientFolderUrl)
+                          </label>
+                          {formData.googleDriveClientFolderUrl ? (
+                            <div className="p-2.5 bg-gray-50 border border-gray-150 rounded-xl text-xs font-mono text-gray-800 break-all select-all animate-in fade-in duration-200">
+                              {formData.googleDriveClientFolderUrl}
+                            </div>
+                          ) : (
+                            <div className="p-2.5 bg-gray-50/50 border border-gray-100 border-dashed rounded-xl text-xs text-gray-400 italic">
+                              Sem URL sincronizada.
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block">
+                            ID da Pasta (googleDriveClientFolderId)
+                          </label>
+                          {formData.googleDriveClientFolderId ? (
+                            <div className="p-2.5 bg-gray-50 border border-gray-150 rounded-xl text-xs font-mono text-gray-800 break-all select-all animate-in fade-in duration-200">
+                              {formData.googleDriveClientFolderId}
+                            </div>
+                          ) : (
+                            <div className="p-2.5 bg-gray-50/50 border border-gray-100 border-dashed rounded-xl text-xs text-gray-400 italic">
+                              Sem identificador sincronizado.
+                            </div>
+                          )}
+                        </div>
+
+                        {formData.googleDriveClientFolderUrl && (
+                          <a
+                            href={formData.googleDriveClientFolderUrl}
+                            target="_blank"
+                            referrerPolicy="no-referrer"
+                            rel="noopener noreferrer"
+                            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-750 font-extrabold rounded-xl text-xs transition-colors cursor-pointer animate-in slide-in-from-top-1 duration-200"
+                          >
+                            <ExternalLink size={13} />
+                            <span>Abrir pasta no Google Drive</span>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SIMULATOR COMPONENT */}
+                  <div className="p-3 border border-gray-150 bg-white rounded-2xl space-y-2 mt-4">
+                    <span className="text-[10.5px] uppercase font-black text-gray-400 block border-b border-gray-50 pb-1 font-mono tracking-wider">
+                      ⚡ Simular Retorno da Automação (Fase de Testes)
+                    </span>
+                    <div className="flex gap-2 flex-wrap text-xs">
+                      <button
+                        type="button"
+                        onClick={() => handleSimulateDriveStatus('aguardando', '', '', '')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                          formData.googleDriveClientFolderStatus === 'aguardando' ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                        }`}
+                      >
+                        Aguardando
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSimulateDriveStatus('criada', `https://drive.google.com/drive/folders/showcase-giffoni-${clientId || 'client_id'}`, `folder_drv_${clientId || '123'}`, '')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                          formData.googleDriveClientFolderStatus === 'criada' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                        }`}
+                      >
+                        Sucesso
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSimulateDriveStatus('falha', '', '', '[Erro de Conexão: 401 Unauthorized] Usuário autenticador sem permissão de escrita no diretório raiz do Drive da Giffoni Connect.')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                          formData.googleDriveClientFolderStatus === 'falha' ? 'bg-red-100 border-red-300 text-red-800' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                        }`}
+                      >
+                        Falha
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 

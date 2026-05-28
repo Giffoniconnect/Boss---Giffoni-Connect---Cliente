@@ -61,6 +61,25 @@ export default function TipoServico() {
   else if (pathname.endsWith('/requerimento-administrativo')) subTypeRoute = 'requerimento-administrativo';
   else if (pathname.endsWith('/outro-servico-administrativo')) subTypeRoute = 'outro-servico-administrativo';
 
+  let currentStep: 'natureza' | 'judicial' | 'extrajudicial' | 'form' = 'natureza';
+  if (pathname.endsWith('/judicial')) currentStep = 'judicial';
+  else if (pathname.endsWith('/extrajudicial')) currentStep = 'extrajudicial';
+  else if (subTypeRoute) currentStep = 'form';
+
+  const getRouteTo = (step: 'natureza' | 'judicial' | 'extrajudicial') => {
+    const query = clientId ? `?clientId=${clientId}` : '';
+    if (safeCaseId) {
+      if (step === 'natureza') return `/boss-giffoni-clientes/fluxo-producao/${safeCaseId}/tipo-producao${query}`;
+      if (step === 'judicial') return `/boss-giffoni-clientes/fluxo-producao/${safeCaseId}/tipo-producao/judicial${query}`;
+      if (step === 'extrajudicial') return `/boss-giffoni-clientes/fluxo-producao/${safeCaseId}/tipo-producao/extrajudicial${query}`;
+    } else {
+      if (step === 'natureza') return `/boss-giffoni-clientes/fluxo-producao/tipo-producao${query}`;
+      if (step === 'judicial') return `/boss-giffoni-clientes/fluxo-producao/tipo-producao/judicial${query}`;
+      if (step === 'extrajudicial') return `/boss-giffoni-clientes/fluxo-producao/tipo-producao/extrajudicial${query}`;
+    }
+    return '';
+  };
+
   // Core Data States
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
@@ -90,6 +109,23 @@ export default function TipoServico() {
   const [todoistTaskLogFalha, setTodoistTaskLogFalha] = useState('');
   const [todoistAutomationStatus, setTodoistAutomationStatus] = useState('aguardando');
 
+  useEffect(() => {
+    if (currentStep === 'judicial') {
+      setMacroTypeSelection('judicial');
+    } else if (currentStep === 'extrajudicial') {
+      setMacroTypeSelection('extrajudicial');
+    } else if (subTypeRoute) {
+      const macro = (subTypeRoute === 'peticao-inicial' || subTypeRoute === 'processo-judicial-em-andamento') ? 'judicial' : 'extrajudicial';
+      setMacroTypeSelection(macro);
+    }
+  }, [currentStep, subTypeRoute]);
+
+  useEffect(() => {
+    if (subTypeRoute === 'peticao-inicial') {
+      setVara('A definir');
+    }
+  }, [subTypeRoute]);
+
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -112,7 +148,7 @@ export default function TipoServico() {
             setOppositeParty(data.oppositeParty || '');
             setHasOppositeParty(!!data.hasOppositeParty);
             setAssunto(data.assunto || data.title || '');
-            setVara(data.vara || '');
+            setVara(subTypeRoute === 'peticao-inicial' ? 'A definir' : (data.vara || ''));
             setComarca(data.comarca || '');
             setProcessNumber(data.processNumber || '');
             setServiceSubtype(data.serviceSubtype || '');
@@ -230,7 +266,7 @@ export default function TipoServico() {
     const subtypePart = serviceSubtype?.trim() || "[Tipo de Serviço]";
 
     if (subTypeRoute === 'peticao-inicial') {
-      return `${clientPart} x ${oppositePart} - ${assuntoPart} - Tipo de serviço: Petição inicial a ajuizar - ${varaPart} - ${comarcaPart}`;
+      return `${clientPart} x ${oppositePart} - ${assuntoPart} - Tipo de serviço: Petição inicial a ajuizar - Vara: A definir - Comarca: ${comarcaPart}`;
     }
     if (subTypeRoute === 'processo-judicial-em-andamento') {
       return `${clientPart} x ${oppositePart} - ${assuntoPart} - Tipo de serviço: Processo ${processPart} - ${varaPart} - ${comarcaPart}`;
@@ -399,7 +435,7 @@ export default function TipoServico() {
       };
 
       if (macro === 'judicial') {
-        payload.vara = vara || '';
+        payload.vara = subTypeRoute === 'peticao-inicial' ? 'A definir' : (vara || '');
         payload.comarca = comarca || '';
         if (subTypeRoute === 'processo-judicial-em-andamento') {
           payload.processNumber = processNumber || '';
@@ -530,81 +566,79 @@ export default function TipoServico() {
             <Loader2 className="animate-spin text-gray-500" size={24} />
             <span className="text-xs font-bold font-mono uppercase tracking-widest">Pesquisando dados específicos do caso...</span>
           </div>
-        ) : subTypeRoute === null ? (
+        ) : currentStep !== 'form' ? (
           
           /* VIEW 1: SELECTION TREE PROCESS (Step 1 -> cards, and Step 2 -> subtypes) */
           <div className="space-y-8 animate-fadeIn">
             
-            {/* STAGE 1: MACRO TYPE */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-black uppercase text-gray-400 tracking-wider block font-mono">
-                Etapa 1 — Selecione o Segmento da Demanda
-              </h4>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                
-                {/* CARD judicial */}
-                <button
-                  type="button"
-                  onClick={() => setMacroTypeSelection('judicial')}
-                  className={`p-6 rounded-3xl border text-left flex gap-4 items-start transition-all cursor-pointer ${
-                    macroTypeSelection === 'judicial'
-                      ? 'bg-indigo-50/50 border-indigo-600 ring-1 ring-indigo-600 shadow-sm'
-                      : 'bg-white border-gray-150 hover:border-gray-250 hover:shadow-xs'
-                  }`}
-                >
-                  <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center shrink-0 shadow-xs ${
-                    macroTypeSelection === 'judicial' ? 'bg-indigo-600 text-white border-transparent' : 'bg-gray-50 text-gray-500 border-gray-100'
-                  }`}>
-                    <Scale size={20} />
-                  </div>
-                  <div className="space-y-1">
-                    <h5 className="font-black text-xs tracking-wider uppercase text-gray-900 font-sans">
-                      1. JUDICIAL
-                    </h5>
-                    <p className="text-xs text-gray-500 leading-relaxed font-semibold">
-                      Adequado para demandas de rito contencioso em andamento ou peças preparatórias de ajuizamento estrutural perante órgãos judiciais.
-                    </p>
-                  </div>
-                </button>
-
-                {/* CARD extrajudicial */}
-                <button
-                  type="button"
-                  onClick={() => setMacroTypeSelection('extrajudicial')}
-                  className={`p-6 rounded-3xl border text-left flex gap-4 items-start transition-all cursor-pointer ${
-                    macroTypeSelection === 'extrajudicial'
-                      ? 'bg-indigo-50/50 border-indigo-600 ring-1 ring-indigo-600 shadow-sm'
-                      : 'bg-white border-gray-150 hover:border-gray-250 hover:shadow-xs'
-                  }`}
-                >
-                  <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center shrink-0 shadow-xs ${
-                    macroTypeSelection === 'extrajudicial' ? 'bg-indigo-600 text-white border-transparent' : 'bg-gray-50 text-gray-500 border-gray-100'
-                  }`}>
-                    <Briefcase size={20} />
-                  </div>
-                  <div className="space-y-1">
-                    <h5 className="font-black text-xs tracking-wider uppercase text-gray-900 font-sans">
-                      2. EXTRAJUDICIAL
-                    </h5>
-                    <p className="text-xs text-gray-500 leading-relaxed font-semibold">
-                      Ideal para notificações preventivas, assessoria contratual pautada em resoluções administrativas e pleitos junto a autarquias.
-                    </p>
-                  </div>
-                </button>
-
-              </div>
-            </div>
-
-            {/* STAGE 2: SUBTYPES BASED ON MACRO SELECTION */}
-            {macroTypeSelection === 'judicial' && (
-              <div className="space-y-4 pt-4 border-t border-gray-100 animate-fadeIn">
+            {/* IF STEP IS naturaleza */}
+            {currentStep === 'natureza' && (
+              <div className="space-y-4">
                 <h4 className="text-sm font-black uppercase text-gray-400 tracking-wider block font-mono">
-                  Etapa 2 — Subtipos Judiciais Disponíveis
+                  Etapa 1 — Selecione o Segmento da Demanda
                 </h4>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  
+                  {/* CARD judicial */}
+                  <button
+                    type="button"
+                    onClick={() => navigate(getRouteTo('judicial'))}
+                    className="p-6 rounded-3xl border bg-white border-gray-150 hover:border-indigo-400 hover:shadow-xs text-left flex gap-4 items-start transition-all cursor-pointer"
+                  >
+                    <div className="w-12 h-12 rounded-2xl border bg-gray-50 text-gray-500 border-gray-100 flex items-center justify-center shrink-0 shadow-xs">
+                      <Scale size={20} />
+                    </div>
+                    <div className="space-y-1">
+                      <h5 className="font-black text-xs tracking-wider uppercase text-gray-900 font-sans">
+                        1. JUDICIAL
+                      </h5>
+                      <p className="text-xs text-gray-550 leading-relaxed font-semibold">
+                        Adequado para demandas de rito contencioso em andamento ou peças preparatórias de ajuizamento estrutural perante órgãos judiciais.
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* CARD extrajudicial */}
+                  <button
+                    type="button"
+                    onClick={() => navigate(getRouteTo('extrajudicial'))}
+                    className="p-6 rounded-3xl border bg-white border-gray-150 hover:border-indigo-400 hover:shadow-xs text-left flex gap-4 items-start transition-all cursor-pointer"
+                  >
+                    <div className="w-12 h-12 rounded-2xl border bg-gray-50 text-gray-500 border-gray-100 flex items-center justify-center shrink-0 shadow-xs">
+                      <Briefcase size={20} />
+                    </div>
+                    <div className="space-y-1">
+                      <h5 className="font-black text-xs tracking-wider uppercase text-gray-900 font-sans">
+                        2. EXTRAJUDICIAL
+                      </h5>
+                      <p className="text-xs text-gray-550 leading-relaxed font-semibold">
+                        Ideal para notificações preventivas, assessoria contratual pautada em resoluções administrativas e pleitos junto a autarquias.
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* IF STEP IS judicial */}
+            {currentStep === 'judicial' && (
+              <div className="space-y-4">
+                {/* Simple Breadcrumb */}
+                <div className="flex items-center gap-2 text-xs text-gray-500 font-semibold font-sans mb-2">
+                  <span className="hover:text-indigo-650 cursor-pointer text-gray-400" onClick={() => navigate(getRouteTo('natureza'))}>
+                    Tipo de Serviço
+                  </span>
+                  <span className="text-gray-350">&gt;</span>
+                  <span className="text-indigo-600 font-bold uppercase tracking-wider">
+                    Judicial
+                  </span>
+                </div>
+
+                <h4 className="text-sm font-black uppercase text-gray-400 tracking-wider block font-mono">
+                  Etapa 2 — Serviço Judicial
+                </h4>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   {/* BUTTON sub 1: Petição Inicial */}
                   <button
                     type="button"
@@ -633,24 +667,34 @@ export default function TipoServico() {
                     </div>
                     <div className="space-y-1">
                       <h5 className="font-extrabold text-xs text-gray-900 uppercase">Processo Judicial em Andamento</h5>
-                      <p className="text-xs text-gray-550 leading-relaxed">
+                      <p className="text-xs text-gray-500 leading-relaxed font-semibold">
                         Habilitação ativa com número CNJ preexistente nas varas federais ou estaduais.
                       </p>
                     </div>
                   </button>
-
                 </div>
               </div>
             )}
 
-            {macroTypeSelection === 'extrajudicial' && (
-              <div className="space-y-4 pt-4 border-t border-gray-100 animate-fadeIn">
+            {/* IF STEP IS extrajudicial */}
+            {currentStep === 'extrajudicial' && (
+              <div className="space-y-4">
+                {/* Simple Breadcrumb */}
+                <div className="flex items-center gap-2 text-xs text-gray-500 font-semibold font-sans mb-2">
+                  <span className="hover:text-indigo-650 cursor-pointer text-gray-400" onClick={() => navigate(getRouteTo('natureza'))}>
+                    Tipo de Serviço
+                  </span>
+                  <span className="text-gray-350">&gt;</span>
+                  <span className="text-indigo-600 font-bold uppercase tracking-wider">
+                    Extrajudicial
+                  </span>
+                </div>
+
                 <h4 className="text-sm font-black uppercase text-gray-400 tracking-wider block font-mono">
-                  Etapa 2 — Subtipos Administrativos Disponíveis
+                  Etapa 2 — Serviço Extrajudicial
                 </h4>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  
                   {/* BUTTON sub 3: Requerimento Administrativo */}
                   <button
                     type="button"
@@ -684,7 +728,6 @@ export default function TipoServico() {
                       </p>
                     </div>
                   </button>
-
                 </div>
               </div>
             )}
@@ -700,11 +743,11 @@ export default function TipoServico() {
             <div>
               <button
                 type="button"
-                onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${safeCaseId}/tipo-producao`)}
+                onClick={() => navigate(getRouteTo(macroTypeSelection || 'judicial'))}
                 className="inline-flex items-center gap-1.5 text-indigo-650 hover:underline font-bold text-xs"
               >
                 <ArrowLeft size={14} />
-                Voltar para escolha de tipo de serviço
+                Voltar para escolha de subtipo de serviço
               </button>
             </div>
 
@@ -844,17 +887,26 @@ export default function TipoServico() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                         
                         {/* VARA */}
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 flex-1">
                           <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
                             Vara
                           </label>
-                          <input 
-                            type="text" 
-                            value={vara} 
-                            onChange={(e) => setVara(e.target.value)}
-                            placeholder="Ex: 2ª Vara Cível / Juizado" 
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
-                          />
+                          {subTypeRoute === 'peticao-inicial' ? (
+                            <input 
+                              type="text" 
+                              value="A definir" 
+                              disabled 
+                              className="w-full px-4 py-3 bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-500 cursor-not-allowed outline-none"
+                            />
+                          ) : (
+                            <input 
+                              type="text" 
+                              value={vara} 
+                              onChange={(e) => setVara(e.target.value)}
+                              placeholder="Ex: 2ª Vara Cível / Juizado" 
+                              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                            />
+                          )}
                         </div>
 
                         {/* COMARCA */}
@@ -1075,18 +1127,18 @@ export default function TipoServico() {
           <button
             type="button"
             onClick={() => {
-              if (subTypeRoute) {
-                // If on subtype form, go back to main tree choice screen
-                navigate(`/boss-giffoni-clientes/fluxo-producao/${safeCaseId}/tipo-producao`);
+              if (currentStep === 'form') {
+                navigate(getRouteTo(macroTypeSelection || 'judicial'));
+              } else if (currentStep === 'judicial' || currentStep === 'extrajudicial') {
+                navigate(getRouteTo('natureza'));
               } else {
-                // Main choice card step, go back to previous major step (dados-caso or cadastro)
                 navigate(safeCaseId ? `/boss-giffoni-clientes/fluxo-producao/${safeCaseId}/dados-caso` : '/boss-giffoni-clientes/fluxo-producao/cadastro');
               }
             }}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-200 hover:border-gray-300 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white"
           >
             <ArrowLeft size={14} />
-            {subTypeRoute ? 'Voltar para Escolha de Tipo' : 'Voltar'}
+            {currentStep === 'form' ? 'Voltar para Subtipos' : (currentStep === 'judicial' || currentStep === 'extrajudicial') ? 'Voltar para Etapa 1' : 'Voltar'}
           </button>
 
           {/* RIGHT CTA SAVE ACTIONS */}

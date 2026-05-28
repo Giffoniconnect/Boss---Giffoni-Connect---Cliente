@@ -34,7 +34,11 @@ import {
   XCircle,
   Trash2,
   Terminal,
-  Activity
+  Activity,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  Globe
 } from 'lucide-react';
 
 const DEFAULT_PORTAL_LINK = 'https://aistudio.google.com/apps/93c62126-a17f-4c18-8bc7-d327df1ca6b5?showPreview=true&showAssistant=true';
@@ -178,6 +182,8 @@ export default function Configuracoes() {
 
   // Expanded card trackers
   const [expandedConnector, setExpandedConnector] = useState<string | null>(null);
+  const [portalCardExpanded, setPortalCardExpanded] = useState(false);
+  const [portalUpdatedAt, setPortalUpdatedAt] = useState<string | null>(null);
   
   // Simulated tools state
   const [testResult, setTestResult] = useState<{[key: string]: string}>({});
@@ -272,6 +278,15 @@ export default function Configuracoes() {
           }
           if (data.portalPublicDomain) {
             setPortalPublicDomain(data.portalPublicDomain);
+          }
+          if (data.updatedAt) {
+            if (typeof data.updatedAt.toDate === 'function') {
+              setPortalUpdatedAt(data.updatedAt.toDate().toLocaleString('pt-BR'));
+            } else if (data.updatedAt.seconds) {
+              setPortalUpdatedAt(new Date(data.updatedAt.seconds * 1000).toLocaleString('pt-BR'));
+            } else {
+              setPortalUpdatedAt(new Date(data.updatedAt).toLocaleString('pt-BR'));
+            }
           }
         }
 
@@ -382,6 +397,7 @@ export default function Configuracoes() {
         localStorage.setItem('giffoni_sectors_links', JSON.stringify(cleanedSectors));
         setPortalLink(sanitizedPortalLink);
         setSectorsLinks(cleanedSectors);
+        setPortalUpdatedAt(new Date().toLocaleString('pt-BR'));
       } else if (activeSubTab === 'conectores') {
         // Active sub-tab connectors persistence settings/connectors
         const payload: any = { ...connectors };
@@ -535,6 +551,9 @@ export default function Configuracoes() {
     }
   };
 
+  const activePortalUrl = portalExternalMode === 'dominio_publicado' ? portalPublicDomain : portalLink;
+  const hasValidUrl = activePortalUrl && (activePortalUrl.startsWith('http://') || activePortalUrl.startsWith('https://'));
+
   return (
     <BossLayout>
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -585,74 +604,186 @@ export default function Configuracoes() {
             {activeSubTab === 'links' && (
               <>
                 {/* PORTAL DO CLIENTE */}
-                <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-8">
-                  <div className="flex items-center gap-3 border-b border-gray-100 pb-5 mb-6">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                      <LinkIcon size={20} />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900">Link Base do Portal do Cliente Externo</h3>
-                      <p className="text-xs text-gray-500">Este é o app externo onde o cliente acessará o portal. O BOSS apenas gera o slug, clientId e caseId.</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-6">
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
-                        URL do App Externo (Portal de Clientes)
-                      </label>
-                      <p className="text-xs text-gray-500 leading-relaxed mb-3">
-                        Cole o link do workspace ou aplicação externa que servirá de contêiner de exibição para o Portal do Cliente.
-                      </p>
-                      <input
-                        type="url"
-                        value={portalLink}
-                        onChange={(e) => setPortalLink(e.target.value)}
-                        placeholder="https://aistudio.google.com/apps/..."
-                        className="w-full px-4 py-3.5 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-100 placeholder:text-gray-400 transition-all font-medium text-sm text-gray-800"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-gray-100">
+                <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden transition-all duration-300">
+                  {/* Card Header as clickable button */}
+                  <button
+                    type="button"
+                    onClick={() => setPortalCardExpanded(!portalCardExpanded)}
+                    className="w-full text-left p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-gray-50/50 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-start sm:items-center gap-4">
+                      <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 shadow-xs">
+                        <Globe size={22} className={hasValidUrl ? "animate-pulse" : ""} />
+                      </div>
                       <div>
-                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
-                          Modo de Exibição do Portal
-                        </label>
-                        <select
-                          value={portalExternalMode}
-                          onChange={(e) => setPortalExternalMode(e.target.value as 'ai_studio_preview' | 'dominio_publicado')}
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-100 font-medium text-sm text-gray-800 select-none cursor-pointer"
-                        >
-                          <option value="ai_studio_preview">Modo Preview (Google AI Studio)</option>
-                          <option value="dominio_publicado">Domínio Publicado (Produção)</option>
-                        </select>
+                        <h3 className="text-base font-extrabold text-gray-955 font-sans">Portal de Clientes Externo</h3>
+                        <p className="text-xs text-gray-500 font-medium leading-relaxed mt-0.5">
+                          Gerenciamento da infraestrutura visual externa e direcionamento das rotas do portal de clientes.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 self-end sm:self-auto">
+                      {/* Live config status */}
+                      {hasValidUrl ? (
+                        <span className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800">
+                          Configurado
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg border border-amber-200 bg-amber-50 text-amber-700">
+                          Não Configurado
+                        </span>
+                      )}
+                      <div className="w-8 h-8 rounded-full bg-gray-50 border border-gray-150 flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors">
+                        {portalCardExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Card Body content (revealed when expanded) */}
+                  {portalCardExpanded && (
+                    <div className="border-t border-gray-100 p-8 space-y-6 bg-gray-50/20 animate-in fade-in duration-200">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        
+                        {/* LEFT COLUMN: STATUS & ACTIVE LINK */}
+                        <div className="space-y-4">
+                          <div>
+                            <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block font-mono mb-2">
+                              Status e Detalhes do Portal
+                            </span>
+                            
+                            {hasValidUrl ? (
+                              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-950 text-xs space-y-1.5 font-semibold">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  <span className="font-extrabold uppercase animate-pulse">Portal Conectado e Ativo</span>
+                                </div>
+                                <p className="text-[11px] text-emerald-700 font-medium leading-relaxed">
+                                  O direcionamento de slugs e rotas virtuais de clientes está sincronizado com um destino válido.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="p-4 bg-amber-50/75 border border-amber-200 rounded-2xl text-amber-955 text-xs space-y-1.5 font-semibold animate-in fade-in duration-200">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                                  <span className="font-extrabold uppercase">Aguardando Configuração</span>
+                                </div>
+                                <p className="text-[11px] text-amber-700 font-medium leading-relaxed">
+                                  URL do Portal Externo ainda não configurada. Defina a URL ou domínio ao lado para liberar os redirecionamentos.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+
+                          {portalUpdatedAt && (
+                            <div className="p-3.5 bg-gray-50 border border-gray-150 rounded-2xl text-[11px] text-gray-500 space-y-1 animate-in fade-in duration-200">
+                              <span className="font-bold text-gray-400 block uppercase text-[9px] font-mono tracking-wider">Última Sincronização em Nuvem</span>
+                              <div className="flex items-center gap-1.5 font-semibold text-gray-700">
+                                <RefreshCw size={12} className="text-gray-400 animate-spin" style={{ animationDuration: '6s' }} />
+                                <span>Sincronizado em {portalUpdatedAt}</span>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block font-mono">
+                              Link Base Ativo do Portal (Calculado)
+                            </label>
+                            {hasValidUrl ? (
+                              <div className="p-3 bg-white border border-gray-150 rounded-2xl text-xs font-mono text-gray-750 break-all select-all shadow-xs">
+                                {activePortalUrl}
+                              </div>
+                            ) : (
+                              <div className="p-3 bg-gray-50/50 border border-gray-100 border-dashed rounded-2xl text-xs text-gray-450 italic">
+                                URL inválida ou ausente
+                              </div>
+                            )}
+                          </div>
+
+                          {hasValidUrl && (
+                            <a
+                              href={activePortalUrl}
+                              target="_blank"
+                              referrerPolicy="no-referrer"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-indigo-650 hover:bg-indigo-750 text-white font-extrabold rounded-2xl text-xs transition-colors cursor-pointer shadow-xs w-full text-center"
+                            >
+                              <ExternalLink size={13} />
+                              <span>Abrir Portal Externo</span>
+                            </a>
+                          )}
+                        </div>
+
+                        {/* RIGHT COLUMN: PARAMETERS EDITOR */}
+                        <div className="space-y-4">
+                          <div>
+                            <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block font-mono mb-2">
+                              Configurações Básicas
+                            </span>
+
+                            <div className="space-y-4">
+                              <div className="space-y-1">
+                                <label className="block text-xs font-extrabold text-gray-700 uppercase tracking-wider">
+                                  Modo de Exibição do Portal
+                                </label>
+                                <select
+                                  value={portalExternalMode}
+                                  onChange={(e) => setPortalExternalMode(e.target.value as 'ai_studio_preview' | 'dominio_publicado')}
+                                  className="w-full px-4 py-3 bg-white border border-gray-150 rounded-2xl focus:ring-2 focus:ring-indigo-100 font-bold text-xs text-gray-800 select-none cursor-pointer"
+                                >
+                                  <option value="ai_studio_preview">Modo Preview (Google AI Studio)</option>
+                                  <option value="dominio_publicado">Domínio Publicado (Produção)</option>
+                                </select>
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="block text-xs font-extrabold text-gray-700 uppercase tracking-wider">
+                                  URL do App Externo (Portal de Clientes)
+                                </label>
+                                <input
+                                  type="url"
+                                  value={portalLink}
+                                  onChange={(e) => setPortalLink(e.target.value)}
+                                  placeholder="https://aistudio.google.com/apps/..."
+                                  className="w-full px-4 py-3 bg-white border border-gray-150 rounded-2xl focus:ring-2 focus:ring-indigo-100 placeholder:text-gray-400 transition-all font-semibold text-xs text-gray-800"
+                                />
+                                <span className="text-[10px] text-gray-400 leading-normal block font-medium">
+                                  Cole o link ou aplicação externa que servirá de contêiner de exibição.
+                                </span>
+                              </div>
+
+                              {portalExternalMode === 'dominio_publicado' && (
+                                <div className="space-y-1 animate-in slide-in-from-top-1 duration-200">
+                                  <label className="block text-xs font-extrabold text-gray-700 uppercase tracking-wider">
+                                    Domínio Base Publicado (portalPublicDomain)
+                                  </label>
+                                  <input
+                                    type="url"
+                                    value={portalPublicDomain}
+                                    onChange={(e) => setPortalPublicDomain(e.target.value)}
+                                    placeholder="https://clientes.giffoniconnect.com"
+                                    className="w-full px-4 py-3 bg-white border border-gray-150 rounded-2xl focus:ring-2 focus:ring-indigo-100 placeholder:text-gray-400 font-semibold text-xs text-gray-800"
+                                  />
+                                  <span className="text-[10px] text-gray-400 leading-normal block font-medium">
+                                    Domínio final de rede onde os clientes reais efetuam o acompanhamento.
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
                       </div>
 
-                      {portalExternalMode === 'dominio_publicado' && (
-                        <div>
-                          <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
-                            Domínio Base Publicado (portalPublicDomain)
-                          </label>
-                          <input
-                            type="url"
-                            value={portalPublicDomain}
-                            onChange={(e) => setPortalPublicDomain(e.target.value)}
-                            placeholder="https://clientes.giffoniconnect.com"
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-blue-100 placeholder:text-gray-400 font-medium text-sm text-gray-800"
-                          />
+                      {portalExternalMode === 'ai_studio_preview' && (
+                        <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl text-amber-900 text-xs flex gap-3 items-start">
+                          <AlertCircle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                          <span className="font-semibold leading-relaxed">
+                            Modo Preview Ativo. Os slugs e redirecionamentos serão operados sob o escopo interno do simulador ou sandbox do BOSS.
+                          </span>
                         </div>
                       )}
                     </div>
-
-                    {portalExternalMode === 'ai_studio_preview' && (
-                      <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl text-amber-900 text-xs flex gap-3 items-start mt-2">
-                        <AlertCircle size={18} className="text-amber-500 shrink-0 mt-0.5" />
-                        <span className="font-semibold leading-relaxed">
-                          Modo Preview do Google AI Studio. O link do slug será apresentado como rota interna simulada para validação.
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                  )}
                 </div>
 
                 {/* SEÇÃO SETORES DO ESCRITÓRIO */}

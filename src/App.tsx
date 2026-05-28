@@ -159,7 +159,39 @@ const router = createBrowserRouter(
         } 
       />
       <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/tipo-producao/judicial" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <TipoServico />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/tipo-producao/extrajudicial" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <TipoServico />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
         path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <TipoServico />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/judicial" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <TipoServico />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/extrajudicial" 
         element={
           <ProtectedRoute role="boss_admin">
             <TipoServico />
