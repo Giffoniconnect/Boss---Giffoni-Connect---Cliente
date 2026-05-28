@@ -43,7 +43,11 @@ export const PJForm: React.FC<PJFormProps> = ({ data, onChange }) => {
       newValue = formatPhone(value);
     }
 
-    onChange({ ...data, [name]: newValue });
+    if (name === 'pj_telefoneEmpresa' && data.pj_possuiWhatsappEmpresa) {
+      onChange({ ...data, pj_telefoneEmpresa: newValue, pj_whatsappEmpresa: newValue });
+    } else {
+      onChange({ ...data, [name]: newValue });
+    }
   };
 
   const handleCEPBlur = async () => {
@@ -95,32 +99,38 @@ export const PJForm: React.FC<PJFormProps> = ({ data, onChange }) => {
 
       <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
         <h3 className="text-[18px] font-bold text-purple-600 uppercase tracking-wider mb-6">BLOCO pjContatoEmpresa</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Input label="E-mail da Empresa" name="pj_emailEmpresa" type="email" value={data.pj_emailEmpresa || ''} onChange={handleChange} />
-          <Input label="Telefone da Empresa" name="pj_telefoneEmpresa" value={data.pj_telefoneEmpresa || ''} onChange={handleChange} placeholder="(00) 9 0000-0000" />
           
-          <div className="flex flex-col gap-1 md:col-span-2">
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-[15px] font-bold text-gray-500 ml-1">WhatsApp Empresa</label>
-              <label className="flex items-center gap-1.5 text-[10px] font-bold text-purple-600 cursor-pointer">
+          <div className="flex flex-col gap-1 w-full">
+            <label className="block text-[15px] font-bold text-gray-500 mb-1 ml-1">Telefone da Empresa</label>
+            <div className="flex items-center gap-2.5 w-full">
+              <div className="relative flex-1 min-w-0">
+                <input
+                  name="pj_telefoneEmpresa"
+                  value={data.pj_telefoneEmpresa || ''}
+                  onChange={handleChange}
+                  placeholder="(00) 9 0000-0000"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-105 focus:bg-white outline-none transition-all placeholder:text-gray-300"
+                />
+              </div>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-purple-600 cursor-pointer select-none shrink-0 border border-purple-105 bg-purple-50/50 hover:bg-purple-50 px-3.5 py-3 rounded-xl transition-all h-[46px] sm:h-[52px]">
                 <input 
                   type="checkbox" 
                   checked={data.pj_possuiWhatsappEmpresa || false} 
-                  onChange={(e) => onChange({ ...data, pj_possuiWhatsappEmpresa: e.target.checked })}
-                  className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                  onChange={(e) => {
+                    const isChecked = e.target.checked;
+                    onChange({
+                      ...data,
+                      pj_possuiWhatsappEmpresa: isChecked,
+                      pj_whatsappEmpresa: isChecked ? (data.pj_telefoneEmpresa || '') : ''
+                    });
+                  }}
+                  className="rounded border-gray-300 text-purple-600 focus:ring-purple-500 w-4 h-4 cursor-pointer"
                 />
-                Possui WhatsApp Empresa?
+                Possui WhatsApp Empresa
               </label>
             </div>
-            {data.pj_possuiWhatsappEmpresa && (
-              <input
-                name="pj_whatsappEmpresa"
-                value={data.pj_whatsappEmpresa || ''}
-                onChange={handleChange}
-                placeholder="(00) 9 0000-0000"
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-purple-100 focus:bg-white outline-none transition-all placeholder:text-gray-300"
-              />
-            )}
           </div>
         </div>
       </div>

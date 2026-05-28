@@ -98,7 +98,11 @@ export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
       return;
     }
 
-    onChange({ ...data, [name]: newValue });
+    if (name === 'pf_telefone' && data.pf_possuiWhatsapp) {
+      onChange({ ...data, pf_telefone: newValue, pf_whatsapp: newValue });
+    } else {
+      onChange({ ...data, [name]: newValue });
+    }
   };
 
   const handleCEPBlur = async () => {
@@ -179,32 +183,38 @@ export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
 
       <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
         <h3 className="text-[18px] font-bold text-blue-600 uppercase tracking-wider mb-6">BLOCO pfContato</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Input label="E-mail" name="pf_email" type="email" value={data.pf_email || ''} onChange={handleChange} required />
-          <Input label="Telefone" name="pf_telefone" value={data.pf_telefone || ''} onChange={handleChange} placeholder="(00) 9 0000-0000" />
           
-          <div className="flex flex-col gap-1 md:col-span-2">
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-[15px] font-bold text-gray-500 ml-1">WhatsApp</label>
-              <label className="flex items-center gap-1.5 text-[10px] font-bold text-blue-600 cursor-pointer">
+          <div className="flex flex-col gap-1 w-full">
+            <label className="block text-[15px] font-bold text-gray-500 mb-1 ml-1">Telefone / Celular</label>
+            <div className="flex items-center gap-2.5 w-full">
+              <div className="relative flex-1 min-w-0">
+                <input
+                  name="pf_telefone"
+                  value={data.pf_telefone || ''}
+                  onChange={handleChange}
+                  placeholder="(00) 9 0000-0000"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-105 focus:bg-white outline-none transition-all placeholder:text-gray-300"
+                />
+              </div>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-blue-600 cursor-pointer select-none shrink-0 border border-blue-105 bg-blue-50/50 hover:bg-blue-50 px-3.5 py-3 rounded-xl transition-all h-[46px] sm:h-[52px]">
                 <input 
                   type="checkbox" 
                   checked={data.pf_possuiWhatsapp || false} 
-                  onChange={(e) => onChange({ ...data, pf_possuiWhatsapp: e.target.checked })}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  onChange={(e) => {
+                    const isChecked = e.target.checked;
+                    onChange({
+                      ...data,
+                      pf_possuiWhatsapp: isChecked,
+                      pf_whatsapp: isChecked ? (data.pf_telefone || '') : ''
+                    });
+                  }}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
                 />
-                Possui WhatsApp?
+                Possui WhatsApp
               </label>
             </div>
-            {data.pf_possuiWhatsapp && (
-              <input
-                name="pf_whatsapp"
-                value={data.pf_whatsapp || ''}
-                onChange={handleChange}
-                placeholder="(00) 9 0000-0000"
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-100 focus:bg-white outline-none transition-all placeholder:text-gray-300"
-              />
-            )}
           </div>
         </div>
       </div>

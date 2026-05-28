@@ -31,7 +31,9 @@ export const AccessForm: React.FC<AccessFormProps> = ({ data, onChange }) => {
   return (
     <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
-        <h3 className="text-[18px] font-bold text-gray-900 uppercase tracking-wider">BLOCO ACESSO SISTEMA PJ</h3>
+        <h3 className="text-[18px] font-bold text-gray-900 uppercase tracking-wider">
+          BLOCO ACESSO SISTEMA {clientType === 'PF' ? 'PF' : 'PJ'}
+        </h3>
         
         <label className="flex items-center gap-2 text-xs font-bold text-blue-600 cursor-pointer select-none">
           <input 

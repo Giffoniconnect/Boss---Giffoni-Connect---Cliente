@@ -29,6 +29,8 @@ const BANKS_SUGGESTIONS = [
 ];
 
 export const BankingForm: React.FC<BankingFormProps> = ({ data, onChange, clientName }) => {
+  const isPF = (typeof window !== 'undefined' && window.location.search.includes('pessoa-fisica')) || data.pf_nomeCompleto !== undefined;
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target as HTMLInputElement;
     const val = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
@@ -36,6 +38,26 @@ export const BankingForm: React.FC<BankingFormProps> = ({ data, onChange, client
 
     if (name === 'bancario_chavePix' && data.bancario_tipoChavePix === 'CPF') {
       newValue = formatCPF(String(val));
+    }
+
+    if (name === 'bancario_titularPix') {
+      const parentName = clientName || data.pf_nomeCompleto || '';
+      onChange({
+        ...data,
+        bancario_titularPix: value,
+        bancario_titularPixEhCliente: value === parentName && parentName !== ''
+      });
+      return;
+    }
+
+    if (name === 'bancario_titularPixEhCliente') {
+      const parentName = clientName || data.pf_nomeCompleto || '';
+      onChange({
+        ...data,
+        bancario_titularPixEhCliente: val,
+        bancario_titularPix: val ? parentName : data.bancario_titularPix
+      });
+      return;
     }
 
     if (name === 'bancario_titularEhCliente' && val) {
@@ -48,6 +70,16 @@ export const BankingForm: React.FC<BankingFormProps> = ({ data, onChange, client
       onChange({ ...data, [name]: newValue });
     }
   };
+
+  // Sync PIX holder name when "bancario_titularPixEhCliente" is checked
+  React.useEffect(() => {
+    if (isPF && data.bancario_titularPixEhCliente) {
+      const parentName = clientName || data.pf_nomeCompleto || '';
+      if (data.bancario_titularPix !== parentName) {
+        onChange({ ...data, bancario_titularPix: parentName });
+      }
+    }
+  }, [isPF, data.bancario_titularPixEhCliente, clientName, data.pf_nomeCompleto]);
 
   // Sync holder name when "titularEhCliente" is checked
   React.useEffect(() => {
@@ -149,12 +181,26 @@ export const BankingForm: React.FC<BankingFormProps> = ({ data, onChange, client
             
             <div className="md:col-span-2">
               <Input 
+                id="bancario_titularPix"
                 label="Quem é o titular da conta Pix?" 
                 name="bancario_titularPix" 
                 value={data.bancario_titularPix || ''} 
                 onChange={handleChange} 
                 placeholder="Nome completo do titular"
               />
+              {isPF && (
+                <label className="flex items-center gap-2 mt-2 text-xs font-bold text-emerald-600 cursor-pointer select-none">
+                  <input 
+                    id="bancario_titularPixEhCliente"
+                    type="checkbox"
+                    name="bancario_titularPixEhCliente"
+                    checked={data.bancario_titularPixEhCliente || false}
+                    onChange={handleChange}
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                  />
+                  <span>Usar nome do cliente como titular da conta?</span>
+                </label>
+              )}
             </div>
           </div>
 

@@ -96,7 +96,11 @@ export const SocioForm: React.FC<SocioFormProps> = ({ data, onChange }) => {
       newValue = formatDate(value);
     }
 
-    onChange({ ...data, [name]: newValue });
+    if (name === 'socio_telefone' && data.socio_possuiWhatsapp) {
+      onChange({ ...data, socio_telefone: newValue, socio_whatsapp: newValue });
+    } else {
+      onChange({ ...data, [name]: newValue });
+    }
   };
 
   const handleCEPBlur = async () => {
@@ -180,32 +184,38 @@ export const SocioForm: React.FC<SocioFormProps> = ({ data, onChange }) => {
 
       <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
         <h3 className="text-[18px] font-bold text-emerald-600 uppercase tracking-wider mb-6">BLOCO socioAdministradorContato</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Input label="E-mail" name="socio_email" type="email" value={data.socio_email || ''} onChange={handleChange} />
-          <Input label="Telefone" name="socio_telefone" value={data.socio_telefone || ''} onChange={handleChange} placeholder="(00) 9 0000-0000" />
           
-          <div className="flex flex-col gap-1 md:col-span-2">
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-[15px] font-bold text-gray-500 ml-1">WhatsApp</label>
-              <label className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 cursor-pointer">
+          <div className="flex flex-col gap-1 w-full">
+            <label className="block text-[15px] font-bold text-gray-500 mb-1 ml-1">Telefone / Celular</label>
+            <div className="flex items-center gap-2.5 w-full">
+              <div className="relative flex-1 min-w-0">
+                <input
+                  name="socio_telefone"
+                  value={data.socio_telefone || ''}
+                  onChange={handleChange}
+                  placeholder="(00) 9 0000-0000"
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-emerald-100 focus:bg-white outline-none transition-all placeholder:text-gray-300"
+                />
+              </div>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 cursor-pointer select-none shrink-0 border border-emerald-100 bg-emerald-50/50 hover:bg-emerald-50 px-3.5 py-3 rounded-xl transition-all h-[46px] sm:h-[52px]">
                 <input 
                   type="checkbox" 
                   checked={data.socio_possuiWhatsapp || false} 
-                  onChange={(e) => onChange({ ...data, socio_possuiWhatsapp: e.target.checked })}
-                  className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                  onChange={(e) => {
+                    const isChecked = e.target.checked;
+                    onChange({
+                      ...data,
+                      socio_possuiWhatsapp: isChecked,
+                      socio_whatsapp: isChecked ? (data.socio_telefone || '') : ''
+                    });
+                  }}
+                  className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
                 />
-                Possui WhatsApp?
+                Possui WhatsApp
               </label>
             </div>
-            {data.socio_possuiWhatsapp && (
-              <input
-                name="socio_whatsapp"
-                value={data.socio_whatsapp || ''}
-                onChange={handleChange}
-                placeholder="(00) 9 0000-0000"
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-emerald-100 focus:bg-white outline-none transition-all placeholder:text-gray-300"
-              />
-            )}
           </div>
         </div>
       </div>
