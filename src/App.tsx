@@ -28,6 +28,7 @@ import NovoCasoFluxo from './pages/boss/fluxo-producao/NovoCasoFluxo';
 import ControladoriaFluxo from './pages/boss/fluxo-producao/ControladoriaFluxo';
 import RelatorioIntegridadeFluxo from './pages/boss/fluxo-producao/RelatorioIntegridadeFluxo';
 import Recadastramento from './pages/boss/fluxo-producao/Recadastramento';
+import EditarCadastroCliente from './pages/boss/fluxo-producao/EditarCadastroCliente';
 
 
 
@@ -133,6 +134,14 @@ export default function App() {
               element={
                 <ProtectedRoute role="boss_admin">
                   <CadastroFluxo />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/boss-giffoni-clientes/fluxo-producao/:caseId/editar-cadastro-cliente" 
+              element={
+                <ProtectedRoute role="boss_admin">
+                  <EditarCadastroCliente />
                 </ProtectedRoute>
               } 
             />

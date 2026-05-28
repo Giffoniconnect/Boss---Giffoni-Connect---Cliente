@@ -14,6 +14,7 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [isNovoCaso, setIsNovoCaso] = useState(false);
+  const [clientType, setClientType] = useState<string | null>(null);
 
   useEffect(() => {
     if (location.pathname.includes('/novo-caso')) {
@@ -30,6 +31,12 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
           if (data.isNovoCaso || data.productionStage === 'novo-caso' || data.caseLifecycle === 'novo-caso') {
             setIsNovoCaso(true);
           }
+          if (data.clientId) {
+            const clientSnap = await getDoc(doc(db, 'clients', data.clientId));
+            if (clientSnap.exists()) {
+              setClientType(clientSnap.data().type || null);
+            }
+          }
         }
       } catch (err) {
         console.error("Error reading case in sidebar:", err);
@@ -40,9 +47,20 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
   }, [caseId, location.pathname]);
 
   const activeSteps = useMemo(() => {
+    let cadastroLabel = 'Cadastro Cliente';
+    if (caseId) {
+      if (clientType === 'PF') {
+        cadastroLabel = 'Cadastro PF';
+      } else if (clientType === 'PJ') {
+        cadastroLabel = 'Cadastro PJ';
+      }
+    } else {
+      cadastroLabel = 'Cadastro (PF/PJ)';
+    }
+
     return isNovoCaso 
       ? [
-          { id: 'cadastro', label: 'Cadastro (PF/PJ)', routeKey: 'cadastro' as any, requiresCaseId: false, order: 1 },
+          { id: 'cadastro', label: cadastroLabel, routeKey: 'cadastro' as any, requiresCaseId: false, order: 1 },
           { id: 'tipo-producao', label: 'Tipo de Serviço', routeKey: 'tipoServico' as any, requiresCaseId: true, order: 2 },
           { id: 'novo-caso', label: 'Cadastro de Novo Caso', routeKey: 'novoCaso' as any, requiresCaseId: true, order: 3 },
           { id: 'controladoria', label: 'Controladoria', routeKey: 'controladoria' as any, requiresCaseId: true, order: 4 },
@@ -51,7 +69,7 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
       : flowSteps.map(s => {
           // Simplify labels for a horizontal visual strip
           let shortLabel = s.label;
-          if (s.id === 'cadastro') shortLabel = 'Cadastro (PF/PJ)';
+          if (s.id === 'cadastro') shortLabel = cadastroLabel;
           else if (s.id === 'dados-caso') shortLabel = 'Entrevista (5W2H)';
           else if (s.id === 'tipo-producao') shortLabel = 'Tipo de Serviço';
           else if (s.id === 'solicitacoes-provas') shortLabel = 'Coleta de Provas';
@@ -66,7 +84,7 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
 
           return { ...s, label: shortLabel };
         });
-  }, [isNovoCaso]);
+  }, [isNovoCaso, caseId, clientType]);
 
   // Find active step index based on current URL path
   const currentIndex = useMemo(() => {
@@ -75,7 +93,7 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
       let stepUrl = '';
 
       if (isCadastro) {
-        stepUrl = isNovoCaso ? '' : flowRoutes.cadastro();
+        stepUrl = isNovoCaso ? '' : (caseId ? flowRoutes.editarCadastroCliente(caseId) : flowRoutes.cadastro());
       } else if (caseId) {
         const routeHelper = flowRoutes[step.routeKey];
         if (typeof routeHelper === 'function') {
@@ -84,7 +102,8 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
       }
       
       return location.pathname === stepUrl || 
-             (!caseId && isCadastro && location.pathname.endsWith('/cadastro'));
+             (!caseId && isCadastro && location.pathname.endsWith('/cadastro')) ||
+             (caseId && isCadastro && location.pathname.endsWith('/editar-cadastro-cliente'));
     });
   }, [activeSteps, caseId, isNovoCaso, location.pathname]);
 
@@ -164,7 +183,7 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
             let isLocked = false;
 
             if (isCadastro) {
-              stepUrl = isNovoCaso ? '' : flowRoutes.cadastro();
+              stepUrl = isNovoCaso ? '' : (caseId ? flowRoutes.editarCadastroCliente(caseId) : flowRoutes.cadastro());
               if (isNovoCaso) {
                 isLocked = true;
               }

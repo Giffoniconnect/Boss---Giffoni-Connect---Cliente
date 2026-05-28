@@ -1,6 +1,7 @@
 export const flowRoutes = {
   fluxoHome: () => '/boss-giffoni-clientes/fluxo-producao',
   cadastro: () => '/boss-giffoni-clientes/fluxo-producao/cadastro',
+  editarCadastroCliente: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/editar-cadastro-cliente`,
   tipoServico: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/tipo-producao`,
   dadosCaso: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/dados-caso`,
   solicitacoesInformacoes: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/solicitacoes-informacoes`,
