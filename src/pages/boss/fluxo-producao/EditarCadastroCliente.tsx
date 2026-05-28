@@ -25,6 +25,7 @@ import {
 import { flowRoutes } from './utils/flowRoutes';
 import { normalizeCpfCnpj, isValidCpf, isValidCnpj } from './utils/documentUtils';
 import { generateSafeClientSlug } from './utils/slugUtils';
+import { useUnsavedChangesGuard } from './hooks/useUnsavedChangesGuard';
 
 export default function EditarCadastroCliente() {
   const { caseId } = useParams<{ caseId: string }>();
@@ -120,6 +121,36 @@ export default function EditarCadastroCliente() {
     bancario_operacao: '',
   });
 
+  const [initialFormData, setInitialFormData] = useState<any>(null);
+
+  const hasUnsavedChanges = initialFormData 
+    ? Object.keys(formData).some(key => {
+        const val1 = formData[key];
+        const val2 = initialFormData[key];
+        if (typeof val1 === 'boolean' || typeof val2 === 'boolean') {
+          return !!val1 !== !!val2;
+        }
+        return String(val1 ?? '').trim() !== String(val2 ?? '').trim();
+      })
+    : false;
+
+  const handleGuardSave = async (): Promise<boolean> => {
+    try {
+      await handleUpdateClient(false);
+      return true;
+    } catch (err) {
+      console.error("Guard save failed in edit screen:", err);
+      return false;
+    }
+  };
+
+  const { UnsavedChangesModal, SaveStatusIndicator } = useUnsavedChangesGuard({
+    hasUnsavedChanges,
+    onSave: handleGuardSave,
+    isSaving: saving,
+    saveError: error
+  });
+
   useEffect(() => {
     if (!caseId) {
       setError('Identificador de caso não fornecido.');
@@ -180,7 +211,7 @@ export default function EditarCadastroCliente() {
         const accessFields = clientData.acessoSistema || {};
         const bankingFields = clientData.bancarioData || clientData.bancarioDadosBancarios || {};
 
-        setFormData({
+        const loadedState = {
           ...pfFields,
           ...pjFields,
           ...socioFields,
@@ -189,7 +220,9 @@ export default function EditarCadastroCliente() {
           acesso_senha: accessFields.acesso_senha || clientData.senhaVisivelPreview || '',
           acesso_confirmarSenha: accessFields.acesso_senha || clientData.senhaVisivelPreview || '',
           ...bankingFields
-        });
+        };
+        setFormData(loadedState);
+        setInitialFormData(loadedState);
 
       } catch (err: any) {
         console.error('Error loading client and case:', err);
@@ -429,6 +462,7 @@ export default function EditarCadastroCliente() {
       }
 
       setSuccess('Cadastro do cliente atualizado com sucesso no Firestore!');
+      setInitialFormData({ ...formData });
 
       setTimeout(() => {
         if (advanceAfter) {
@@ -464,6 +498,27 @@ export default function EditarCadastroCliente() {
       caseId={caseId}
     >
       <div className="space-y-8 relative">
+        {/* HEADER WITH SAVE STATUS INDICATOR */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate(flowRoutes.dadosCaso(caseId!))}
+              className="p-2 hover:bg-gray-100 rounded-xl transition-colors shrink-0 text-gray-500"
+              title="Voltar aos Dados do Caso"
+            >
+              <ArrowLeft size={16} />
+            </button>
+            <div>
+              <span className="text-xs font-black uppercase text-gray-400 tracking-wider block font-mono">Formulário de Cadastro</span>
+              <h2 className="text-xl font-black text-gray-900 tracking-tight">Editar Ficha de Identificação Cadastral</h2>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <SaveStatusIndicator />
+          </div>
+        </div>
+
         {error && (
           <div className="p-4 bg-red-55 border border-red-200 text-red-900 rounded-2xl flex items-start gap-3 text-xs font-semibold leading-relaxed animate-in fade-in duration-200">
             <AlertTriangle className="text-red-600 shrink-0 mt-0.5" size={16} />
@@ -643,6 +698,7 @@ export default function EditarCadastroCliente() {
           </div>
         )}
       </div>
+      <UnsavedChangesModal />
     </FluxoStepLayout>
   );
 }

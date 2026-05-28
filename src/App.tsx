@@ -1,5 +1,5 @@
 import React, { Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { createBrowserRouter, createRoutesFromElements, RouterProvider, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 // Regular imports instead of lazy load for debugging
@@ -55,226 +55,258 @@ const ProtectedRoute = ({ children, role }: { children: React.ReactNode, role: '
   return <React.Fragment>{children}</React.Fragment>;
 };
 
+const router = createBrowserRouter(
+  createRoutesFromElements(
+    <Route element={<Suspense fallback={null}><Outlet /></Suspense>}>
+      <Route path="/" element={<Home />} />
+      
+      {/* BOSS Admin Routes */}
+      <Route path="/boss-giffoni-clientes/login" element={<BossLogin />} />
+      <Route 
+        path="/boss-giffoni-clientes/dashboard" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <BossDashboard />
+          </ProtectedRoute>
+        } 
+      />
+
+      {/* Boss Configuracoes Routes */}
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <BossConfiguracoes />
+          </ProtectedRoute>
+        } 
+      />
+      
+      {/* Public Mirror Preview Routing */}
+      <Route 
+        path="/boss-giffoni-clientes/portal-cliente-preview/:clientId" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <BossPortalClientePreview />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configurações" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <BossConfiguracoes />
+          </ProtectedRoute>
+        } 
+      />
+
+      {/* Boss Setores Routes */}
+      <Route 
+        path="/boss-giffoni-clientes/setores" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <BossSetores />
+          </ProtectedRoute>
+        } 
+      />
+
+      {/* Boss Fluxo de Produção Routes */}
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <FluxoHome />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao-exibir-pendencias" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <PendenciasFluxo />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/cadastro" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <CadastroFluxo />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/editar-cadastro-cliente" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <EditarCadastroCliente />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/recadastramento" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <Recadastramento />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/tipo-producao" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <TipoServico />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <TipoServico />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/peticao-inicial" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <TipoServico />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/processo-judicial-em-andamento" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <TipoServico />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/requerimento-administrativo" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <TipoServico />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/outro-servico-administrativo" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <TipoServico />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/dados-caso" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DadosCaso />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacoes-informacoes" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <SolicitacoesInformacoes />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacoes-provas" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <SolicitacoesProvas />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/financeiro" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <FinanceiroFluxo />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/edrp" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <EDRPFluxo />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/revisao" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <RevisaoFluxo />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/protocolo" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <ProtocoloFluxo />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/novo-caso" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <NovoCasoFluxo />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/controladoria" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <ControladoriaFluxo />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/relatorio-integridade" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <RelatorioIntegridadeFluxo />
+          </ProtectedRoute>
+        } 
+      />
+
+      {/* Boss Central de Controle Routes */}
+      <Route 
+        path="/boss-giffoni-clientes/central-controle" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <CentralControle />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/editor-painel-cliente/:clientId" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <BossEditorPainelCliente />
+          </ProtectedRoute>
+        } 
+      />
+
+      {/* Default Catch-all */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Route>
+  )
+);
+
 export default function App() {
   return (
     <AuthProvider>
-      <Router>
-        <Suspense fallback={null}>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            
-            {/* BOSS Admin Routes */}
-            <Route path="/boss-giffoni-clientes/login" element={<BossLogin />} />
-            <Route 
-              path="/boss-giffoni-clientes/dashboard" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <BossDashboard />
-                </ProtectedRoute>
-              } 
-            />
-
-            {/* Boss Configuracoes Routes */}
-            <Route 
-              path="/boss-giffoni-clientes/configuracoes" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <BossConfiguracoes />
-                </ProtectedRoute>
-              } 
-            />
-            
-            {/* Public Mirror Preview Routing */}
-            <Route 
-              path="/boss-giffoni-clientes/portal-cliente-preview/:clientId" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <BossPortalClientePreview />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/configurações" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <BossConfiguracoes />
-                </ProtectedRoute>
-              } 
-            />
-
-            {/* Boss Setores Routes */}
-            <Route 
-              path="/boss-giffoni-clientes/setores" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <BossSetores />
-                </ProtectedRoute>
-              } 
-            />
-
-            {/* Boss Fluxo de Produção Routes */}
-            <Route 
-              path="/boss-giffoni-clientes/fluxo-producao" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <FluxoHome />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/fluxo-producao-exibir-pendencias" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <PendenciasFluxo />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/fluxo-producao/cadastro" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <CadastroFluxo />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/fluxo-producao/:caseId/editar-cadastro-cliente" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <EditarCadastroCliente />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/fluxo-producao/recadastramento" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <Recadastramento />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/fluxo-producao/tipo-producao" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <TipoServico />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <TipoServico />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/fluxo-producao/:caseId/dados-caso" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <DadosCaso />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacoes-informacoes" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <SolicitacoesInformacoes />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacoes-provas" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <SolicitacoesProvas />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/fluxo-producao/:caseId/financeiro" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <FinanceiroFluxo />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/fluxo-producao/:caseId/edrp" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <EDRPFluxo />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/fluxo-producao/:caseId/revisao" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <RevisaoFluxo />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/fluxo-producao/:caseId/protocolo" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <ProtocoloFluxo />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/fluxo-producao/:caseId/novo-caso" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <NovoCasoFluxo />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/fluxo-producao/:caseId/controladoria" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <ControladoriaFluxo />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/fluxo-producao/:caseId/relatorio-integridade" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <RelatorioIntegridadeFluxo />
-                </ProtectedRoute>
-              } 
-            />
-
-            {/* Boss Central de Controle Routes */}
-            <Route 
-              path="/boss-giffoni-clientes/central-controle" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <CentralControle />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/boss-giffoni-clientes/editor-painel-cliente/:clientId" 
-              element={
-                <ProtectedRoute role="boss_admin">
-                  <BossEditorPainelCliente />
-                </ProtectedRoute>
-              } 
-            />
-
-
-
-            {/* Default Catch-all */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
-      </Router>
+      <RouterProvider router={router} />
     </AuthProvider>
   );
 }

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { collection, doc, setDoc, getDoc, getDocs, updateDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import FluxoStepLayout from './components/FluxoStepLayout';
+import { useUnsavedChangesGuard } from './hooks/useUnsavedChangesGuard';
 
 // Core dynamic forms
 import { PFForm } from '../../../modules/boss/components/forms/PFForm';
@@ -246,6 +247,47 @@ export default function CadastroFluxo() {
     bancario_agencia: '',
     bancario_numeroConta: '',
     bancario_operacao: '',
+  });
+
+  const [initialFormData, setInitialFormData] = useState<any>(null);
+
+  // Initialize initialFormData on mount
+  useEffect(() => {
+    if (!initialFormData) {
+      setInitialFormData({ ...formData });
+    }
+  }, []);
+
+  const hasUnsavedChanges = initialFormData 
+    ? Object.keys(formData).some(key => {
+        const val1 = formData[key];
+        const val2 = initialFormData[key];
+        if (typeof val1 === 'boolean' || typeof val2 === 'boolean') {
+          return !!val1 !== !!val2;
+        }
+        return String(val1 ?? '').trim() !== String(val2 ?? '').trim();
+      })
+    : false;
+
+  const handleGuardSave = async (): Promise<boolean> => {
+    try {
+      if (checkPortalSetupReady()) {
+        await handleCreateCustomerPortal();
+      } else {
+        await handleSaveInternalDraft(true);
+      }
+      return true;
+    } catch (err) {
+      console.error("Guard save error:", err);
+      return false;
+    }
+  };
+
+  const { UnsavedChangesModal, SaveStatusIndicator } = useUnsavedChangesGuard({
+    hasUnsavedChanges,
+    onSave: handleGuardSave,
+    isSaving: loading,
+    saveError: error
   });
 
   // Duplication management
@@ -616,6 +658,7 @@ export default function CadastroFluxo() {
       await setDoc(doc(db, 'clients', targetId), payload);
 
       setSuccess('Salvo como Rascunho Interno Incompleto com sucesso!');
+      setInitialFormData({ ...formData });
       setTimeout(() => {
         createDraftCaseAndNavigate(targetId, payload.slug || '');
       }, 1000);
@@ -825,6 +868,7 @@ export default function CadastroFluxo() {
       });
 
       setSuccess(`Portal do cliente [/${slug}] criado e liberado com sucesso em modo preview!`);
+      setInitialFormData({ ...formData });
       setTimeout(() => {
         createDraftCaseAndNavigate(targetId, slug);
       }, 1000);
@@ -849,7 +893,7 @@ export default function CadastroFluxo() {
     const banking = client.bancarioData || client.bancarioDadosBancarios || {};
 
     setClientType(client.type as 'PF' | 'PJ');
-    setFormData({
+    const loadedState = {
       ...pfData,
       ...pjData,
       ...socioData,
@@ -862,7 +906,9 @@ export default function CadastroFluxo() {
 
       // Banking values
       ...banking
-    });
+    };
+    setFormData(loadedState);
+    setInitialFormData(loadedState);
 
     setSelectedPath('novo-cliente');
     setSuccess('Carregado cadastro de cliente para edição técnica.');
@@ -898,7 +944,17 @@ export default function CadastroFluxo() {
   return (
     <FluxoStepLayout stepName="Cadastro Geral" statusText="Cadastro de Cliente">
       <div className="space-y-8 relative">
-        
+        {/* HEADER WITH SAVE STATUS INDICATOR */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
+          <div>
+            <span className="text-xs font-black uppercase text-gray-400 tracking-wider block font-mono">Fase de Cadastro</span>
+            <h2 className="text-2xl font-black text-gray-900 tracking-tight">Cadastro e Fluxo de Produção</h2>
+          </div>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <SaveStatusIndicator />
+          </div>
+        </div>
+
         {/* Warning missing fields Modal */}
         {showDraftWarningModal && (
           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -1662,6 +1718,7 @@ export default function CadastroFluxo() {
           </div>
         )}
       </div>
+      <UnsavedChangesModal />
     </FluxoStepLayout>
   );
 }

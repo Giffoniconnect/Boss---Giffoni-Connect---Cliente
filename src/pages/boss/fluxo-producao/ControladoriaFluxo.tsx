@@ -243,6 +243,11 @@ export default function ControladoriaFluxo() {
   const [controladoria, setControladoria] = useState<ControladoriaData>(DEFAULT_CONTROLADORIA);
   const [protocol, setProtocol] = useState<ExtendedProtocolData>(DEFAULT_PROTOCOL);
   const [internStatusChoice, setInternStatusChoice] = useState<'Em controladoria' | 'Consolidado'>('Em controladoria');
+  
+  const [statusInterno, setStatusInterno] = useState<string>('Em produção');
+  const [statusPublicoCliente, setStatusPublicoCliente] = useState<string>('Em análise');
+  const [visibleToClient, setVisibleToClient] = useState<boolean>(true);
+  const [isPublicStatusManuallyEdited, setIsPublicStatusManuallyEdited] = useState<boolean>(false);
 
   // Multi-item lists input state
   const [newClientInput, setNewClientInput] = useState('');
@@ -301,6 +306,11 @@ export default function ControladoriaFluxo() {
         } else {
           setInternStatusChoice('Em controladoria');
         }
+
+        setStatusInterno(cData.statusInterno || 'Em produção');
+        setStatusPublicoCliente(cData.statusPublicoCliente || 'Em análise');
+        setVisibleToClient(cData.visibleToClient ?? true);
+        setIsPublicStatusManuallyEdited(cData.isPublicStatusManuallyEdited ?? false);
 
         const rawProt = cData.protocol || {};
         let loadedClients = rawProt.clientsList || [];
@@ -380,6 +390,53 @@ export default function ControladoriaFluxo() {
     setControladoria((p) => ({ ...p, [field]: value }));
   };
 
+  const statusInternoOptions = [
+    'Em produção',
+    'Aguardando cliente',
+    'Aguardando controladoria',
+    'Consolidado',
+    'Protocolado',
+    'Com recurso',
+    'Gargalo técnico'
+  ];
+
+  const statusMapping: Record<string, string> = {
+    'Em produção': 'Análise de documentos iniciada',
+    'Aguardando cliente': 'Informações solicitadas ao cliente',
+    'Aguardando controladoria': 'Fatos validados e aguardando protocolo',
+    'Consolidado': 'Petição inicial pronta e homologada',
+    'Protocolado': 'Caso protocolado sob número judicial',
+    'Com recurso': 'Fase recursal fática instaurada',
+    'Gargalo técnico': 'Estudo aprofundado de tese pelo escritório'
+  };
+
+  const statusConcepts: Record<string, string> = {
+    'Em produção': 'O caso está sob ativa redação de faticidade e enquadramento pela assessoria.',
+    'Aguardando cliente': 'Paralisação operacional temporária aguardando retorno de provas ou esclarecimentos.',
+    'Aguardando controladoria': 'Redação concluída. Etapa pendente de conferência procedimental da controladoria.',
+    'Consolidado': 'Aprovado pelo controle de integridade formal para encaminhamento ao protocolo.',
+    'Protocolado': 'Submetido ao tribunal estatal ou autarquia administrativa com chaves de identificação.',
+    'Com recurso': 'Peticionamento incidental ou recursal contra decisão preliminar ou acórdão.',
+    'Gargalo técnico': 'Estudo qualificado de alta complexidade fática exigindo junta extraordinária de advogados.'
+  };
+
+  const handleStatusInternoChange = (newVal: string) => {
+    setStatusInterno(newVal);
+    if (!isPublicStatusManuallyEdited) {
+      setStatusPublicoCliente(statusMapping[newVal] || 'Em análise');
+    }
+  };
+
+  const handlePublicStatusChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setStatusPublicoCliente(e.target.value);
+    setIsPublicStatusManuallyEdited(true);
+  };
+
+  const handleRestoreStatusSuggestion = () => {
+    setStatusPublicoCliente(statusMapping[statusInterno] || 'Em análise');
+    setIsPublicStatusManuallyEdited(false);
+  };
+
   const hProtChange = (field: keyof ExtendedProtocolData, value: any) => {
     setProtocol((p) => {
       let val = value;
@@ -436,6 +493,10 @@ export default function ControladoriaFluxo() {
         controladoria: updatedControladoria,
         protocol: protocol,
         processNumber: protocol.processNumber,
+        statusInterno: statusInterno,
+        statusPublicoCliente: statusPublicoCliente,
+        visibleToClient: visibleToClient,
+        isPublicStatusManuallyEdited: isPublicStatusManuallyEdited,
         updatedAt: now
       };
 
@@ -456,7 +517,7 @@ export default function ControladoriaFluxo() {
           payload.productionStage = 'relatorio-integridade';
         }
       } else {
-        payload.statusInterno = 'Em controladoria';
+        payload.statusInterno = statusInterno || 'Em controladoria';
         if (action === 'advance') {
           payload.productionStage = 'relatorio-integridade';
         }
@@ -1263,6 +1324,113 @@ export default function ControladoriaFluxo() {
               placeholder="Observações operacionais adicionais de arquivamento fático..."
               className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl p-3.5 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[70px]"
             />
+          </div>
+        </div>
+
+        {/* CONTROLE DE STATUS E TRANSPARÊNCIA DO CLIENTE (Ref relocated from DadosCaso) */}
+        <div className="bg-white border border-gray-150 rounded-3xl p-6 space-y-6 shadow-xs">
+          <div className="border-b border-gray-100 pb-3">
+            <h3 className="text-[18px] font-extrabold text-gray-900 tracking-tight flex items-center gap-2">
+              <Activity size={18} className="text-indigo-600" />
+              <span>Controle de Status e Transparência ao Cliente</span>
+            </h3>
+            <p className="text-[15px] text-gray-500 mt-1">Gestão técnica de status de produção e publicação correspondente na timeline do cliente.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            {/* Embedded Internal Status Column with Concept & Suggestions */}
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
+                  <Activity size={12} className="text-indigo-600" />
+                  <span>Status Interno de Produção *</span>
+                </label>
+                <p className="text-xs text-gray-400 leading-relaxed">Status restrito à equipe técnica interna.</p>
+                <select
+                  value={statusInterno}
+                  onChange={(e) => handleStatusInternoChange(e.target.value)}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none cursor-pointer"
+                >
+                  {statusInternoOptions.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* CONCEPT BOX PLACED IMMEDIATELY UNDER THE SELECTION DROPDOWN */}
+              <div className="p-4 bg-gray-50 rounded-2xl border border-gray-150 space-y-2.5">
+                <div className="flex items-center gap-1.5 text-xs font-black text-gray-500 uppercase tracking-widest leading-none">
+                  <Info size={12} className="text-indigo-600" />
+                  <span>Conceito & Prática Corporativa</span>
+                </div>
+
+                <p className="text-xs text-gray-700 leading-relaxed font-sans">
+                  Conceito do status <strong className="text-gray-900 font-bold">"{statusInterno}"</strong>: <br/>
+                  <span className="text-gray-650 font-medium italic">"{statusConcepts[statusInterno] || 'Fase de análise interna.'}"</span>
+                </p>
+
+                <p className="text-xs text-gray-750 font-medium leading-none font-mono border-t border-gray-100 pt-2 flex items-center gap-1">
+                  <span>Sugestão à timeline:</span>
+                  <strong className="text-indigo-700">"{statusMapping[statusInterno] || ''}"</strong>
+                </p>
+
+                {isPublicStatusManuallyEdited && (
+                  <button
+                    type="button"
+                    onClick={handleRestoreStatusSuggestion}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-100 hover:bg-indigo-150 text-indigo-700 font-extrabold rounded-lg text-xs transition-colors cursor-pointer w-full justify-center border border-indigo-200"
+                  >
+                    <RotateCcw size={10} className="animate-spin-once" />
+                    Restaurar sugestão automática
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Visible to client and manual public status */}
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
+                  <User size={12} className="text-indigo-600" />
+                  <span>Exibir no Portal do Cliente?</span>
+                </label>
+                <p className="text-xs text-gray-400 leading-relaxed">Define se o caso fica visível ou opaco no portal do cliente e timeline.</p>
+                <div className="flex items-center gap-3 py-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setVisibleToClient(!visibleToClient)}
+                    className={`w-12 h-6 flex items-center rounded-full p-0.5 transition-colors outline-none duration-250 cursor-pointer ${
+                      visibleToClient ? 'bg-emerald-600 justify-end' : 'bg-gray-200 justify-start'
+                    }`}
+                  >
+                    <div className="w-5 h-5 bg-white rounded-full shadow-sm" />
+                  </button>
+                  <span className="text-xs font-bold text-gray-700">
+                    {visibleToClient ? 'Visível (Indicado)' : 'Ocultado ao cliente'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
+                  <span>Status Público do Cliente (Timeline do Portal) *</span>
+                </label>
+                
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Texto exibido para o cliente logado no portal.
+                </p>
+                
+                <input
+                  type="text"
+                  value={statusPublicoCliente}
+                  onChange={handlePublicStatusChange}
+                  placeholder="Defina as palavras do status público..."
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                />
+              </div>
+            </div>
+
           </div>
         </div>
 

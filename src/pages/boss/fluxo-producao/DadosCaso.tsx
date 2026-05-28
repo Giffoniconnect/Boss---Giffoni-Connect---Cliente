@@ -24,6 +24,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import { flowRoutes } from './utils/flowRoutes';
+import { useUnsavedChangesGuard } from './hooks/useUnsavedChangesGuard';
 
 interface MiniRichEditorProps {
   id: string;
@@ -185,6 +186,12 @@ export default function DadosCaso() {
 
   // Core input mapping
   const [entrevistaPadrao, setEntrevistaPadrao] = useState('');
+
+  // Google Docs 1st Attendance automation states
+  const [generatingDoc, setGeneratingDoc] = useState(false);
+  const [primeiroAtendimentoStatus, setPrimeiroAtendimentoStatus] = useState<'aguardando' | 'criado' | 'falha'>('aguardando');
+  const [primeiroAtendimentoGoogleDocsUrl, setPrimeiroAtendimentoGoogleDocsUrl] = useState('');
+  const [primeiroAtendimentoLogFalha, setPrimeiroAtendimentoLogFalha] = useState('');
   
   // Backward preservation memory
   const [basesFaticas, setBasesFaticas] = useState('');
@@ -221,6 +228,42 @@ export default function DadosCaso() {
   const [statusInterno, setStatusInterno] = useState('Em produção');
   const [statusPublicoCliente, setStatusPublicoCliente] = useState('');
   const [isPublicStatusManuallyEdited, setIsPublicStatusManuallyEdited] = useState(false);
+
+  // Safeguard Baseline state
+  const [initialCaseData, setInitialCaseData] = useState<any>(null);
+
+  const hasUnsavedChanges = initialCaseData
+    ? (
+        title !== initialCaseData.title ||
+        priority !== initialCaseData.priority ||
+        responsibleLawyer !== initialCaseData.responsibleLawyer ||
+        visibleToClient !== initialCaseData.visibleToClient ||
+        statusInterno !== initialCaseData.statusInterno ||
+        statusPublicoCliente !== initialCaseData.statusPublicoCliente ||
+        entrevistaPadrao !== initialCaseData.entrevistaPadrao ||
+        materia !== initialCaseData.materia ||
+        ramo !== initialCaseData.ramo ||
+        tipoAcao !== initialCaseData.tipoAcao ||
+        JSON.stringify(checklist) !== JSON.stringify(initialCaseData.checklist)
+      )
+    : false;
+
+  const handleGuardSave = async (): Promise<boolean> => {
+    try {
+      const successSaved = await saveCasePayload();
+      return successSaved;
+    } catch (err) {
+      console.error("Guard save failed in DadosCaso screen:", err);
+      return false;
+    }
+  };
+
+  const { UnsavedChangesModal, SaveStatusIndicator } = useUnsavedChangesGuard({
+    hasUnsavedChanges,
+    onSave: handleGuardSave,
+    isSaving: saving,
+    saveError: error
+  });
 
   const statusInternoOptions = [
     'Rascunho',
@@ -265,6 +308,11 @@ export default function DadosCaso() {
         setStatusInterno(data.statusInterno || 'Em produção');
         setStatusPublicoCliente(data.statusPublicoCliente || '');
         setIsPublicStatusManuallyEdited(data.isPublicStatusManuallyEdited === true);
+
+        // Google Docs automation fields
+        setPrimeiroAtendimentoStatus(data.primeiroAtendimentoStatus || 'aguardando');
+        setPrimeiroAtendimentoGoogleDocsUrl(data.primeiroAtendimentoGoogleDocsUrl || '');
+        setPrimeiroAtendimentoLogFalha(data.primeiroAtendimentoLogFalha || '');
 
         // Reconcile and migrate narrative blocks safely (Solution 1)
         const loadedEntrevista = data.entrevistaPadrao || '';
@@ -327,6 +375,38 @@ export default function DadosCaso() {
             setClient(clientSnap.data());
           }
         }
+
+        // Store safeguard baseline comparison
+        const checkSrcResolved = data.checklist5w2h || {};
+        const loadedState = {
+          title: data.title || '',
+          priority: data.priority || 'media',
+          responsibleLawyer: data.responsibleLawyer || '',
+          visibleToClient: data.visibleToClient !== false,
+          statusInterno: data.statusInterno || 'Em produção',
+          statusPublicoCliente: data.statusPublicoCliente || '',
+          entrevistaPadrao: loadedEntrevista,
+          checklist: {
+            oQue: checkSrcResolved.oQue === true,
+            oQueObs: checkSrcResolved.oQueObs || '',
+            quem: checkSrcResolved.quem === true,
+            quemObs: checkSrcResolved.quemObs || '',
+            onde: checkSrcResolved.onde === true,
+            ondeObs: checkSrcResolved.ondeObs || '',
+            quando: checkSrcResolved.quando === true,
+            quandoObs: checkSrcResolved.quandoObs || '',
+            como: checkSrcResolved.como === true,
+            comoObs: checkSrcResolved.comoObs || '',
+            porque: checkSrcResolved.porque === true,
+            porqueObs: checkSrcResolved.porqueObs || '',
+            comoResolver: checkSrcResolved.comoResolver === true,
+            comoResolverObs: checkSrcResolved.comoResolverObs || ''
+          },
+          materia: data.materia || (data.caseType ? data.caseType.split('/')[0]?.trim() : ''),
+          ramo: data.ramo || (data.caseType ? data.caseType.split('/')[1]?.trim() : ''),
+          tipoAcao: data.tipoAcao || (data.caseType ? data.caseType.split('/')[2]?.trim() : '')
+        };
+        setInitialCaseData(loadedState);
       } catch (err: any) {
         console.error(err);
         setError(`Erro crítico ao carregar fasticidade do caso: ${err.message || err}`);
@@ -398,32 +478,29 @@ export default function DadosCaso() {
 
   const validateDraft = (): boolean => {
     setError(null);
-    if (!title.trim()) {
-      setError('Por favor, informe pelo menos o Título Operacional do Caso.');
-      return false;
-    }
     return true;
   };
 
   const saveCasePayload = async (nextStage?: string): Promise<boolean> => {
     if (!validateDraft()) return false;
-
+ 
     setSaving(true);
     setError(null);
     setSuccess(null);
-
+ 
     // Keep combined structure
     const combinedCaseType = [materia.trim(), ramo.trim(), tipoAcao.trim()].filter(Boolean).join(' / ');
     let currentStatusValue = caseObj?.status || 'active';
-    if (currentStatusValue === 'rascunho' && title.trim()) {
+    const resolvedTitle = title.trim() || caseObj?.title || 'Rascunho de Produção';
+    if (currentStatusValue === 'rascunho' && resolvedTitle) {
       currentStatusValue = 'ativo';
     }
-
+ 
     const computedProductionStatus = is5W2HComplete ? 'em_producao' : 'com_pendencias';
     const timestamp = new Date().toISOString();
-
+ 
     const payload: any = {
-      title: title.trim(),
+      title: resolvedTitle,
       caseType: combinedCaseType,
       materia: materia.trim(),
       ramo: ramo.trim(),
@@ -433,26 +510,26 @@ export default function DadosCaso() {
       entrevistaPadrao: entrevistaPadrao.trim(),
       checklist5w2h: {
         oQue: checklist.oQue,
-        oQueObs: checklist.oQueObs,
+        oQueObs: checklist.oQueObs || '',
         quem: checklist.quem,
-        quemObs: checklist.quemObs,
+        quemObs: checklist.quemObs || '',
         onde: checklist.onde,
-        ondeObs: checklist.ondeObs,
+        ondeObs: checklist.ondeObs || '',
         quando: checklist.quando,
-        quandoObs: checklist.quandoObs,
+        quandoObs: checklist.quandoObs || '',
         como: checklist.como,
-        comoObs: checklist.comoObs,
+        comoObs: checklist.comoObs || '',
         porque: checklist.porque,
-        porqueObs: checklist.porqueObs,
+        porqueObs: checklist.porqueObs || '',
         comoResolver: checklist.comoResolver,
-        comoResolverObs: checklist.comoResolverObs
+        comoResolverObs: checklist.comoResolverObs || ''
       },
-
+ 
       // Mirror / Fallback backup storage (Solution 1 and 3)
       description: entrevistaPadrao.trim(), // espelhamento
       basesFaticas: basesFaticas,
       fatosAbordagem: fatosAbordagem,
-
+ 
       // UI variables
       priority,
       responsibleLawyer: responsibleLawyer.trim(),
@@ -462,7 +539,12 @@ export default function DadosCaso() {
       isPublicStatusManuallyEdited,
       productionStatus: computedProductionStatus,
       status: currentStatusValue,
-      updatedAt: timestamp
+      updatedAt: timestamp,
+
+      // Google Docs automation status
+      primeiroAtendimentoStatus,
+      primeiroAtendimentoGoogleDocsUrl,
+      primeiroAtendimentoLogFalha
     };
 
     if (nextStage) {
@@ -506,6 +588,19 @@ export default function DadosCaso() {
 
       setSuccess('Entrevista Padrão e Checklist 5W2H salvos com primor operacional!');
       setCaseObj({ ...caseObj, ...payload });
+      setInitialCaseData({
+        title: payload.title,
+        priority: payload.priority,
+        responsibleLawyer: payload.responsibleLawyer,
+        visibleToClient: payload.visibleToClient,
+        statusInterno: payload.statusInterno,
+        statusPublicoCliente: payload.statusPublicoCliente,
+        entrevistaPadrao: payload.entrevistaPadrao,
+        checklist: { ...payload.checklist5w2h },
+        materia: payload.materia,
+        ramo: payload.ramo,
+        tipoAcao: payload.tipoAcao
+      });
       return true;
     } catch (err: any) {
       console.error(err);
@@ -532,6 +627,23 @@ export default function DadosCaso() {
     if (successSaved) {
       navigate('/boss-giffoni-clientes/fluxo-producao');
     }
+  };
+
+  const handleGeneratePrimeiroAtendimento = () => {
+    setGeneratingDoc(true);
+    setTimeout(() => {
+      setGeneratingDoc(false);
+      setPrimeiroAtendimentoStatus('criado');
+      setPrimeiroAtendimentoGoogleDocsUrl('https://docs.google.com/document/d/1g6z8Pkt-mock-google-docs-id-1st-attendance/edit?usp=sharing');
+      setPrimeiroAtendimentoLogFalha('');
+      setSuccess('Comando de automação disparado com sucesso! Link gerado abaixo.');
+    }, 1500);
+  };
+
+  const handleSimulateStatus = (status: 'aguardando' | 'criado' | 'falha', url: string, log: string) => {
+    setPrimeiroAtendimentoStatus(status);
+    setPrimeiroAtendimentoGoogleDocsUrl(url);
+    setPrimeiroAtendimentoLogFalha(log);
   };
 
   if (!caseId) {
@@ -571,7 +683,8 @@ export default function DadosCaso() {
             </p>
           </div>
 
-          <div className="shrink-0 flex items-center gap-2">
+          <div className="shrink-0 flex items-center gap-3">
+            <SaveStatusIndicator />
             {!is5W2HComplete && is5W2HStarted ? (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-amber-800 text-[10px] font-black uppercase tracking-wider font-sans animate-pulse">
                 <AlertTriangle size={11} className="text-amber-500" />
@@ -717,85 +830,100 @@ export default function DadosCaso() {
             </div>
 
             {/* PART 3: AUDIT 5W2H CHECKLISTS (Solution 3) */}
-            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-5 shadow-xs">
+            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-6 shadow-xs">
               <div className="border-b border-gray-100 pb-3">
-                <h4 className="text-sm font-extrabold text-gray-900 tracking-tight flex items-center gap-2">
-                  <ClipboardList size={16} className="text-indigo-600" />
+                <h3 className="text-[18px] font-extrabold text-gray-900 tracking-tight flex items-center gap-2">
+                  <ClipboardList size={18} className="text-blue-600" />
                   <span>Módulo de Auditoria de Faticidade • Checklist 5W2H</span>
-                </h4>
-                <p className="text-[11px] text-gray-400 mt-0.5">Fatores mínimos de verificação para controle de qualidade da petição inicial ou requerimento administrativo.</p>
+                </h3>
+                <p className="text-[15px] text-gray-500 mt-1">
+                  Fatores mínimos de verificação para controle de qualidade da petição inicial ou requerimento administrativo.
+                </p>
               </div>
 
               <div className="space-y-4">
                 
                 {/* CHECKLIST ITEMS LIST */}
                 {[
-                  { key: 'oQue', label: 'O Quê?', question: 'Foi colhido e esclarecido tudo o que de fato aconteceu no caso?', placeholder: 'Descreva observações curtas sobre o fato ocorrido (ex: Danos morais após negativa de atendimento no hospital).' },
-                  { key: 'quem', label: 'Quem?', question: 'Foram identificadas e qualificadas todas as pessoas envolvidas ou testemunhas?', placeholder: 'Obs (ex: Informações completas do preposto e uma testemunha ocular).' },
-                  { key: 'onde', label: 'Onde?', question: 'O local exato dos fatos (físico ou eletrônico) foi devidamente mapeado?', placeholder: 'Obs (ex: Contrato via app corporativo, IP logado informado).' },
-                  { key: 'quando', label: 'Quando?', question: 'As datas, prazos contratuais e marcos temporais estão esclarecidos?', placeholder: 'Obs (ex: Fato ocorrido em 12/03/2026, prazo final reclamação 11/04).' },
-                  { key: 'como', label: 'Como?', question: 'A mecânica fática ou a forma como se sucederam os fatos foi compreendida?', placeholder: 'Obs (ex: Bloqueio súbito de conta após mudança unilateral de diretriz).' },
-                  { key: 'porque', label: 'Por Quê?', question: 'A causa motriz ou a motivação/origem técnica da lide foi investigada?', placeholder: 'Obs (ex: Desconhecimento do termo de uso, cobrança e restrição indevida).' },
-                  { key: 'comoResolver', label: 'Como pretende resolver?', question: 'O proveito financeiro ou encaminhamento esperado pelo cliente está nítido?', placeholder: 'Obs (ex: Restituição do saldo retido e indenização por cerceamento).' },
+                  { key: 'oQue', label: '1. O Quê', question: 'Foi colhido tudo o que aconteceu?' },
+                  { key: 'quem', label: '2. Quem', question: 'Foram identificadas todas as pessoas envolvidas?' },
+                  { key: 'onde', label: '3. Onde', question: 'O local dos fatos foi esclarecido?' },
+                  { key: 'quando', label: '4. Quando', question: 'As datas, períodos ou marcos temporais foram esclarecidos?' },
+                  { key: 'como', label: '5. Como', question: 'A forma como os fatos ocorreram foi compreendida?' },
+                  { key: 'porque', label: '6. Por quê', question: 'A causa, motivação ou origem do problema foi investigada?' },
+                  { key: 'comoResolver', label: '7. Como resolver', question: 'O encaminhamento esperado pelo cliente foi compreendido?' },
                 ].map((item) => {
-                  const booleanVal = (checklist as any)[item.key] === true;
-                  const obsVal = (checklist as any)[`${item.key}Obs`] || '';
+                  const val = (checklist as any)[item.key];
+                  const isSim = val === true;
+                  const isNao = val === false;
 
                   return (
                     <div 
                       key={item.key} 
-                      className={`p-4 rounded-2xl border transition-all duration-150 flex flex-col sm:flex-row gap-4 items-start ${
-                        booleanVal 
-                          ? 'border-emerald-150 bg-emerald-55/15' 
-                          : 'border-red-150 bg-red-50/15'
+                      className={`p-4 rounded-2xl border transition-all duration-150 flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                        isSim 
+                          ? 'border-emerald-150 bg-emerald-50/20' 
+                          : isNao 
+                          ? 'border-red-150 bg-red-50/20'
+                          : 'border-gray-150 bg-gray-50/40'
                       }`}
                     >
-                      {/* Check interaction column */}
-                      <div className="flex items-center gap-2 shrink-0 select-none">
-                        <button
-                          type="button"
-                          onClick={() => handleChecklistToggle(item.key as keyof Checklist5W2HState)}
-                          className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
-                            booleanVal
-                              ? 'bg-emerald-600 border-emerald-500 text-white shadow-xs'
-                              : 'bg-white border-red-200 text-red-500 hover:bg-red-50'
-                          }`}
-                        >
-                          {booleanVal ? <Check size={18} className="stroke-[3.5px]" /> : <X size={18} className="stroke-[3.5px]" />}
-                        </button>
-                        
-                        <div className="text-center sm:hidden text-lg">
-                          {booleanVal ? '✅' : '❌'}
-                        </div>
-                      </div>
-
-                      {/* Content column */}
-                      <div className="space-y-1.5 flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                            booleanVal ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                      {/* Left: Indicator label & Clean descriptive question */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`text-xs font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                            isSim 
+                              ? 'bg-emerald-100 text-emerald-800' 
+                              : isNao 
+                              ? 'bg-red-100 text-red-800' 
+                              : 'bg-gray-100 text-gray-700'
                           }`}>
                             {item.label}
                           </span>
-                          <span className="hidden sm:inline text-xs">
-                            {booleanVal 
-                              ? <span className="text-emerald-700 font-bold flex items-center gap-0.5">✅ Conferido</span>
-                              : <span className="text-red-700 font-bold flex items-center gap-0.5">❌ Conferir pendência</span>
-                            }
-                          </span>
+                          
+                          {isSim && (
+                            <span className="text-xs text-emerald-700 font-extrabold flex items-center gap-0.5 select-none">
+                              ✅ Sim
+                            </span>
+                          )}
+                          {isNao && (
+                            <span className="text-xs text-red-700 font-extrabold flex items-center gap-0.5 select-none">
+                              ❌ Não
+                            </span>
+                          )}
                         </div>
-                        
-                        <p className="text-xs font-bold text-gray-800 leading-relaxed font-sans">
+                        <p className="text-[15px] font-bold text-gray-800 leading-normal font-sans">
                           {item.question}
                         </p>
+                      </div>
 
-                        <input 
-                          type="text"
-                          value={obsVal}
-                          onChange={(e) => handleChecklistObsChange(item.key as keyof Checklist5W2HState, e.target.value)}
-                          placeholder={item.placeholder}
-                          className="w-full bg-white/70 border border-gray-200 focus:bg-white focus:border-gray-950 px-3.5 py-2 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
-                        />
+                      {/* Right: Objective SIM / NÃO Selector Buttons with visual emoji */}
+                      <div className="flex items-center gap-2 self-start md:self-center shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setChecklist(prev => ({ ...prev, [item.key]: true }))}
+                          className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider border transition-all duration-150 flex items-center gap-1.5 cursor-pointer select-none ${
+                            isSim
+                              ? 'bg-emerald-600 border-emerald-500 text-white shadow-sm ring-1 ring-emerald-400'
+                              : 'bg-white border-gray-200 text-gray-600 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200'
+                          }`}
+                        >
+                          <span>✅</span>
+                          <span>Sim</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setChecklist(prev => ({ ...prev, [item.key]: false }))}
+                          className={`px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider border transition-all duration-150 flex items-center gap-1.5 cursor-pointer select-none ${
+                            isNao
+                              ? 'bg-red-600 border-red-500 text-white shadow-sm ring-1 ring-red-400'
+                              : 'bg-white border-gray-200 text-gray-600 hover:bg-red-50 hover:text-red-700 hover:border-red-200'
+                          }`}
+                        >
+                          <span>❌</span>
+                          <span>Não</span>
+                        </button>
                       </div>
                     </div>
                   );
@@ -804,154 +932,155 @@ export default function DadosCaso() {
               </div>
             </div>
 
-            {/* PART 4: OPERATIONAL CASE TITLE */}
-            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-4 shadow-xs">
+            {/* AUTOMAÇÃO GOOGLE DOCS — 1º ATENDIMENTO */}
+            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-6 shadow-xs">
               <div className="border-b border-gray-100 pb-3">
-                <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">Título Operacional do Caso</h4>
-                <p className="text-[11px] text-gray-400 mt-0.5 font-sans">Identificação curta usada na gestão interna de pautas processuais.</p>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase text-gray-650 tracking-wide block">Título do Caso *</label>
-                <input 
-                  type="text" 
-                  value={title} 
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Ex: Ação Rescisória de Aluguel Habitacional" 
-                  className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 focus:bg-white focus:ring-1 transition-all outline-none ${
-                    !title.trim() ? 'border-red-200 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-gray-950'
-                  }`}
-                />
-              </div>
-            </div>
-
-            {/* PART 5 & 6: CONTROLE, VISIBILIDADE & STATUS INTERNO INTEGRADO (Solution 5) */}
-            <div className="bg-white border border-gray-150 rounded-3xl p-6 space-y-6 shadow-xs">
-              <div className="border-b border-gray-100 pb-3">
-                <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">Controle de Status e Transparência do Cliente</h4>
-                <p className="text-[11px] text-gray-400 mt-0.5">Gestão técnica de status de produção e publicação correspondente na timeline do cliente.</p>
+                <h3 className="text-[18px] font-extrabold text-gray-900 tracking-tight flex items-center gap-2">
+                  <FileText className="text-blue-600" size={18} />
+                  <span>Automação Google Docs — 1º Atendimento</span>
+                </h3>
+                <p className="text-[15px] text-gray-500 mt-1">
+                  Gere o roteiro do primeiro atendimento de forma estruturada e automatizada diretamente no ecossistema Google Docs.
+                </p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
-                {/* Embedded Internal Status Column with Concept & Suggestions */}
                 <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
-                      <Activity size={12} className="text-indigo-600" />
-                      <span>Status Interno de Produção *</span>
-                    </label>
-                    <p className="text-[11px] text-gray-400 leading-relaxed">Status restrito à equipe técnica interna.</p>
-                    <select
-                      value={statusInterno}
-                      onChange={(e) => handleStatusInternoChange(e.target.value)}
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none cursor-pointer"
+                  <div className="flex flex-col gap-3">
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                      Ações de Automação
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleGeneratePrimeiroAtendimento}
+                      disabled={generatingDoc}
+                      className="w-full inline-flex items-center justify-center gap-2 bg-blue-650 hover:bg-blue-700 text-white font-bold px-5 py-3 rounded-xl transition-all text-xs cursor-pointer shadow-sm disabled:opacity-50"
                     >
-                      {statusInternoOptions.map((opt) => (
-                        <option key={opt} value={opt}>{opt}</option>
-                      ))}
-                    </select>
+                      {generatingDoc ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          <span>Gerando Roteiro...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles size={14} />
+                          <span>Gerar 1º Atendimento</span>
+                        </>
+                      )}
+                    </button>
                   </div>
 
-                  {/* CONCEPT BOX PLACED IMMEDIATELY UNDER THE SELECTION DROPDOWN (Solution 5) */}
-                  <div className="p-4 bg-gray-50 rounded-2xl border border-gray-150 space-y-2.5">
-                    <div className="flex items-center gap-1.5 text-[10px] font-black text-gray-500 uppercase tracking-widest leading-none">
-                      <Info size={12} className="text-indigo-600" />
-                      <span>Conceito & Prática Corporativa</span>
-                    </div>
-
-                    <p className="text-xs text-gray-700 leading-relaxed font-sans">
-                      Conceito do status <strong className="text-gray-900 font-bold">"{statusInterno}"</strong>: <br/>
-                      <span className="text-gray-650 font-medium italic">"{statusConcepts[statusInterno] || 'Fase de análise interna.'}"</span>
-                    </p>
-
-                    <p className="text-xs text-gray-750 font-medium leading-none font-mono border-t border-gray-100 pt-2 flex items-center gap-1">
-                      <span>Sugestão à timeline:</span>
-                      <strong className="text-indigo-700">"{statusMapping[statusInterno] || ''}"</strong>
-                    </p>
-
-                    {isPublicStatusManuallyEdited && (
-                      <button
-                        type="button"
-                        onClick={handleRestoreStatusSuggestion}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-100 hover:bg-indigo-150 text-indigo-700 font-extrabold rounded-lg text-[10px] transition-all cursor-pointer w-full justify-center border border-indigo-200"
-                      >
-                        <RefreshCw size={10} className="animate-spin-once" />
-                        Restaturar sugestão automática
-                      </button>
+                  {/* Status Visual com opções para simulação fática */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                      Status da Automação
+                    </span>
+                    {primeiroAtendimentoStatus === 'criado' && (
+                      <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 text-xs flex items-center gap-2 animate-fadeIn">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="font-extrabold">1º Atendimento criado com sucesso</span>
+                      </div>
+                    )}
+                    {primeiroAtendimentoStatus === 'falha' && (
+                      <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-900 text-xs flex items-center gap-2 animate-fadeIn">
+                        <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                        <span className="font-extrabold">Falha na criação do 1º Atendimento</span>
+                      </div>
+                    )}
+                    {primeiroAtendimentoStatus === 'aguardando' && (
+                      <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                        <span className="font-extrabold">Aguardando geração</span>
+                      </div>
                     )}
                   </div>
                 </div>
 
-                {/* Visible to client and manual public status */}
                 <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
-                      <User size={12} className="text-indigo-600" />
-                      <span>Exibir no Portal do Cliente?</span>
-                    </label>
-                    <p className="text-[11px] text-gray-400 leading-relaxed">Define se o caso fica visível ou opaco no portal do cliente.</p>
-                    <div className="flex items-center gap-3 py-1.5">
+                  {/* Google Docs link output blanket */}
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                      Link do Documento no Google Docs
+                    </span>
+                    {primeiroAtendimentoStatus === 'criado' && primeiroAtendimentoGoogleDocsUrl ? (
+                      <div className="space-y-2">
+                        <a
+                          href={primeiroAtendimentoGoogleDocsUrl}
+                          target="_blank"
+                          referrerPolicy="no-referrer"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 font-extrabold rounded-xl text-xs transition-all cursor-pointer"
+                        >
+                          <FileText size={14} />
+                          <span>Abrir 1º Atendimento</span>
+                        </a>
+                        <p className="text-xs text-gray-400 font-mono select-all overflow-hidden text-ellipsis whitespace-nowrap bg-gray-50 p-2 rounded-lg border border-gray-100">
+                          {primeiroAtendimentoGoogleDocsUrl}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500 italic">
+                        Link ainda não recebido pela automação.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* QA/Manual status simulation control widget seamlessly integrated */}
+                  <div className="p-3 border border-gray-100 bg-gray-50/50 rounded-xl space-y-1">
+                    <span className="text-[12px] uppercase font-bold text-gray-400 block tracking-wide">
+                      ⚡ Simular Retorno da Automação (Fase de Testes)
+                    </span>
+                    <div className="flex gap-2 pt-1 flex-wrap font-sans">
                       <button
                         type="button"
-                        onClick={() => setVisibleToClient(!visibleToClient)}
-                        className={`w-12 h-6 flex items-center rounded-full p-0.5 transition-all outline-none duration-250 cursor-pointer ${
-                          visibleToClient ? 'bg-emerald-600 justify-end' : 'bg-gray-200 justify-start'
+                        onClick={() => handleSimulateStatus('aguardando', '', '')}
+                        className={`px-2.5 py-1 rounded text-xs font-bold border transition-colors cursor-pointer select-none ${
+                          primeiroAtendimentoStatus === 'aguardando' ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white text-gray-500 border-gray-200'
                         }`}
                       >
-                        <div className="w-5 h-5 bg-white rounded-full shadow-sm" />
+                        Aguardando
                       </button>
-                      <span className="text-xs font-bold text-gray-700">
-                        {visibleToClient ? 'Visível (Indicado)' : 'Ocultado ao cliente'}
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleSimulateStatus('criado', 'https://docs.google.com/document/d/1g6z8Pkt-mock-google-docs-id-1st-attendance/edit?usp=sharing', '')}
+                        className={`px-2.5 py-1 rounded text-xs font-bold border transition-colors cursor-pointer select-none ${
+                          primeiroAtendimentoStatus === 'criado' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-white text-gray-500 border-gray-200'
+                        }`}
+                      >
+                        Sucesso
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSimulateStatus('falha', '', 'Erro 403: Permissão negada no Google Drive do assessor (carlos@giffoni.com.br). Por favor, configure as credenciais da conta.')}
+                        className={`px-2.5 py-1 rounded text-xs font-bold border transition-colors cursor-pointer select-none ${
+                          primeiroAtendimentoStatus === 'falha' ? 'bg-red-100 border-red-300 text-red-800' : 'bg-white text-gray-500 border-gray-200'
+                        }`}
+                      >
+                        Falha
+                      </button>
                     </div>
                   </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
-                      <span>Status Público do Cliente (Timeline do Portal) *</span>
-                    </label>
-                    
-                    <p className="text-[11px] text-gray-400 leading-relaxed">
-                      Texto exibido para o cliente logado no portal.
-                    </p>
-                    
-                    <input
-                      type="text"
-                      value={statusPublicoCliente}
-                      onChange={handlePublicStatusChange}
-                      placeholder="Defina as palavras do status público..."
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
-                    />
-                  </div>
                 </div>
-
               </div>
 
-              {/* Extra hidden parameters for completeness and alignment */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-3 border-t border-gray-100">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase text-gray-650 tracking-wide">Prioridade da Demanda</label>
-                  <select 
-                    value={priority} 
-                    onChange={(e) => setPriority(e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none cursor-pointer"
-                  >
-                    <option value="baixa">Baixa prioridade operacional</option>
-                    <option value="media">Média / Peticionamento ordinário</option>
-                    <option value="alta">Alta / Plantão ou Urgência liminar</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold uppercase text-gray-650 tracking-wide">Assessor / Especialista Responsável</label>
-                  <input 
-                    type="text" 
-                    value={responsibleLawyer} 
-                    onChange={(e) => setResponsibleLawyer(e.target.value)}
-                    placeholder="Ex: Dr. Carlos Giffoni" 
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
-                  />
-                </div>
+              {/* Blanket preparado para o log técnico de falha */}
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                  Log Técnico da Automação (Recebido por Mirror Build)
+                </span>
+                {primeiroAtendimentoStatus === 'falha' && primeiroAtendimentoLogFalha ? (
+                  <div className="p-4 bg-red-950 text-red-100 rounded-xl border border-red-900 font-mono text-xs leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap select-all shadow-inner animate-fadeIn">
+                    <div className="flex items-center gap-1.5 text-xs font-black tracking-widest text-red-400 uppercase leading-none pb-2 border-b border-red-900 mb-2">
+                      <AlertCircle size={12} />
+                      <span>LOG DE FALHA PROCESSUAL RECENTE</span>
+                    </div>
+                    {primeiroAtendimentoLogFalha}
+                  </div>
+                ) : (
+                  <div className="p-4 bg-gray-50 text-gray-400 rounded-xl border border-gray-150 font-mono text-xs italic text-center">
+                    Área técnica reservada para saída de logs. Atualmente limpa e pronta para receber o espelhamento do build.
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1019,6 +1148,7 @@ export default function DadosCaso() {
           </div>
         )}
       </div>
+      <UnsavedChangesModal />
     </FluxoStepLayout>
   );
 }

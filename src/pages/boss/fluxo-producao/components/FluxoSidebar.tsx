@@ -254,12 +254,12 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h4 className="text-sm font-extrabold text-gray-900 tracking-tight leading-none">Acompanhamento Produtivo</h4>
-              <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md text-[9px] font-bold uppercase tracking-wider">
+              <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md text-[12px] font-bold uppercase tracking-wider">
                 {isNovoCaso ? 'Fluxo Simplificado' : 'Fluxo Padrão'}
               </span>
             </div>
             
-            <p className="text-[10px] text-gray-400 mt-1 truncate flex items-center gap-1 font-mono uppercase tracking-wide">
+            <p className="text-[12px] text-gray-400 mt-1 truncate flex items-center gap-1 font-mono uppercase tracking-wide">
               <FolderKanban size={10} />
               {caseId ? `Caso Ativo: ${caseId}` : 'Rascunho de Cadastro Inicial'}
             </p>
@@ -269,7 +269,7 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
         {/* PROGRESS METRIC BLOCK */}
         <div className="flex items-center gap-4 bg-gray-50/55 border border-gray-100 px-4 py-2 rounded-2xl shrink-0 self-start md:self-auto">
           <div className="text-left">
-            <span className="text-[9px] font-black uppercase text-gray-400 block tracking-widest leading-none">
+            <span className="text-[12px] font-black uppercase text-gray-400 block tracking-widest leading-none">
               Avanço Administrativo
             </span>
             <span className="text-xs font-black text-gray-900 block mt-1">
@@ -347,7 +347,7 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
                     navigate(stepUrl);
                   }
                 }}
-                className={`flex items-center gap-1.5 px-3.5 py-2 border rounded-full text-[11px] font-bold transition-all shrink-0 cursor-pointer outline-none ${pillClass}`}
+                className={`flex items-center gap-1.5 px-3.5 py-2 border rounded-full text-[12px] font-bold transition-all shrink-0 cursor-pointer outline-none ${pillClass}`}
                 id={`timeline-step-${step.id}`}
               >
                 {/* Visual Status Indicator in compliance with Obstáculo 1 & 6 */}
@@ -359,7 +359,7 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
                     return (
                       <div className="relative group/tooltip flex items-center justify-center">
                         <X size={11} className="text-red-500 shrink-0 stroke-[3px]" />
-                        <span className="absolute bottom-full mb-1.5 hidden group-hover/tooltip:block bg-red-800 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-40 font-mono tracking-wider">
+                        <span className="absolute bottom-full mb-1.5 hidden group-hover/tooltip:block bg-red-800 text-white text-[12px] font-black uppercase px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-40 font-mono tracking-wider">
                           {step.id === 'dados-caso' ? 'Entrevista incompleta' : 'Cadastro incompleto'}
                         </span>
                       </div>
@@ -374,7 +374,7 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
                   return null;
                 })()}
 
-                <span className="font-mono text-[9px] opacity-60">
+                <span className="font-mono text-[12px] opacity-60">
                   {String(step.order).padStart(2, '0')}
                 </span>
                 
