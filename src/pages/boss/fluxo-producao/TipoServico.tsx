@@ -376,6 +376,21 @@ export default function TipoServico() {
       return;
     }
 
+    if (subTypeRoute === 'peticao-inicial') {
+      if (!clientName) {
+        setError('Por favor, certifique-se de que o nome do cliente está carregado.');
+        return;
+      }
+      if (!oppositeParty.trim()) {
+        setError('Por favor, informe a Parte Adversa.');
+        return;
+      }
+      if (!comarca.trim()) {
+        setError('Por favor, informe a Comarca.');
+        return;
+      }
+    }
+
     if (subTypeRoute === 'processo-judicial-em-andamento' && !processNumber.trim()) {
       setError('Por favor, defina o número do Processo CNJ para prosseguir.');
       return;
@@ -420,22 +435,31 @@ export default function TipoServico() {
     }
 
     try {
+      const isPeticaoInicial = subTypeRoute === 'peticao-inicial';
+      const nextStage = advanceAfter ? "solicitacoes-provas" : "tipo-producao";
+
       const payload: any = {
         serviceMacroType: macro,
-        registrationTypeKey: subTypeRoute,
-        registrationType: regType,
+        registrationTypeKey: isPeticaoInicial ? "peticao_inicial" : subTypeRoute,
+        registrationType: isPeticaoInicial ? "Petição Inicial a Ajuizar" : regType,
+        serviceSubtype: isPeticaoInicial ? "peticao_inicial" : (subTypeRoute === 'outro-servico-administrativo' ? serviceSubtype : ''),
         clientDisplayName: clientName || '',
         oppositeParty: oppositeParty || '',
-        hasOppositeParty: !!hasOppositeParty,
+        hasOppositeParty: isPeticaoInicial ? true : !!hasOppositeParty,
         assunto: assunto.trim(),
         title: assunto.trim(), 
         todoistFormula: currentFormula,
         updatedAt: now,
-        productionStage: "tipo-producao"
+        productionStage: nextStage
       };
 
-      if (macro === 'judicial') {
-        payload.vara = subTypeRoute === 'peticao-inicial' ? 'A definir' : (vara || '');
+      if (isPeticaoInicial) {
+        payload.tipoServicoCompleto = true;
+        payload.tipoServicoPendente = false;
+        payload.vara = "A definir";
+        payload.comarca = comarca || '';
+      } else if (macro === 'judicial') {
+        payload.vara = vara || '';
         payload.comarca = comarca || '';
         if (subTypeRoute === 'processo-judicial-em-andamento') {
           payload.processNumber = processNumber || '';
@@ -449,10 +473,15 @@ export default function TipoServico() {
 
       try {
         await setDoc(doc(db, 'casos', safeCaseId), {
+          id: safeCaseId,
+          caseId: safeCaseId,
           title: assunto.trim(),
           titulo: assunto.trim(),
-          tipo: regType,
-          caseType: regType,
+          tipo: isPeticaoInicial ? "Petição Inicial a Ajuizar" : regType,
+          caseType: isPeticaoInicial ? "Petição Inicial a Ajuizar" : regType,
+          registrationTypeKey: isPeticaoInicial ? "peticao_inicial" : subTypeRoute,
+          registrationType: isPeticaoInicial ? "Petição Inicial a Ajuizar" : regType,
+          productionStage: nextStage,
           updatedAt: now
         }, { merge: true });
       } catch (mirrorErr) {

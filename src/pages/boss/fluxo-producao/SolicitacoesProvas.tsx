@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, updateDoc, collection, addDoc, getDocs, query, where } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, addDoc, getDocs, query, where, setDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { LOCAL_FALLBACK_TEMPLATES } from '../Configuracoes';
 import FluxoStepLayout from './components/FluxoStepLayout';
@@ -27,7 +27,8 @@ import {
   ExternalLink,
   Globe,
   HelpCircle,
-  Eye
+  Eye,
+  CheckCircle
 } from 'lucide-react';
 import { flowRoutes } from './utils/flowRoutes';
 
@@ -101,8 +102,8 @@ export default function SolicitacoesProvas() {
   const [checklistProvasLogFalha, setChecklistProvasLogFalha] = useState('');
   const [checklistProvasUpdatedAt, setChecklistProvasUpdatedAt] = useState('');
 
-  // Tab navigation
-  const [activeStepTab, setActiveStepTab] = useState<'procuracao' | 'custas' | 'contrato' | 'checklist_provas' | 'provas_customizadas'>('procuracao');
+  // Tab navigation & Step management
+  const [activeStepTab, setActiveStepTab] = useState<'procuracao' | 'custas' | 'contrato' | 'checklist_provas' | 'auditoria'>('procuracao');
 
   // Form inputs for Custom Evidence
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -111,7 +112,7 @@ export default function SolicitacoesProvas() {
   const [formDueDate, setFormDueDate] = useState('');
   const [formVisible, setFormVisible] = useState(true);
   const [formAllowUpload, setFormAllowUpload] = useState(true);
-  const [formMaxFiles, setFormMaxFiles] = useState(5);
+  const [formMaxFiles, setFormMaxFiles] = useState(1);
 
   const [typePdf, setTypePdf] = useState(true);
   const [typeAudio, setTypeAudio] = useState(false);
@@ -120,6 +121,11 @@ export default function SolicitacoesProvas() {
   const [formStatus, setFormStatus] = useState<EvidenceRequest['status']>('pendente');
   const [formAnalysisStatus, setFormAnalysisStatus] = useState('');
   const [formAnalysisNotes, setFormAnalysisNotes] = useState('');
+
+  const [formDocNumber, setFormDocNumber] = useState('');
+  const [useDefaultDeadline, setUseDefaultDeadline] = useState(true);
+
+  const [auditData, setAuditData] = useState<any>({});
 
   const [refreshToggle, setRefreshToggle] = useState(0);
 
@@ -180,6 +186,12 @@ export default function SolicitacoesProvas() {
         if (cData.checklistProvasLogFalha) setChecklistProvasLogFalha(cData.checklistProvasLogFalha);
         if (cData.checklistProvasUpdatedAt) setChecklistProvasUpdatedAt(cData.checklistProvasUpdatedAt);
 
+        if (cData.auditData) {
+          setAuditData(cData.auditData);
+        } else {
+          setAuditData({});
+        }
+
         // Fetch Client
         if (cData.clientId) {
           const clientSnap = await getDoc(doc(db, 'clients', cData.clientId));
@@ -218,6 +230,27 @@ export default function SolicitacoesProvas() {
 
     loadData();
   }, [caseId, refreshToggle]);
+
+  // Reactive automatic 7-day standard deadline
+  useEffect(() => {
+    if (useDefaultDeadline) {
+      const d = new Date();
+      d.setDate(d.getDate() + 7);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      setFormDueDate(`${yyyy}-${mm}-${dd}`);
+    }
+  }, [useDefaultDeadline]);
+
+  // Dynamic document counter: ignore contract 'Doc. $$$', start at Doc. 03
+  useEffect(() => {
+    if (!editingId) {
+      const customOnes = requests.filter(r => r.status !== 'arquivado' && !['Procuração', 'Declaração de Pobreza', 'Contrato de Honorários', 'Checklist de Provas'].includes(r.documentType || ''));
+      const nextNum = 3 + customOnes.length;
+      setFormDocNumber(`Doc. ${String(nextNum).padStart(2, '0')}`);
+    }
+  }, [requests, editingId]);
 
   // Unified simulation controller for Google Docs automations
   const triggerAutomation = async (
@@ -403,6 +436,46 @@ export default function SolicitacoesProvas() {
     }
   };
 
+  const getNextDocumentNumber = () => {
+    let maxNum = 2; // Começa após Doc. 01 (Procuração), Doc. 02 (Declaração/Custas)
+    requests.forEach((r) => {
+      if (r.documentNumber && r.documentNumber !== '$$$') {
+        const num = parseInt(r.documentNumber.replace(/\D/g, ''), 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      } else if (r.title && r.title.startsWith('Doc. ')) {
+        const match = r.title.match(/^Doc\.\s*(\d+)/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > maxNum) {
+            maxNum = num;
+          }
+        }
+      }
+    });
+    return `Doc. ${String(maxNum + 1).padStart(2, '0')}`;
+  };
+
+  const handleToggleAudit = async (docKey: string, field: 'delivered' | 'digitized' | 'uploaded') => {
+    const current = auditData[docKey] || { delivered: false, digitized: false, uploaded: false };
+    const updated = {
+      ...current,
+      [field]: !current[field]
+    };
+    const nextAuditData = {
+      ...auditData,
+      [docKey]: updated
+    };
+    setAuditData(nextAuditData);
+    
+    try {
+      await updateDoc(doc(db, 'cases', caseId!), { auditData: nextAuditData });
+    } catch (err) {
+      console.error('Erro ao auto-salvar auditoria no Firestore:', err);
+    }
+  };
+
   const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -427,17 +500,21 @@ export default function SolicitacoesProvas() {
     const nowISO = new Date().toISOString();
 
     try {
+      const docNumToSave = formDocNumber.trim() || getNextDocumentNumber();
+      const prependedTitle = formDocNumber.trim() ? `${formDocNumber.trim()} - ${formTitle.trim()}` : formTitle.trim();
+
       const payload: any = {
         caseId: caseId!,
         clientId: caseObj?.clientId || '',
         clientSlug: clientSlug || '',
-        title: formTitle.trim(),
+        title: prependedTitle,
         description: formDesc.trim(),
         dueDate: formDueDate || '',
         visibleToClient: formVisible,
         allowUpload: formAllowUpload,
         expectedFileTypes: expectedTypes,
-        maxFiles: Number(formMaxFiles) || 1,
+        maxFiles: 1, // Internamente mantido como 1 arquivo por pedido
+        documentNumber: docNumToSave,
         updatedAt: nowISO
       };
 
@@ -460,7 +537,8 @@ export default function SolicitacoesProvas() {
       setEditingId(null);
       setFormTitle('');
       setFormDesc('');
-      setFormDueDate('');
+      // Reset doc number so we suggest a new one next time
+      setFormDocNumber('');
       setRefreshToggle(p => p + 1);
     } catch (err: any) {
       console.error(err);
@@ -472,12 +550,28 @@ export default function SolicitacoesProvas() {
 
   const handleEditInit = (req: EvidenceRequest) => {
     setEditingId(req.id);
-    setFormTitle(req.title);
+    let cleanTitle = req.title;
+    let docNum = req.documentNumber || '';
+    if (!docNum) {
+      const match = req.title.match(/^(Doc\.\s*\d+)\s*-\s*(.*)/i);
+      if (match) {
+        docNum = match[1];
+        cleanTitle = match[2];
+      }
+    } else {
+      const prefix = `${docNum} - `;
+      if (cleanTitle.startsWith(prefix)) {
+        cleanTitle = cleanTitle.substring(prefix.length);
+      }
+    }
+
+    setFormTitle(cleanTitle);
+    setFormDocNumber(docNum);
     setFormDesc(req.description);
     setFormDueDate(req.dueDate || '');
     setFormVisible(req.visibleToClient);
     setFormAllowUpload(req.allowUpload !== false);
-    setFormMaxFiles(req.maxFiles || 5);
+    setFormMaxFiles(1);
     setTypePdf(req.expectedFileTypes?.includes('PDF') || false);
     setTypeAudio(req.expectedFileTypes?.includes('áudio compatível com PJe') || false);
     setTypeVideo(req.expectedFileTypes?.includes('vídeo compatível com PJe') || false);
@@ -491,8 +585,10 @@ export default function SolicitacoesProvas() {
     setError(null);
     const nowISO = new Date().toISOString();
     try {
-      await updateDoc(doc(db, 'cases', caseId!), {
+      const payload = {
         productionStage: "solicitacoes-informacoes",
+        evidenceCompleted: true, // Libera pendência em definitivo
+        evidenceStatus: 'concluido',
         updatedAt: nowISO,
         desejaRecolherCustas,
         guiaCustasNecessaria,
@@ -500,8 +596,23 @@ export default function SolicitacoesProvas() {
         procuracaoStatus,
         declaracaoPobrezaStatus,
         contratoHonorariosStatus,
-        checklistProvasGoogleDocsStatus
-      });
+        checklistProvasGoogleDocsStatus,
+        auditData
+      };
+      
+      await updateDoc(doc(db, 'cases', caseId!), payload);
+
+      try {
+        await setDoc(doc(db, 'casos', caseId!), {
+          productionStage: "solicitacoes-informacoes",
+          evidenceCompleted: true,
+          evidenceStatus: 'concluido',
+          updatedAt: nowISO
+        }, { merge: true });
+      } catch (mirrorErr) {
+        console.warn('Erro silencioso no espelho de casos:', mirrorErr);
+      }
+
       navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId!}/solicitacoes-informacoes`);
     } catch (err: any) {
       console.error(err);
@@ -511,36 +622,53 @@ export default function SolicitacoesProvas() {
     }
   };
 
-  const getStepVisualStatus = (step: 'procuracao' | 'custas' | 'contrato' | 'checklist') => {
+  const getStepVisualStatus = (step: 'procuracao' | 'custas' | 'contrato' | 'checklist' | 'auditoria') => {
     if (step === 'procuracao') {
-      if (procuracaoStatus === 'criada') return { icon: '✅', label: 'Concluído', color: 'bg-emerald-50 border-emerald-200 text-emerald-800' };
+      if (procuracaoStatus === 'concluido' || procuracaoStatus === 'criada') return { icon: '✅', label: 'Concluído', color: 'bg-emerald-50 border-emerald-200 text-emerald-800' };
       if (procuracaoStatus === 'falha') return { icon: '❌', label: 'Falha', color: 'bg-rose-50 border-rose-200 text-rose-800' };
       if (procuracaoStatus === 'aguardando') return { icon: '⏳', label: 'Aguardando Automação', color: 'bg-amber-50 border-amber-200 text-amber-800' };
+      if (procuracaoStatus === 'pendente_assinatura') return { icon: '✍️', label: 'Assinatura Pendente', color: 'bg-indigo-50 border-indigo-200 text-indigo-850' };
+      if (procuracaoStatus === 'pendente_digitalizacao') return { icon: '📑', label: 'Digitalização Pendente', color: 'bg-indigo-50 border-indigo-200 text-indigo-850' };
+      if (procuracaoStatus === 'pendente_upload') return { icon: '📤', label: 'Upload Pendente', color: 'bg-indigo-50 border-indigo-200 text-indigo-850' };
       return { icon: '⏳', label: 'Pendente', color: 'bg-gray-50 border-gray-200 text-gray-700' };
     }
     if (step === 'custas') {
       if (desejaRecolherCustas) {
         if (guiaCustasStatus === 'aprovado') return { icon: '✅', label: 'Custas Pagas', color: 'bg-emerald-50 border-emerald-200 text-emerald-800' };
         if (guiaCustasStatus === 'rejeitado') return { icon: '❌', label: 'Guia Rejeitada', color: 'bg-rose-50 border-rose-200 text-rose-800' };
-        return { icon: '⏳', label: 'Aguardando Guia', color: 'bg-amber-50 border-amber-200 text-amber-800' };
+        return { icon: '⏳', label: 'Aguardando Guia', color: 'bg-amber-50 border-amber-200 text-amber-805' };
       } else {
-        if (declaracaoPobrezaStatus === 'criada') return { icon: '✅', label: 'Dec. Criada', color: 'bg-emerald-50 border-emerald-200 text-emerald-800' };
+        if (declaracaoPobrezaStatus === 'concluido' || declaracaoPobrezaStatus === 'criada') return { icon: '✅', label: 'Dec. Criada', color: 'bg-emerald-50 border-emerald-200 text-emerald-800' };
         if (declaracaoPobrezaStatus === 'falha') return { icon: '❌', label: 'Falha Dec.', color: 'bg-rose-50 border-rose-200 text-rose-800' };
-        if (declaracaoPobrezaStatus === 'aguardando') return { icon: '⏳', label: 'Aguardando Automação', color: 'bg-amber-50 border-amber-200 text-amber-800' };
+        if (declaracaoPobrezaStatus === 'aguardando') return { icon: '⏳', label: 'Aguardando Automação', color: 'bg-amber-50 border-amber-200 text-amber-805' };
+        if (declaracaoPobrezaStatus === 'pendente_assinatura') return { icon: '✍️', label: 'Assinatura Pendente', color: 'bg-indigo-50 border-indigo-200 text-indigo-850' };
+        if (declaracaoPobrezaStatus === 'pendente_digitalizacao') return { icon: '📑', label: 'Digitalização Pendente', color: 'bg-indigo-50 border-indigo-200 text-indigo-850' };
+        if (declaracaoPobrezaStatus === 'pendente_upload') return { icon: '📤', label: 'Upload Pendente', color: 'bg-indigo-50 border-indigo-200 text-indigo-850' };
         return { icon: '⏳', label: 'Pendente', color: 'bg-gray-50 border-gray-200 text-gray-700' };
       }
     }
     if (step === 'contrato') {
-      if (contratoHonorariosStatus === 'criada') return { icon: '✅', label: 'Concluído', color: 'bg-emerald-50 border-emerald-200 text-emerald-800' };
+      if (contratoHonorariosStatus === 'concluido' || contratoHonorariosStatus === 'criada') return { icon: '✅', label: 'Concluído', color: 'bg-emerald-50 border-emerald-200 text-emerald-800' };
       if (contratoHonorariosStatus === 'falha') return { icon: '❌', label: 'Falha', color: 'bg-rose-50 border-rose-200 text-rose-800' };
-      if (contratoHonorariosStatus === 'aguardando') return { icon: '⏳', label: 'Aguardando Automação', color: 'bg-amber-50 border-amber-200 text-amber-800' };
+      if (contratoHonorariosStatus === 'aguardando') return { icon: '⏳', label: 'Aguardando Automação', color: 'bg-amber-50 border-amber-200 text-amber-805' };
+      if (contratoHonorariosStatus === 'pendente_assinatura') return { icon: '✍️', label: 'Assinatura Pendente', color: 'bg-indigo-50 border-indigo-200 text-indigo-850' };
+      if (contratoHonorariosStatus === 'pendente_digitalizacao') return { icon: '📑', label: 'Digitalização Pendente', color: 'bg-indigo-50 border-indigo-200 text-indigo-850' };
+      if (contratoHonorariosStatus === 'pendente_upload') return { icon: '📤', label: 'Upload Pendente', color: 'bg-indigo-50 border-indigo-200 text-indigo-850' };
       return { icon: '⏳', label: 'Pendente', color: 'bg-gray-50 border-gray-200 text-gray-700' };
     }
     if (step === 'checklist') {
-      if (checklistProvasGoogleDocsStatus === 'criada') return { icon: '✅', label: 'Gerado Docs', color: 'bg-emerald-50 border-emerald-200 text-emerald-800' };
+      if (checklistProvasGoogleDocsStatus === 'concluido' || checklistProvasGoogleDocsStatus === 'criada') return { icon: '✅', label: 'Gerado Docs', color: 'bg-emerald-50 border-emerald-200 text-emerald-800' };
       if (checklistProvasGoogleDocsStatus === 'falha') return { icon: '❌', label: 'Falha', color: 'bg-rose-50 border-rose-200 text-rose-800' };
-      if (checklistProvasGoogleDocsStatus === 'aguardando') return { icon: '⏳', label: 'Aguardando Automação', color: 'bg-amber-50 border-amber-200 text-amber-800' };
-      return { icon: '⏳', label: 'Não Criado', color: 'bg-gray-50 border-gray-200 text-gray-700' };
+      if (checklistProvasGoogleDocsStatus === 'aguardando') return { icon: '⏳', label: 'Aguardando Automação', color: 'bg-amber-50 border-amber-200 text-amber-805' };
+      return { icon: '⏳', label: 'Não Criado', color: 'bg-gray-50 border-gray-200 text-gray-750' };
+    }
+    if (step === 'auditoria') {
+      const keys = Object.keys(auditData);
+      if (keys.length === 0) return { icon: '⏳', label: 'Não Iniciado', color: 'bg-gray-50 border-gray-200 text-gray-500' };
+      const total = keys.length;
+      const completed = keys.filter(k => auditData[k]?.delivered && auditData[k]?.digitized && auditData[k]?.uploaded).length;
+      if (completed === total) return { icon: '✅', label: 'Auditado', color: 'bg-emerald-50 border-emerald-200 text-emerald-800' };
+      return { icon: '🎨', label: `${completed}/${total} Auditados`, color: 'bg-amber-50 border-amber-200 text-amber-800' };
     }
     return { icon: '⏳', label: 'Pendente', color: 'bg-gray-50 border-gray-200 text-gray-700' };
   };
@@ -625,9 +753,8 @@ export default function SolicitacoesProvas() {
             
             {/* LEFT AREA: NAVIGATION TABS AND OVERVIEW CHECKLIST GENERAL BACKGROUND */}
             <div className="xl:col-span-4 space-y-4">
-              
               <div className="bg-white border border-gray-150 rounded-3xl p-4 space-y-2 shadow-xs">
-                <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 font-mono block">Estrutura Visual de 4 Etapas</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 font-mono block">Estrutura de 5 Etapas</span>
                 
                 <div className="flex flex-col gap-1.5">
                   <button
@@ -676,7 +803,7 @@ export default function SolicitacoesProvas() {
                       activeStepTab === 'checklist_provas' ? 'bg-indigo-600 text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
                     }`}
                   >
-                    <span>4. Checklist no Google Docs</span>
+                    <span>4. Solicitação de Provas</span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/20 text-inherit font-mono font-black uppercase">
                       {getStepVisualStatus('checklist').icon}
                     </span>
@@ -684,13 +811,13 @@ export default function SolicitacoesProvas() {
 
                   <button
                     type="button"
-                    onClick={() => setActiveStepTab('provas_customizadas')}
+                    onClick={() => setActiveStepTab('auditoria')}
                     className={`w-full text-left px-4 py-3 rounded-2xl text-xs font-bold flex justify-between items-center transition-all border-dashed border border-indigo-200 ${
-                      activeStepTab === 'provas_customizadas' ? 'bg-indigo-600 text-white' : 'bg-indigo-50/50 text-indigo-700 hover:bg-indigo-50'
+                      activeStepTab === 'auditoria' ? 'bg-indigo-600 text-white' : 'bg-indigo-50/50 text-indigo-700 hover:bg-indigo-50'
                     }`}
                   >
-                    <span>Fichário de Provas Fáticas ({customRequests.length})</span>
-                    <span className="text-[9px] px-1.5 py-0.5 bg-indigo-200 text-indigo-900 rounded font-mono font-black">EXTRA</span>
+                    <span>5. Auditoria de Provas</span>
+                    <span className="text-[9px] px-1.5 py-0.5 bg-indigo-200 text-indigo-900 rounded font-mono font-black">AUDIT</span>
                   </button>
                 </div>
               </div>
@@ -699,39 +826,42 @@ export default function SolicitacoesProvas() {
               <div className="bg-white border border-gray-150 rounded-3xl p-5 shadow-xs space-y-3">
                 <h4 className="text-xs font-black uppercase tracking-wider text-gray-900 font-sans border-b border-gray-100 pb-2 flex items-center gap-1.5">
                   <FileCheck2 size={16} className="text-indigo-600" />
-                  <span>Resumo do Checklist Geral</span>
+                  <span>Resumo do Onboarding</span>
                 </h4>
 
                 <div className="space-y-2">
-                  {/* Item 1 */}
                   <div className="flex items-center justify-between text-xs font-semibold p-2 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
-                    <span className="text-gray-700">1. Procuração</span>
+                    <span className="text-gray-750">1. Procuração</span>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStepVisualStatus('procuracao').color}`}>
                       {getStepVisualStatus('procuracao').icon} {getStepVisualStatus('procuracao').label}
                     </span>
                   </div>
 
-                  {/* Item 2 */}
                   <div className="flex items-center justify-between text-xs font-semibold p-2 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
-                    <span className="text-gray-700">2. Custas / Declaração</span>
+                    <span className="text-gray-750">2. Custas / Declaração</span>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStepVisualStatus('custas').color}`}>
                       {getStepVisualStatus('custas').icon} {getStepVisualStatus('custas').label}
                     </span>
                   </div>
 
-                  {/* Item 3 */}
                   <div className="flex items-center justify-between text-xs font-semibold p-2 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
-                    <span className="text-gray-700">3. Contrato de Honorários</span>
+                    <span className="text-gray-750">3. Contrato de Honorários</span>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStepVisualStatus('contrato').color}`}>
                       {getStepVisualStatus('contrato').icon} {getStepVisualStatus('contrato').label}
                     </span>
                   </div>
 
-                  {/* Item 4 */}
                   <div className="flex items-center justify-between text-xs font-semibold p-2 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
-                    <span className="text-gray-700">4. Checklist de Provas</span>
+                    <span className="text-gray-750">4. Solicitação de Provas</span>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStepVisualStatus('checklist').color}`}>
                       {getStepVisualStatus('checklist').icon} {getStepVisualStatus('checklist').label}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs font-semibold p-2 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
+                    <span className="text-gray-750">5. Auditoria de Provas</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getStepVisualStatus('auditoria').color}`}>
+                      {getStepVisualStatus('auditoria').icon} {getStepVisualStatus('auditoria').label}
                     </span>
                   </div>
                 </div>
@@ -1116,373 +1246,496 @@ export default function SolicitacoesProvas() {
                 </div>
               )}
 
-              {/* STEP 4: CHECKLIST OF PROOFS IN GOOGLE DOCS AUTOMATION */}
+              {/* STEP 4: SOLICITACAO DE PROVAS WORKSPACE */}
               {activeStepTab === 'checklist_provas' && (
-                <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-sm space-y-5">
-                  <div className="flex items-start justify-between gap-4 pb-3 border-b border-gray-100">
+                <div className="space-y-6">
+                  <div className="flex items-start justify-between gap-4 pb-3 border-b border-gray-100 bg-white p-6 rounded-3xl border border-gray-150">
                     <div>
-                      <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-600 block">Etapa 4 de 4</span>
-                      <h3 className="text-base font-black text-gray-900">Documento de Checklist de Provas Solicitadas</h3>
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-600 block">Etapa 4 de 5</span>
+                      <h3 className="text-base font-black text-gray-900">Solicitação de Provas & Triagem de Documentação</h3>
                       <p className="text-xs text-gray-500 mt-1 font-medium leading-relaxed">
-                        Gera automaticamente um arquivo formatado no Google Docs dentro da pasta do cliente com o checklist atualizado de todas as provas solicitadas nesta tela.
+                        Defina prazos e formatos para que o cliente submeta os comprovantes fáticos fundamentais para o sucesso da petição.
                       </p>
                     </div>
                   </div>
 
-                  {/* DETAILS */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-3">
-                      <span className="text-[10px] font-bold uppercase text-gray-400 block font-mono">Acionar Automação</span>
-                      <button
-                        type="button"
-                        onClick={() => triggerAutomation('Checklist de Provas', 'aguardando')}
-                        className="w-full py-3 px-4 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-805 text-indigo-800 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <RefreshCw size={14} className="animate-spin text-indigo-600" style={{ animationDuration: '8s' }} />
-                        <span>Gerar Checklist de Provas (004)</span>
-                      </button>
-
-                      {/* SIMULATION CHOOSERS */}
-                      <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 space-y-2">
-                        <span className="text-[9px] font-mono uppercase text-gray-400 block">Provedor de Resposta (MOCK DE BACKEND)</span>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => triggerAutomation('Checklist de Provas', 'criada')}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] px-2.5 py-1.5 rounded-lg cursor-pointer transition-all flex-1"
-                          >
-                            Simular Sucesso
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => triggerAutomation('Checklist de Provas', 'falha')}
-                            className="bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] px-2.5 py-1.5 rounded-lg cursor-pointer transition-all flex-1"
-                          >
-                            Simular Falha
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2 text-xs">
-                      <div>
-                        <span className="block text-[10px] text-gray-400 uppercase font-bold font-mono">Status do Checklist</span>
-                        {checklistProvasGoogleDocsStatus === 'criada' ? (
-                          <span className="px-2 py-1 inline-block text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-250 rounded font-mono">Checklist Sincronizado</span>
-                        ) : (
-                          <span className="px-2 py-1 inline-block text-[10px] font-bold bg-amber-50 text-amber-805 border border-amber-250 rounded font-mono">Pendente de Atualização</span>
-                        )}
-                      </div>
-
-                      {checklistProvasUpdatedAt && (
-                        <div>
-                          <span className="block text-[10px] text-gray-400 uppercase font-bold font-mono">Última Sincronização</span>
-                          <span className="font-semibold text-gray-800">{new Date(checklistProvasUpdatedAt).toLocaleString('pt-BR')}</span>
-                        </div>
-                      )}
-
-                      <div>
-                        <span className="block text-[10px] text-gray-400 uppercase font-bold font-mono">Google Docs URL</span>
-                        {checklistProvasGoogleDocsUrl ? (
-                          <a href={checklistProvasGoogleDocsUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 font-bold hover:underline break-all block p-2 bg-indigo-50/50 rounded-lg">
-                            {checklistProvasGoogleDocsUrl}
-                          </a>
-                        ) : (
-                          <span className="text-gray-400 italic block">Checklist pendente de compilação</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* LIST ALL EVIDENCE REQUESTED TO BE EXPORTED */}
-                  <div className="p-4 bg-gray-50 rounded-2xl space-y-3.5 border border-gray-150">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 font-mono block">Provas a exportar no Google Docs ({customRequests.length})</span>
+                  <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
                     
-                    {customRequests.length === 0 ? (
-                      <p className="text-xs text-gray-400 leading-normal italic">Nenhuma prova fática adicional requisitada até o momento.</p>
-                    ) : (
-                      <div className="divide-y divide-gray-200">
-                        {customRequests.map((req, idx) => (
-                          <div key={req.id} className="py-2 flex justify-between items-center text-xs">
-                            <div>
-                              <span className="font-bold text-gray-800">{idx + 1}. {req.title}</span>
-                              <p className="text-[11px] text-gray-400 font-medium truncate max-w-[450px]">{req.description}</p>
+                    {/* LEFT COLUMN: GUIDELINES AND REQUESTS */}
+                    <div className="xl:col-span-7 space-y-6">
+                      
+                      {/* 1. GOOGLE DRIVE DIRECTORY LINK STATUS */}
+                      <div className="bg-white border border-gray-150 rounded-3xl p-5 shadow-xs space-y-3">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 font-mono block">Pasta Operacional Google Drive</span>
+                        {hasDriveFolder ? (
+                          <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center justify-between gap-3 text-xs">
+                            <div className="flex items-center gap-2 text-emerald-950 font-bold">
+                              <HardDrive className="text-emerald-500 animate-pulse" size={16} />
+                              <span>Diretório Conectado Ativo</span>
                             </div>
-                            <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase font-mono bg-indigo-50 text-indigo-700 border border-indigo-200">
-                              {req.status}
-                            </span>
+                            <a
+                              href={driveFolderUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 bg-emerald-600 font-extrabold text-[10px] text-white rounded-lg hover:bg-emerald-700 transition"
+                            >
+                              Abrir Pasta GDrive
+                            </a>
                           </div>
-                        ))}
+                        ) : (
+                          <div className="p-4 bg-amber-50 border border-amber-200 text-amber-950 rounded-2xl text-xs space-y-2 font-bold shadow-xs">
+                            <div className="flex items-center gap-2">
+                              <AlertTriangle className="text-amber-500 animate-pulse" size={16} />
+                              <span className="font-extrabold uppercase tracking-tight text-[11px]">Pasta Google Drive Ausente</span>
+                            </div>
+                            <p className="text-[11px] text-amber-700 font-semibold leading-relaxed">
+                              Pasta Google Drive do cliente ainda não configurada no cadastro. Crie o diretório remoto antes de disparar as automações de documentos.
+                            </p>
+                          </div>
+                        )}
                       </div>
-                    )}
+
+                      {/* 2. PF/PJ CLIENT MANDATORY DOCUMENTS CHECKLIST */}
+                      <div className="bg-white border border-gray-150 rounded-3xl p-5 shadow-xs space-y-4">
+                        <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 font-mono block">Documentação Mínima Mandatória</span>
+                          <span className="text-[9px] px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full font-black border border-indigo-150 uppercase">
+                            Regime {client?.type || (client?.pjDadosEmpresa ? 'PJ' : 'PF')}
+                          </span>
+                        </div>
+
+                        {/* RENDER DYNAMIC COMPLIANCE CHECKS */}
+                        <div className="space-y-4">
+                          {/* Office Automated Docs checklist items */}
+                          <div>
+                            <span className="text-[9px] uppercase font-black tracking-widest text-indigo-600 block mb-2 font-mono">I. Documentos Gerados no Escritório</span>
+                            <div className="space-y-2 text-xs font-semibold text-gray-750">
+                              <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 border border-transparent">
+                                <div className="flex items-center gap-2">
+                                  <CheckCircle className={procuracaoStatus === 'criada' ? 'text-emerald-500' : 'text-gray-300'} size={15} />
+                                  <span>Doc. 01 - Procuração Ad Judicia</span>
+                                </div>
+                                <span className="text-[9px] font-bold text-gray-405">{procuracaoStatus === 'criada' ? 'Gerada' : 'Pendente'}</span>
+                              </div>
+
+                              <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 border border-transparent">
+                                <div className="flex items-center gap-2">
+                                  <CheckCircle className={(desejaRecolherCustas ? guiaCustasStatus === 'aprovado' : declaracaoPobrezaStatus === 'criada') ? 'text-emerald-500' : 'text-gray-300'} size={15} />
+                                  <span>Doc. 02 - {desejaRecolherCustas ? 'Alerta de Guia de Custas' : 'Declaração de Pobreza'}</span>
+                                </div>
+                                <span className="text-[9px] font-bold text-gray-405">
+                                  {desejaRecolherCustas ? (guiaCustasStatus === 'aprovado' ? 'Paga' : 'Pendente') : (declaracaoPobrezaStatus === 'criada' ? 'Gerada' : 'Pendente')}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 border border-transparent">
+                                <div className="flex items-center gap-2">
+                                  <CheckCircle className={contratoHonorariosStatus === 'criada' ? 'text-emerald-500' : 'text-gray-300'} size={15} />
+                                  <span className="font-bold text-gray-900 font-mono tracking-tight text-xs">Doc. $$$ - Contrato de Honorários</span>
+                                </div>
+                                <span className="text-[9px] font-bold text-gray-405">{contratoHonorariosStatus === 'criada' ? 'Gerado' : 'Pendente'}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Client Mandatory physical docs checklist items */}
+                          <div>
+                            <span className="text-[9px] uppercase font-black tracking-widest text-indigo-600 block mb-2 font-mono">II. Documentos de Identificação do Cliente</span>
+                            <div className="space-y-2 text-xs font-semibold text-gray-750">
+                              {!(client?.type === 'PJ' || !!client?.pjDadosEmpresa) ? (
+                                <>
+                                  <div className="flex items-center gap-2.5 p-2 rounded-xl bg-gray-50 border border-transparent">
+                                    <FileCheck2 className="text-gray-450 text-indigo-500" size={15} />
+                                    <span>DOCUMENTO DE IDENTIFICAÇÃO (R.G., CNH, Carteira OAB/Similares) com CPF</span>
+                                  </div>
+                                  <div className="flex items-center gap-2.5 p-2 rounded-xl bg-gray-50 border border-transparent">
+                                    <FileCheck2 className="text-gray-450 text-indigo-500" size={15} />
+                                    <span>COMPROVANTE DE RESIDÊNCIA emitido nos últimos 90 dias (água, luz, telefone)</span>
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="flex items-center gap-2.5 p-2 rounded-xl bg-gray-50 border border-transparent">
+                                    <FileCheck2 className="text-gray-450 text-indigo-500" size={15} />
+                                    <span>CONTRATO SOCIAL / ESTATUTO SOCIAL devidamente registrado + alterações</span>
+                                  </div>
+                                  <div className="flex items-center gap-2.5 p-2 rounded-xl bg-gray-50 border border-transparent">
+                                    <FileCheck2 className="text-gray-450 text-indigo-500" size={15} />
+                                    <span>CARTÃO CNPJ ATIVO atualizado impresso da Receita Federal</span>
+                                  </div>
+                                  <div className="flex items-center gap-2.5 p-2 rounded-xl bg-gray-50 border border-transparent">
+                                    <FileCheck2 className="text-gray-450 text-indigo-500" size={15} />
+                                    <span>DOCUMENTO DE IDENTIFICAÇÃO DOS SÓCIOS ADMINISTRADORES</span>
+                                  </div>
+                                  <div className="flex items-center gap-2.5 p-2 rounded-xl bg-gray-50 border border-transparent">
+                                    <FileCheck2 className="text-gray-450 text-indigo-500" size={15} />
+                                    <span>COMPROVANTE DE ENDEREÇO COMERCIAL DA EMPRESA</span>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 3. CURRENT SCHEDULLED CUSTOM PROOFS */}
+                      <div className="bg-white border border-gray-150 rounded-3xl p-5 shadow-xs space-y-3">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-gray-500 font-mono block">Provas e Documentos Sob Agendamento ({customRequests.length})</span>
+                        {customRequests.length === 0 ? (
+                          <p className="text-xs text-gray-400 italic">Nenhum pedido de prova complementar agendado ainda.</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {customRequests.map((req, idx) => (
+                              <div key={req.id} className="p-3.5 bg-gray-50 border border-gray-150 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="px-1.5 py-0.5 font-bold font-mono text-[9px] bg-indigo-100 text-indigo-805 rounded uppercase">
+                                      {req.documentNumber || `Doc. ${String(idx + 3).padStart(2, '0')}`}
+                                    </span>
+                                    <span className="text-xs font-extrabold text-gray-900">{req.title}</span>
+                                  </div>
+                                  <p className="text-[11px] text-gray-500 font-semibold line-clamp-2 max-w-[400px]">{req.description}</p>
+                                  <div className="flex gap-2 text-[9px] font-bold text-gray-400 font-mono">
+                                    <span>Prazo: {req.dueDate ? new Date(req.dueDate + 'T12:00:00').toLocaleDateString('pt-BR') : 'Sem prazo'}</span>
+                                    <span>•</span>
+                                    <span className="uppercase text-indigo-600">{req.expectedFileTypes?.join(', ')}</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0 self-end sm:self-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditInit(req)}
+                                    className="p-1.5 bg-white border border-gray-200 hover:bg-gray-100 rounded-lg text-gray-600 cursor-pointer text-[10px] font-bold flex items-center gap-1"
+                                    title="Editar"
+                                  >
+                                    <Edit2 size={11} className="text-indigo-600" />
+                                    <span>Alt.</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleQuickStatusUpdate(req.id, 'arquivado')}
+                                    className="p-1.5 bg-white border border-gray-200 hover:bg-rose-50 rounded-lg text-rose-600 cursor-pointer"
+                                    title="Arquivar/Apagar"
+                                  >
+                                    <Archive size={11} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+
+                    {/* RIGHT COLUMN: ACTION SCHEDULER FORM */}
+                    <div className="xl:col-span-5">
+                      <form onSubmit={handleSubmitForm} className="bg-white border border-gray-150 rounded-3xl p-5 space-y-4 shadow-sm sticky top-4">
+                        
+                        {/* CALCULATED DOCUMENT NUMBER HEADER */}
+                        <div className="p-3 bg-indigo-50 border border-indigo-100 text-indigo-950 rounded-2xl text-center space-y-0.5">
+                          <span className="text-[9px] font-black uppercase text-indigo-600 tracking-wider font-mono block">Próximo Documento</span>
+                          <span className="text-sm font-black font-mono block text-indigo-900">
+                            {editingId ? `Editando: ${formDocNumber || 'Sem Doc'}` : (formDocNumber || 'Calculando...')}
+                          </span>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold uppercase text-gray-400 block font-mono">Título da Reclamação / Prova *</label>
+                          <input
+                            type="text"
+                            value={formTitle}
+                            onChange={(e) => setFormTitle(e.target.value)}
+                            placeholder="Ex: Contrato de Empréstimo sob Juros Abusivos"
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-indigo-500 rounded-xl text-xs font-semibold outline-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold uppercase text-gray-400 block font-mono">Identificador / Número do Documento *</label>
+                          <input
+                            type="text"
+                            value={formDocNumber}
+                            onChange={(e) => setFormDocNumber(e.target.value)}
+                            placeholder="Ex: Doc. 03"
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-indigo-500 rounded-xl text-xs font-semibold outline-none font-mono"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold uppercase text-gray-400 block font-mono">Instruções Técnicas e Orientação *</label>
+                          <textarea
+                            rows={3}
+                            value={formDesc}
+                            onChange={(e) => setFormDesc(e.target.value)}
+                            placeholder="Ex: Baixe o arquivo PDF completo direto do internet banking com os juros..."
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-indigo-500 rounded-xl text-xs font-semibold outline-none resize-none leading-relaxed"
+                          />
+                        </div>
+
+                        {/* DEADLINE WITH 7 DAYS CHECKBOX INTAKE */}
+                        <div className="p-3 bg-gray-50 rounded-2xl border border-gray-150 space-y-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold uppercase text-gray-400 block font-mono">Prazo limite</label>
+                            <input
+                              type="date"
+                              disabled={useDefaultDeadline}
+                              value={formDueDate}
+                              onChange={(e) => setFormDueDate(e.target.value)}
+                              className={`w-full px-3 py-1.5 border border-gray-200 rounded-xl text-xs font-semibold outline-none ${useDefaultDeadline ? 'bg-gray-150 text-gray-500' : 'bg-white text-gray-800'}`}
+                            />
+                          </div>
+
+                          <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-gray-700">
+                            <input
+                              type="checkbox"
+                              checked={useDefaultDeadline}
+                              onChange={(e) => setUseDefaultDeadline(e.target.checked)}
+                              className="rounded border-gray-300 text-indigo-600 focus:ring-0"
+                            />
+                            <span>Usar prazo padrão de 7 dias</span>
+                          </label>
+                        </div>
+
+                        {/* ALLOW UPLOAD CONTROL */}
+                        <div className="flex items-center justify-between p-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-semibold text-gray-750">
+                          <span>Permitir upload no portal do cliente?</span>
+                          <input
+                            type="checkbox"
+                            checked={formAllowUpload}
+                            onChange={(e) => setFormAllowUpload(e.target.checked)}
+                            className="rounded border-gray-300 text-indigo-600 focus:ring-0 cursor-pointer"
+                          />
+                        </div>
+
+                        {/* FORMATS WITH REMOVAL OF MAXFILES */}
+                        {formAllowUpload && (
+                          <div className="p-3 bg-gray-50 border border-gray-100 rounded-xl text-xs space-y-1.5 font-semibold text-gray-750">
+                            <span className="block text-[8px] uppercase tracking-wider text-gray-400 font-mono">Formatos Compatíveis (Max. 1 arquivo)</span>
+                            <div className="flex flex-col gap-1.5">
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" checked={typePdf} onChange={(e) => setTypePdf(e.target.checked)} className="rounded border-gray-300 text-indigo-600 focus:ring-0" />
+                                <span>PDF Padrão PJe</span>
+                              </label>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" checked={typeAudio} onChange={(e) => setTypeAudio(e.target.checked)} className="rounded border-gray-300 text-indigo-600 focus:ring-0" />
+                                <span>Mídia de Áudio compatível</span>
+                              </label>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" checked={typeVideo} onChange={(e) => setTypeVideo(e.target.checked)} className="rounded border-gray-300 text-indigo-600 focus:ring-0" />
+                                <span>Mídia de Vídeo compatível</span>
+                              </label>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between p-2.5 bg-gray-50 border border-gray-100 rounded-xl text-xs font-semibold text-gray-750">
+                          <span>Visível no portal externo?</span>
+                          <input
+                            type="checkbox"
+                            checked={formVisible}
+                            onChange={(e) => setFormVisible(e.target.checked)}
+                            className="rounded border-gray-300 text-indigo-600 focus:ring-0 cursor-pointer"
+                          />
+                        </div>
+
+                        {editingId && (
+                          <div className="p-3 bg-indigo-50/20 border border-indigo-150 rounded-xl space-y-2 text-xs">
+                            <span className="text-[9px] font-black uppercase text-indigo-700 block font-mono">Dados da Auditoria Técnica</span>
+                            <div className="space-y-1">
+                              <label className="block text-gray-500 text-[10px]">Resultado / Status</label>
+                              <select value={formStatus} onChange={(e) => setFormStatus(e.target.value as any)} className="w-full p-1 border rounded bg-white font-semibold">
+                                <option value="pendente">Pendente</option>
+                                <option value="enviado">Submetido</option>
+                                <option value="em_analise">Em Análise</option>
+                                <option value="aprovado">Aprovado</option>
+                                <option value="rejeitado">Rejeitado</option>
+                                <option value="complemento_solicitado">Requer Complemento</option>
+                                <option value="arquivado">Arquivado</option>
+                              </select>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="block text-gray-500 text-[10px]">Feedback Técnico / Justificativa</label>
+                              <textarea value={formAnalysisNotes} onChange={(e) => setFormAnalysisNotes(e.target.value)} className="w-full p-2 border rounded bg-white text-xs" rows={2} />
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex gap-2">
+                          {editingId && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingId(null);
+                                setFormTitle('');
+                                setFormDesc('');
+                                setFormDocNumber('');
+                              }}
+                              className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-750 text-xs font-bold rounded-xl flex-1 border border-gray-250 cursor-pointer"
+                            >
+                              Cancelar
+                            </button>
+                          )}
+                          <button
+                            type="submit"
+                            disabled={saving}
+                            className="flex-1 py-2.5 bg-gray-950 hover:bg-black text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                          >
+                            {saving ? <Loader2 size={13} className="animate-spin" /> : <span>{editingId ? 'Salvar Comprovante' : 'Requisitar Prova'}</span>}
+                          </button>
+                        </div>
+
+                      </form>
+                    </div>
+
                   </div>
                 </div>
               )}
 
-              {/* STEP 5: PROVAS CUSTOMIZADAS EXTRA MANAGER */}
-              {activeStepTab === 'provas_customizadas' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-                    
-                    {/* LEFT AREA: REQS TABLE */}
-                    <div className="md:col-span-7 space-y-4">
-                      
-                      <div className="flex justify-between items-center bg-white border border-gray-150 p-4 rounded-3xl">
-                        <div>
-                          <h4 className="text-xs font-black uppercase text-gray-800 font-mono block">Provas Customizadas Cadastradas ({customRequests.length})</h4>
-                          <p className="text-[10px] text-gray-400 font-medium mt-0.5">Clique em editar para gerenciar formatos e visibilidade técnica.</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setRefreshToggle(p => p + 1)}
-                          className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-900 transition-colors cursor-pointer"
-                        >
-                          <RefreshCw size={14} className={loadingRequests ? 'animate-spin' : ''} />
-                        </button>
-                      </div>
+              {/* STEP 5: AUDITORIA DE PROVAS ENTREGUES */}
+              {activeStepTab === 'auditoria' && (
+                <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-sm space-y-6">
+                  
+                  <div className="flex items-start justify-between gap-4 pb-3 border-b border-gray-100">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-600 block">Etapa 5 de 5 • Concorrência Auditoria</span>
+                      <h3 className="text-base font-black text-gray-900">Auditoria Física, Digitalização e Upload de Prontuários</h3>
+                      <p className="text-xs text-gray-500 mt-1 font-medium leading-relaxed font-semibold">
+                        Aproveite este painel de compliance para acompanhar a recepção dos originais, conferência técnica no tribunal de arquivos digitalizados, e publicação no Drive do cliente.
+                      </p>
+                    </div>
+                  </div>
 
-                      {customRequests.length === 0 ? (
-                        <div className="p-10 border-2 border-dashed border-gray-150 rounded-3xl text-center text-gray-400 flex flex-col items-center justify-center bg-white/50">
-                          <FolderOpen size={32} className="text-gray-300 mb-2" />
-                          <span className="text-xs font-semibold">Fichário vazio</span>
-                          <p className="text-[10px] text-gray-400 max-w-xs mt-1">Requisite comprovantes fáticos adicionais do cliente no formulário ao lado.</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {customRequests.map((req) => (
-                            <div key={req.id} className={`p-4 bg-white border rounded-2xl space-y-3 transition-all ${editingId === req.id ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-gray-150 hover:border-gray-200'}`}>
-                              <div className="flex justify-between items-start gap-4">
-                                <div className="space-y-1">
-                                  <h5 className="text-xs font-extrabold text-gray-900">{req.title}</h5>
-                                  <p className="text-[11px] text-gray-500 max-w-sm leading-relaxed">{req.description}</p>
-                                  <div className="flex flex-wrap gap-1 pt-1">
-                                    {req.expectedFileTypes?.map((fmt) => (
-                                      <span key={fmt} className="text-[8px] font-black uppercase text-blue-850 text-blue-800 bg-blue-50 px-1 py-0.5 rounded border border-blue-100 font-mono">
-                                        {fmt}
-                                      </span>
-                                    ))}
-                                    <span className="text-[8px] font-black text-gray-500 bg-gray-50 px-1 py-0.5 rounded border border-gray-100 font-mono">
-                                      {req.maxFiles} arq. max
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="flex flex-col items-end gap-1 shrink-0">
-                                  <RequestStatusBadge status={req.status} />
-                                  <RequestVisibilityBadge visible={req.visibleToClient} />
-                                </div>
-                              </div>
+                  {/* METRICS HEADERS */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-1.5 text-center">
+                      <span className="text-[9px] font-mono text-gray-400 font-extrabold uppercase">Total no Prontuário</span>
+                      <span className="text-base font-black text-indigo-950 block">{3 + customRequests.length} docs</span>
+                    </div>
+                    <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 space-y-1.5 text-center">
+                      <span className="text-[9px] font-mono text-emerald-600 font-extrabold uppercase">Auditados & Seguros</span>
+                      <span className="text-base font-black text-emerald-950 block">
+                        {
+                          [
+                            auditData['procuracao'],
+                            auditData['custas_processuais'],
+                            auditData['contrato_honorarios'],
+                            ...(customRequests.map(r => auditData[r.id]))
+                          ].filter(v => v?.delivered && v?.digitized && v?.uploaded).length
+                        } docs
+                      </span>
+                    </div>
+                    <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 space-y-1.5 text-center">
+                      <span className="text-[9px] font-mono text-amber-600 font-extrabold uppercase">Diligências Pendentes</span>
+                      <span className="text-base font-black text-amber-955 block">
+                        {
+                          (3 + customRequests.length) - [
+                            auditData['procuracao'],
+                            auditData['custas_processuais'],
+                            auditData['contrato_honorarios'],
+                            ...(customRequests.map(r => auditData[r.id]))
+                          ].filter(v => v?.delivered && v?.digitized && v?.uploaded).length
+                        } pendências
+                      </span>
+                    </div>
+                  </div>
 
-                              {req.clientObservation && (
-                                <div className="p-2.5 bg-gray-50 border border-gray-105 rounded-xl text-[11px] font-semibold text-gray-700">
-                                  <span className="text-[8px] font-black text-gray-400 uppercase tracking-wider block mb-0.5">Resp. Cliente:</span>
-                                  “{req.clientObservation}”
-                                </div>
-                              )}
-
-                              {(req.bossAnalysisStatus || req.bossAnalysisNotes) && (
-                                <div className="p-2.5 bg-indigo-50/20 border border-indigo-100/30 rounded-xl text-[11px] space-y-0.5">
-                                  <span className="text-[8px] font-black text-indigo-700 uppercase tracking-wider">Anotações da Auditoria</span>
-                                  {req.bossAnalysisNotes && <p className="italic text-gray-600">“{req.bossAnalysisNotes}”</p>}
-                                </div>
-                              )}
-
-                              <div className="flex items-center justify-between pt-2.5 border-t border-gray-100 gap-2">
-                                <span className="text-[9px] text-gray-405 font-mono">
-                                  Criado em: {new Date(req.createdAt).toLocaleDateString('pt-BR')}
-                                </span>
-
-                                <div className="flex items-center gap-1.5 text-[10px] font-bold">
-                                  {req.status !== 'aprovado' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleQuickStatusUpdate(req.id, 'aprovado', 'aprovado')}
-                                      className="px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-transparent rounded-lg cursor-pointer transition-colors"
-                                    >
-                                      Aprovar
-                                    </button>
-                                  )}
-                                  {req.status !== 'rejeitado' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleQuickStatusUpdate(req.id, 'rejeitado', 'rejeitado')}
-                                      className="px-2 py-0.5 bg-red-50 hover:bg-red-100 text-red-800 border border-transparent rounded-lg cursor-pointer transition-colors"
-                                    >
-                                      Rejeitar
-                                    </button>
-                                  )}
-                                  {req.status !== 'arquivado' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleQuickStatusUpdate(req.id, 'arquivado')}
-                                      className="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-transparent rounded-lg cursor-pointer transition-colors flex items-center gap-0.5"
-                                    >
-                                      <Archive size={9} />
-                                      <span>Arquivar</span>
-                                    </button>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleEditInit(req)}
-                                    className="p-1 hover:bg-gray-150 border border-gray-200 rounded text-gray-600 cursor-pointer"
-                                    title="Editar"
-                                  >
-                                    <Edit2 size={11} />
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                  {/* MAIN AUDIT INTERACTIVE GRID TABLE */}
+                  <div className="border border-gray-150 rounded-2xl overflow-hidden bg-white">
+                    <div className="grid grid-cols-12 bg-gray-50 p-3.5 border-b border-gray-150 text-[10px] font-black uppercase text-gray-400 font-mono tracking-wider gap-2">
+                      <span className="col-span-2">ID / Ref</span>
+                      <span className="col-span-4">Descrição do Comprovante</span>
+                      <span className="col-span-2 text-center">I. Coletado</span>
+                      <span className="col-span-2 text-center">II. Escaneado</span>
+                      <span className="col-span-2 text-center">III. Upload</span>
                     </div>
 
-                    {/* RIGHT AREA: FORM EDITOR INTAKE */}
-                    <form onSubmit={handleSubmitForm} className="md:col-span-5 bg-white border border-gray-150 rounded-3xl p-5 space-y-3.5 shadow-xs">
-                      <div className="flex justify-between items-center pb-2 border-b border-gray-100">
-                        <h4 className="text-xs font-black uppercase text-gray-600 tracking-wider font-mono">
-                          {editingId ? 'Editar Prova' : 'Agendar Pedido de Prova'}
-                        </h4>
-                        {editingId && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingId(null);
-                              setFormTitle('');
-                              setFormDesc('');
-                              setFormDueDate('');
-                            }}
-                            className="text-[9px] font-extrabold uppercase bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded"
-                          >
-                            Novo
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-gray-400 block font-mono">Título da Reclamação / Prova *</label>
-                        <input
-                          type="text"
-                          value={formTitle}
-                          onChange={(e) => setFormTitle(e.target.value)}
-                          placeholder="Ex: Extrato bancário de empréstimos"
-                          className="w-full px-3 py-2 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold outline-none"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold uppercase text-gray-400 block font-mono">Instruções Técnicas e Orientação *</label>
-                        <textarea
-                          rows={3}
-                          value={formDesc}
-                          onChange={(e) => setFormDesc(e.target.value)}
-                          placeholder="Ex: Escaneie o arquivo completo retroativo a 3 meses..."
-                          className="w-full px-3 py-2 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold outline-none resize-none"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold uppercase text-gray-400 block font-mono">Prazo limite</label>
-                          <input
-                            type="date"
-                            value={formDueDate}
-                            onChange={(e) => setFormDueDate(e.target.value)}
-                            className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 focus:bg-white text-xs font-semibold rounded-xl outline-none"
-                          />
+                    <div className="divide-y divide-gray-150 font-sans text-xs">
+                      
+                      {/* 1. Procuração */}
+                      <div className="grid grid-cols-12 p-3.5 items-center gap-2 hover:bg-gray-50/50">
+                        <span className="col-span-2 font-mono font-bold text-gray-450">Doc. 01</span>
+                        <div className="col-span-4 space-y-0.5">
+                          <span className="font-extrabold text-gray-900 block">Procuração Jurídica Ad Judicia</span>
+                          <span className="text-[9px] font-bold text-indigo-600 block uppercase">{procuracaoStatus}</span>
                         </div>
-
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold uppercase text-gray-400 block font-mono">Max arquivos</label>
-                          <input
-                            type="number"
-                            min={1}
-                            max={20}
-                            value={formMaxFiles}
-                            onChange={(e) => setFormMaxFiles(Number(e.target.value) || 1)}
-                            className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 focus:bg-white text-xs font-bold rounded-xl outline-none font-mono"
-                          />
+                        <div className="col-span-2 flex justify-center">
+                          <input type="checkbox" checked={auditData['procuracao']?.delivered || false} onChange={() => handleToggleAudit('procuracao', 'delivered')} className="rounded border-gray-300 text-emerald-600 w-4 h-4 cursor-pointer focus:ring-0" />
+                        </div>
+                        <div className="col-span-2 flex justify-center">
+                          <input type="checkbox" checked={auditData['procuracao']?.digitized || false} onChange={() => handleToggleAudit('procuracao', 'digitized')} className="rounded border-gray-300 text-emerald-600 w-4 h-4 cursor-pointer focus:ring-0" />
+                        </div>
+                        <div className="col-span-2 flex justify-center">
+                          <input type="checkbox" checked={auditData['procuracao']?.uploaded || false} onChange={() => handleToggleAudit('procuracao', 'uploaded')} className="rounded border-gray-300 text-emerald-600 w-4 h-4 cursor-pointer focus:ring-0" />
                         </div>
                       </div>
 
-                      {/* ALLOW UPLOAD SWITCH */}
-                      <div className="flex items-center justify-between p-2.5 bg-gray-50 border border-gray-100 rounded-xl text-[11px] font-semibold">
-                        <div>
-                          <span className="block text-gray-700">Permitir upload no portal?</span>
+                      {/* 2. Custas */}
+                      <div className="grid grid-cols-12 p-3.5 items-center gap-2 hover:bg-gray-50/50">
+                        <span className="col-span-2 font-mono font-bold text-gray-450">Doc. 02</span>
+                        <div className="col-span-4 space-y-0.5">
+                          <span className="font-extrabold text-gray-900 block">{desejaRecolherCustas ? 'Guia de Custas Judiciais' : 'Declaração de Pobreza / Hipossuficiência'}</span>
+                          <span className="text-[9px] font-bold text-indigo-600 block uppercase">{desejaRecolherCustas ? guiaCustasStatus : declaracaoPobrezaStatus}</span>
                         </div>
-                        <input
-                          type="checkbox"
-                          checked={formAllowUpload}
-                          onChange={(e) => setFormAllowUpload(e.target.checked)}
-                          className="rounded border-gray-300 text-indigo-600 focus:ring-0 cursor-pointer"
-                        />
+                        <div className="col-span-2 flex justify-center">
+                          <input type="checkbox" checked={auditData['custas_processuais']?.delivered || false} onChange={() => handleToggleAudit('custas_processuais', 'delivered')} className="rounded border-gray-300 text-emerald-600 w-4 h-4 cursor-pointer focus:ring-0" />
+                        </div>
+                        <div className="col-span-2 flex justify-center">
+                          <input type="checkbox" checked={auditData['custas_processuais']?.digitized || false} onChange={() => handleToggleAudit('custas_processuais', 'digitized')} className="rounded border-gray-300 text-emerald-600 w-4 h-4 cursor-pointer focus:ring-0" />
+                        </div>
+                        <div className="col-span-2 flex justify-center">
+                          <input type="checkbox" checked={auditData['custas_processuais']?.uploaded || false} onChange={() => handleToggleAudit('custas_processuais', 'uploaded')} className="rounded border-gray-300 text-emerald-600 w-4 h-4 cursor-pointer focus:ring-0" />
+                        </div>
                       </div>
 
-                      {/* FORMAT CHECKBOXES */}
-                      {formAllowUpload && (
-                        <div className="p-3 bg-gray-50 border border-gray-100 rounded-xl text-[11px] space-y-1.5 font-semibold text-gray-750">
-                          <span className="block text-[8px] uppercase tracking-wider text-gray-400 font-mono">Formatos Compatíveis</span>
-                          <div className="flex flex-col gap-1.5">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input type="checkbox" checked={typePdf} onChange={(e) => setTypePdf(e.target.checked)} className="rounded border-gray-300 text-indigo-600" />
-                              <span>PDF Padrão PJe</span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input type="checkbox" checked={typeAudio} onChange={(e) => setTypeAudio(e.target.checked)} className="rounded border-gray-300 text-indigo-600" />
-                              <span>Mídia de Áudio</span>
-                            </label>
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <input type="checkbox" checked={typeVideo} onChange={(e) => setTypeVideo(e.target.checked)} className="rounded border-gray-300 text-indigo-600" />
-                              <span>Mídia de Vídeo</span>
-                            </label>
+                      {/* 3. Contrato de Honorarios (with strict dynamic $$$-notation visualization) */}
+                      <div className="grid grid-cols-12 p-3.5 items-center gap-2 hover:bg-gray-50/50">
+                        <span className="col-span-2 font-mono font-black text-gray-900 tracking-wider">Doc. $$$</span>
+                        <div className="col-span-4 space-y-0.5">
+                          <span className="font-extrabold text-gray-900 block">Contrato de Prestação de Serviços</span>
+                          <span className="text-[9px] font-bold text-indigo-600 block uppercase">{contratoHonorariosStatus}</span>
+                        </div>
+                        <div className="col-span-2 flex justify-center">
+                          <input type="checkbox" checked={auditData['contrato_honorarios']?.delivered || false} onChange={() => handleToggleAudit('contrato_honorarios', 'delivered')} className="rounded border-gray-300 text-emerald-600 w-4 h-4 cursor-pointer focus:ring-0" />
+                        </div>
+                        <div className="col-span-2 flex justify-center">
+                          <input type="checkbox" checked={auditData['contrato_honorarios']?.digitized || false} onChange={() => handleToggleAudit('contrato_honorarios', 'digitized')} className="rounded border-gray-300 text-emerald-600 w-4 h-4 cursor-pointer focus:ring-0" />
+                        </div>
+                        <div className="col-span-2 flex justify-center">
+                          <input type="checkbox" checked={auditData['contrato_honorarios']?.uploaded || false} onChange={() => handleToggleAudit('contrato_honorarios', 'uploaded')} className="rounded border-gray-300 text-emerald-600 w-4 h-4 cursor-pointer focus:ring-0" />
+                        </div>
+                      </div>
+
+                      {/* 4. Scheduled Evidence Proof collection */}
+                      {customRequests.map((req, idx) => (
+                        <div key={req.id} className="grid grid-cols-12 p-3.5 items-center gap-2 hover:bg-gray-50/50">
+                          <span className="col-span-2 font-mono font-bold text-gray-450">{req.documentNumber || `Doc. ${String(idx + 3).padStart(2, '0')}`}</span>
+                          <div className="col-span-4 space-y-0.5">
+                            <span className="font-extrabold text-gray-900 block truncate">{req.title}</span>
+                            <span className="text-[9px] font-bold text-indigo-605 block uppercase text-indigo-650">{req.status}</span>
+                          </div>
+                          <div className="col-span-2 flex justify-center">
+                            <input type="checkbox" checked={auditData[req.id]?.delivered || false} onChange={() => handleToggleAudit(req.id, 'delivered')} className="rounded border-gray-300 text-emerald-600 w-4 h-4 cursor-pointer focus:ring-0" />
+                          </div>
+                          <div className="col-span-2 flex justify-center">
+                            <input type="checkbox" checked={auditData[req.id]?.digitized || false} onChange={() => handleToggleAudit(req.id, 'digitized')} className="rounded border-gray-300 text-emerald-600 w-4 h-4 cursor-pointer focus:ring-0" />
+                          </div>
+                          <div className="col-span-2 flex justify-center">
+                            <input type="checkbox" checked={auditData[req.id]?.uploaded || false} onChange={() => handleToggleAudit(req.id, 'uploaded')} className="rounded border-gray-300 text-emerald-600 w-4 h-4 cursor-pointer focus:ring-0" />
                           </div>
                         </div>
-                      )}
+                      ))}
 
-                      {/* VISIBLE SWITCH */}
-                      <div className="flex items-center justify-between p-2.5 bg-gray-50 border border-gray-100 rounded-xl text-[11px] font-semibold">
-                        <div>
-                          <span className="block text-gray-700">Visível no portal do cliente?</span>
-                        </div>
-                        <input
-                          type="checkbox"
-                          checked={formVisible}
-                          onChange={(e) => setFormVisible(e.target.checked)}
-                          className="rounded border-gray-300 text-indigo-600 focus:ring-0 cursor-pointer"
-                        />
-                      </div>
-
-                      {editingId && (
-                        <div className="p-3 bg-indigo-50/20 border border-indigo-150 rounded-xl space-y-2 text-[11px]">
-                          <span className="text-[9px] font-black uppercase text-indigo-780 block font-mono">Dados da Auditoria Técnica</span>
-                          <div className="space-y-1">
-                            <label className="block text-gray-500 text-[10px]">Resultado / Status</label>
-                            <select value={formStatus} onChange={(e) => setFormStatus(e.target.value as any)} className="w-full p-1 border rounded bg-white font-semibold">
-                              <option value="pendente">Pendente</option>
-                              <option value="enviado">Submetido</option>
-                              <option value="em_analise">Em Análise</option>
-                              <option value="aprovado">Aprovado</option>
-                              <option value="rejeitado">Rejeitado</option>
-                              <option value="complemento_solicitado">Requer Complemento</option>
-                              <option value="arquivado">Arquivado</option>
-                            </select>
-                          </div>
-                          <div className="space-y-1">
-                            <label className="block text-gray-500 text-[10px]">Feedback Técnico / Justificativa</label>
-                            <textarea value={formAnalysisNotes} onChange={(e) => setFormAnalysisNotes(e.target.value)} className="w-full p-2 border rounded bg-white" rows={2} />
-                          </div>
-                        </div>
-                      )}
-
-                      <button
-                        type="submit"
-                        disabled={saving}
-                        className="w-full py-2.5 bg-gray-950 hover:bg-black text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-                      >
-                        {saving ? <Loader2 size={13} className="animate-spin" /> : <span>{editingId ? 'Salvar Alteração' : 'Criar Pedido de Prova'}</span>}
-                      </button>
-                    </form>
-
+                    </div>
                   </div>
+
+                  <div className="p-4 bg-indigo-50/50 rounded-2xl flex items-start gap-3.5 text-xs">
+                    <CheckCircle className="text-indigo-600 mt-0.5 shrink-0 animate-pulse" size={16} />
+                    <p className="leading-relaxed font-semibold text-gray-800">
+                      As alterações efetuadas nas caixas de auditoria acima são registradas <strong>imediatamente e de modo seguro</strong> no Firestore sob o nó <code>auditData</code> deste caso, garantindo integridade das métricas do escritório em tempo-real.
+                    </p>
+                  </div>
+
                 </div>
               )}
 
