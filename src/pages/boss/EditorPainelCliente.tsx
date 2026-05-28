@@ -15,6 +15,13 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { BossLayout } from '../../components/Layout';
+
+// Core dynamic layouts unified with Fluxo de Produção
+import { PFForm } from '../../modules/boss/components/forms/PFForm';
+import { PJForm } from '../../modules/boss/components/forms/PJForm';
+import { SocioForm } from '../../modules/boss/components/forms/SocioForm';
+import { AccessForm } from '../../modules/boss/components/forms/AccessForm';
+import { BankingForm } from '../../modules/boss/components/forms/BankingForm';
 import { 
   ArrowLeft, Save, ExternalLink, Shield, User, Briefcase, 
   Activity, ListTodo, Plus, Trash2, CheckCircle, Clock, DollarSign, 
@@ -118,7 +125,7 @@ export default function EditorPainelCliente() {
       const bancario = clientData.bancarioDadosBancarios || clientData.bancarioData || {};
       
       // Setup Form Data matching the fields structure
-      setFormData({
+      const initialFormData: any = {
         id: clientId,
         slug: clientData.slug || '',
         type: clientData.type || 'PF',
@@ -132,59 +139,94 @@ export default function EditorPainelCliente() {
         acesso_senha: access.acesso_senha || clientData.senhaVisivelPreview || '',
         acesso_statusAcesso: access.acesso_statusAcesso || 'ativo',
   
-        pf_nomeCompleto: pf.pf_nomeCompleto || '',
-        pf_cpf: pf.pf_cpf || '',
-        pf_rg: pf.pf_rg || '',
-        pf_dataNascimento: pf.pf_dataNascimento || pf.pf_nascimento || '',
-        pf_nacionalidade: pf.pf_nacionalidade || '',
-        pf_profissao: pf.pf_profissao || '',
-        pf_estadoCivil: pf.pf_estadoCivil || '',
-        pf_email: pf.pf_email || '',
-        pf_telefone: pf.pf_telefone || '',
-        pf_whatsapp: pf.pf_whatsapp || '',
-        pf_cep: pf.pf_cep || '',
-        pf_endereco: pf.pf_endereco || '',
-        pf_numero: pf.pf_numero || '',
-        pf_bairro: pf.pf_bairro || '',
-        pf_cidade: pf.pf_cidade || '',
-        pf_estado: pf.pf_estado || '',
-  
-        pj_razaoSocial: pj.pj_razaoSocial || '',
-        pj_nomeFantasia: pj.pj_nomeFantasia || '',
-        pj_cnpj: pj.pj_cnpj || '',
-        pj_telefoneEmpresa: pj.pj_telefoneEmpresa || '',
-        pj_whatsappEmpresa: pj.pj_whatsappEmpresa || '',
-        pj_cepEmpresa: pj.pj_cepEmpresa || '',
-        pj_enderecoEmpresa: pj.pj_enderecoEmpresa || '',
-        pj_bairroEmpresa: pj.pj_bairroEmpresa || '',
-        pj_cidadeEmpresa: pj.pj_cidadeEmpresa || '',
-        pj_estadoEmpresa: pj.pj_estadoEmpresa || '',
-  
-        socio_nomeCompleto: socio.socio_nomeCompleto || '',
-        socio_cpf: socio.socio_cpf || '',
-        socio_rg: socio.socio_rg || '',
-        socio_dataNascimento: socio.socio_dataNascimento || '',
-        socio_profissao: socio.socio_profissao || '',
-        socio_estadoCivil: socio.socio_estadoCivil || '',
-        socio_cep: socio.socio_cep || '',
-        socio_endereco: socio.socio_endereco || '',
-        socio_bairro: socio.socio_bairro || '',
-        socio_cidade: socio.socio_cidade || '',
-        socio_estado: socio.socio_estado || '',
-  
-        bancario_possuiDadosBancarios: bancario.bancario_possuiDadosBancarios || false,
-        bancario_tipoChavePix: bancario.bancario_tipoChavePix || '',
-        bancario_chavePix: bancario.bancario_chavePix || '',
-        bancario_bancoPix: bancario.bancario_bancoPix || '',
-        bancario_titularPix: bancario.bancario_titularPix || '',
-        bancario_banco: bancario.bancario_banco || '',
-        bancario_agencia: bancario.bancario_agencia || '',
-        bancario_conta: bancario.bancario_conta || '',
-        bancario_tipoConta: bancario.bancario_tipoConta || '',
-        bancario_titularConta: bancario.bancario_titularConta || '',
-        bancario_titularEhCliente: bancario.bancario_titularEhCliente || false,
-        bancario_usarCpfComoPix: bancario.bancario_usarCpfComoPix || false,
-  
+        ...pf,
+        ...pj,
+        ...socio,
+        ...bancario,
+      };
+
+      const defaults: any = {
+        pf_nomeCompleto: '',
+        pf_cpf: '',
+        pf_rg: '',
+        pf_dataNascimento: '',
+        pf_nacionalidade: '',
+        pf_profissao: '',
+        pf_estadoCivil: '',
+        pf_email: '',
+        pf_telefone: '',
+        pf_whatsapp: '',
+        pf_cep: '',
+        pf_endereco: '',
+        pf_numero: '',
+        pf_complemento: '',
+        pf_bairro: '',
+        pf_cidade: '',
+        pf_estado: '',
+        pf_instagram: '',
+        pf_facebook: '',
+        pf_tiktok: '',
+        
+        pj_razaoSocial: '',
+        pj_nomeFantasia: '',
+        pj_cnpj: '',
+        pj_telefoneEmpresa: '',
+        pj_whatsappEmpresa: '',
+        pj_cepEmpresa: '',
+        pj_enderecoEmpresa: '',
+        pj_numeroEmpresa: '',
+        pj_complementoEmpresa: '',
+        pj_bairroEmpresa: '',
+        pj_cidadeEmpresa: '',
+        pj_estadoEmpresa: '',
+        pj_instagramEmpresa: '',
+        pj_facebookEmpresa: '',
+        pj_tiktokEmpresa: '',
+        pj_emailEmpresa: '',
+
+        socio_nomeCompleto: '',
+        socio_cpf: '',
+        socio_rg: '',
+        socio_dataNascimento: '',
+        socio_profissao: '',
+        socio_estadoCivil: '',
+        socio_cep: '',
+        socio_endereco: '',
+        socio_numero: '',
+        socio_complemento: '',
+        socio_bairro: '',
+        socio_cidade: '',
+        socio_estado: '',
+        socio_instagram: '',
+        socio_facebook: '',
+        socio_tiktok: '',
+
+        bancario_possuiDadosBancarios: false,
+        bancario_tipoChavePix: '',
+        bancario_chavePix: '',
+        bancario_bancoPix: '',
+        bancario_titularPix: '',
+        bancario_banco: '',
+        bancario_agencia: '',
+        bancario_conta: '',
+        bancario_tipoConta: '',
+        bancario_titularConta: '',
+        bancario_titularEhCliente: false,
+        bancario_usarCpfComoPix: false
+      };
+
+      Object.keys(defaults).forEach(key => {
+        if (initialFormData[key] === undefined) {
+          initialFormData[key] = defaults[key];
+        }
+      });
+
+      if (!initialFormData.pf_dataNascimento && pf.pf_nascimento) {
+        initialFormData.pf_dataNascimento = pf.pf_nascimento;
+      }
+
+      setFormData({
+        ...initialFormData,
         showDashboard: clientData.showDashboard !== false,
         showCadastros: clientData.showCadastros !== false,
         showCasos: clientData.showCasos !== false,
@@ -1417,9 +1459,9 @@ export default function EditorPainelCliente() {
             {/* ----------------------------------------------- */}
             {activeTab === 'cadastro' && (
               <div className="space-y-6">
-                <div className="flex items-center justify-between border-b pb-3">
+                <div className="flex items-center justify-between border-b pb-3 text-xs">
                   <div>
-                    <h2 className="text-[18px] font-black text-gray-800 uppercase tracking-tight">Ficha Cadastral e Acesso de Login</h2>
+                    <h2 className="text-[18px] font-black text-gray-800 uppercase tracking-tight font-sans">Ficha Cadastral e Acesso de Login</h2>
                     <p className="text-xs text-gray-500">Edite as informações pessoais, dados comerciais, chaves Pix e credenciais de acesso do cliente.</p>
                   </div>
                   <button
@@ -1430,368 +1472,104 @@ export default function EditorPainelCliente() {
                   </button>
                 </div>
 
-                {/* Sub-block A: Configuração de Acesso (Crítico) */}
-                <div className="p-6 bg-white border border-gray-200 rounded-2xl shadow-2xs space-y-4">
-                  <div className="flex items-center gap-2 border-b pb-2">
-                    <Shield className="w-4 h-4 text-indigo-650" />
-                    <span className="text-xs font-black uppercase text-gray-800">1. Credenciais de Acesso e Direcionamento do Portal</span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
-                    <div>
-                      <label className="block text-gray-450 font-bold mb-1.5 uppercase tracking-wide">E-mail de Login no Portal</label>
-                      <input 
-                        type="email"
-                        value={formData.acesso_emailLogin}
-                        onChange={(e) => setFormData({...formData, acesso_emailLogin: e.target.value})}
-                        className="w-full p-2.5 bg-gray-50 border rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-bold text-gray-800 font-sans"
-                        placeholder="nome@giffoni.com"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-gray-450 font-bold mb-1.5 uppercase tracking-wide">Senha Pública do Portal</label>
-                      <input 
-                        type="text"
-                        value={formData.acesso_senha}
-                        onChange={(e) => setFormData({...formData, acesso_senha: e.target.value})}
-                        className="w-full p-2.5 bg-gray-50 border rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono font-bold text-indigo-800"
-                        placeholder="Senha"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-gray-450 font-bold mb-1.5 uppercase tracking-wide">Slug do Portal</label>
-                      <input 
-                        type="text"
-                        value={formData.slug}
-                        onChange={(e) => setFormData({...formData, slug: e.target.value})}
-                        className="w-full p-2.5 bg-gray-50 border rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
-                        placeholder="Ex: joao-silva"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-gray-450 font-bold mb-1.5 uppercase tracking-wide">Status do Acesso</label>
-                      <select
-                        value={formData.acesso_statusAcesso}
-                        onChange={(e) => setFormData({...formData, acesso_statusAcesso: e.target.value})}
-                        className="w-full p-2.5 bg-gray-50 border rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 font-bold text-gray-700"
-                      >
-                        <option value="ativo">Ativo - Acesso liberado</option>
-                        <option value="suspenso">Suspenso - Bloquear login</option>
-                        <option value="criado">Criado - Aguardando ativação</option>
-                      </select>
-                    </div>
-                  </div>
+                <div className="flex justify-end bg-gray-100 p-0.5 rounded-lg w-fit ms-auto mb-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData({...formData, type: 'PF'});
+                    }}
+                    className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${
+                      formData.type === 'PF' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                    }`}
+                  >
+                    Pessoa Física (PF)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData({...formData, type: 'PJ'});
+                    }}
+                    className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${
+                      formData.type === 'PJ' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                    }`}
+                  >
+                    Pessoa Jurídica (PJ)
+                  </button>
                 </div>
 
-                {/* Sub-block B: Identificação Pessoal/Empresarial */}
-                <div className="p-6 bg-white border border-gray-200 rounded-2xl shadow-2xs space-y-4">
-                  <div className="flex items-center justify-between border-b pb-2">
-                    <div className="flex items-center gap-2">
-                      <User className="w-4 h-4 text-gray-700" />
-                      <span className="text-xs font-black uppercase text-gray-800">2. Informações Gerais de Identificação</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <button 
-                        type="button" 
-                        onClick={() => setFormData({...formData, type: 'PF'})}
-                        className={`px-3 py-1 rounded-lg font-bold border transition-colors ${formData.type === 'PF' ? 'bg-indigo-650 text-white border-transparent' : 'bg-gray-100 text-gray-600'}`}
-                      >
-                        Pessoa Física (PF)
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={() => setFormData({...formData, type: 'PJ'})}
-                        className={`px-3 py-1 rounded-lg font-bold border transition-colors ${formData.type === 'PJ' ? 'bg-indigo-650 text-white border-transparent' : 'bg-gray-100 text-gray-600'}`}
-                      >
-                        Pessoa Jurídica (PJ)
-                      </button>
-                    </div>
-                  </div>
-
+                {/* Dynamic Sub-form inclusion with styling similar to CadastroFluxo */}
+                <div className="boss-form-breathable space-y-8 animate-in fade-in duration-300">
+                  <style>{`
+                    .boss-form-breathable label {
+                      color: rgb(107 114 128) !important;
+                      font-weight: 700 !important;
+                      text-transform: uppercase !important;
+                      font-size: 0.6875rem !important;
+                      letter-spacing: 0.05em !important;
+                    }
+                    .boss-form-breathable input, 
+                    .boss-form-breathable select {
+                      height: 3.25rem !important;
+                      padding-left: 1.25rem !important;
+                      padding-right: 1.25rem !important;
+                      background-color: rgb(249 250 251 / 0.5) !important;
+                      border: 1px solid rgb(229 231 235) !important;
+                      font-size: 0.875rem !important;
+                      border-radius: 0.875rem !important;
+                    }
+                    .boss-form-breathable input:focus, 
+                    .boss-form-breathable select:focus {
+                      border-color: rgb(17 24 39) !important;
+                      background-color: #ffffff !important;
+                    }
+                    .boss-form-breathable .bg-white.p-6.rounded-2xl.border {
+                      background-color: transparent !important;
+                      border: none !important;
+                      padding: 0 !important;
+                      box-shadow: none !important;
+                      border-radius: 0 !important;
+                      margin-bottom: 2.25rem !important;
+                    }
+                    .boss-form-breathable h3,
+                    .boss-form-breathable h4 {
+                      color: rgb(17 24 39) !important;
+                      font-size: 0.8125rem !important;
+                      font-weight: 800 !important;
+                      letter-spacing: 0.05em !important;
+                      border-bottom: 1.5px solid rgb(243 244 246);
+                      padding-bottom: 0.625rem;
+                      margin-bottom: 1.5rem !important;
+                      text-transform: uppercase;
+                    }
+                    .boss-form-breathable .border-t {
+                      border-top: none !important;
+                      padding-top: 0.5rem !important;
+                    }
+                  `}</style>
                   {formData.type === 'PF' ? (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">Nome Completo</label>
-                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
-                          <input type="text" value={formData.pf_nomeCompleto} onChange={(e) => setFormData({...formData, pf_nomeCompleto: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
-                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
-                            <input 
-                              type="checkbox" 
-                              checked={formData.pf_nomeCompleto === 'Não possuo'} 
-                              onChange={(e) => setFormData({...formData, pf_nomeCompleto: e.target.checked ? 'Não possuo' : ''})} 
-                              className="w-3.5 h-3.5 rounded border-gray-300"
-                            />
-                            Não possuo
-                          </label>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">CPF</label>
-                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
-                          <input type="text" value={formData.pf_cpf} onChange={(e) => setFormData({...formData, pf_cpf: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" placeholder="000.000.000-00" />
-                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
-                            <input 
-                              type="checkbox" 
-                              checked={formData.pf_cpf === 'Não possuo'} 
-                              onChange={(e) => setFormData({...formData, pf_cpf: e.target.checked ? 'Não possuo' : ''})} 
-                              className="w-3.5 h-3.5 rounded border-gray-300"
-                            />
-                            Não possuo
-                          </label>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">RG</label>
-                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
-                          <input type="text" value={formData.pf_rg} onChange={(e) => setFormData({...formData, pf_rg: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
-                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
-                            <input 
-                              type="checkbox" 
-                              checked={formData.pf_rg === 'Não possuo'} 
-                              onChange={(e) => setFormData({...formData, pf_rg: e.target.checked ? 'Não possuo' : ''})} 
-                              className="w-3.5 h-3.5 rounded border-gray-300"
-                            />
-                            Não possuo
-                          </label>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">Data Nascimento</label>
-                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
-                          <input type="text" value={formData.pf_dataNascimento} onChange={(e) => setFormData({...formData, pf_dataNascimento: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
-                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
-                            <input 
-                              type="checkbox" 
-                              checked={formData.pf_dataNascimento === 'Não possuo'} 
-                              onChange={(e) => setFormData({...formData, pf_dataNascimento: e.target.checked ? 'Não possuo' : ''})} 
-                              className="w-3.5 h-3.5 rounded border-gray-300"
-                            />
-                            Não possuo
-                          </label>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">Nacionalidade</label>
-                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
-                          <input type="text" value={formData.pf_nacionalidade} onChange={(e) => setFormData({...formData, pf_nacionalidade: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
-                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
-                            <input 
-                              type="checkbox" 
-                              checked={formData.pf_nacionalidade === 'Não possuo'} 
-                              onChange={(e) => setFormData({...formData, pf_nacionalidade: e.target.checked ? 'Não possuo' : ''})} 
-                              className="w-3.5 h-3.5 rounded border-gray-300"
-                            />
-                            Não possuo
-                          </label>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">Profissão</label>
-                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
-                          <input type="text" value={formData.pf_profissao} onChange={(e) => setFormData({...formData, pf_profissao: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
-                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
-                            <input 
-                              type="checkbox" 
-                              checked={formData.pf_profissao === 'Não possuo'} 
-                              onChange={(e) => setFormData({...formData, pf_profissao: e.target.checked ? 'Não possuo' : ''})} 
-                              className="w-3.5 h-3.5 rounded border-gray-300"
-                            />
-                            Não possuo
-                          </label>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">Estado Civil</label>
-                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
-                          <input type="text" value={formData.pf_estadoCivil} onChange={(e) => setFormData({...formData, pf_estadoCivil: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
-                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
-                            <input 
-                              type="checkbox" 
-                              checked={formData.pf_estadoCivil === 'Não possuo'} 
-                              onChange={(e) => setFormData({...formData, pf_estadoCivil: e.target.checked ? 'Não possuo' : ''})} 
-                              className="w-3.5 h-3.5 rounded border-gray-300"
-                            />
-                            Não possuo
-                          </label>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">E-mail Alternativo</label>
-                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
-                          <input type="text" value={formData.pf_email} onChange={(e) => setFormData({...formData, pf_email: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
-                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
-                            <input 
-                              type="checkbox" 
-                              checked={formData.pf_email === 'Não possuo'} 
-                              onChange={(e) => setFormData({...formData, pf_email: e.target.checked ? 'Não possuo' : ''})} 
-                              className="w-3.5 h-3.5 rounded border-gray-300"
-                            />
-                            Não possuo
-                          </label>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">Telefone</label>
-                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
-                          <input type="text" value={formData.pf_telefone} onChange={(e) => setFormData({...formData, pf_telefone: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
-                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
-                            <input 
-                              type="checkbox" 
-                              checked={formData.pf_telefone === 'Não possuo'} 
-                              onChange={(e) => setFormData({...formData, pf_telefone: e.target.checked ? 'Não possuo' : ''})} 
-                              className="w-3.5 h-3.5 rounded border-gray-300"
-                            />
-                            Não possuo
-                          </label>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">WhatsApp</label>
-                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
-                          <input type="text" value={formData.pf_whatsapp} onChange={(e) => setFormData({...formData, pf_whatsapp: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
-                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
-                            <input 
-                              type="checkbox" 
-                              checked={formData.pf_whatsapp === 'Não possuo'} 
-                              onChange={(e) => setFormData({...formData, pf_whatsapp: e.target.checked ? 'Não possuo' : ''})} 
-                              className="w-3.5 h-3.5 rounded border-gray-300"
-                            />
-                            Não possuo
-                          </label>
-                        </div>
-                      </div>
-                    </div>
+                    <PFForm data={formData} onChange={(d) => setFormData(d)} />
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">Razão Social</label>
-                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
-                          <input type="text" value={formData.pj_razaoSocial} onChange={(e) => setFormData({...formData, pj_razaoSocial: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
-                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
-                            <input 
-                              type="checkbox" 
-                              checked={formData.pj_razaoSocial === 'Não possuo'} 
-                              onChange={(e) => setFormData({...formData, pj_razaoSocial: e.target.checked ? 'Não possuo' : ''})} 
-                              className="w-3.5 h-3.5 rounded border-gray-300"
-                            />
-                            Não possuo
-                          </label>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">Nome Fantasia</label>
-                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
-                          <input type="text" value={formData.pj_nomeFantasia} onChange={(e) => setFormData({...formData, pj_nomeFantasia: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
-                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
-                            <input 
-                              type="checkbox" 
-                              checked={formData.pj_nomeFantasia === 'Não possuo'} 
-                              onChange={(e) => setFormData({...formData, pj_nomeFantasia: e.target.checked ? 'Não possuo' : ''})} 
-                              className="w-3.5 h-3.5 rounded border-gray-300"
-                            />
-                            Não possuo
-                          </label>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">CNPJ</label>
-                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
-                          <input type="text" value={formData.pj_cnpj} onChange={(e) => setFormData({...formData, pj_cnpj: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
-                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
-                            <input 
-                              type="checkbox" 
-                              checked={formData.pj_cnpj === 'Não possuo'} 
-                              onChange={(e) => setFormData({...formData, pj_cnpj: e.target.checked ? 'Não possuo' : ''})} 
-                              className="w-3.5 h-3.5 rounded border-gray-300"
-                            />
-                            Não possuo
-                          </label>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">Telefone Empresa</label>
-                        <div className="flex items-center gap-1.5 bg-white border rounded-lg px-2">
-                          <input type="text" value={formData.pj_telefoneEmpresa} onChange={(e) => setFormData({...formData, pj_telefoneEmpresa: e.target.value})} className="w-full py-1.5 outline-none border-none bg-transparent" />
-                          <label className="flex items-center gap-1 text-[10px] text-gray-500 font-bold shrink-0 cursor-pointer select-none">
-                            <input 
-                              type="checkbox" 
-                              checked={formData.pj_telefoneEmpresa === 'Não possuo'} 
-                              onChange={(e) => setFormData({...formData, pj_telefoneEmpresa: e.target.checked ? 'Não possuo' : ''})} 
-                              className="w-3.5 h-3.5 rounded border-gray-300"
-                            />
-                            Não possuo
-                          </label>
-                        </div>
+                    <div className="space-y-8">
+                      <PJForm data={formData} onChange={(d) => setFormData(d)} />
+                      
+                      <div className="border-t border-gray-100 pt-6 font-sans">
+                        <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider mb-4 font-mono">Quadro de Sócios / Representante do CNPJ</h3>
+                        <SocioForm data={formData} onChange={(d) => setFormData(d)} />
                       </div>
                     </div>
                   )}
 
-                  {/* Endereço - Comum a PF/PJ */}
-                  <div className="pt-4 border-t space-y-4">
-                    <span className="text-[11px] font-black uppercase text-gray-500">Endereço Principal</span>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">CEP</label>
-                        <input type="text" value={formData.pf_cep} onChange={(e) => setFormData({...formData, pf_cep: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="block text-gray-400 font-bold mb-1">Endereço / Logradouro</label>
-                        <input type="text" value={formData.pf_endereco} onChange={(e) => setFormData({...formData, pf_endereco: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">Número</label>
-                        <input type="text" value={formData.pf_numero} onChange={(e) => setFormData({...formData, pf_numero: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">Bairro</label>
-                        <input type="text" value={formData.pf_bairro} onChange={(e) => setFormData({...formData, pf_bairro: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">Cidade</label>
-                        <input type="text" value={formData.pf_cidade} onChange={(e) => setFormData({...formData, pf_cidade: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">Estado</label>
-                        <input type="text" value={formData.pf_estado} onChange={(e) => setFormData({...formData, pf_estado: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Sub-block C: Dados Bancários */}
-                <div className="p-6 bg-white border border-gray-200 rounded-2xl shadow-2xs space-y-4">
-                  <div className="flex items-center justify-between border-b pb-2">
-                    <span className="text-xs font-black uppercase text-gray-800">3. Dados Bancários e Recebimentos</span>
-                    <label className="flex items-center gap-1.5 text-xs text-gray-500 font-bold cursor-pointer">
-                      <input 
-                        type="checkbox"
-                        checked={formData.bancario_possuiDadosBancarios}
-                        onChange={(e) => setFormData({...formData, bancario_possuiDadosBancarios: e.target.checked})}
-                        className="rounded border-gray-300 w-4 h-4"
-                      />
-                      Possui Dados Bancários Atuais
-                    </label>
+                  <div className="border-t border-gray-100 pt-6">
+                    <AccessForm data={formData} onChange={(d) => setFormData(d)} />
                   </div>
 
-                  {formData.bancario_possuiDadosBancarios && (
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs animate-in fade-in duration-200">
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">Tipo de Chave Pix</label>
-                        <input type="text" value={formData.bancario_tipoChavePix} onChange={(e) => setFormData({...formData, bancario_tipoChavePix: e.target.value})} className="w-full p-2 border rounded-lg outline-none" placeholder="Ex: CPF, CNPJ, Celular" />
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">Chave Pix</label>
-                        <input type="text" value={formData.bancario_chavePix} onChange={(e) => setFormData({...formData, bancario_chavePix: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">Titular da Chave</label>
-                        <input type="text" value={formData.bancario_titularPix} onChange={(e) => setFormData({...formData, bancario_titularPix: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-gray-400 font-bold mb-1">Banco Origem</label>
-                        <input type="text" value={formData.bancario_banco} onChange={(e) => setFormData({...formData, bancario_banco: e.target.value})} className="w-full p-2 border rounded-lg outline-none" />
-                      </div>
-                    </div>
-                  )}
+                  <div className="border-t border-gray-100 pt-6">
+                    <BankingForm 
+                      data={formData} 
+                      onChange={(d) => setFormData(d)} 
+                      clientName={formData.type === 'PF' ? (formData.pf_nomeCompleto || '') : (formData.pj_razaoSocial || '')}
+                    />
+                  </div>
                 </div>
               </div>
             )}
