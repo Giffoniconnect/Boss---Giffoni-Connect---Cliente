@@ -192,7 +192,7 @@ export default function TipoServico() {
           updatedAt: now
         });
         
-        navigate(`/boss-giffoni-clientes/fluxo-producao/${safeCaseId}/dados-caso`);
+        navigate(`/boss-giffoni-clientes/fluxo-producao/${safeCaseId}/solicitacoes-provas`);
       } else if (clientId) {
         // Mode 2: Create brand new case draft
         const collectionRef = collection(db, 'cases');
@@ -213,7 +213,7 @@ export default function TipoServico() {
           statusPublicoCliente: publicStatus,
           visibleToClient: true,
           productionStatus: "em_producao",
-          productionStage: isNovoCaso ? "novo-caso" : "dados-caso",
+          productionStage: isNovoCaso ? "novo-caso" : "solicitacoes-provas",
           caseLifecycle: isNovoCaso ? "novo-caso" : "edrp",
           isNovoCaso: isNovoCaso,
           createdAt: now,
@@ -225,7 +225,7 @@ export default function TipoServico() {
         if (isNovoCaso) {
           navigate(`/boss-giffoni-clientes/fluxo-producao/${autoCaseId}/novo-caso`);
         } else {
-          navigate(`/boss-giffoni-clientes/fluxo-producao/${autoCaseId}/dados-caso`);
+          navigate(`/boss-giffoni-clientes/fluxo-producao/${autoCaseId}/solicitacoes-provas`);
         }
       } else {
         setError('Impossível prosseguir sem um identificador fático ativo.');
@@ -304,7 +304,7 @@ export default function TipoServico() {
         <div className="flex flex-col sm:flex-row sm:justify-between items-center gap-4 pt-6 border-t border-gray-150">
           <button
             type="button"
-            onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao/cadastro')}
+            onClick={() => navigate(safeCaseId ? `/boss-giffoni-clientes/fluxo-producao/${safeCaseId}/dados-caso` : '/boss-giffoni-clientes/fluxo-producao/cadastro')}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-200 hover:border-gray-300 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer"
           >
             <ArrowLeft size={14} />

@@ -23,7 +23,9 @@ import {
   Loader2,
   ChevronRight,
   ShieldCheck,
-  Edit2
+  Edit2,
+  User,
+  Building2
 } from 'lucide-react';
 
 import { normalizeCpfCnpj, isValidCpf, isValidCnpj } from './utils/documentUtils';
@@ -35,6 +37,10 @@ type CadastroPath = 'novo-cliente' | 'novo-caso' | 'continuar';
 export default function CadastroFluxo() {
   const navigate = useNavigate();
   const location = useLocation();
+  const pathParam = new URLSearchParams(location.search).get('path');
+  const isExplicitNovoCliente = pathParam === 'novo-cliente';
+  const isNovoClientePF = pathParam === 'novo-cliente-pessoa-fisica';
+  const isNovoClientePJ = pathParam === 'novo-cliente-pessoa-juridica';
   const [selectedPath, setSelectedPath] = useState<CadastroPath>('novo-cliente');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,12 +49,72 @@ export default function CadastroFluxo() {
   // Editing mode indicator
   const [editingClientId, setEditingClientId] = useState<string | null>(null);
 
+  const createDraftCaseAndNavigate = async (clientId: string, clientSlug: string) => {
+    setLoading(true);
+    try {
+      const collectionRef = collection(db, 'cases');
+      const caseRef = doc(collectionRef);
+      const autoCaseId = caseRef.id;
+      const now = new Date().toISOString();
+      const payload = {
+        clientId: clientId,
+        clientSlug: clientSlug || '',
+        title: "RASCUNHO DE PRODUÇÃO",
+        status: "rascunho",
+        statusInterno: "Em produção",
+        statusPublicoCliente: "Aguardando definição",
+        visibleToClient: true,
+        productionStatus: "em_producao",
+        productionStage: "dados-caso",
+        caseLifecycle: "edrp",
+        isNovoCaso: false,
+        createdAt: now,
+        updatedAt: now
+      };
+      await setDoc(caseRef, payload);
+      
+      await setDoc(doc(db, 'casos', autoCaseId), {
+        id: autoCaseId,
+        caseId: autoCaseId,
+        clientId: clientId,
+        clienteId: clientId,
+        title: "RASCUNHO DE PRODUÇÃO",
+        titulo: "RASCUNHO DE PRODUÇÃO",
+        status: "rascunho",
+        statusInterno: "Em produção",
+        statusPublicoCliente: "Aguardando definição",
+        visibleToClient: true,
+        productionStatus: "em_producao",
+        createdAt: now,
+        updatedAt: now
+      });
+
+      navigate(`/boss-giffoni-clientes/fluxo-producao/${autoCaseId}/dados-caso`);
+    } catch (err: any) {
+      console.error("Erro ao criar rascunho de caso:", err);
+      setError(`Erro ao criar rascunho de caso: ${err.message || err}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Sync params on mount/update
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const pathParam = params.get('path');
-    if (pathParam === 'novo-cliente' || pathParam === 'novo-caso' || pathParam === 'continuar') {
-      setSelectedPath(pathParam as CadastroPath);
+    const pathParamCurrent = params.get('path');
+    if (
+      pathParamCurrent === 'novo-cliente' || 
+      pathParamCurrent === 'novo-cliente-pessoa-fisica' || 
+      pathParamCurrent === 'novo-cliente-pessoa-juridica'
+    ) {
+      setSelectedPath('novo-cliente');
+      if (pathParamCurrent === 'novo-cliente-pessoa-fisica') {
+        setClientType('PF');
+      } else if (pathParamCurrent === 'novo-cliente-pessoa-juridica') {
+        setClientType('PJ');
+      }
+    } else if (pathParamCurrent === 'novo-caso' || pathParamCurrent === 'continuar') {
+      setSelectedPath(pathParamCurrent as CadastroPath);
     }
 
     const editId = params.get('editClientId');
@@ -551,7 +617,7 @@ export default function CadastroFluxo() {
 
       setSuccess('Salvo como Rascunho Interno Incompleto com sucesso!');
       setTimeout(() => {
-        navigate(`/boss-giffoni-clientes/fluxo-producao/tipo-producao?clientId=${targetId}`);
+        createDraftCaseAndNavigate(targetId, payload.slug || '');
       }, 1000);
 
     } catch (err: any) {
@@ -760,7 +826,7 @@ export default function CadastroFluxo() {
 
       setSuccess(`Portal do cliente [/${slug}] criado e liberado com sucesso em modo preview!`);
       setTimeout(() => {
-        navigate(`/boss-giffoni-clientes/fluxo-producao/tipo-producao?clientId=${targetId}`);
+        createDraftCaseAndNavigate(targetId, slug);
       }, 1000);
 
     } catch (err: any) {
@@ -808,8 +874,7 @@ export default function CadastroFluxo() {
       setError('Por favor, selecione um cliente existente na lista para vincular.');
       return;
     }
-    const cId = selectedClientForCase.clientId;
-    navigate(`/boss-giffoni-clientes/fluxo-producao/tipo-producao?clientId=${cId}`);
+    createDraftCaseAndNavigate(selectedClientForCase.clientId, selectedClientForCase.slug || '');
   };
 
   const handleContinueCase = (c: any) => {
@@ -876,48 +941,109 @@ export default function CadastroFluxo() {
           </div>
         )}
 
-        <div>
-          <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">Qual é o caminho desejado?</h3>
-          <p className="text-xs text-gray-500 mt-1">
-            Selecione a modalidade correta para prosseguir com o fluxo de produção de casos.
-          </p>
-        </div>
+        {isExplicitNovoCliente ? (
+          <div>
+            <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">Tipo de Cadastro</h3>
+            <p className="text-xs text-gray-500 mt-1">
+              Selecione se o novo cliente é Pessoa Física ou Pessoa Jurídica para preencher a ficha de identificação cadastral.
+            </p>
+          </div>
+        ) : !isNovoClientePF && !isNovoClientePJ ? (
+          <div>
+            <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">Qual é o caminho desejado?</h3>
+            <p className="text-xs text-gray-500 mt-1">
+              Selecione a modalidade correta para prosseguir com o fluxo de produção de casos.
+            </p>
+          </div>
+        ) : null}
 
-        {/* Path Picker Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {paths.map((p) => {
-            const Icon = p.icon;
-            const isSelected = selectedPath === p.id;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => {
-                  setSelectedPath(p.id);
-                  setError(null);
-                  setSuccess(null);
-                }}
-                className={`flex flex-col gap-3 p-5 rounded-2xl border text-left transition-all ${
-                  isSelected 
-                    ? 'bg-gray-950 text-white border-transparent shadow-md font-sans' 
-                    : 'bg-white text-gray-700 border-gray-150 hover:border-gray-200'
-                }`}
-              >
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                  isSelected ? 'bg-blue-500/20 text-blue-300' : 'bg-gray-50 text-gray-400'
-                }`}>
-                  <Icon size={18} />
-                </div>
-                <div>
-                  <h4 className="font-bold text-[18px] tracking-tight uppercase font-sans">{p.label}</h4>
-                  <p className={`text-[10px] leading-relaxed mt-1 ${isSelected ? 'text-gray-300' : 'text-gray-400'}`}>
-                    {p.desc}
-                  </p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+        {isExplicitNovoCliente ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button
+              type="button"
+              id="card-pessoa-fisica"
+              onClick={() => {
+                setClientType('PF');
+                setFoundDuplicateClient(null);
+                setDocValidationError(null);
+                navigate('/boss-giffoni-clientes/fluxo-producao/cadastro?path=novo-cliente-pessoa-fisica');
+              }}
+              className="flex flex-col gap-3 p-5 rounded-2xl border text-left transition-all cursor-pointer bg-white text-gray-700 border-gray-150 hover:border-gray-350 hover:shadow-xs"
+            >
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-blue-550/10 text-blue-600">
+                <User size={18} />
+              </div>
+              <div>
+                <h4 className="font-bold text-[18px] tracking-tight uppercase font-sans">Pessoa Física</h4>
+                <p className="text-[10px] leading-relaxed mt-1 text-gray-400">
+                  Cadastro completo ou rascunho de Pessoa Física (Pessoa Natural com CPF).
+                </p>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              id="card-pessoa-juridica"
+              onClick={() => {
+                setClientType('PJ');
+                setFoundDuplicateClient(null);
+                setDocValidationError(null);
+                navigate('/boss-giffoni-clientes/fluxo-producao/cadastro?path=novo-cliente-pessoa-juridica');
+              }}
+              className="flex flex-col gap-3 p-5 rounded-2xl border text-left transition-all cursor-pointer bg-white text-gray-700 border-gray-150 hover:border-gray-350 hover:shadow-xs"
+            >
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-blue-550/10 text-blue-600">
+                <Building2 size={18} />
+              </div>
+              <div>
+                <h4 className="font-bold text-[18px] tracking-tight uppercase font-sans">Pessoa Jurídica</h4>
+                <p className="text-[10px] leading-relaxed mt-1 text-gray-400">
+                  Cadastro completo ou rascunho de Pessoa Jurídica (Empresa/Entidade com CNPJ).
+                </p>
+              </div>
+            </button>
+          </div>
+        ) : !isNovoClientePF && !isNovoClientePJ ? (
+          /* Path Picker Grid */
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {paths.map((p) => {
+              const Icon = p.icon;
+              const isSelected = selectedPath === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    if (p.id === 'novo-cliente') {
+                      navigate('/boss-giffoni-clientes/fluxo-producao/cadastro?path=novo-cliente');
+                    } else {
+                      setSelectedPath(p.id);
+                    }
+                    setError(null);
+                    setSuccess(null);
+                  }}
+                  className={`flex flex-col gap-3 p-5 rounded-2xl border text-left transition-all cursor-pointer ${
+                    isSelected 
+                      ? 'bg-gray-950 text-white border-transparent shadow-md font-sans' 
+                      : 'bg-white text-gray-700 border-gray-150 hover:border-gray-200'
+                  }`}
+                >
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    isSelected ? 'bg-blue-500/20 text-blue-300' : 'bg-gray-50 text-gray-400'
+                  }`}>
+                    <Icon size={18} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-[18px] tracking-tight uppercase font-sans">{p.label}</h4>
+                    <p className={`text-[10px] leading-relaxed mt-1 ${isSelected ? 'text-gray-300' : 'text-gray-400'}`}>
+                      {p.desc}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
 
         {error && (
           <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-900 text-xs flex gap-3 items-center">
@@ -934,9 +1060,9 @@ export default function CadastroFluxo() {
         )}
 
         {/* PATH 1 — NOVO CLIENTE */}
-        {selectedPath === 'novo-cliente' && (
+        {selectedPath === 'novo-cliente' && !isExplicitNovoCliente && (
           <div className="space-y-8">
-            <div className="border border-gray-150 rounded-2xl bg-white p-6 space-y-6">
+            <div className="space-y-6">
               <div className="flex justify-between items-center border-b border-gray-100 pb-4">
                 <div>
                   <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono">Ficha de Identificação Cadastral Completa</h4>
@@ -946,38 +1072,80 @@ export default function CadastroFluxo() {
                     </span>
                   )}
                 </div>
-                <div className="flex bg-gray-100 p-0.5 rounded-lg shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setClientType('PF');
-                      setFoundDuplicateClient(null);
-                      setDocValidationError(null);
-                    }}
-                    className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${
-                      clientType === 'PF' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
-                    }`}
-                  >
-                    Pessoa Física (PF)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setClientType('PJ');
-                      setFoundDuplicateClient(null);
-                      setDocValidationError(null);
-                    }}
-                    className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${
-                      clientType === 'PJ' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
-                    }`}
-                  >
-                    Pessoa Jurídica (PJ)
-                  </button>
-                </div>
+                {!isExplicitNovoCliente && !isNovoClientePF && !isNovoClientePJ && (
+                  <div className="flex bg-gray-100 p-0.5 rounded-lg shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setClientType('PF');
+                        setFoundDuplicateClient(null);
+                        setDocValidationError(null);
+                      }}
+                      className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${
+                        clientType === 'PF' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                      }`}
+                    >
+                      Pessoa Física (PF)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setClientType('PJ');
+                        setFoundDuplicateClient(null);
+                        setDocValidationError(null);
+                      }}
+                      className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${
+                        clientType === 'PJ' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
+                      }`}
+                    >
+                      Pessoa Jurídica (PJ)
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Dynamic Sub-form inclusion */}
-              <div className="space-y-8 animate-in fade-in duration-300">
+              <div className="boss-form-breathable space-y-8 animate-in fade-in duration-300">
+                <style>{`
+                  .boss-form-breathable input, 
+                  .boss-form-breathable select {
+                    height: 3.25rem !important;
+                    padding-left: 1.25rem !important;
+                    padding-right: 1.25rem !important;
+                    background-color: rgb(249 250 251 / 0.5) !important;
+                    border: 1px solid rgb(229 231 235) !important;
+                    font-size: 0.875rem !important;
+                    border-radius: 0.875rem !important;
+                  }
+                  .boss-form-breathable input:focus, 
+                  .boss-form-breathable select:focus {
+                    border-color: rgb(17 24 39) !important;
+                    background-color: #ffffff !important;
+                  }
+                  .boss-form-breathable .bg-white.p-6.rounded-2xl.border {
+                    background-color: transparent !important;
+                    border: none !important;
+                    padding: 0 !important;
+                    box-shadow: none !important;
+                    border-radius: 0 !important;
+                    margin-bottom: 2.25rem !important;
+                  }
+                  .boss-form-breathable h3,
+                  .boss-form-breathable h4 {
+                    color: rgb(17 24 39) !important;
+                    font-size: 0.8125rem !important;
+                    font-weight: 800 !important;
+                    letter-spacing: 0.05em !important;
+                    border-bottom: 1.5px solid rgb(243 244 246);
+                    padding-bottom: 0.625rem;
+                    margin-bottom: 1.5rem !important;
+                    text-transform: uppercase;
+                  }
+                  .boss-form-breathable .border-t {
+                    border-top: none !important;
+                    padding-top: 0.5rem !important;
+                  }
+                `}</style>
                 {clientType === 'PF' ? (
                   <PFForm data={formData} onChange={(d) => setFormData(d)} />
                 ) : (
@@ -985,7 +1153,7 @@ export default function CadastroFluxo() {
                     <PJForm data={formData} onChange={(d) => setFormData(d)} />
                     
                     <div className="border-t border-gray-100 pt-6">
-                      <h4 className="text-xs font-black uppercase text-gray-400 tracking-wider mb-4 font-mono">Quadro de Sócios / Representante do CNPJ</h4>
+                      <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider mb-4 font-mono">Quadro de Sócios / Representante do CNPJ</h3>
                       <SocioForm data={formData} onChange={(d) => setFormData(d)} />
                     </div>
                   </div>
@@ -1043,7 +1211,7 @@ export default function CadastroFluxo() {
 
                   <button
                     type="button"
-                    onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/tipo-producao?clientId=${foundDuplicateClient.clientId}`)}
+                    onClick={() => createDraftCaseAndNavigate(foundDuplicateClient.clientId, foundDuplicateClient.slug || '')}
                     className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer"
                   >
                     <span>Criar novo caso</span>
@@ -1054,36 +1222,48 @@ export default function CadastroFluxo() {
             )}
 
             {/* ACTION DUAL FOOTER BUTTONS */}
-            <div className="flex flex-col sm:flex-row sm:justify-end gap-3 border-t border-gray-150 pt-6">
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => handleSaveInternalDraft(false)}
-                className="inline-flex items-center justify-center gap-2 bg-white border border-gray-250 hover:bg-gray-50 text-gray-800 px-6 py-3.5 rounded-xl font-bold transition-all disabled:opacity-50 text-xs shadow-3xs cursor-pointer"
-              >
-                {loading ? <Loader2 size={13} className="animate-spin" /> : null}
-                <span>Salvar como Rascunho Interno (Incompleto)</span>
-              </button>
+            <div className="flex flex-col sm:flex-row sm:justify-between items-center gap-3 border-t border-gray-150 pt-6">
+              {(isNovoClientePF || isNovoClientePJ) ? (
+                <button
+                  type="button"
+                  onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao/cadastro?path=novo-cliente')}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-600 px-6 py-3.5 rounded-xl font-bold transition-all text-xs cursor-pointer"
+                >
+                  Voltar para Escolha de Tipo
+                </button>
+              ) : <div />}
 
-              <button
-                type="button"
-                disabled={loading || foundDuplicateClient !== null || !checkPortalSetupReady()}
-                onClick={handleCreateCustomerPortal}
-                className="inline-flex items-center justify-center gap-2 bg-gray-950 hover:bg-black text-white px-8 py-3.5 rounded-xl font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-md text-xs cursor-pointer"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
-                    <span>Processando...</span>
-                  </>
-                ) : (
-                  <>
-                    <ShieldCheck size={14} />
-                    <span>Criar Portal do Cliente e Prosseguir</span>
-                    <ArrowRight size={14} />
-                  </>
-                )}
-              </button>
+              <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => handleSaveInternalDraft(false)}
+                  className="inline-flex items-center justify-center gap-2 bg-white border border-gray-250 hover:bg-gray-50 text-gray-800 px-6 py-3.5 rounded-xl font-bold transition-all disabled:opacity-50 text-xs shadow-3xs cursor-pointer w-full sm:w-auto"
+                >
+                  {loading ? <Loader2 size={13} className="animate-spin" /> : null}
+                  <span>Salvar como Rascunho Interno (Incompleto)</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={loading || foundDuplicateClient !== null || !checkPortalSetupReady()}
+                  onClick={handleCreateCustomerPortal}
+                  className="inline-flex items-center justify-center gap-2 bg-gray-950 hover:bg-black text-white px-8 py-3.5 rounded-xl font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-md text-xs cursor-pointer w-full sm:w-auto"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Processando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck size={14} />
+                      <span>Criar Portal do Cliente e Prosseguir</span>
+                      <ArrowRight size={14} />
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
             
             {/* INHERENT PORTAL REQUIREMENT HELPER */}

@@ -10,8 +10,8 @@ export interface FlowStep {
 
 export const flowSteps: FlowStep[] = [
   { id: 'cadastro', label: '1.1/1.2 Cadastro (PF/PJ)', routeKey: 'cadastro', requiresCaseId: false, order: 1 },
-  { id: 'tipo-producao', label: '1.3.2 Tipo de Serviço', routeKey: 'tipoServico', requiresCaseId: true, order: 2 },
-  { id: 'dados-caso', label: '1.3.1 Entrevista (5W2H)', routeKey: 'dadosCaso', requiresCaseId: true, order: 3 },
+  { id: 'dados-caso', label: '1.3/1.3.1 Entrevista (5W2H)', routeKey: 'dadosCaso', requiresCaseId: true, order: 2 },
+  { id: 'tipo-producao', label: '1.3.2 Tipo de Serviço', routeKey: 'tipoServico', requiresCaseId: true, order: 3 },
   { id: 'solicitacoes-provas', label: '1.4 Coletar Provas', routeKey: 'solicitacoesProvas', requiresCaseId: true, order: 4 },
   { id: 'solicitacoes-informacoes', label: '1.5 Info. Complementares', routeKey: 'solicitacoesInformacoes', requiresCaseId: true, order: 5 },
   { id: 'financeiro', label: 'Financeiro (Faturamento)', routeKey: 'financeiro', requiresCaseId: true, order: 6 },

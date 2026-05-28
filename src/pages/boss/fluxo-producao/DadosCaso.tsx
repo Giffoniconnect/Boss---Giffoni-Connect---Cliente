@@ -388,9 +388,9 @@ export default function DadosCaso() {
   };
 
   const handleSaveAndAdvance = async () => {
-    const successSaved = await saveCasePayload('solicitacoes-informacoes');
+    const successSaved = await saveCasePayload('tipo-producao');
     if (successSaved) {
-      navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId!}/solicitacoes-informacoes`);
+      navigate(flowRoutes.tipoServico(caseId!));
     }
   };
 
@@ -928,7 +928,7 @@ export default function DadosCaso() {
               
               <button
                 type="button"
-                onClick={() => navigate(flowRoutes.tipoServico(caseId!))}
+                onClick={() => navigate(flowRoutes.cadastro())}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-250 hover:bg-gray-50 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-sm cursor-pointer"
               >
                 <ArrowLeft size={16} />

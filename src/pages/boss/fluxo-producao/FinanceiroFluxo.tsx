@@ -1058,11 +1058,11 @@ export default function FinanceiroFluxo() {
         <div className="flex flex-col sm:flex-row sm:justify-between items-center gap-4 pt-6 border-t border-gray-150">
           <button
             type="button"
-            onClick={() => navigate(flowRoutes.solicitacoesProvas(caseId))}
+            onClick={() => navigate(flowRoutes.solicitacoesInformacoes(caseId))}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer"
           >
             <ArrowLeft size={14} />
-            Voltar para Solicitações de Provas
+            Voltar para Solicitação de Informações Complementares
           </button>
 
           <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
