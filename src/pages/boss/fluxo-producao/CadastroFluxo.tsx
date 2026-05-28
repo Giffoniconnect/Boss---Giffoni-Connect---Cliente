@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { collection, doc, setDoc, getDoc, getDocs, updateDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import FluxoStepLayout from './components/FluxoStepLayout';
@@ -34,6 +34,7 @@ type CadastroPath = 'novo-cliente' | 'novo-caso' | 'continuar';
 
 export default function CadastroFluxo() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [selectedPath, setSelectedPath] = useState<CadastroPath>('novo-cliente');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +42,61 @@ export default function CadastroFluxo() {
 
   // Editing mode indicator
   const [editingClientId, setEditingClientId] = useState<string | null>(null);
+
+  // Sync params on mount/update
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const pathParam = params.get('path');
+    if (pathParam === 'novo-cliente' || pathParam === 'novo-caso' || pathParam === 'continuar') {
+      setSelectedPath(pathParam as CadastroPath);
+    }
+
+    const editId = params.get('editClientId');
+    if (editId) {
+      setSelectedPath('novo-cliente');
+      const loadExternalClient = async () => {
+        setLoading(true);
+        try {
+          const docRef = doc(db, 'clients', editId);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            handleLoadClientForEditing({
+              clientId: editId,
+              ...docSnap.data()
+            });
+          }
+        } catch (err) {
+          console.error("Error loading external client:", err);
+        } finally {
+          setLoading(false);
+        }
+      };
+      loadExternalClient();
+    }
+
+    const selectIdForCase = params.get('clientId');
+    if (selectIdForCase && !editId) {
+      setSelectedPath('novo-caso');
+      const loadClientForCase = async () => {
+        setLoading(true);
+        try {
+          const docRef = doc(db, 'clients', selectIdForCase);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            setSelectedClientForCase({
+              clientId: selectIdForCase,
+              ...docSnap.data()
+            });
+          }
+        } catch (err) {
+          console.error("Error loading client for case:", err);
+        } finally {
+          setLoading(false);
+        }
+      };
+      loadClientForCase();
+    }
+  }, [location.search]);
 
   // Client Type
   const [clientType, setClientType] = useState<'PF' | 'PJ'>('PF');

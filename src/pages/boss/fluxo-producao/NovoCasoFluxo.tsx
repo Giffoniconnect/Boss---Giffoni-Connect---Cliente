@@ -48,14 +48,14 @@ interface ExtendedProtocolData {
   completedAt: string;
   updatedAt: string;
 
-  // Step 1.9.1 fields
+  // Step 1.10.1.1 fields
   clientsList: string[];
   exAdversosList: string[];
   subject: string;
   court: string;
   comarca: string;
 
-  // Step 1.9.2 Perícia fields
+  // Step 1.10.1.2 Perícia fields
   periciaMarked: boolean;
   periciaDate: string;
   periciaTime: string;
@@ -64,7 +64,7 @@ interface ExtendedProtocolData {
   periciaType: 'presencial' | 'online';
   periciaEscritorioComparecer: boolean;
 
-  // Step 1.9.3 Prazo fields
+  // Step 1.10.1.3 Prazo fields
   prazoMarked: boolean;
   prazoQual: string;
   prazoFatal: string;
@@ -72,10 +72,10 @@ interface ExtendedProtocolData {
   prazoSeguranca: string;
   prazoDependeClienteInfo: boolean;
   prazoQualInfo: string;
-  prazoDependeClienteProva: boolean;
-  prazoQualProva: string;
+  prazoDependeClienteProof: boolean;
+  prazoQualProof: string;
 
-  // Step 1.9.4 Audiência fields
+  // Step 1.10.1.4 Audiência fields
   audienciaMarked: boolean;
   audienciaDate: string;
   audienciaTime: string;
@@ -87,18 +87,18 @@ interface ExtendedProtocolData {
   audienciaLink: string;
   audienciaClienteAvisado: boolean;
 
-  // Step 1.9.5 Contrato fields
+  // Step 1.10.1.5 Contrato fields
   contratoCriado: boolean;
   contratoValorTotal: string;
   contratoParcelas: string;
   contratoVencimentoDia: string;
   contratoAssinado: boolean;
 
-  // Step 1.9.6 Andamento fields
+  // Step 1.10.1.6 Andamento fields
   andamentoConferido: boolean;
   andamentoResumo: string;
 
-  // Step 1.9.7 Controladoria fields
+  // Step 1.10.1.7 Controladoria fields
   controladoriaMigrado: boolean;
   controladoriaData: string;
   controladoriaResponsavel: string;
@@ -141,8 +141,8 @@ const DEFAULT_PROTOCOL: ExtendedProtocolData = {
   prazoSeguranca: '',
   prazoDependeClienteInfo: false,
   prazoQualInfo: '',
-  prazoDependeClienteProva: false,
-  prazoQualProva: '',
+  prazoDependeClienteProof: false,
+  prazoQualProof: '',
 
   audienciaMarked: false,
   audienciaDate: '',
@@ -200,7 +200,7 @@ function formatCNJ(value: string) {
   return formatted;
 }
 
-export default function ProtocoloFluxo() {
+export default function NovoCasoFluxo() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
 
@@ -211,14 +211,13 @@ export default function ProtocoloFluxo() {
 
   const [caseObj, setCaseObj] = useState<any>(null);
   const [client, setClient] = useState<any>(null);
+  // Shared 'protocol' object is used in firebase database to enable subsequent step modules to work out of the box!
   const [protocol, setProtocol] = useState<ExtendedProtocolData>(DEFAULT_PROTOCOL);
 
-  // Additional Inline State for Client & Ex-Adverso lists
   const [newClientInput, setNewClientInput] = useState('');
   const [newExAdversoInput, setNewExAdversoInput] = useState('');
   const [copiedFormula, setCopiedFormula] = useState(false);
 
-  // Validation
   const isCNJValid = (value: string) => {
     return value.replace(/\D/g, '').length === 20;
   };
@@ -257,7 +256,6 @@ export default function ProtocoloFluxo() {
 
         const rawProtocol = cData.protocol || {};
         
-        // Auto pull clientsList and pre-populate if empty
         let loadedClientsList = rawProtocol.clientsList || [];
         if (!Array.isArray(loadedClientsList) || loadedClientsList.length === 0) {
           loadedClientsList = [resolvedPrimaryClient];
@@ -300,8 +298,8 @@ export default function ProtocoloFluxo() {
           prazoSeguranca: rawProtocol.prazoSeguranca || '',
           prazoDependeClienteInfo: rawProtocol.prazoDependeClienteInfo ?? false,
           prazoQualInfo: rawProtocol.prazoQualInfo || '',
-          prazoDependeClienteProva: rawProtocol.prazoDependeClienteProva ?? false,
-          prazoQualProva: rawProtocol.prazoQualProva || '',
+          prazoDependeClienteProof: rawProtocol.prazoDependeClienteProof ?? false,
+          prazoQualProof: rawProtocol.prazoQualProof || '',
 
           audienciaMarked: rawProtocol.audienciaMarked ?? false,
           audienciaDate: rawProtocol.audienciaDate || '',
@@ -331,7 +329,7 @@ export default function ProtocoloFluxo() {
         setProtocol(merged);
       } catch (err: any) {
         console.error(err);
-        setError(`Erro ao buscar dados do protocolo: ${err.message || err}`);
+        setError(`Erro ao buscar dados do caso: ${err.message || err}`);
       } finally {
         setLoading(false);
       }
@@ -350,7 +348,6 @@ export default function ProtocoloFluxo() {
     });
   };
 
-  // Helper lists handlers
   const handleAddClient = () => {
     if (!newClientInput.trim()) return;
     setProtocol((prev) => ({
@@ -383,7 +380,6 @@ export default function ProtocoloFluxo() {
     }));
   };
 
-  // Formula generator
   const generatedTodoistFormula = `[${protocol.clientsList.join(' & ')}] x [${protocol.exAdversosList.join(' & ')}] - [${protocol.subject || 'Assunto'}] - [${protocol.processNumber || 'Sem CNJ'}] - [${protocol.court || 'Sem Vara'}] - [${protocol.comarca || 'Sem Comarca'}]`;
 
   const copyTodoistFormula = () => {
@@ -398,9 +394,8 @@ export default function ProtocoloFluxo() {
     setError(null);
     if (!silent) setSuccess(null);
 
-    // CRITICAL: Prevent progress or save validation if CNJ has not been filled out with exactly 20 digits.
     if (!isCNJValid(protocol.processNumber)) {
-      setError('🚨 O número do processo (CNJ) é obrigatório e de preenchimento obrigatório com exatamente 20 dígitos.');
+      setError('🚨 O número do processo (CNJ) é obrigatório e de preenchimento obrigatório com exatamente 20 dígitos para cadastro legítimo de caso.');
       setSaving(false);
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return false;
@@ -421,23 +416,9 @@ export default function ProtocoloFluxo() {
         updatedAt: now
       };
 
-      // Handle transition rules
-      const isInitialField = caseObj?.registrationTypeKey === 'peticao_inicial';
-      if (isInitialField && protocol.protocolStatus === 'protocolado') {
-        updatedProtocol.convertedToJudicialCase = true;
-        payload.registrationTypeKey = 'processo_judicial_ajuizado';
-        payload.registrationType = 'Processo Judicial Ajuizado';
-        payload.actionCategory = 'judicial';
-        payload.statusPublicoCliente = `Processo nº ${protocol.processNumber}`;
-        payload.statusInterno = 'Protocolado';
-        payload.caseLifecycle = 'caso';
-      }
-
       if (action === 'advance') {
         payload.productionStage = 'controladoria';
         payload.statusInterno = 'Em controladoria';
-      } else {
-        payload.statusInterno = protocol.protocolStatus === 'protocolado' ? 'Protocolado' : (caseObj?.statusInterno || 'Aguardando protocolo');
       }
 
       await updateDoc(doc(db, 'cases', caseId!), payload);
@@ -449,7 +430,7 @@ export default function ProtocoloFluxo() {
       }));
 
       if (!silent) {
-        setSuccess('Etapa 1.9 Protocolo e Distribuição salva de forma exemplar no Connect!');
+        setSuccess('Etapa 1.10.1 Cadastro de Novo Caso salva de forma exemplar no Connect!');
       }
 
       if (action === 'exit') {
@@ -461,7 +442,7 @@ export default function ProtocoloFluxo() {
       return true;
     } catch (err: any) {
       console.error(err);
-      setError(`Erro ao salvar protocolo: ${err.message || err}`);
+      setError(`Erro ao salvar cadastro do novo caso: ${err.message || err}`);
       return false;
     } finally {
       setSaving(false);
@@ -470,11 +451,11 @@ export default function ProtocoloFluxo() {
 
   if (loading) {
     return (
-      <FluxoStepLayout stepName="Protocolo / Distribuição" caseId={caseId}>
+      <FluxoStepLayout stepName="Cadastro de Novo Caso" caseId={caseId}>
         <div className="p-16 text-center text-gray-400 flex flex-col items-center justify-center gap-3">
           <Loader2 className="animate-spin text-gray-900" size={28} />
           <span className="text-xs font-bold font-mono tracking-wide uppercase">
-            Carregando Sincronizador de Protocolo...
+            Carregando Sincronizador de Cadastro...
           </span>
         </div>
       </FluxoStepLayout>
@@ -491,9 +472,9 @@ export default function ProtocoloFluxo() {
 
   return (
     <FluxoStepLayout
-      stepName="1.9 Protocolo e Distribuição"
+      stepName="1.10.1 Cadastro de Novo Caso"
       caseId={caseId}
-      statusText={caseObj?.statusInterno || 'Aguardando protocolo'}
+      statusText={caseObj?.statusInterno || 'Novo Caso'}
     >
       <div className="space-y-8 font-sans">
         
@@ -529,28 +510,27 @@ export default function ProtocoloFluxo() {
 
             <div>
               <span className="text-[10px] font-bold px-3 py-1.5 rounded-xl border border-gray-150 bg-white text-gray-700">
-                Fase do Caso: {caseObj?.productionStage || 'protocolo'}
+                Fase do Caso: {caseObj?.productionStage || 'novo-caso'}
               </span>
             </div>
           </div>
         </div>
 
-        {/* ======================= STEP 1.9.1 ======================= */}
+        {/* ======================= STEP 1.10.1.1 ======================= */}
         <div className="border border-gray-150 rounded-3xl p-6 space-y-6 bg-white shadow-3xs">
           <div className="flex items-center gap-2.5 border-b border-gray-100 pb-4">
             <div className="w-8 h-8 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0 font-bold text-xs">
-              1.9.1
+              1.10.1.1
             </div>
             <div>
-              <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Opção 1.9.1 — Cadastrar Protocolo / Processo</h3>
-              <p className="text-[10.5px] text-gray-400">Insira a relação de partes fáticas da ação jurídica correspondente.</p>
+              <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Opção 1.10.1.1 — Cadastrar Novo Caso / Processo</h3>
+              <p className="text-[10.5px] text-gray-400">Insira as partes fáticas do processo correlato ao novo caso.</p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Clientes List block */}
             <div className="space-y-2">
-              <label className="block text-[10px] font-black uppercase tracking-wider text-gray-450 text-gray-500">Relação de Clientes (Mais de um permitido) *</label>
+              <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400">Relação de Clientes *</label>
               
               <div className="flex gap-2">
                 <input
@@ -570,28 +550,23 @@ export default function ProtocoloFluxo() {
               </div>
 
               <div className="flex flex-wrap gap-2 pt-1">
-                {protocol.clientsList.length === 0 ? (
-                  <span className="text-xs text-gray-400 italic">Nenhum cliente cadastrado.</span>
-                ) : (
-                  protocol.clientsList.map((c, idx) => (
-                    <span key={idx} className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 border border-indigo-150 text-indigo-750 text-xs font-bold rounded-xl">
-                      <span>{c}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveClient(idx)}
-                        className="text-indigo-400 hover:text-indigo-800 font-bold text-[11px] font-sans"
-                      >
-                        &times;
-                      </button>
-                    </span>
-                  ))
-                )}
+                {protocol.clientsList.map((c, idx) => (
+                  <span key={idx} className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 border border-indigo-150 text-indigo-750 text-xs font-bold rounded-xl animate-fadeIn">
+                    <span>{c}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveClient(idx)}
+                      className="text-indigo-400 hover:text-indigo-800 font-bold text-[11px] font-sans h-3.5 leading-none"
+                    >
+                      &times;
+                    </button>
+                  </span>
+                ))}
               </div>
             </div>
 
-            {/* Ex-adversos List block */}
             <div className="space-y-2">
-              <label className="block text-[10px] font-black uppercase tracking-wider text-gray-450 text-gray-500">Relação de Ex-adversos (Mais de um permitido)</label>
+              <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400">Relação de Ex-adversos</label>
               
               <div className="flex gap-2">
                 <input
@@ -615,12 +590,12 @@ export default function ProtocoloFluxo() {
                   <span className="text-[11px] text-gray-400 italic mt-2.5">Adicione os ex-adversos neste caso de produção</span>
                 ) : (
                   protocol.exAdversosList.map((exa, idx) => (
-                    <span key={idx} className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 border border-red-150 text-red-750 text-xs font-bold rounded-xl">
+                    <span key={idx} className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 border border-red-150 text-red-750 text-xs font-bold rounded-xl animate-fadeIn">
                       <span>{exa}</span>
                       <button
                         type="button"
                         onClick={() => handleRemoveExAdverso(idx)}
-                        className="text-red-400 hover:text-red-800 font-bold text-[11px] font-sans"
+                        className="text-red-400 hover:text-red-800 font-bold text-[11px] font-sans h-3.5 leading-none"
                       >
                         &times;
                       </button>
@@ -688,7 +663,6 @@ export default function ProtocoloFluxo() {
             </div>
           </div>
 
-          {/* DYNAMIC TODOIST FORMULA CARD */}
           <div className="bg-slate-900 border border-slate-950 rounded-2xl p-5 text-indigo-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-1">
               <span className="text-[8.5px] font-mono tracking-widest font-black uppercase text-indigo-400 bg-indigo-950/85 px-2.5 py-1 rounded">
@@ -719,16 +693,16 @@ export default function ProtocoloFluxo() {
           </div>
         </div>
 
-        {/* ======================= STEP 1.9.2 ======================= */}
+        {/* ======================= STEP 1.10.1.2 ======================= */}
         <div className="border border-gray-150 rounded-3xl p-6 space-y-6 bg-white shadow-3xs">
           <div className="flex items-center justify-between border-b border-gray-100 pb-4">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0 font-bold text-xs font-sans">
-                1.9.2
+                1.10.1.2
               </div>
               <div>
-                <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Opção 1.9.2 — Caso possui perícia marcada?</h3>
-                <p className="text-[10.5px] text-gray-400">Assinale caso haja vistoria técnica, laudo ou perícia fixada judicialmente.</p>
+                <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Opção 1.10.1.2 — Caso possui perícia marcada?</h3>
+                <p className="text-[10.5px] text-gray-400">Valores de laudo ou perícias judiciais faticamente fixadas.</p>
               </div>
             </div>
 
@@ -783,7 +757,7 @@ export default function ProtocoloFluxo() {
                   value={protocol.periciaPerito}
                   onChange={(e) => handleChange('periciaPerito', e.target.value)}
                   placeholder="Nome do expert judicial"
-                  className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-xs font-medium placeholder-gray-350"
+                  className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-xs font-medium placeholder-gray-355"
                 />
               </div>
 
@@ -794,7 +768,7 @@ export default function ProtocoloFluxo() {
                   value={protocol.periciaLocal}
                   onChange={(e) => handleChange('periciaLocal', e.target.value)}
                   placeholder="Endereço fático da clínica ou órgão judicial"
-                  className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-xs font-medium placeholder-gray-350"
+                  className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-xs font-medium placeholder-gray-355"
                 />
               </div>
 
@@ -838,16 +812,16 @@ export default function ProtocoloFluxo() {
           )}
         </div>
 
-        {/* ======================= STEP 1.9.3 ======================= */}
+        {/* ======================= STEP 1.10.1.3 ======================= */}
         <div className="border border-gray-150 rounded-3xl p-6 space-y-6 bg-white shadow-3xs">
           <div className="flex items-center justify-between border-b border-gray-100 pb-4">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0 font-bold text-xs font-sans">
-                1.9.3
+                1.10.1.3
               </div>
               <div>
-                <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Opção 1.9.3 — Caso possui prazo em aberto?</h3>
-                <p className="text-[10.5px] text-gray-400">Assinale se há exigências temporais a serem observadas.</p>
+                <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Opção 1.10.1.3 — Caso possui prazo em aberto?</h3>
+                <p className="text-[10.5px] text-gray-400">Prazos e termos processuais judicialmente vigentes.</p>
               </div>
             </div>
 
@@ -882,7 +856,7 @@ export default function ProtocoloFluxo() {
                     type="text"
                     value={protocol.prazoQual}
                     onChange={(e) => handleChange('prazoQual', e.target.value)}
-                    placeholder="Exemplo: Réplica à contestação, manifestação de provas"
+                    placeholder="Exemplo: Manifestação de provas, réplica jurídica"
                     className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-xs font-medium placeholder-gray-350"
                   />
                 </div>
@@ -920,7 +894,6 @@ export default function ProtocoloFluxo() {
                   />
                 </div>
 
-                {/* Depends on client's info or proof dynamic toggles */}
                 <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Depends on info */}
                   <div className="p-3.5 border border-indigo-100 rounded-2xl bg-indigo-50/20 space-y-2">
@@ -971,18 +944,18 @@ export default function ProtocoloFluxo() {
                       <div className="flex gap-1">
                         <button
                           type="button"
-                          onClick={() => handleChange('prazoDependeClienteProva', true)}
+                          onClick={() => handleChange('prazoDependeClienteProof', true)}
                           className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase transition-all ${
-                            protocol.prazoDependeClienteProva ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 border border-gray-200'
+                            protocol.prazoDependeClienteProof ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 border border-gray-200'
                           }`}
                         >
                           Sim
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleChange('prazoDependeClienteProva', false)}
+                          onClick={() => handleChange('prazoDependeClienteProof', false)}
                           className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase transition-all ${
-                            !protocol.prazoDependeClienteProva ? 'bg-gray-600 text-white' : 'bg-white text-gray-500 border border-gray-200'
+                            !protocol.prazoDependeClienteProof ? 'bg-gray-600 text-white' : 'bg-white text-gray-500 border border-gray-200'
                           }`}
                         >
                           Não
@@ -990,12 +963,12 @@ export default function ProtocoloFluxo() {
                       </div>
                     </div>
 
-                    {protocol.prazoDependeClienteProva && (
+                    {protocol.prazoDependeClienteProof && (
                       <div className="space-y-1.5 animate-fadeIn">
                         <input
                           type="text"
-                          value={protocol.prazoQualProva}
-                          onChange={(e) => handleChange('prazoQualProva', e.target.value)}
+                          value={protocol.prazoQualProof}
+                          onChange={(e) => handleChange('prazoQualProof', e.target.value)}
                           placeholder="Qual prova documental é pendente?"
                           className="w-full bg-white border border-gray-200 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-lg px-2.5 py-1.5 text-[11px] font-medium"
                         />
@@ -1011,16 +984,16 @@ export default function ProtocoloFluxo() {
           )}
         </div>
 
-        {/* ======================= STEP 1.9.4 ======================= */}
+        {/* ======================= STEP 1.10.1.4 ======================= */}
         <div className="border border-gray-150 rounded-3xl p-6 space-y-6 bg-white shadow-3xs">
           <div className="flex items-center justify-between border-b border-gray-100 pb-4">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0 font-bold text-xs font-sans">
-                1.9.4
+                1.10.1.4
               </div>
               <div>
-                <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Opção 1.9.4 — Caso possui audiência marcada?</h3>
-                <p className="text-[10.5px] text-gray-400">Assinale se há rito presencial ou virtual fático agendado.</p>
+                <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Opção 1.10.1.4 — Caso possui audiência marcada?</h3>
+                <p className="text-[10.5px] text-gray-400">Sessões ordinárias e interrogatórios marcados.</p>
               </div>
             </div>
 
@@ -1075,7 +1048,7 @@ export default function ProtocoloFluxo() {
                     type="text"
                     value={protocol.audienciaJuizo}
                     onChange={(e) => handleChange('audienciaJuizo', e.target.value)}
-                    placeholder="Exemplo: Vara do Trabalho, Juizado Especial"
+                    placeholder="Exemplo: Vara Federal, Comarca Geral"
                     className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-xs font-medium placeholder-gray-350"
                   />
                 </div>
@@ -1087,7 +1060,7 @@ export default function ProtocoloFluxo() {
                     value={protocol.audienciaLocal}
                     onChange={(e) => handleChange('audienciaLocal', e.target.value)}
                     placeholder="Exemplo: Fórum Central Barra Funda"
-                    className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-xs font-medium placeholder-gray-350"
+                    className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-xs font-medium placeholder-gray-355"
                   />
                 </div>
               </div>
@@ -1164,16 +1137,16 @@ export default function ProtocoloFluxo() {
           )}
         </div>
 
-        {/* ======================= STEP 1.9.5 ======================= */}
+        {/* ======================= STEP 1.10.1.5 ======================= */}
         <div className="border border-gray-150 rounded-3xl p-6 space-y-6 bg-white shadow-3xs">
           <div className="flex items-center justify-between border-b border-gray-100 pb-4">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0 font-bold text-xs font-sans">
-                1.9.5
+                1.10.1.5
               </div>
               <div>
-                <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Opção 1.9.5 — Criar Novo Contrato Financeiro</h3>
-                <p className="text-[10.5px] text-gray-400">Defina os termos fáticos do faturamento processual ou honorários do caso.</p>
+                <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Opção 1.10.1.5 — Criar Novo Contrato Financeiro</h3>
+                <p className="text-[10.5px] text-gray-400">Defina os honorários advocatícios ou cláusulas contratuais fáticas.</p>
               </div>
             </div>
 
@@ -1250,16 +1223,16 @@ export default function ProtocoloFluxo() {
           )}
         </div>
 
-        {/* ======================= STEP 1.9.6 ======================= */}
+        {/* ======================= STEP 1.10.1.6 ======================= */}
         <div className="border border-gray-150 rounded-3xl p-6 space-y-6 bg-white shadow-3xs">
           <div className="flex items-center justify-between border-b border-gray-100 pb-4">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0 font-bold text-xs font-sans">
-                1.9.6
+                1.10.1.6
               </div>
               <div>
-                <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Opção 1.9.6 — Conferir Andamento Processual</h3>
-                <p className="text-[10.5px] text-gray-400">Certifique o andamento nos painéis dos Tribunais (PJe, e-SAJ, etc.) para sincronizar a base.</p>
+                <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Opção 1.10.1.6 — Conferir Andamento Processual</h3>
+                <p className="text-[10.5px] text-gray-400">Efetue o levantamento nos Tribunais PJe ou correlatos para ratificar a situação fática.</p>
               </div>
             </div>
 
@@ -1298,16 +1271,16 @@ export default function ProtocoloFluxo() {
           )}
         </div>
 
-        {/* ======================= STEP 1.9.7 ======================= */}
+        {/* ======================= STEP 1.10.1.7 ======================= */}
         <div className="border border-gray-150 rounded-3xl p-6 space-y-6 bg-white shadow-3xs">
           <div className="flex items-center justify-between border-b border-gray-100 pb-4">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center shrink-0 font-bold text-xs font-sans">
-                1.9.7
+                1.10.1.7
               </div>
               <div>
-                <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Opção 1.9.7 — Migrar Informações para o Setor da Controladoria</h3>
-                <p className="text-[10.5px] text-gray-400">Prepare os registros fáticos para auditorias, trâmites e controle interno do escritório.</p>
+                <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Opção 1.10.1.7 — Migrar Informações para o Setor da Controladoria</h3>
+                <p className="text-[10.5px] text-gray-450">Prepare os registros fáticos para auditorias, trâmites e controle interno do escritório.</p>
               </div>
             </div>
 
@@ -1368,11 +1341,11 @@ export default function ProtocoloFluxo() {
         <div className="flex flex-col sm:flex-row sm:justify-between items-center gap-4 pt-6 border-t border-gray-150">
           <button
             type="button"
-            onClick={() => navigate(flowRoutes.revisao(caseId!))}
+            onClick={() => navigate(`${flowRoutes.tipoServico(caseId!)}?clientId=${caseObj?.clientId}&source=novo-caso`)}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-200 hover:border-gray-300 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white"
           >
             <ArrowLeft size={14} />
-            Voltar para Revisão
+            Voltar para Tipo de Serviço
           </button>
 
           <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto">
@@ -1383,7 +1356,7 @@ export default function ProtocoloFluxo() {
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-300 hover:border-gray-400 text-gray-700 px-5 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white"
             >
               <Save size={13} />
-              {saving ? 'Gravando...' : 'Salvar Protocolo'}
+              {saving ? 'Gravando...' : 'Salvar Informações'}
             </button>
 
             <button

@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { flowSteps } from '../utils/flowSteps';
 import { flowRoutes } from '../utils/flowRoutes';
 import { Lock, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../../../lib/firebase';
 
 interface FluxoSidebarProps {
   caseId?: string;
@@ -11,6 +13,41 @@ interface FluxoSidebarProps {
 export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const [isNovoCaso, setIsNovoCaso] = useState(false);
+
+  useEffect(() => {
+    if (location.pathname.includes('/novo-caso')) {
+      setIsNovoCaso(true);
+      return;
+    }
+    if (!caseId) return;
+
+    const fetchCaseStatus = async () => {
+      try {
+        const caseSnap = await getDoc(doc(db, 'cases', caseId));
+        if (caseSnap.exists()) {
+          const data = caseSnap.data();
+          if (data.isNovoCaso || data.productionStage === 'novo-caso' || data.caseLifecycle === 'novo-caso') {
+            setIsNovoCaso(true);
+          }
+        }
+      } catch (err) {
+        console.error("Error reading case in sidebar:", err);
+      }
+    };
+
+    fetchCaseStatus();
+  }, [caseId, location.pathname]);
+
+  const activeSteps = isNovoCaso 
+    ? [
+        { id: 'cadastro', label: '1.1/1.2 Cliente Vinculado', routeKey: 'cadastro' as any, requiresCaseId: false, order: 1 },
+        { id: 'tipo-producao', label: '1.3.2 Tipo de Serviço', routeKey: 'tipoServico' as any, requiresCaseId: true, order: 2 },
+        { id: 'novo-caso', label: '1.10.1 Cadastro de Novo Caso', routeKey: 'novoCaso' as any, requiresCaseId: true, order: 3 },
+        { id: 'controladoria', label: '1.11.1 Controladoria', routeKey: 'controladoria' as any, requiresCaseId: true, order: 4 },
+        { id: 'relatorio-integridade', label: '1.11.2 Arquivamento (Fechamento)', routeKey: 'relatorioIntegridade' as any, requiresCaseId: true, order: 5 },
+      ]
+    : flowSteps;
 
   return (
     <div className="w-full lg:w-80 bg-white border border-gray-150 rounded-3xl p-6 shadow-sm shrink-0">
@@ -38,13 +75,16 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
       </div>
 
       <nav className="space-y-1.5">
-        {flowSteps.map((step) => {
+        {activeSteps.map((step) => {
           const isCadastro = step.id === 'cadastro';
           let stepUrl = '';
           let isLocked = false;
 
           if (isCadastro) {
-            stepUrl = flowRoutes.cadastro();
+            stepUrl = isNovoCaso ? '' : flowRoutes.cadastro();
+            if (isNovoCaso) {
+              isLocked = true; // For Novo Caso, the client is pre-linked so they cannot click back to 1.1/1.2 registration screen
+            }
           } else if (caseId) {
             // we have a caseId, resolve the route helper dynamically!
             const routeHelper = flowRoutes[step.routeKey];
@@ -61,10 +101,10 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
 
           // Styling based on state: atual, disponivel, bloqueado, futuro
           let stateStyle = '';
-          let isClickable = !isLocked;
+          let isClickable = !isLocked && stepUrl !== '';
 
           if (isLocked) {
-            stateStyle = 'border-transparent text-gray-300 pointer-events-none';
+            stateStyle = 'border-transparent text-gray-300 pointer-events-none bg-gray-50/50';
           } else if (isCurrent) {
             stateStyle = 'bg-gray-950 text-white border-transparent shadow-sm';
           } else {

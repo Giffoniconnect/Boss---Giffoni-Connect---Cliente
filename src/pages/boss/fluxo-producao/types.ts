@@ -11,7 +11,8 @@ export type FlowStep =
   | 'revisao'
   | 'protocolo'
   | 'controladoria'
-  | 'relatorio_integridade';
+  | 'relatorio_integridade'
+  | 'recadastramento';
 
 export type ClientSelectionMode = 'new_pf' | 'new_pj' | 'select';
 

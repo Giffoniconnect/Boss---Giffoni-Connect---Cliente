@@ -23,8 +23,10 @@ import FinanceiroFluxo from './pages/boss/fluxo-producao/FinanceiroFluxo';
 import EDRPFluxo from './pages/boss/fluxo-producao/EDRPFluxo';
 import RevisaoFluxo from './pages/boss/fluxo-producao/RevisaoFluxo';
 import ProtocoloFluxo from './pages/boss/fluxo-producao/ProtocoloFluxo';
+import NovoCasoFluxo from './pages/boss/fluxo-producao/NovoCasoFluxo';
 import ControladoriaFluxo from './pages/boss/fluxo-producao/ControladoriaFluxo';
 import RelatorioIntegridadeFluxo from './pages/boss/fluxo-producao/RelatorioIntegridadeFluxo';
+import Recadastramento from './pages/boss/fluxo-producao/Recadastramento';
 
 
 
@@ -126,6 +128,14 @@ export default function App() {
               } 
             />
             <Route 
+              path="/boss-giffoni-clientes/fluxo-producao/recadastramento" 
+              element={
+                <ProtectedRoute role="boss_admin">
+                  <Recadastramento />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
               path="/boss-giffoni-clientes/fluxo-producao/tipo-producao" 
               element={
                 <ProtectedRoute role="boss_admin">
@@ -194,6 +204,14 @@ export default function App() {
               element={
                 <ProtectedRoute role="boss_admin">
                   <ProtocoloFluxo />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/boss-giffoni-clientes/fluxo-producao/:caseId/novo-caso" 
+              element={
+                <ProtectedRoute role="boss_admin">
+                  <NovoCasoFluxo />
                 </ProtectedRoute>
               } 
             />

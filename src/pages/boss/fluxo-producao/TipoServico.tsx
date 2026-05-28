@@ -199,27 +199,34 @@ export default function TipoServico() {
         const caseRef = doc(collectionRef);
         const autoCaseId = caseRef.id;
 
+        const isNovoCaso = searchParams.get('source') === 'novo-caso';
+
         const payload = {
           clientId: clientId,
           clientSlug: clientSlug,
           registrationType: serviceItem.label,
           registrationTypeKey: selectedService,
           actionCategory: actionCat,
-          title: "RASCUNHO DE PRODUÇÃO",
-          status: "rascunho",
-          statusInterno: "Em produção",
+          title: isNovoCaso ? "NOVO CASO" : "RASCUNHO DE PRODUÇÃO",
+          status: isNovoCaso ? "ativo" : "rascunho",
+          statusInterno: isNovoCaso ? "Em produção" : "Em produção",
           statusPublicoCliente: publicStatus,
           visibleToClient: true,
           productionStatus: "em_producao",
-          productionStage: "dados-caso",
-          caseLifecycle: "edrp",
+          productionStage: isNovoCaso ? "novo-caso" : "dados-caso",
+          caseLifecycle: isNovoCaso ? "novo-caso" : "edrp",
+          isNovoCaso: isNovoCaso,
           createdAt: now,
           updatedAt: now
         };
 
         await setDoc(caseRef, payload);
 
-        navigate(`/boss-giffoni-clientes/fluxo-producao/${autoCaseId}/dados-caso`);
+        if (isNovoCaso) {
+          navigate(`/boss-giffoni-clientes/fluxo-producao/${autoCaseId}/novo-caso`);
+        } else {
+          navigate(`/boss-giffoni-clientes/fluxo-producao/${autoCaseId}/dados-caso`);
+        }
       } else {
         setError('Impossível prosseguir sem um identificador fático ativo.');
       }

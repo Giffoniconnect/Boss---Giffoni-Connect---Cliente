@@ -9,8 +9,10 @@ export const flowRoutes = {
   edrp: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp`,
   revisao: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/revisao`,
   protocolo: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/protocolo`,
+  novoCaso: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/novo-caso`,
   controladoria: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/controladoria`,
   relatorioIntegridade: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/relatorio-integridade`,
+  recadastramento: () => '/boss-giffoni-clientes/fluxo-producao/recadastramento'
 };
 
 export type FlowRouteKey = keyof typeof flowRoutes;
