@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { flowSteps } from '../utils/flowSteps';
 import { flowRoutes } from '../utils/flowRoutes';
-import { Lock, ArrowLeft, Check, Compass, FolderKanban } from 'lucide-react';
+import { Lock, ArrowLeft, Check, X, FolderKanban } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
 
@@ -16,6 +16,10 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
   const [isNovoCaso, setIsNovoCaso] = useState(false);
   const [clientType, setClientType] = useState<string | null>(null);
 
+  // Loaded database objects to measure real semantic integrity
+  const [caseObj, setCaseObj] = useState<any>(null);
+  const [clientObj, setClientObj] = useState<any>(null);
+
   useEffect(() => {
     if (location.pathname.includes('/novo-caso')) {
       setIsNovoCaso(true);
@@ -28,13 +32,16 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
         const caseSnap = await getDoc(doc(db, 'cases', caseId));
         if (caseSnap.exists()) {
           const data = caseSnap.data();
+          setCaseObj(data);
           if (data.isNovoCaso || data.productionStage === 'novo-caso' || data.caseLifecycle === 'novo-caso') {
             setIsNovoCaso(true);
           }
           if (data.clientId) {
             const clientSnap = await getDoc(doc(db, 'clients', data.clientId));
             if (clientSnap.exists()) {
-              setClientType(clientSnap.data().type || null);
+              const cData = clientSnap.data();
+              setClientObj(cData);
+              setClientType(cData.type || null);
             }
           }
         }
@@ -67,7 +74,6 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
           { id: 'relatorio-integridade', label: 'Arquivamento', routeKey: 'relatorioIntegridade' as any, requiresCaseId: true, order: 5 },
         ]
       : flowSteps.map(s => {
-          // Simplify labels for a horizontal visual strip
           let shortLabel = s.label;
           if (s.id === 'cadastro') shortLabel = cadastroLabel;
           else if (s.id === 'dados-caso') shortLabel = 'Entrevista (5W2H)';
@@ -107,27 +113,117 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
     });
   }, [activeSteps, caseId, isNovoCaso, location.pathname]);
 
-  // Percentage calculation: 0 = start, 100% = finish
+  // Measure real, functional step completeness mapping in compliance with Obstáculo 1 & 6
+  const getStepStatus = (stepId: string): 'complete' | 'incomplete' | 'uninitiated' => {
+    if (stepId === 'cadastro') {
+      if (!clientObj) return 'uninitiated';
+      const missing = clientObj.missingFields || [];
+      const isIncomplete = clientObj.cadastroIncompleto === true || (missing.length > 0);
+      return isIncomplete ? 'incomplete' : 'complete';
+    }
+
+    if (stepId === 'dados-caso') {
+      if (!caseObj) return 'uninitiated';
+      
+      // Determine if they completed every 10 minimal items:
+      const completeValue = !!(
+        caseObj.basesFaticas?.trim() &&
+        caseObj.description?.trim() &&
+        caseObj.fatosAbordagem?.trim() &&
+        caseObj.oQueAconteceu?.trim() &&
+        caseObj.quemParticipou?.trim() &&
+        caseObj.ondeAconteceu?.trim() &&
+        caseObj.quandoAconteceu?.trim() &&
+        caseObj.comoAconteceu?.trim() &&
+        caseObj.porQueAconteceu?.trim() &&
+        caseObj.comoPretendeResolver?.trim()
+      );
+
+      if (completeValue) return 'complete';
+
+      // If they have written at least some text, it is incomplete; otherwise, uninitiated.
+      const started = !!(
+        caseObj.basesFaticas?.trim() ||
+        caseObj.description?.trim() ||
+        caseObj.fatosAbordagem?.trim() ||
+        caseObj.oQueAconteceu?.trim() ||
+        caseObj.quemParticipou?.trim() ||
+        caseObj.ondeAconteceu?.trim() ||
+        caseObj.quandoAconteceu?.trim() ||
+        caseObj.comoAconteceu?.trim() ||
+        caseObj.porQueAconteceu?.trim() ||
+        caseObj.comoPretendeResolver?.trim()
+      );
+
+      return started ? 'incomplete' : 'uninitiated';
+    }
+
+    if (stepId === 'tipo-producao') {
+      if (!caseObj) return 'uninitiated';
+      const isComplete = !!(caseObj.registrationTypeKey || caseObj.registrationType);
+      return isComplete ? 'complete' : 'uninitiated';
+    }
+
+    if (stepId === 'solicitacoes-provas') {
+      if (!caseObj) return 'uninitiated';
+      return (caseObj.evidenceStatus === 'concluido' || caseObj.evidenceCompleted) ? 'complete' : 'uninitiated';
+    }
+
+    if (stepId === 'solicitacoes-informacoes') {
+      if (!caseObj) return 'uninitiated';
+      return (caseObj.infoStatus === 'concluido' || caseObj.infoCompleted) ? 'complete' : 'uninitiated';
+    }
+
+    if (stepId === 'financeiro') {
+      if (!caseObj) return 'uninitiated';
+      return (caseObj.financeiroStatus === 'faturado' || caseObj.financialCompleted) ? 'complete' : 'uninitiated';
+    }
+
+    if (stepId === 'edrp') {
+      if (!caseObj) return 'uninitiated';
+      return caseObj.edrp ? 'complete' : 'uninitiated';
+    }
+
+    if (stepId === 'revisao') {
+      if (!caseObj) return 'uninitiated';
+      return (caseObj.revisionCompleted || caseObj.statusInterno === 'Aprovado para protocolo') ? 'complete' : 'uninitiated';
+    }
+
+    if (stepId === 'protocolo') {
+      if (!caseObj) return 'uninitiated';
+      return (caseObj.statusInterno === 'Protocolado' || caseObj.processNumber) ? 'complete' : 'uninitiated';
+    }
+
+    if (stepId === 'controladoria') {
+      if (!caseObj) return 'uninitiated';
+      return (caseObj.controladoriaCompleted || caseObj.statusInterno === 'Em controladoria') ? 'complete' : 'uninitiated';
+    }
+
+    if (stepId === 'relatorio-integridade') {
+      if (!caseObj) return 'uninitiated';
+      return caseObj.statusInterno === 'Arquivado' ? 'complete' : 'uninitiated';
+    }
+
+    return 'uninitiated';
+  };
+
+  // Percentage calculation: math-safe avanço metric
   const progressPercent = useMemo(() => {
     if (activeSteps.length <= 1) return 0;
     const activeIdx = currentIndex !== -1 ? currentIndex : 0;
     return Math.round((activeIdx / (activeSteps.length - 1)) * 100);
   }, [activeSteps, currentIndex]);
 
-  const currentStep = currentIndex !== -1 ? activeSteps[currentIndex] : activeSteps[0];
-
   return (
     <div className="w-full bg-white border border-gray-150 rounded-[2.5rem] p-6 shadow-sm space-y-5">
       
-      {/* ROW 1: CONTROLS & PROGRESS */}
+      {/* ROW 1: PROGRESS TRACKER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-4">
-        
-        {/* Back and title info */}
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
             onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao')}
-            className="p-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-500 hover:text-gray-900 transition-all flex items-center justify-center cursor-pointer shrink-0"
+            className="p-2 bg-gray-50 hover:bg-gray-100 border border-gray-150 rounded-xl text-gray-500 hover:text-gray-900 transition-all flex items-center justify-center cursor-pointer shrink-0"
             title="Voltar ao Início"
           >
             <ArrowLeft size={14} />
@@ -135,20 +231,20 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
           
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">Acompanhamento Produtivo</h4>
+              <h4 className="text-sm font-extrabold text-gray-900 tracking-tight leading-none">Acompanhamento Produtivo</h4>
               <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md text-[9px] font-bold uppercase tracking-wider">
                 {isNovoCaso ? 'Fluxo Simplificado' : 'Fluxo Padrão'}
               </span>
             </div>
             
-            <p className="text-[10px] text-gray-400 mt-0.5 truncate flex items-center gap-1">
+            <p className="text-[10px] text-gray-400 mt-1 truncate flex items-center gap-1 font-mono uppercase tracking-wide">
               <FolderKanban size={10} />
-              {caseId ? `Caso Ativo: ${caseId}` : 'Rascunho de Cadastro Inicial (Sem Caso)'}
+              {caseId ? `Caso Ativo: ${caseId}` : 'Rascunho de Cadastro Inicial'}
             </p>
           </div>
         </div>
 
-        {/* Dynamic percentage display */}
+        {/* PROGRESS METRIC BLOCK */}
         <div className="flex items-center gap-4 bg-gray-50/55 border border-gray-100 px-4 py-2 rounded-2xl shrink-0 self-start md:self-auto">
           <div className="text-left">
             <span className="text-[9px] font-black uppercase text-gray-400 block tracking-widest leading-none">
@@ -171,12 +267,11 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
             </div>
           </div>
         </div>
-
       </div>
 
-      {/* ROW 2: HORIZONTAL TIMELINE PILLS (SWIPE/SCROLLABLE) */}
+      {/* ROW 2: HORIZONTAL TIMELINE PROCESS */}
       <div className="relative">
-        <div className="flex items-center gap-2.5 overflow-x-auto pb-1 scrollbar-none select-none scroll-smooth">
+        <div className="flex items-center gap-2.5 overflow-x-auto pb-1.5 scrollbar-none select-none scroll-smooth">
           {activeSteps.map((step, idx) => {
             const isCadastro = step.id === 'cadastro';
             let stepUrl = '';
@@ -197,15 +292,23 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
             }
 
             const isCurrent = idx === currentIndex || (!caseId && isCadastro && location.pathname.endsWith('/cadastro'));
-            const isCompleted = currentIndex !== -1 && idx < currentIndex;
             const isClickable = !isLocked && stepUrl !== '';
 
-            // Styling based on state: current, completed, future/locked
+            // Calculate precise status metrics
+            const stepStatusValue = getStepStatus(step.id);
+
+            // Styling based on state: current, complete, incomplete, locked
             let pillClass = '';
             if (isCurrent) {
-              pillClass = 'bg-gray-950 text-white border-transparent shadow-xs';
-            } else if (isCompleted) {
+              if (stepStatusValue === 'incomplete') {
+                pillClass = 'bg-red-50 text-red-900 border-red-300 ring-1 ring-red-300 shadow-xs';
+              } else {
+                pillClass = 'bg-gray-950 text-white border-transparent shadow-xs';
+              }
+            } else if (stepStatusValue === 'complete') {
               pillClass = 'bg-emerald-50 border-emerald-100 text-emerald-800 hover:bg-emerald-100/50 hover:border-emerald-200';
+            } else if (stepStatusValue === 'incomplete') {
+              pillClass = 'bg-red-50 border-red-150 text-red-700 hover:bg-red-100/50 hover:border-red-200';
             } else if (isLocked) {
               pillClass = 'border-transparent bg-gray-50 text-gray-300 pointer-events-none';
             } else {
@@ -225,13 +328,29 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
                 className={`flex items-center gap-1.5 px-3.5 py-2 border rounded-full text-[11px] font-bold transition-all shrink-0 cursor-pointer outline-none ${pillClass}`}
                 id={`timeline-step-${step.id}`}
               >
-                {isCompleted ? (
-                  <Check size={11} className="text-emerald-600 shrink-0 stroke-[3px]" />
-                ) : isCurrent ? (
-                  <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse shrink-0" />
-                ) : isLocked ? (
-                  <Lock size={9} className="text-gray-300 shrink-0" />
-                ) : null}
+                {/* Visual Status Indicator in compliance with Obstáculo 1 & 6 */}
+                {(() => {
+                  if (stepStatusValue === 'complete') {
+                    return <Check size={11} className="text-emerald-600 shrink-0 stroke-[3px]" />;
+                  }
+                  if (stepStatusValue === 'incomplete') {
+                    return (
+                      <div className="relative group/tooltip flex items-center justify-center">
+                        <X size={11} className="text-red-500 shrink-0 stroke-[3px]" />
+                        <span className="absolute bottom-full mb-1.5 hidden group-hover/tooltip:block bg-red-800 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-lg whitespace-nowrap z-40 font-mono tracking-wider">
+                          {step.id === 'dados-caso' ? 'Entrevista incompleta' : 'Cadastro incompleto'}
+                        </span>
+                      </div>
+                    );
+                  }
+                  if (isCurrent) {
+                    return <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse shrink-0" />;
+                  }
+                  if (isLocked) {
+                    return <Lock size={9} className="text-gray-300 shrink-0" />;
+                  }
+                  return null;
+                })()}
 
                 <span className="font-mono text-[9px] opacity-60">
                   {String(step.order).padStart(2, '0')}

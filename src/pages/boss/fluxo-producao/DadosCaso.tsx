@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
@@ -8,135 +8,187 @@ import {
   ArrowRight, 
   Save, 
   Info, 
-  FileText, 
-  Calendar, 
-  HelpCircle, 
   Loader2, 
-  AlertTriangle, 
   CheckCircle2, 
   AlertCircle,
-  Building,
-  User,
+  FileText,
   Activity,
-  UserCheck,
-  Scale,
-  DollarSign
+  User,
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 import { flowRoutes } from './utils/flowRoutes';
 
-// helper for CNJ process masking
-function formatCNJ(value: string): string {
-  const clean = value.replace(/\D/g, '').slice(0, 20);
-  if (clean.length === 0) return '';
-  let formatted = '';
-  // Format: 1234567-89.2023.8.26.0100
-  if (clean.length <= 7) {
-    formatted = clean;
-  } else if (clean.length <= 9) {
-    formatted = `${clean.slice(0, 7)}-${clean.slice(7)}`;
-  } else if (clean.length <= 13) {
-    formatted = `${clean.slice(0, 7)}-${clean.slice(7, 9)}.${clean.slice(9)}`;
-  } else if (clean.length <= 14) {
-    formatted = `${clean.slice(0, 7)}-${clean.slice(7, 9)}.${clean.slice(9, 13)}.${clean.slice(13)}`;
-  } else if (clean.length <= 16) {
-    formatted = `${clean.slice(0, 7)}-${clean.slice(7, 9)}.${clean.slice(9, 13)}.${clean.slice(13, 14)}.${clean.slice(14)}`;
-  } else {
-    formatted = `${clean.slice(0, 7)}-${clean.slice(7, 9)}.${clean.slice(9, 13)}.${clean.slice(13, 14)}.${clean.slice(14, 16)}.${clean.slice(16, 20)}`;
-  }
-  return formatted;
+// Multi-functional map of internal status -> suggested public status for client
+const statusMapping: Record<string, string> = {
+  'Rascunho': 'Cadastro interno em andamento.',
+  'Entrevista pendente': 'Aguardando complementação de informações.',
+  'Em produção': 'Seu caso está em análise e preparação.',
+  'Com pendência': 'Há pendências necessárias para avanço do caso.',
+  'Em estruturação': 'Seu caso está em estruturação técnica.',
+  'Aguardando revisão': 'Seu caso está em revisão interna.',
+  'Em revisão': 'Seu caso está em revisão jurídica.',
+  'Aprovado para protocolo': 'Seu caso está pronto para o próximo protocolo.',
+  'Aguardando protocolo': 'Seu caso aguarda protocolo.',
+  'Protocolado': 'Seu caso foi protocolado.',
+  'Em controladoria': 'Seu caso está em acompanhamento processual.',
+  'Arquivado': 'Atendimento encerrado/arquivado.'
+};
+
+interface MiniRichEditorProps {
+  id: string;
+  value: string;
+  onChange: (val: string) => void;
+  placeholder: string;
+  isMissing: boolean;
 }
 
-const resolveRegistrationTypeKey = (key: string, label: string): string => {
-  if (key) return key;
-  const normalized = (label || '').toLowerCase().trim();
-  if (normalized.includes('inicial')) return 'peticao_inicial';
-  if (normalized.includes('requerimento') || normalized.includes('adm')) return 'requerimento_administrativo';
-  if (normalized.includes('extrajudicial')) return 'extrajudicial';
-  if (normalized.includes('andamento')) return 'processo_judicial_em_andamento';
-  if (normalized.includes('ajuizado')) return 'processo_judicial_ajuizado';
-  return 'peticao_inicial';
-};
+// Mini Rich Text Editor in compliance with Solution 3
+function MiniRichEditor({ id, value, onChange, placeholder, isMissing }: MiniRichEditorProps) {
+  const editorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (editorRef.current && editorRef.current.innerHTML !== value) {
+      editorRef.current.innerHTML = value || '';
+    }
+  }, [value]);
+
+  const handleInput = () => {
+    if (editorRef.current) {
+      onChange(editorRef.current.innerHTML);
+    }
+  };
+
+  const applyCommand = (command: string, arg?: string) => {
+    document.execCommand(command, false, arg);
+    handleInput();
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    document.execCommand('insertText', false, text);
+  };
+
+  return (
+    <div id={`editor-container-${id}`} className={`border rounded-2xl overflow-hidden shadow-xs bg-white transition-all duration-200 ${
+      isMissing ? 'border-red-300 focus-within:border-red-500 focus-within:ring-1 focus-within:ring-red-500' : 'border-gray-200 focus-within:border-gray-900 focus-within:ring-1 focus-within:ring-gray-900'
+    }`}>
+      {/* Editorial Toolbar Buttons */}
+      <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border-b border-gray-150 select-none">
+        <button
+          type="button"
+          onClick={() => applyCommand('bold')}
+          className="px-3 py-1.5 text-xs text-gray-800 hover:bg-gray-200 border border-gray-200 hover:border-gray-300 rounded-lg transition-all font-serif font-black flex items-center justify-center min-w-[28px] cursor-pointer"
+          title="Negrito"
+        >
+          N
+        </button>
+        <button
+          type="button"
+          onClick={() => applyCommand('backColor', 'yellow')}
+          className="px-2.5 py-1.5 text-[11px] text-gray-800 hover:bg-yellow-100 border border-yellow-200 rounded-lg transition-all bg-yellow-50 flex items-center gap-1.5 cursor-pointer font-bold"
+          title="Marca-texto amarelo"
+        >
+          <span className="w-3.5 h-3.5 bg-yellow-400 border border-yellow-500 rounded-md shrink-0 block" />
+          <span>Marca-texto</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            applyCommand('removeFormat');
+            try {
+              applyCommand('backColor', 'transparent');
+            } catch (e) {}
+          }}
+          className="px-3 py-1.5 text-[11px] text-red-600 hover:bg-red-50 border border-red-100 hover:border-red-200 rounded-lg transition-all font-bold ml-auto cursor-pointer"
+          title="Limpar marcação"
+        >
+          Limpar formatação
+        </button>
+      </div>
+
+      {/* Editor Main Canvas - Styled like clean judicial pages in compliance with Solution 3 */}
+      <div
+        ref={editorRef}
+        contentEditable
+        onInput={handleInput}
+        onBlur={handleInput}
+        onPaste={handlePaste}
+        className="outline-none min-h-[160px] p-6 text-gray-900 bg-white"
+        style={{
+          fontFamily: '"Times New Roman", Times, serif',
+          fontSize: '12pt',
+          lineHeight: '1.5',
+          textAlign: 'justify',
+          paddingLeft: '1.5rem',
+        }}
+        placeholder={placeholder}
+      />
+    </div>
+  );
+}
 
 export default function DadosCaso() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
 
-  // Root screen state
+  // Screen states
   const [fetching, setFetching] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Associated raw loaded documents
+  // Loaded assets
   const [client, setClient] = useState<any>(null);
   const [caseObj, setCaseObj] = useState<any>(null);
 
-  // Core inputs
+  // Narrative inputs (mini word editor)
+  const [basesFaticas, setBasesFaticas] = useState('');
+  const [description, setDescription] = useState(''); // detail narrative
+  const [fatosAbordagem, setFatosAbordagem] = useState('');
+
+  // 5W2H input states
+  const [oQueAconteceu, setOQueAconteceu] = useState('');
+  const [quemParticipou, setQuemParticipou] = useState('');
+  const [ondeAconteceu, setOndeAconteceu] = useState('');
+  const [quandoAconteceu, setQuandoAconteceu] = useState('');
+  const [comoAconteceu, setComoAconteceu] = useState('');
+  const [porQueAconteceu, setPorQueAconteceu] = useState('');
+  const [comoPretendeResolver, setComoPretendeResolver] = useState('');
+
+  // Core administrative inputs
   const [title, setTitle] = useState('');
-  const [adverseParty, setAdverseParty] = useState('');
-  const [caseType, setCaseType] = useState('');
-  const [description, setDescription] = useState('');
+  
+  // Separated classification inputs
+  const [materia, setMateria] = useState('');
+  const [ramo, setRamo] = useState('');
+  const [tipoAcao, setTipoAcao] = useState('');
+
   const [priority, setPriority] = useState('media');
   const [responsibleLawyer, setResponsibleLawyer] = useState('');
-  const [tribunal, setTribunal] = useState('');
-  const [court, setCourt] = useState('');
-  const [district, setDistrict] = useState('');
-  const [processNumber, setProcessNumber] = useState('');
   const [visibleToClient, setVisibleToClient] = useState(true);
   const [statusInterno, setStatusInterno] = useState('Em produção');
   const [statusPublicoCliente, setStatusPublicoCliente] = useState('');
-
-  // Flag tracking if customer has manually tailored public status input box
   const [isPublicStatusManuallyEdited, setIsPublicStatusManuallyEdited] = useState(false);
 
-  // Group 1: peticao_inicial specific fields
-  const [pretendedActionName, setPretendedActionName] = useState('');
-  const [pretendedJurisdiction, setPretendedJurisdiction] = useState('');
-  const [estimatedValue, setEstimatedValue] = useState('');
-
-  // Group 2: requerimento_administrativo specific fields
-  const [administrativeBody, setAdministrativeBody] = useState('');
-  const [requirementType, setRequirementType] = useState('');
-
-  // Group 3: extrajudicial specific fields
-  const [negotiationType, setNegotiationType] = useState('');
-  const [recipientName, setRecipientName] = useState('');
-
-  // Group 4: Audiência scheduler conditional block
-  const [audienciaAgendada, setAudienciaAgendada] = useState(false);
-  const [audienciaData, setAudienciaData] = useState('');
-  const [audienciaHora, setAudienciaHora] = useState('');
-  const [audienciaLocalOuLink, setAudienciaLocalOuLink] = useState('');
-  const [audienciaResponsavel, setAudienciaResponsavel] = useState('');
-  const [audienciaObservacoes, setAudienciaObservacoes] = useState('');
-
+  // Options
   const statusInternoOptions = [
+    'Rascunho',
+    'Entrevista pendente',
     'Em produção',
+    'Com pendência',
     'Em estruturação',
-    'Delegado',
     'Aguardando revisão',
     'Em revisão',
     'Aprovado para protocolo',
     'Aguardando protocolo',
     'Protocolado',
     'Em controladoria',
-    'Consolidado',
-    'Com pendência',
     'Arquivado'
   ];
 
-  const statusPublicoSuggestions = [
-    'Aguardando distribuição',
-    'Requerimento pendente',
-    'Tratativa extrajudicial pendente',
-    'Aguardando documentos',
-    'Audiência agendada',
-    'Perícia agendada',
-    'Processo nº [CNJ]',
-    'Em acompanhamento',
-    'Arquivado'
-  ];
-
+  // Load documentation on mount
   useEffect(() => {
     if (!caseId) {
       setError('Identificador do caso ausente na URL.');
@@ -144,7 +196,7 @@ export default function DadosCaso() {
       return;
     }
 
-    async function loadResources() {
+    async function loadCaseData() {
       try {
         const caseSnap = await getDoc(doc(db, 'cases', caseId!));
         if (!caseSnap.exists()) {
@@ -156,43 +208,33 @@ export default function DadosCaso() {
         const data = caseSnap.data();
         setCaseObj(data);
 
-        // Map core states
+        // Core inputs
         setTitle(data.title || '');
-        setAdverseParty(data.adverseParty || '');
-        setCaseType(data.caseType || '');
-        setDescription(data.description || '');
         setPriority(data.priority || 'media');
         setResponsibleLawyer(data.responsibleLawyer || '');
-        setTribunal(data.tribunal || '');
-        setCourt(data.court || data.vara || '');
-        setDistrict(data.district || data.comarca || '');
-        setProcessNumber(data.processNumber ? formatCNJ(data.processNumber) : '');
         setVisibleToClient(data.visibleToClient !== false);
         setStatusInterno(data.statusInterno || 'Em produção');
         setStatusPublicoCliente(data.statusPublicoCliente || '');
+        setIsPublicStatusManuallyEdited(data.isPublicStatusManuallyEdited === true);
 
-        if (data.statusPublicoCliente) {
-          setIsPublicStatusManuallyEdited(true);
-        }
+        // Separated classification fields
+        setMateria(data.materia || (data.caseType ? data.caseType.split('/')[0]?.trim() : ''));
+        setRamo(data.ramo || (data.caseType ? data.caseType.split('/')[1]?.trim() : ''));
+        setTipoAcao(data.tipoAcao || (data.caseType ? data.caseType.split('/')[2]?.trim() : ''));
 
-        // Map conditional states
-        setPretendedActionName(data.pretendedActionName || '');
-        setPretendedJurisdiction(data.pretendedJurisdiction || '');
-        setEstimatedValue(data.estimatedValue || '');
-        setAdministrativeBody(data.administrativeBody || '');
-        setRequirementType(data.requirementType || '');
-        setNegotiationType(data.negotiationType || '');
-        setRecipientName(data.recipientName || '');
+        // Load 5W2H & main narrative paragraphs safely
+        setBasesFaticas(data.basesFaticas || '');
+        setDescription(data.description || '');
+        setFatosAbordagem(data.fatosAbordagem || '');
+        setOQueAconteceu(data.oQueAconteceu || '');
+        setQuemParticipou(data.quemParticipou || '');
+        setOndeAconteceu(data.ondeAconteceu || '');
+        setQuandoAconteceu(data.quandoAconteceu || '');
+        setComoAconteceu(data.comoAconteceu || '');
+        setPorQueAconteceu(data.porQueAconteceu || '');
+        setComoPretendeResolver(data.comoPretendeResolver || data.encaminhamentoEsperado || '');
 
-        // Map audience states
-        setAudienciaAgendada(data.audienciaAgendada || false);
-        setAudienciaData(data.audienciaData || '');
-        setAudienciaHora(data.audienciaHora || '');
-        setAudienciaLocalOuLink(data.audienciaLocalOuLink || '');
-        setAudienciaResponsavel(data.audienciaResponsavel || '');
-        setAudienciaObservacoes(data.audienciaObservacoes || '');
-
-        // Attempt reading client
+        // Client lookup
         if (data.clientId) {
           const clientSnap = await getDoc(doc(db, 'clients', data.clientId));
           if (clientSnap.exists()) {
@@ -201,30 +243,21 @@ export default function DadosCaso() {
         }
       } catch (err: any) {
         console.error(err);
-        setError(`Erro crítico ao carregar registros remotos: ${err.message || err}`);
+        setError(`Erro crítico ao carregar registros do caso: ${err.message || err}`);
       } finally {
         setFetching(false);
       }
     }
 
-    loadResources();
+    loadCaseData();
   }, [caseId]);
 
-  const activeRegKey = resolveRegistrationTypeKey(caseObj?.registrationTypeKey, caseObj?.registrationType);
-
-  const handleCnjChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawVal = e.target.value;
-    const formatted = formatCNJ(rawVal);
-    setProcessNumber(formatted);
-
-    // Auto update statusPublicoCliente unless manually handled
-    const isJudicial = activeRegKey === 'processo_judicial_em_andamento' || activeRegKey === 'processo_judicial_ajuizado';
-    if (isJudicial && !isPublicStatusManuallyEdited) {
-      if (formatted.trim()) {
-        setStatusPublicoCliente(`Processo nº ${formatted}`);
-      } else {
-        setStatusPublicoCliente('Aguardando número do processo');
-      }
+  // Handle automatic Suggested Public Status mapping on Internal Status alteration
+  const handleStatusInternoChange = (newVal: string) => {
+    setStatusInterno(newVal);
+    if (!isPublicStatusManuallyEdited) {
+      const suggest = statusMapping[newVal] || '';
+      setStatusPublicoCliente(suggest);
     }
   };
 
@@ -233,109 +266,109 @@ export default function DadosCaso() {
     setIsPublicStatusManuallyEdited(true);
   };
 
-  const selectSuggestion = (text: string) => {
+  const handleRestoreStatusSuggestion = () => {
     setError(null);
-    if (text === 'Processo nº [CNJ]') {
-      if (processNumber.trim()) {
-        setStatusPublicoCliente(`Processo nº ${processNumber}`);
-      } else {
-        setStatusPublicoCliente('Processo nº ');
-      }
-    } else {
-      setStatusPublicoCliente(text);
-    }
-    setIsPublicStatusManuallyEdited(true);
+    const suggest = statusMapping[statusInterno] || '';
+    setStatusPublicoCliente(suggest);
+    setIsPublicStatusManuallyEdited(false);
   };
 
-  const validateForm = (): boolean => {
+  // Check 5W2H completeness status
+  const is5W2HComplete = !!(
+    basesFaticas.trim() &&
+    description.trim() &&
+    fatosAbordagem.trim() &&
+    oQueAconteceu.trim() &&
+    quemParticipou.trim() &&
+    ondeAconteceu.trim() &&
+    quandoAconteceu.trim() &&
+    comoAconteceu.trim() &&
+    porQueAconteceu.trim() &&
+    comoPretendeResolver.trim()
+  );
+
+  const is5W2HStarted = !!(
+    basesFaticas.trim() ||
+    description.trim() ||
+    fatosAbordagem.trim() ||
+    oQueAconteceu.trim() ||
+    quemParticipou.trim() ||
+    ondeAconteceu.trim() ||
+    quandoAconteceu.trim() ||
+    comoAconteceu.trim() ||
+    porQueAconteceu.trim() ||
+    comoPretendeResolver.trim()
+  );
+
+  const validateDraft = (): boolean => {
     setError(null);
-
     if (!title.trim()) {
-      setError('Por favor, informe o Título Operacional do Caso.');
+      setError('Por favor, informe pelo menos o Título Operacional do Caso.');
       return false;
     }
-    if (!caseType.trim()) {
-      setError('Por favor, informe a Matéria / Ramo / Tipo de Ação.');
-      return false;
-    }
-    if (!statusInterno) {
-      setError('O status operacional interno deve ser definido.');
-      return false;
-    }
-    if (!statusPublicoCliente.trim()) {
-      setError('Defina o status de exibição pública do cliente para assegurar a transparência fática.');
-      return false;
-    }
-
-    const isJudicial = activeRegKey === 'processo_judicial_em_andamento' || activeRegKey === 'processo_judicial_ajuizado';
-    if (isJudicial && statusInterno === 'Protocolado' && !processNumber.trim()) {
-      setError('O número de processo CNJ é obrigatório quando o status interno for definido como "Protocolado".');
-      return false;
-    }
-
     return true;
   };
 
   const saveCasePayload = async (nextStage?: string): Promise<boolean> => {
-    if (!validateForm()) return false;
+    if (!validateDraft()) return false;
 
     setSaving(true);
     setSuccess(null);
 
-    // Status draft resolution
-    let currentStatusValue = caseObj?.status || 'rascunho';
-    const minFieldsFilled = title.trim() && caseType.trim() && (responsibleLawyer.trim() || adverseParty.trim());
-    if (currentStatusValue === 'rascunho' && minFieldsFilled) {
+    // Calculate backward-compatible multi-classification fields
+    const combinedCaseType = [materia.trim(), ramo.trim(), tipoAcao.trim()].filter(Boolean).join(' / ');
+
+    // status resolution
+    let currentStatusValue = caseObj?.status || 'active';
+    if (currentStatusValue === 'rascunho' && title.trim()) {
       currentStatusValue = 'ativo';
     }
+
+    // productionStatus: complete -> em_producao, incomplete -> com_pendencias
+    const computedProductionStatus = is5W2HComplete ? 'em_producao' : 'com_pendencias';
 
     const timestamp = new Date().toISOString();
     const payload: any = {
       title: title.trim(),
-      adverseParty: adverseParty.trim(),
-      caseType: caseType.trim(),
+      caseType: combinedCaseType,
+      materia: materia.trim(),
+      ramo: ramo.trim(),
+      tipoAcao: tipoAcao.trim(),
+      
+      // Store all 5W2H narrative blocks
+      basesFaticas: basesFaticas.trim(),
       description: description.trim(),
+      fatosAbordagem: fatosAbordagem.trim(),
+      oQueAconteceu: oQueAconteceu.trim(),
+      quemParticipou: quemParticipou.trim(),
+      ondeAconteceu: ondeAconteceu.trim(),
+      quandoAconteceu: quandoAconteceu.trim(),
+      comoAconteceu: comoAconteceu.trim(),
+      porQueAconteceu: porQueAconteceu.trim(),
+      comoPretendeResolver: comoPretendeResolver.trim(),
+
       priority,
       responsibleLawyer: responsibleLawyer.trim(),
       visibleToClient,
       statusInterno,
       statusPublicoCliente: statusPublicoCliente.trim(),
+      isPublicStatusManuallyEdited,
+      productionStatus: computedProductionStatus,
       status: currentStatusValue,
       updatedAt: timestamp
     };
 
     if (nextStage) {
       payload.productionStage = nextStage;
-    }
-
-    // Capture Group fields
-    if (activeRegKey === 'processo_judicial_em_andamento' || activeRegKey === 'processo_judicial_ajuizado') {
-      payload.processNumber = processNumber.trim();
-      payload.tribunal = tribunal.trim();
-      payload.court = court.trim();
-      payload.district = district.trim();
-
-      payload.audienciaAgendada = audienciaAgendada;
-      payload.audienciaData = audienciaData;
-      payload.audienciaHora = audienciaHora;
-      payload.audienciaLocalOuLink = audienciaLocalOuLink.trim();
-      payload.audienciaResponsavel = audienciaResponsavel.trim();
-      payload.audienciaObservacoes = audienciaObservacoes.trim();
-    } else if (activeRegKey === 'peticao_inicial') {
-      payload.pretendedActionName = pretendedActionName.trim();
-      payload.pretendedJurisdiction = pretendedJurisdiction.trim();
-      payload.estimatedValue = estimatedValue.trim();
-    } else if (activeRegKey === 'requerimento_administrativo') {
-      payload.administrativeBody = administrativeBody.trim();
-      payload.requirementType = requirementType.trim();
-    } else if (activeRegKey === 'extrajudicial') {
-      payload.negotiationType = negotiationType.trim();
-      payload.recipientName = recipientName.trim();
+    } else {
+      payload.productionStage = 'dados-caso';
     }
 
     try {
+      // 1. Maintain primary cases collection persistence
       await updateDoc(doc(db, 'cases', caseId!), payload);
       
+      // 2. Maintain mirrored list cases collection persistence
       await setDoc(doc(db, 'casos', caseId!), {
         id: caseId,
         caseId: caseId,
@@ -343,8 +376,6 @@ export default function DadosCaso() {
         clientId: caseObj.clientId,
         title: payload.title,
         titulo: payload.title,
-        adverseParty: payload.adverseParty,
-        parteContraria: payload.adverseParty,
         caseType: payload.caseType,
         tipo: payload.caseType,
         description: payload.description,
@@ -358,25 +389,20 @@ export default function DadosCaso() {
         statusInterno: payload.statusInterno,
         statusPublicoCliente: payload.statusPublicoCliente,
         status: payload.status,
-        processNumber: payload.processNumber || '',
-        numeroProcesso: payload.processNumber || '',
-        tribunal: payload.tribunal || '',
-        court: payload.court || '',
-        vara: payload.court || '',
-        district: payload.district || '',
-        comarca: payload.district || '',
+        productionStatus: payload.productionStatus,
+        productionStage: payload.productionStage,
         updatedAt: payload.updatedAt,
         atualizadoEm: payload.updatedAt,
         createdAt: caseObj.createdAt || new Date().toISOString(),
         criadoEm: caseObj.createdAt || new Date().toISOString()
       }, { merge: true });
 
-      setSuccess('Dados salvos na base com excelência operacional!');
+      setSuccess('Dados salvos na faticidade operacional com primor técnico!');
       setCaseObj({ ...caseObj, ...payload });
       return true;
     } catch (err: any) {
       console.error(err);
-      setError(`Erro ao manter persistência de dados: ${err.message || err}`);
+      setError(`Erro ao gravar dados fáticos mestre: ${err.message || err}`);
       return false;
     } finally {
       setSaving(false);
@@ -401,12 +427,7 @@ export default function DadosCaso() {
     }
   };
 
-  // Check if incomplete card warning is required
-  const registrationTypeName = caseObj?.registrationType || 'Não definido';
-  const isJudicial = activeRegKey === 'processo_judicial_em_andamento' || activeRegKey === 'processo_judicial_ajuizado';
-  const showCnjWarning = isJudicial && !processNumber.trim();
-
-  // Root screen check error state
+  // Return blocked UI if caseId is empty
   if (!caseId) {
     return (
       <div className="p-8 max-w-xl mx-auto mt-20 bg-white border border-red-200 rounded-3xl shadow-sm text-center">
@@ -415,13 +436,6 @@ export default function DadosCaso() {
         <p className="text-xs text-gray-500 mt-2 leading-relaxed">
           Nenhum identificador fático (caseId) foi fornecido na URL de requisição técnica.
         </p>
-        <button
-          type="button"
-          onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao/cadastro')}
-          className="mt-6 inline-flex bg-gray-900 hover:bg-black text-white text-xs font-bold px-6 py-2.5 rounded-xl cursor-pointer"
-        >
-          Voltar ao Início do Fluxo
-        </button>
       </div>
     );
   }
@@ -437,24 +451,49 @@ export default function DadosCaso() {
     <FluxoStepLayout stepName="Dados do Caso" caseId={caseId} statusText={caseObj?.status === 'rascunho' ? 'Rascunho' : 'Caso Ativo'}>
       <div className="space-y-8">
         
-        {/* HEADER EXPLAINER */}
-        <div>
-          <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">Parametros Gerais da Demanda</h3>
-          <p className="text-xs text-gray-500 mt-1">
-            Qualifique estruturalmente o litígio, configure visibilidade operacional e controle os fluxos fáticos perante o cliente.
-          </p>
+        {/* HEADER AREA */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-5">
+          <div>
+            <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">Entrevista Inicial / Questionário 5W2H</h3>
+            {clientName && (
+              <p className="text-[11px] text-indigo-650 font-bold font-mono tracking-wide mt-1 uppercase">
+                Cliente Associado: {clientName} ({clientSlug})
+              </p>
+            )}
+            <p className="text-xs text-gray-500 mt-1">
+              Esboce a base de fatos reais do caso jurídicamente relevante e preencha o questionário metodológico.
+            </p>
+          </div>
+
+          <div className="shrink-0 flex items-center gap-2">
+            {!is5W2HComplete && is5W2HStarted ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-amber-800 text-[10px] font-black uppercase tracking-wider font-sans">
+                <AlertTriangle size={11} className="text-amber-500" />
+                Entrevista Incompleta
+              </span>
+            ) : is5W2HComplete ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 rounded-full text-emerald-800 text-[10px] font-black uppercase tracking-wider font-sans">
+                <CheckCircle2 size={11} className="text-emerald-500" />
+                Fatos Consolidados
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-50 border border-gray-200 rounded-full text-gray-500 text-[10px] font-bold uppercase tracking-wider font-sans">
+                Aguardando Preenchimento
+              </span>
+            )}
+          </div>
         </div>
 
         {/* FEEDBACK BANNERS */}
         {error && (
-          <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-900 text-xs flex gap-3 items-center animate-fadeIn">
+          <div className="p-4 bg-red-50 border border-red-150 rounded-2xl text-red-900 text-xs flex gap-3 items-center animate-fadeIn">
             <AlertCircle size={16} className="text-red-500 shrink-0" />
             <span className="font-semibold leading-relaxed">{error}</span>
           </div>
         )}
 
         {success && (
-          <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl text-emerald-900 text-xs flex gap-3 items-center animate-fadeIn">
+          <div className="p-4 bg-emerald-50 border border-emerald-150 rounded-2xl text-emerald-900 text-xs flex gap-3 items-center animate-fadeIn">
             <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
             <span className="font-semibold">{success}</span>
           </div>
@@ -462,113 +501,299 @@ export default function DadosCaso() {
 
         {fetching ? (
           <div className="p-16 text-center text-gray-400 flex flex-col items-center justify-center gap-3">
-            <Loader2 className="animate-spin text-gray-500" size={28} />
-            <span className="text-xs font-bold font-mono uppercase tracking-widest text-gray-500">Sincronizando Metadados...</span>
+            <Loader2 className="animate-spin text-gray-500 font-bold" size={28} />
+            <span className="text-xs font-bold font-mono uppercase tracking-widest text-gray-500">Sincronizando Histórico Fático...</span>
           </div>
         ) : (
           <div className="space-y-6">
 
-            {/* TOP METADATA SUMMARY BAR IN COMPLIANCE WITH REGRA 10 */}
-            <div className="bg-gray-50 border border-gray-150 rounded-2xl p-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 divide-y sm:divide-y-0 sm:divide-x divide-gray-200">
-                <div className="space-y-1">
-                  <span className="text-xs font-bold tracking-wider text-gray-500 uppercase">Cliente Titular</span>
-                  <h4 className="text-sm font-bold text-gray-950 truncate max-w-[180px]">{clientName || 'Nenhum'}</h4>
-                  <p className="text-xs text-gray-500 font-mono">Slug: {clientSlug || 'Sem slug'}</p>
-                </div>
-                <div className="space-y-1 sm:pl-4">
-                  <span className="text-xs font-bold tracking-wider text-gray-500 uppercase">Modalidade</span>
-                  <h4 className="text-sm font-bold text-gray-900 uppercase tracking-tight">{registrationTypeName}</h4>
-                  <span className="inline-block text-xs font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md font-mono mt-0.5 uppercase">
-                    {activeRegKey}
-                  </span>
-                </div>
-                <div className="space-y-1 md:pl-4 col-span-1">
-                  <span className="text-xs font-bold tracking-wider text-gray-500 uppercase">Controle Operacional</span>
-                  <div className="text-xs text-gray-700 space-y-1">
-                    <div>Interno: <span className="font-bold text-gray-800">{statusInterno}</span></div>
-                    <div className="truncate max-w-[150px]">Público: <span className="font-bold text-indigo-700">{statusPublicoCliente}</span></div>
-                  </div>
-                </div>
-                <div className="space-y-1 md:pl-4 col-span-1">
-                  <span className="text-xs font-bold tracking-wider text-gray-500 uppercase">Ficha Técnica</span>
-                  <div className="text-xs text-gray-750 space-y-1">
-                    <div>Status: <span className="font-bold uppercase text-blue-600">{caseObj?.status || 'Rascunho'}</span></div>
-                    <div>Prioridade: <span className="font-bold text-gray-800 capitalize">{priority}</span></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* CNJ PERSISTENT ALERT IN COMPLIANCE WITH REGRA 9/10 */}
-            {showCnjWarning && (
+            {/* IF INCOMPLETE WARNING CARD (Solution 6) */}
+            {!is5W2HComplete && is5W2HStarted && (
               <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 text-sm flex gap-3 items-start animate-fadeIn">
                 <AlertTriangle size={18} className="text-amber-600 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <h5 className="font-black uppercase tracking-wider text-xs">Aviso Cadastral de Produção</h5>
-                  <p className="font-medium leading-relaxed">
-                    CNJ ainda não preenchido. O status público permanecerá como aguardando número do processo. 
-                    O avanço das etapas subsequentes não será bloqueado por este quesito, salvo se o status interno for alterado para <span className="font-black font-mono">"Protocolado"</span>.
+                  <h5 className="font-bold text-xs uppercase tracking-wider">Aviso de Integralidade Fática</h5>
+                  <p className="leading-relaxed text-xs">
+                    Entrevista 5W2H incompleta. Você pode navegar livremente pelas próximas etapas, mas esta pendência continuará registrada no painel administrativo até o preenchimento de todos os 10 fatores mínimos destacados abaixo com borda vermelha.
                   </p>
                 </div>
               </div>
             )}
 
-            {/* MAIN CARD FIELDS */}
-            <div className="bg-white border border-gray-150 rounded-2xl p-6 space-y-6 shadow-xs">
-              <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono border-b border-gray-100 pb-3">Bases fáticas informativas</h4>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5 col-span-1 md:col-span-2">
-                  <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Título do Caso *</label>
-                  <input 
-                    type="text" 
-                    value={title} 
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Ex: Ação Rescisória de Aluguel Habitacional" 
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
+            {/* ORDEM REORGANIZADA DA TELA (Solution 2 & Series) */}
+
+            {/* PART 1: BASES FÁTICAS */}
+            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-4">
+              <div className="flex justify-between items-start border-b border-gray-100 pb-3 flex-wrap gap-2">
+                <div>
+                  <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">1. Bases Fáticas Informativas da Estruturação Inicial do Caso</h4>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Visão mestre sobre a lide e os pressupostos de atuação.</p>
+                </div>
+                {!basesFaticas.trim() && (
+                  <span className="text-[10px] text-red-500 font-bold uppercase tracking-wider px-2 py-0.5 bg-red-50 rounded-md">Pendente *</span>
+                )}
+              </div>
+              <MiniRichEditor 
+                id="basesFaticas"
+                value={basesFaticas}
+                onChange={setBasesFaticas}
+                placeholder="Insira as bases fáticas resumidas de inicialização fática da lide..." 
+                isMissing={!basesFaticas.trim()}
+              />
+            </div>
+
+            {/* PART 2: DESCRIÇÃO DETALHADA */}
+            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-4">
+              <div className="flex justify-between items-start border-b border-gray-100 pb-3 flex-wrap gap-2">
+                <div>
+                  <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">2. Descrição Detalhada</h4>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Narrativa minuciosa dos acontecimentos ocorridos cronologicamente.</p>
+                </div>
+                {!description.trim() && (
+                  <span className="text-[10px] text-red-500 font-bold uppercase tracking-wider px-2 py-0.5 bg-red-50 rounded-md">Pendente *</span>
+                )}
+              </div>
+              <MiniRichEditor 
+                id="description"
+                value={description}
+                onChange={setDescription}
+                placeholder="Insira a descrição detalhada e técnica da lide..." 
+                isMissing={!description.trim()}
+              />
+            </div>
+
+            {/* PART 3: FATOS DE ABORDAGEM */}
+            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-4">
+              <div className="flex justify-between items-start border-b border-gray-100 pb-3 flex-wrap gap-2">
+                <div>
+                  <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">3. Fatos de Abordagem</h4>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Elementos de destaque e conexões de argumentação inicial.</p>
+                </div>
+                {!fatosAbordagem.trim() && (
+                  <span className="text-[10px] text-red-500 font-bold uppercase tracking-wider px-2 py-0.5 bg-red-50 rounded-md">Pendente *</span>
+                )}
+              </div>
+              <MiniRichEditor 
+                id="fatosAbordagem"
+                value={fatosAbordagem}
+                onChange={setFatosAbordagem}
+                placeholder="Esclareça os fatos de abordagem e as nuances para a petição jurídica secundária..." 
+                isMissing={!fatosAbordagem.trim()}
+              />
+            </div>
+
+            {/* PART 4: ENTREVISTA 5W2H */}
+            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-6">
+              <div className="border-b border-gray-100 pb-3">
+                <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">4. Questionário Fático Operacional (5W2H)</h4>
+                <p className="text-[11px] text-gray-400 mt-0.5">Indispensáveis para a tese mestre da inicial ou do rito administrativo.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                
+                {/* 5W1H - O que aconteceu */}
+                <div className="space-y-1.5 md:col-span-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-extrabold uppercase text-gray-600 tracking-wide">O que aconteceu? (What) *</label>
+                    {!oQueAconteceu.trim() && <span className="text-[9px] font-black text-red-500 uppercase bg-red-50 px-1.5 py-0.5 rounded">Faltando</span>}
+                  </div>
+                  <textarea 
+                    rows={3}
+                    value={oQueAconteceu}
+                    onChange={(e) => setOQueAconteceu(e.target.value)}
+                    placeholder="Especifique o objeto ou fato ocorrido sob lide."
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none resize-none focus:bg-white focus:ring-1 ${
+                      !oQueAconteceu.trim() ? 'border-red-200 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-gray-900 focus:border-gray-900'
+                    }`}
                   />
                 </div>
 
+                {/* 5W2H - Quem participou */}
                 <div className="space-y-1.5">
-                  <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Réu / Parte Adversária</label>
-                  <input 
-                    type="text" 
-                    value={adverseParty} 
-                    onChange={(e) => setAdverseParty(e.target.value)}
-                    placeholder="Ex: Banco Imobiliário do Norte S/A" 
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-extrabold uppercase text-gray-600 tracking-wide">Quem participou? (Who) *</label>
+                    {!quemParticipou.trim() && <span className="text-[9px] font-black text-red-500 uppercase bg-red-50 px-1.5 py-0.5 rounded">Faltando</span>}
+                  </div>
+                  <textarea 
+                    rows={2}
+                    value={quemParticipou}
+                    onChange={(e) => setQuemParticipou(e.target.value)}
+                    placeholder="Identifique sujeitos, testemunhas e agentes ativos/passivos."
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none resize-none focus:bg-white focus:ring-1 ${
+                      !quemParticipou.trim() ? 'border-red-200 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-gray-900 focus:border-gray-900'
+                    }`}
                   />
                 </div>
 
+                {/* 5W3H - Onde aconteceu */}
                 <div className="space-y-1.5">
-                  <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Matéria / Ramo / Tipo de Ação *</label>
-                  <input 
-                    type="text" 
-                    value={caseType} 
-                    onChange={(e) => setCaseType(e.target.value)}
-                    placeholder="Ex: Direito Civil / Cobrança" 
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-extrabold uppercase text-gray-600 tracking-wide">Onde aconteceu? (Where) *</label>
+                    {!ondeAconteceu.trim() && <span className="text-[9px] font-black text-red-500 uppercase bg-red-50 px-1.5 py-0.5 rounded">Faltando</span>}
+                  </div>
+                  <textarea 
+                    rows={2}
+                    value={ondeAconteceu}
+                    onChange={(e) => setOndeAconteceu(e.target.value)}
+                    placeholder="Local físico, meios digitais ou fáticos de materialização."
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none resize-none focus:bg-white focus:ring-1 ${
+                      !ondeAconteceu.trim() ? 'border-red-200 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-gray-900 focus:border-gray-900'
+                    }`}
                   />
                 </div>
 
+                {/* 5W4H - Quando aconteceu */}
                 <div className="space-y-1.5">
-                  <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Advogado Responsável / Assessor</label>
-                  <input 
-                    type="text" 
-                    value={responsibleLawyer} 
-                    onChange={(e) => setResponsibleLawyer(e.target.value)}
-                    placeholder="Ex: Dr. Carlos Giffoni" 
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-extrabold uppercase text-gray-600 tracking-wide">Quando aconteceu? (When) *</label>
+                    {!quandoAconteceu.trim() && <span className="text-[9px] font-black text-red-500 uppercase bg-red-50 px-1.5 py-0.5 rounded">Faltando</span>}
+                  </div>
+                  <textarea 
+                    rows={2}
+                    value={quandoAconteceu}
+                    onChange={(e) => setQuandoAconteceu(e.target.value)}
+                    placeholder="Data, prazos e momentos cronológicos de ocorrência."
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none resize-none focus:bg-white focus:ring-1 ${
+                      !quandoAconteceu.trim() ? 'border-red-200 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-gray-900 focus:border-gray-900'
+                    }`}
                   />
                 </div>
 
+                {/* 5W5H - Como aconteceu */}
                 <div className="space-y-1.5">
-                  <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Prioridade no Atendimento</label>
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-extrabold uppercase text-gray-600 tracking-wide">Como aconteceu? (How) *</label>
+                    {!comoAconteceu.trim() && <span className="text-[9px] font-black text-red-500 uppercase bg-red-50 px-1.5 py-0.5 rounded">Faltando</span>}
+                  </div>
+                  <textarea 
+                    rows={2}
+                    value={comoAconteceu}
+                    onChange={(e) => setComoAconteceu(e.target.value)}
+                    placeholder="Forma ou modalidade técnica de ocorrência jurídica."
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none resize-none focus:bg-white focus:ring-1 ${
+                      !comoAconteceu.trim() ? 'border-red-200 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-gray-900 focus:border-gray-900'
+                    }`}
+                  />
+                </div>
+
+                {/* 5W6H - Por que aconteceu */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-extrabold uppercase text-gray-600 tracking-wide">Por que aconteceu? (Why) *</label>
+                    {!porQueAconteceu.trim() && <span className="text-[9px] font-black text-red-500 uppercase bg-red-50 px-1.5 py-0.5 rounded">Faltando</span>}
+                  </div>
+                  <textarea 
+                    rows={2}
+                    value={porQueAconteceu}
+                    onChange={(e) => setPorQueAconteceu(e.target.value)}
+                    placeholder="Motivos motivadores, imperativos legais ou fáticos lesionados."
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none resize-none focus:bg-white focus:ring-1 ${
+                      !porQueAconteceu.trim() ? 'border-red-200 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-gray-900 focus:border-gray-900'
+                    }`}
+                  />
+                </div>
+
+                {/* 5W7H - Como pretende resolver */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-extrabold uppercase text-gray-600 tracking-wide">Encaminhamento Esperado / Como pretende resolver? *</label>
+                    {!comoPretendeResolver.trim() && <span className="text-[9px] font-black text-red-500 uppercase bg-red-50 px-1.5 py-0.5 rounded">Faltando</span>}
+                  </div>
+                  <textarea 
+                    rows={2}
+                    value={comoPretendeResolver}
+                    onChange={(e) => setComoPretendeResolver(e.target.value)}
+                    placeholder="Objetivo pretendido pelo autor em face da lide."
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none resize-none focus:bg-white focus:ring-1 ${
+                      !comoPretendeResolver.trim() ? 'border-red-200 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-gray-900 focus:border-gray-900'
+                    }`}
+                  />
+                </div>
+
+              </div>
+            </div>
+
+            {/* PART 5: TÍTULO DO CASO */}
+            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-4">
+              <div className="border-b border-gray-100 pb-3">
+                <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">5. Título Operacional do Caso</h4>
+                <p className="text-[11px] text-gray-400 mt-0.5 font-sans">Título identificador para controle interno de pautas processuais.</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase text-gray-650 tracking-wide block">Título do Caso *</label>
+                <input 
+                  type="text" 
+                  value={title} 
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Ex: Ação Rescisória de Aluguel Habitacional" 
+                  className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 focus:bg-white focus:ring-1 transition-all outline-none ${
+                    !title.trim() ? 'border-red-200 focus:ring-red-500 focus:border-red-500' : 'border-gray-200 focus:ring-gray-950'
+                  }`}
+                />
+              </div>
+            </div>
+
+            {/* PART 6, 7 & 8: MATÉRIA, RAMO E TIPO DE AÇÃO (Solutions separated) */}
+            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-5">
+              <div className="border-b border-gray-100 pb-3">
+                <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">6 / 7 / 8. Enquadramento Jurídico e Classificação</h4>
+                <p className="text-[11px] text-gray-400 mt-0.5">Campos separados para garantir robustez e consistência taxonômica.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                
+                {/* MATÉRIA */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-gray-650 tracking-wide block">Matéria (Ex: Direito do Consumidor, Civil) *</label>
+                  <input 
+                    type="text" 
+                    value={materia} 
+                    onChange={(e) => setMateria(e.target.value)}
+                    placeholder="Direito do Consumidor" 
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 focus:bg-white focus:ring-1 transition-all outline-none ${
+                      !materia.trim() ? 'border-red-100 focus:ring-red-450 focus:border-red-450' : 'border-gray-200 focus:ring-gray-950'
+                    }`}
+                  />
+                </div>
+
+                {/* RAMO */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-gray-650 tracking-wide block">Ramo (Ex: Contratos, Responsabilidade Civil) *</label>
+                  <input 
+                    type="text" 
+                    value={ramo} 
+                    onChange={(e) => setRamo(e.target.value)}
+                    placeholder="Contratos Bancários" 
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 focus:bg-white focus:ring-1 transition-all outline-none ${
+                      !ramo.trim() ? 'border-red-100 focus:ring-red-450 focus:border-red-450' : 'border-gray-200 focus:ring-gray-950'
+                    }`}
+                  />
+                </div>
+
+                {/* TIPO DE AÇÃO */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-gray-650 tracking-wide block">Tipo de Ação / Tipo de Caso *</label>
+                  <input 
+                    type="text" 
+                    value={tipoAcao} 
+                    onChange={(e) => setTipoAcao(e.target.value)}
+                    placeholder="Declaratória de Inexistência" 
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs font-semibold text-gray-800 focus:bg-white focus:ring-1 transition-all outline-none ${
+                      !tipoAcao.trim() ? 'border-red-100 focus:ring-red-450 focus:border-red-450' : 'border-gray-200 focus:ring-gray-950'
+                    }`}
+                  />
+                </div>
+
+              </div>
+
+              {/* Extra technical parameters */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-3 border-t border-gray-100">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-gray-650 tracking-wide">Prioridade da Demanda</label>
                   <select 
                     value={priority} 
                     onChange={(e) => setPriority(e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none cursor-pointer"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none cursor-pointer"
                   >
                     <option value="baixa">Baixa prioridade operacional</option>
                     <option value="media">Média / Peticionamento ordinário</option>
@@ -576,280 +801,39 @@ export default function DadosCaso() {
                   </select>
                 </div>
 
-                <div className="space-y-1.5 col-span-1 md:col-span-2">
-                  <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Descrição Detalhada e Fatos de Abordagem</label>
-                  <textarea 
-                    rows={4} 
-                    value={description} 
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Qualifique faticamente os prejuízos do cliente, pontos chaves fáticos e as metas jurídicas..." 
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none resize-none"
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase text-gray-650 tracking-wide">Assessor / Especialista Responsável</label>
+                  <input 
+                    type="text" 
+                    value={responsibleLawyer} 
+                    onChange={(e) => setResponsibleLawyer(e.target.value)}
+                    placeholder="Ex: Dr. Carlos Giffoni" 
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
                   />
                 </div>
               </div>
             </div>
 
-            {/* CONDITIONAL SUBFORM PER REGISTRATIONTYPEKEY */}
-
-            {/* MODE: peticao_inicial */}
-            {activeRegKey === 'peticao_inicial' && (
-              <div className="bg-white border border-gray-150 rounded-2xl p-6 space-y-4 shadow-xs animate-fadeIn">
-                <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono border-b border-gray-100 pb-3 flex gap-2 items-center">
-                  <Scale size={14} className="text-blue-500" />
-                  <span>Campos Exclusivos: Petição Inicial</span>
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Ação Pretendida</label>
-                    <input 
-                      type="text" 
-                      value={pretendedActionName}
-                      onChange={(e) => setPretendedActionName(e.target.value)}
-                      placeholder="Ex: Declaratória de Inexistência" 
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Competência / Juízo Pretendido</label>
-                    <input 
-                      type="text" 
-                      value={pretendedJurisdiction}
-                      onChange={(e) => setPretendedJurisdiction(e.target.value)}
-                      placeholder="Ex: Juizado Especial Cível" 
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Valor Estimado Causa</label>
-                    <div className="relative">
-                      <DollarSign className="absolute left-3.5 top-3.5 text-gray-400" size={14} />
-                      <input 
-                        type="text" 
-                        value={estimatedValue}
-                        onChange={(e) => setEstimatedValue(e.target.value)}
-                        placeholder="R$ 15.000,00" 
-                        className="w-full pl-9 pr-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
+            {/* PART 9: CONTROLE E VISIBILIDADE OPERACIONAL (Solution 5) */}
+            <div className="bg-white border border-gray-150 rounded-3xl p-6 space-y-6 shadow-xs">
+              <div className="border-b border-gray-100 pb-3">
+                <h4 className="text-sm font-extrabold text-gray-900 tracking-tight">9. Controle e Visibilidade Operacional</h4>
+                <p className="text-[11px] text-gray-400 mt-0.5">Sincronização de transparência entre a equipe mestre e a timeline do cliente.</p>
               </div>
-            )}
-
-            {/* MODE: requerimento_administrativo */}
-            {activeRegKey === 'requerimento_administrativo' && (
-              <div className="bg-white border border-gray-150 rounded-2xl p-6 space-y-4 shadow-xs animate-fadeIn">
-                <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono border-b border-gray-100 pb-3 flex gap-2 items-center">
-                  <Building size={14} className="text-amber-500" />
-                  <span>Campos Exclusivos: Requerimento Administrativo</span>
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Órgão Administrativo Alvo</label>
-                    <input 
-                      type="text" 
-                      value={administrativeBody}
-                      onChange={(e) => setAdministrativeBody(e.target.value)}
-                      placeholder="Ex: INSS, Prefeitura, Receita Federal" 
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Tipo/Objeto de Requerimento</label>
-                    <input 
-                      type="text" 
-                      value={requirementType}
-                      onChange={(e) => setRequirementType(e.target.value)}
-                      placeholder="Ex: Recurso Ordinário, Liberação de Alvará" 
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* MODE: extrajudicial */}
-            {activeRegKey === 'extrajudicial' && (
-              <div className="bg-white border border-gray-150 rounded-2xl p-6 space-y-4 shadow-xs animate-fadeIn">
-                <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono border-b border-gray-100 pb-3 flex gap-2 items-center">
-                  <FileText size={14} className="text-indigo-500" />
-                  <span>Campos Exclusivos: Trâmite Extrajudicial</span>
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Tipo de Tratativa / Notificação</label>
-                    <input 
-                      type="text" 
-                      value={negotiationType}
-                      onChange={(e) => setNegotiationType(e.target.value)}
-                      placeholder="Ex: Notificação Extrajudicial, Minuta de Acordo" 
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Destinatário da Tratativa</label>
-                    <input 
-                      type="text" 
-                      value={recipientName}
-                      onChange={(e) => setRecipientName(e.target.value)}
-                      placeholder="Ex: Condomínio Edifício Mirador (Representante)" 
-                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* MODE: processo_judicial_em_andamento & processo_judicial_ajuizado */}
-            {isJudicial && (
-              <div className="space-y-6">
-                
-                {/* CORE JUDICIAL IDENTIFIERS CARD */}
-                <div className="bg-white border border-gray-150 rounded-2xl p-6 space-y-4 shadow-xs">
-                  <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono border-b border-gray-100 pb-3">Jurisdição e Processo Judicial</h4>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Número ÚNICO CNJ ({statusInterno === 'Protocolado' ? 'Obrigatório *' : 'Recomendado'})</label>
-                      <input 
-                        type="text" 
-                        value={processNumber}
-                        onChange={handleCnjChange}
-                        placeholder="Ex: 0000000-00.0000.0.00.0000" 
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-mono font-bold text-gray-850 transition-all outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Tribunal Virtual / Competência</label>
-                      <input 
-                        type="text" 
-                        value={tribunal}
-                        onChange={(e) => setTribunal(e.target.value)}
-                        placeholder="Ex: TJPE, TRT6, TRF5" 
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Vara / Órgão Julgador (Court)</label>
-                      <input 
-                        type="text" 
-                        value={court}
-                        onChange={(e) => setCourt(e.target.value)}
-                        placeholder="Ex: 2ª Vara Cível da Comarca de Recife" 
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Comarca / Seção Judiciária (District)</label>
-                      <input 
-                        type="text" 
-                        value={district}
-                        onChange={(e) => setDistrict(e.target.value)}
-                        placeholder="Ex: Recife - PE" 
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* AUDIÊNCIA SCHEDULER BLOCK IN COMPLIANCE WITH REGRA 5 */}
-                <div className="bg-white border border-gray-150 rounded-2xl p-6 space-y-4 shadow-xs">
-                  <div className="flex justify-between items-center border-b border-gray-100 pb-3">
-                    <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono flex gap-2 items-center">
-                      <Calendar size={14} className="text-indigo-500" />
-                      <span>Agendamento de Audiência</span>
-                    </h4>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-gray-500 uppercase tracking-widest">Há Audiência agendada?</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAudienciaAgendada(!audienciaAgendada);
-                        }}
-                        className={`w-12 h-6 flex items-center rounded-full p-0.5 transition-all outline-none duration-250 cursor-pointer ${
-                          audienciaAgendada ? 'bg-indigo-600 justify-end' : 'bg-gray-200 justify-start'
-                        }`}
-                      >
-                        <div className="w-5 h-5 bg-white rounded-full shadow-xs" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {audienciaAgendada && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fadeIn">
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Data da Audiência</label>
-                        <input 
-                          type="date" 
-                          value={audienciaData}
-                          onChange={(e) => setAudienciaData(e.target.value)}
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Horário (HH:MM)</label>
-                        <input 
-                          type="time" 
-                          value={audienciaHora}
-                          onChange={(e) => setAudienciaHora(e.target.value)}
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Local físico ou Link da Videoconferência</label>
-                        <input 
-                          type="text" 
-                          value={audienciaLocalOuLink}
-                          onChange={(e) => setAudienciaLocalOuLink(e.target.value)}
-                          placeholder="Ex: Sala de Audiências da 2ª Vara ou Link Teams" 
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Advogado / Responsável da Audiência</label>
-                        <input 
-                          type="text" 
-                          value={audienciaResponsavel}
-                          onChange={(e) => setAudienciaResponsavel(e.target.value)}
-                          placeholder="Dr. Carlos Giffoni" 
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
-                        />
-                      </div>
-                      <div className="space-y-1.5 col-span-1 md:col-span-2">
-                        <label className="text-sm font-bold uppercase text-gray-650 tracking-wide">Instruções / Observações fáticas da Audiência</label>
-                        <textarea 
-                          rows={2}
-                          value={audienciaObservacoes}
-                          onChange={(e) => setAudienciaObservacoes(e.target.value)}
-                          placeholder="Ex: Cliente necessita portar documento original com foto e conectar-se 15 min antes." 
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none resize-none"
-                        />
-                        <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mt-1.5">Os dados de audiência serão salvos temporariamente neste caso operacional e integrados futuramente.</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            )}
-
-            {/* STATUS & PORTAL CONTROLS CARD */}
-            <div className="bg-white border border-gray-150 rounded-2xl p-6 space-y-6 shadow-xs">
-              <h4 className="text-xs font-bold uppercase text-gray-500 tracking-wider font-mono border-b border-gray-100 pb-3">Controle e Visibilidade Operacional</h4>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
-                {/* STATUS INTERNO IN COMPLIANCE WITH REGRA 6 */}
+                {/* Status Interno de Produção - Solution 5 */}
                 <div className="space-y-2">
-                  <label className="text-sm font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
-                    <Activity size={12} className="text-gray-400" />
+                  <label className="text-xs font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
+                    <Activity size={12} className="text-indigo-600" />
                     <span>Status Interno de Produção *</span>
                   </label>
-                  <p className="text-xs text-gray-500 leading-relaxed">Status restrito ao BOSS e assessores internos.</p>
+                  <p className="text-[11px] text-gray-400 leading-relaxed">Status mestre restrito ao BOSS e assessores internos.</p>
                   <select
                     value={statusInterno}
-                    onChange={(e) => setStatusInterno(e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none cursor-pointer"
+                    onChange={(e) => handleStatusInternoChange(e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none cursor-pointer"
                   >
                     {statusInternoOptions.map((opt) => (
                       <option key={opt} value={opt}>{opt}</option>
@@ -857,13 +841,13 @@ export default function DadosCaso() {
                   </select>
                 </div>
 
-                {/* VISIBLE TO CLIENT TOGGLE */}
+                {/* Exibir no Portal do Cliente (Visible to client toggle) */}
                 <div className="space-y-2">
-                  <label className="text-sm font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
-                    <UserCheck size={12} className="text-gray-400" />
+                  <label className="text-xs font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
+                    <User size={12} className="text-indigo-600" />
                     <span>Exibir no Portal do Cliente?</span>
                   </label>
-                  <p className="text-xs text-gray-500 leading-relaxed">Controla a liberação ou opacidade jurídica do caso.</p>
+                  <p className="text-[11px] text-gray-400 leading-relaxed">Garante ou opacifica a visibilidade geral do caso.</p>
                   <div className="flex items-center gap-3 py-1">
                     <button
                       type="button"
@@ -874,67 +858,64 @@ export default function DadosCaso() {
                     >
                       <div className="w-5 h-5 bg-white rounded-full shadow-xs" />
                     </button>
-                    <span className="text-sm font-bold text-gray-700">
-                      {visibleToClient ? 'Visível (Recomendado)' : 'Caso Ocultado (Opacidade técnica)'}
+                    <span className="text-xs font-bold text-gray-700">
+                      {visibleToClient ? 'Visível (Indicado)' : 'Ocultado para o cliente'}
                     </span>
                   </div>
                 </div>
 
-                {/* STATUS PUBLICO CLIENTE IN COMPLIANCE WITH REGRA 6 */}
+                {/* Status Público do Cliente - Solution 5 */}
                 <div className="space-y-2 col-span-1 md:col-span-2">
-                  <label className="text-sm font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
-                    <User size={12} className="text-indigo-500" />
-                    <span>Status Público do Cliente (Visibilidade no Portal) *</span>
-                  </label>
-                  <p className="text-xs text-gray-500 leading-relaxed">
-                    Mensagem limpa exibida em tempo real na timeline do cliente conectado.
+                  <div className="flex justify-between items-center flex-wrap gap-2">
+                    <label className="text-xs font-bold uppercase text-gray-650 tracking-wide flex items-center gap-1.5">
+                      <span>Status Público do Cliente (Timeline do Portal) *</span>
+                    </label>
+                    
+                    {isPublicStatusManuallyEdited && (
+                      <button
+                        type="button"
+                        onClick={handleRestoreStatusSuggestion}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-800 border border-indigo-150 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                      >
+                        <RefreshCw size={10} />
+                        Restaurar sugestão automática
+                      </button>
+                    )}
+                  </div>
+                  
+                  <p className="text-[11px] text-gray-400 leading-relaxed">
+                    Anotação descritiva atualizada de transparência na timeline do cliente.
                   </p>
+                  
                   <input
                     type="text"
                     value={statusPublicoCliente}
                     onChange={handlePublicStatusChange}
                     placeholder="Defina as palavras do status operacional..."
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-sm font-semibold text-gray-800 transition-all outline-none"
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
                   />
-
-                  {/* QUICK SUGGESTIONS LIST FROM REGRA 6 */}
-                  <div className="space-y-1.5 pt-1">
-                    <span className="text-xs uppercase font-bold text-gray-500 tracking-wider">Sugestões rápidas de preenchimento:</span>
-                    <div className="flex flex-wrap gap-1.5 pt-1.5">
-                      {statusPublicoSuggestions.map((sug) => {
-                        const displaySug = sug === 'Processo nº [CNJ]' && processNumber.trim() 
-                          ? `Processo nº ${processNumber}` 
-                          : sug;
-                        return (
-                          <button
-                            key={sug}
-                            type="button"
-                            onClick={() => selectSuggestion(sug)}
-                            className="px-2.5 py-1.5 text-xs font-semibold text-gray-750 bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded-xl transition-all cursor-pointer"
-                          >
-                            {displaySug}
-                          </button>
-                        );
-                      })}
+                  
+                  <div className="p-3 bg-gray-50 rounded-2xl border border-gray-150 space-y-1.5 mt-2">
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-gray-500 uppercase tracking-wide">
+                      <Info size={11} className="text-grey-400" />
+                      <span>Conceito associado ao status interno atual:</span>
                     </div>
+                    <p className="text-xs text-gray-700 leading-relaxed font-sans">
+                      Status Interno: <strong className="text-gray-900 font-bold">"{statusInterno}"</strong> • 
+                      Sugestão automática da timeline pública: <strong className="text-indigo-700 font-bold">"{statusMapping[statusInterno] || ''}"</strong>
+                    </p>
                   </div>
                 </div>
 
               </div>
             </div>
 
-            {/* ACTION FLOATING CORE NAV BAR */}
+            {/* ACTION FOOTER */}
             <div className="flex flex-col sm:flex-row sm:justify-between items-center gap-4 pt-6 border-t border-gray-150">
               
               <button
                 type="button"
-                onClick={() => {
-                  if (caseId) {
-                    navigate(flowRoutes.editarCadastroCliente(caseId));
-                  } else {
-                    navigate(flowRoutes.cadastro());
-                  }
-                }}
+                onClick={() => navigate(flowRoutes.editarCadastroCliente(caseId))}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-250 hover:bg-gray-50 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-sm cursor-pointer"
               >
                 <ArrowLeft size={16} />
@@ -977,7 +958,7 @@ export default function DadosCaso() {
                   {saving ? (
                     <>
                       <Loader2 size={14} className="animate-spin" />
-                      <span>Processando etapas...</span>
+                      <span>Salvando dados fáticos...</span>
                     </>
                   ) : (
                     <>

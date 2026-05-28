@@ -40,6 +40,7 @@ export default function TipoServico() {
   const [error, setError] = useState<string | null>(null);
   const [clientName, setClientName] = useState<string>('');
   const [clientSlug, setClientSlug] = useState<string>('');
+  const [isEntrevistaIncomplete, setIsEntrevistaIncomplete] = useState(false);
 
   const serviceTypes: ServiceTypeItem[] = [
     { 
@@ -125,6 +126,39 @@ export default function TipoServico() {
             const regType = data.registrationType || '';
             const match = serviceTypes.find(s => s.id === regTypeKey) || serviceTypes.find(s => s.label === regType || s.id === regType);
             if (match) setSelectedService(match.id);
+
+            // Check for completeness of the 5W2H interview
+            const is5W2HComplete = !!(
+              data.basesFaticas?.trim() &&
+              (data.description?.trim() || data.descricaoDet?.trim()) &&
+              data.fatosAbordagem?.trim() &&
+              data.oQueAconteceu?.trim() &&
+              data.quemParticipou?.trim() &&
+              data.ondeAconteceu?.trim() &&
+              data.quandoAconteceu?.trim() &&
+              data.comoAconteceu?.trim() &&
+              data.porQueAconteceu?.trim() &&
+              (data.comoPretendeResolver?.trim() || data.encaminhamentoEsperado?.trim())
+            );
+
+            const isStarted = !!(
+              data.basesFaticas?.trim() ||
+              data.description?.trim() ||
+              data.descricaoDet?.trim() ||
+              data.fatosAbordagem?.trim() ||
+              data.oQueAconteceu?.trim() ||
+              data.quemParticipou?.trim() ||
+              data.ondeAconteceu?.trim() ||
+              data.quandoAconteceu?.trim() ||
+              data.comoAconteceu?.trim() ||
+              data.porQueAconteceu?.trim() ||
+              data.comoPretendeResolver?.trim() ||
+              data.encaminhamentoEsperado?.trim()
+            );
+
+            if (!is5W2HComplete && isStarted) {
+              setIsEntrevistaIncomplete(true);
+            }
 
             // Fetch matched client label
             const cliSnap = await getDoc(doc(db, 'clients', data.clientId));
@@ -252,6 +286,18 @@ export default function TipoServico() {
             Selecione o tipo de rito fático desejado para estruturar o fluxo de dados deste caso.
           </p>
         </div>
+
+        {isEntrevistaIncomplete && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-950 text-xs flex gap-3 items-start animate-fadeIn">
+            <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <h5 className="font-extrabold text-amber-900">Entrevista 5W2H incompleta</h5>
+              <p className="leading-relaxed">
+                Você pode navegar, mas esta pendência continuará registrada.
+              </p>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-900 text-xs flex gap-3 items-center">
