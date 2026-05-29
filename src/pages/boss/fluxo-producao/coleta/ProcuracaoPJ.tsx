@@ -3,7 +3,7 @@ import { useColetaState } from '../hooks/useColetaState';
 import FluxoStepLayout from '../components/FluxoStepLayout';
 import { 
   ArrowRight, FileText, UploadCloud, Trash2, ArrowLeft, 
-  Check, AlertCircle 
+  Check, AlertCircle, Sparkles 
 } from 'lucide-react';
 
 export default function ProcuracaoPJ() {
@@ -116,6 +116,16 @@ export default function ProcuracaoPJ() {
 
             {/* FLOW QUESTIONNAIRE CARD */}
             <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-2xs space-y-5">
+              
+              {/* CARD DE ESPAÇO RESERVADO PARA AUTOMAÇÕES FUTURAS */}
+              <div className="p-4 bg-blue-50/75 border border-blue-100 rounded-2xl flex items-start gap-3 text-blue-950 text-xs font-semibold leading-relaxed shadow-3xs">
+                <Sparkles size={16} className="text-blue-500 shrink-0 mt-0.5 animate-pulse" />
+                <div>
+                  <span className="block font-extrabold uppercase tracking-widest text-[9px] text-blue-600 mb-0.5 font-mono">Automação Inteligente</span>
+                  Espaço reservado para automação futura da procuração
+                </div>
+              </div>
+
               <div className="space-y-1 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
                 <p className="text-xs font-extrabold text-gray-800">1.1 Você gerou a procuração do cliente empresarial?</p>
                 <div className="flex gap-4 mt-2">
@@ -140,7 +150,7 @@ export default function ProcuracaoPJ() {
                   <div className="space-y-1">
                     <p className="text-xs font-extrabold text-gray-800">1.2 Você enviou a procuração empresarial ao cliente?</p>
                     <div className="flex flex-wrap gap-3 mt-1.5">
-                      {['whatsapp', 'email', 'fisica', 'outro'].map(ch => (
+                      {['fisica', 'whatsapp', 'email', 'outro'].map(ch => (
                         <label key={ch} className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-gray-700 lowercase">
                           <input 
                             type="checkbox"

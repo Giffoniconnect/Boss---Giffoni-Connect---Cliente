@@ -3,7 +3,7 @@ import { useColetaState } from '../hooks/useColetaState';
 import FluxoStepLayout from '../components/FluxoStepLayout';
 import { 
   ArrowRight, FileText, UploadCloud, Trash2, ArrowLeft, 
-  Check, AlertCircle 
+  Check, AlertCircle, Sparkles 
 } from 'lucide-react';
 
 export default function DeclaracaoPF() {
@@ -144,6 +144,15 @@ export default function DeclaracaoPF() {
               {wizardState.q2_1 === 'sim' && (
                 <div className="space-y-4 border-l-2 border-indigo-200 pl-4 animate-in fade-in duration-200">
                   
+                  {/* CARD DE ESPAÇO RESERVADO PARA AUTOMAÇÕES FUTURAS */}
+                  <div className="p-4 bg-blue-50/75 border border-blue-100 rounded-2xl flex items-start gap-3 text-blue-950 text-xs font-semibold leading-relaxed shadow-3xs">
+                    <Sparkles size={16} className="text-blue-500 shrink-0 mt-0.5 animate-pulse" />
+                    <div>
+                      <span className="block font-extrabold uppercase tracking-widest text-[9px] text-blue-600 mb-0.5 font-mono">Automação Inteligente</span>
+                      Espaço reservado para automação futura da declaração de hipossuficiência
+                    </div>
+                  </div>
+
                   <div className="space-y-1">
                     <p className="text-xs font-extrabold text-gray-800">2.2 Você gerou a declaração do cliente?</p>
                     <div className="flex gap-4 mt-1.5">
@@ -166,7 +175,7 @@ export default function DeclaracaoPF() {
                       <div className="space-y-1">
                         <p className="text-xs font-extrabold text-gray-800">2.3 Você enviou a declaração?</p>
                         <div className="flex flex-wrap gap-3 mt-1.5">
-                          {['whatsapp', 'email', 'fisica', 'outro'].map(ch => (
+                          {['fisica', 'whatsapp', 'email', 'outro'].map(ch => (
                             <label key={ch} className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-gray-700">
                               <input 
                                 type="checkbox"

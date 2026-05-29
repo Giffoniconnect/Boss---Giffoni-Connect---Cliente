@@ -1303,7 +1303,7 @@ export default function SolicitacoesProvas() {
                                     <div className="p-3 bg-red-50/50 rounded-xl space-y-2 animate-in fade-in">
                                       <p className="text-[10px] font-bold text-red-800 uppercase font-mono">Solicitar Diligência de Pendência</p>
                                       <div className="flex flex-wrap gap-2">
-                                        {['whatsapp', 'email', 'portal_cliente', 'outro'].map(ch => (
+                                        {['portal_cliente', 'whatsapp', 'email', 'outro'].map(ch => (
                                           <label key={ch} className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-700 cursor-pointer">
                                             <input 
                                               type="checkbox"
@@ -1378,7 +1378,7 @@ export default function SolicitacoesProvas() {
                           <div className="bg-indigo-50/50 rounded-xl p-3 border space-y-2 animate-in fade-in text-xs font-semibold">
                             <span className="text-[9px] font-mono uppercase text-indigo-700 block">Escolher Canais Disponíveis</span>
                             <div className="flex gap-3">
-                              {['whatsapp', 'email', 'portal_cliente'].map(c => (
+                              {['portal_cliente', 'whatsapp', 'email'].map(c => (
                                 <label key={c} className="flex items-center gap-1">
                                   <input 
                                     type="checkbox"
@@ -1655,7 +1655,7 @@ export default function SolicitacoesProvas() {
                       </div>
                       
                       <div className="flex gap-3 text-xs font-semibold">
-                        {['whatsapp', 'email', 'portal_cliente'].map(c => (
+                        {['portal_cliente', 'whatsapp', 'email'].map(c => (
                           <label key={c} className="flex items-center gap-1 cursor-pointer">
                             <input 
                               type="checkbox"
