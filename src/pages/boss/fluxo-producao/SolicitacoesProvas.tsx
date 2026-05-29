@@ -71,11 +71,28 @@ export default function SolicitacoesProvas() {
   const [typeVideo, setTypeVideo] = useState(false);
 
   // Computed data
-  const isPJ = client?.type === 'PJ' || !!client?.pjDadosEmpresa;
+  const tipoCliente = client?.type;
+  const isPF = tipoCliente === 'PF';
+  const isPJ = tipoCliente === 'PJ';
+  const tipoClienteValido = isPF || isPJ;
+
+  const temPjDadosEmpresa = !!(
+    (client?.pjDadosEmpresa && Object.keys(client.pjDadosEmpresa).some(k => !!client.pjDadosEmpresa[k])) ||
+    (client?.pjData && Object.keys(client.pjData).some(k => !!client.pjData[k]))
+  );
+
+  const temDadosMinimosPJ = !!(
+    (client?.pjDadosEmpresa?.pj_razaoSocial || client?.pjData?.pj_razaoSocial) &&
+    (client?.pjDadosEmpresa?.pj_cnpj || client?.pjDadosEmpresa?.cnpj || client?.pjData?.pj_cnpj || client?.pjData?.cnpj)
+  );
+
   const clientName = client 
-    ? (client.type === 'PF' 
+    ? (isPF 
         ? (client.pfDadosPessoais?.pf_nomeCompleto || client.pfData?.pf_nomeCompleto || 'Sem Nome') 
-        : (client.pjDadosEmpresa?.pj_razaoSocial || client.pjData?.pj_razaoSocial || 'Sem Razão Social'))
+        : isPJ 
+          ? (client.pjDadosEmpresa?.pj_razaoSocial || client.pjData?.pj_razaoSocial || 'Sem Razão Social')
+          : 'Tipo de cliente indefinido/inconsistente'
+      )
     : '';
   const clientSlug = client?.slug || '';
   const driveFolderId = client?.googleDriveClientFolderId || client?.gdriveFolderId || caseObj?.gdriveFolderId || '';
@@ -146,23 +163,25 @@ export default function SolicitacoesProvas() {
   }, [caseId]);
 
   // Save State and sync in Firestore
-  const saveWizardStateUpdate = async (updates: Partial<typeof wizardState>) => {
+  const saveWizardStateUpdate = (updates: Partial<typeof wizardState>) => {
     setWizardState((prev: any) => {
       const next = { ...prev, ...updates };
-      // Async update caseObj and firestore
-      updateDoc(doc(db, 'cases', caseId!), { 
-        solicitacoesProvasWizardState: next,
-        // sync backward compatibility variables
-        procuracaoStatus: next.q1_3 === 'sim' ? 'criada' : 'pendente',
-        desejaRecolherCustas: next.q2_1 === 'nao',
-        declaracaoPobrezaStatus: next.q2_4 === 'sim' ? 'criada' : 'pendente',
-        contratoHonorariosStatus: next.q3_4 === 'sim' ? 'criada' : 'pendente'
-      }).then(() => {
-        setSuccess('Salvo automaticamente com segurança!');
-        setTimeout(() => setSuccess(null), 2500);
-      }).catch(e => {
-        console.error('Auto-save error', e);
-      });
+      // Async update caseObj and firestore outside the React render/update cycle immediately
+      setTimeout(() => {
+        updateDoc(doc(db, 'cases', caseId!), { 
+          solicitacoesProvasWizardState: next,
+          // sync backward compatibility variables
+          procuracaoStatus: next.q1_3 === 'sim' ? 'criada' : 'pendente',
+          desejaRecolherCustas: next.q2_1 === 'nao',
+          declaracaoPobrezaStatus: next.q2_4 === 'sim' ? 'criada' : 'pendente',
+          contratoHonorariosStatus: next.q3_4 === 'sim' ? 'criada' : 'pendente'
+        }).then(() => {
+          setSuccess('Salvo automaticamente com segurança!');
+          setTimeout(() => setSuccess(null), 2500);
+        }).catch(e => {
+          console.error('Auto-save error', e);
+        });
+      }, 0);
       return next;
     });
   };
@@ -257,10 +276,11 @@ export default function SolicitacoesProvas() {
 
   // Step advancement handles
   const handleNextStep = (stepNum: number) => {
-    saveWizardStateUpdate({
+    const updates = { 
       [`step${stepNum}_completed`]: true,
       currentStep: stepNum + 1
-    });
+    };
+    saveWizardStateUpdate(updates);
   };
 
   const handleCustomEvidenceSubmit = async (e: React.FormEvent) => {
@@ -454,7 +474,7 @@ export default function SolicitacoesProvas() {
           <div className="bg-white border border-gray-150 rounded-2xl p-5 shadow-xs flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold font-mono tracking-tight uppercase">Regime {isPJ ? 'PJ' : 'PF'}</span>
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold font-mono tracking-tight uppercase">Tipo de cliente: {isPJ ? 'Pessoa Jurídica' : 'Pessoa Física'}</span>
                 <span className="text-xs text-gray-500 font-medium">Caso: #{caseId?.slice(0, 8)}</span>
               </div>
               <h1 className="text-sm font-black text-gray-900 leading-none">
@@ -985,115 +1005,150 @@ export default function SolicitacoesProvas() {
 
               {currentStepNum === 4 && (
                 <div className="p-5 border-t border-gray-100 bg-gray-50/20 space-y-4 animate-in slide-in-from-top duration-300">
-                  <div className="p-3 bg-indigo-50/30 text-indigo-900 border border-indigo-150 rounded-xl text-xs font-bold uppercase tracking-tight flex items-center gap-1.5">
-                    <CheckCircle size={14} className="text-indigo-600" />
-                    <span>Identificado Automaticamente: Regime {isPJ ? 'Pessoa Jurídica (PJ)' : 'Pessoa Física (PF)'}</span>
-                  </div>
-
-                  {/* PESSOA FÍSICA ROUTE */}
-                  {!isPJ ? (
-                    <div className="space-y-4">
-                      {['q4_rg', 'q4_cpf', 'q4_residencia'].map((field, idx) => {
-                        const labelList = [
-                          '4.1 Você recebeu o RG do cliente?',
-                          '4.2 Você recebeu o CPF do cliente?',
-                          '4.3 Você recebeu o comprovante de residência do cliente?'
-                        ];
-                        return (
-                          <div key={field} className="space-y-1">
-                            <p className="text-xs font-extrabold text-gray-800">{labelList[idx]}</p>
-                            <div className="flex gap-4">
-                              {['sim', 'nao'].map(o => (
-                                <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-700">
-                                  <input type="radio" checked={wizardState[field] === o} onChange={() => saveWizardStateUpdate({ [field]: o })} />
-                                  <span>{o}</span>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-
-                      <div className="space-y-3">
-                        <p className="text-xs font-extrabold text-gray-800">4.4 Deseja anexar os documentos mínimos obrigatórios agora?</p>
-                        <div className="flex gap-4">
-                          {['sim', 'nao'].map(o => (
-                            <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-700">
-                              <input type="radio" checked={wizardState.q4_anexar_pf === o} onChange={() => saveWizardStateUpdate({ q4_anexar_pf: o })} />
-                              <span>{o}</span>
-                            </label>
-                          ))}
-                        </div>
-                        {wizardState.q4_anexar_pf === 'sim' && (
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div className="bg-white border rounded-xl p-3"><span className="text-[10px] font-bold text-gray-400 block font-mono">RG</span><FileUploadBox field="rgFiles" /></div>
-                            <div className="bg-white border rounded-xl p-3"><span className="text-[10px] font-bold text-gray-400 block font-mono">CPF</span><FileUploadBox field="cpfFiles" /></div>
-                            <div className="bg-white border rounded-xl p-3"><span className="text-[10px] font-bold text-gray-400 block font-mono">Residência</span><FileUploadBox field="residenciaFiles" /></div>
-                          </div>
-                        )}
+                  {!tipoClienteValido ? (
+                    <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-950 text-xs font-semibold space-y-2">
+                      <div className="flex items-center gap-2 text-rose-800 font-extrabold uppercase font-mono">
+                        <AlertTriangle size={16} />
+                        <span>Erro de Conformidade</span>
                       </div>
+                      <p>
+                        Não foi possível abrir a Etapa 4 porque o tipo de cliente está inconsistente. Verifique se o cliente é Pessoa Física ou Pessoa Jurídica no cadastro.
+                      </p>
                     </div>
                   ) : (
-                    /* PESSOA JURÍDICA ROUTE */
-                    <div className="space-y-4">
-                      {['q4_cnpj', 'q4_contrato_social', 'q4_endereco_sede', 'q4_rg_socio', 'q4_cpf_socio', 'q4_residencia_socio'].map((field, idx) => {
-                        const labels = [
-                          '4.1 Você recebeu o Cartão CNPJ?',
-                          '4.2 Você recebeu o Contrato Social e Atos Constitutivos?',
-                          '4.3 Você recebeu o comprovante do endereço da sede da empresa?',
-                          '4.4 Você recebeu o RG do sócio administrador?',
-                          '4.5 Você recebeu o CPF do sócio administrador?',
-                          '4.6 Você recebeu o comprovante de residência do sócio administrador?'
-                        ];
-                        return (
-                          <div key={field} className="space-y-1">
-                            <p className="text-xs font-extrabold text-gray-800">{labels[idx]}</p>
+                    <>
+                      <div className="p-3 bg-indigo-50/30 text-indigo-900 border border-indigo-150 rounded-xl text-xs font-bold uppercase tracking-tight flex items-center gap-1.5">
+                        <CheckCircle size={14} className="text-indigo-600" />
+                        <span>Identificado Automaticamente: Tipo de cliente: {isPJ ? 'Pessoa Jurídica' : 'Pessoa Física'}</span>
+                      </div>
+
+                      {/* INTEGRITY ALERTS (CORREÇÃO 5) */}
+                      {isPF && temPjDadosEmpresa && (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs font-semibold flex items-start gap-2 animate-in slide-in-from-top duration-200">
+                          <AlertTriangle className="text-amber-500 shrink-0 mt-0.5" size={15} />
+                          <div>
+                            Inconsistência cadastral detectada: cliente marcado como Pessoa Física possui dados residuais de Pessoa Jurídica. O sistema seguirá o tipo canônico Pessoa Física, mas recomenda revisar o cadastro.
+                          </div>
+                        </div>
+                      )}
+
+                      {isPJ && !temDadosMinimosPJ && (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs font-semibold flex items-start gap-2 animate-in slide-in-from-top duration-200">
+                          <AlertTriangle className="text-amber-500 shrink-0 mt-0.5" size={15} />
+                          <div>
+                            Inconsistência cadastral detectada: cliente marcado como Pessoa Jurídica não possui dados empresariais mínimos.
+                          </div>
+                        </div>
+                      )}
+
+                      {/* PESSOA FÍSICA ROUTE */}
+                      {isPF && (
+                        <div className="space-y-4 animate-in fade-in">
+                          {['q4_rg', 'q4_cpf', 'q4_residencia'].map((field, idx) => {
+                            const labelList = [
+                              '4.1 Você recebeu o RG do cliente?',
+                              '4.2 Você recebeu o CPF do cliente?',
+                              '4.3 Você recebeu o comprovante de residência do cliente?'
+                            ];
+                            return (
+                              <div key={field} className="space-y-1">
+                                <p className="text-xs font-extrabold text-gray-800">{labelList[idx]}</p>
+                                <div className="flex gap-4">
+                                  {['sim', 'nao'].map(o => (
+                                    <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-700">
+                                      <input type="radio" checked={wizardState[field] === o} onChange={() => saveWizardStateUpdate({ [field]: o })} />
+                                      <span>{o}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          <div className="space-y-3">
+                            <p className="text-xs font-extrabold text-gray-800">4.4 Deseja anexar os documentos mínimos obrigatórios agora?</p>
                             <div className="flex gap-4">
                               {['sim', 'nao'].map(o => (
                                 <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-700">
-                                  <input type="radio" checked={wizardState[field] === o} onChange={() => saveWizardStateUpdate({ [field]: o })} />
+                                  <input type="radio" checked={wizardState.q4_anexar_pf === o} onChange={() => saveWizardStateUpdate({ q4_anexar_pf: o })} />
                                   <span>{o}</span>
                                 </label>
                               ))}
                             </div>
+                            {wizardState.q4_anexar_pf === 'sim' && (
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div className="bg-white border rounded-xl p-3"><span className="text-[10px] font-bold text-gray-400 block font-mono">RG</span><FileUploadBox field="rgFiles" /></div>
+                                <div className="bg-white border rounded-xl p-3"><span className="text-[10px] font-bold text-gray-400 block font-mono">CPF</span><FileUploadBox field="cpfFiles" /></div>
+                                <div className="bg-white border rounded-xl p-3"><span className="text-[10px] font-bold text-gray-400 block font-mono">Residência</span><FileUploadBox field="residenciaFiles" /></div>
+                              </div>
+                            )}
                           </div>
-                        );
-                      })}
-
-                      <div className="space-y-3">
-                        <p className="text-xs font-extrabold text-gray-800">4.7 Deseja anexar os documentos mínimos obrigatórios agora?</p>
-                        <div className="flex gap-4">
-                          {['sim', 'nao'].map(o => (
-                            <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-700">
-                              <input type="radio" checked={wizardState.q4_anexar_pj === o} onChange={() => saveWizardStateUpdate({ q4_anexar_pj: o })} />
-                              <span>{o}</span>
-                            </label>
-                          ))}
                         </div>
-                        {wizardState.q4_anexar_pj === 'sim' && (
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                            <div className="bg-white border rounded-xl p-3"><span className="text-[10px] font-bold text-gray-400 block font-mono">CARTÃO CNPJ</span><FileUploadBox field="cnpjFiles" /></div>
-                            <div className="bg-white border rounded-xl p-3"><span className="text-[10px] font-bold text-gray-400 block font-mono">CONTRATO SOCIAL</span><FileUploadBox field="contratoSocialFiles" /></div>
-                            <div className="bg-white border rounded-xl p-3"><span className="text-[10px] font-bold text-gray-400 block font-mono">ENDEREÇO DA SEDE</span><FileUploadBox field="enderecoSedeFiles" /></div>
-                            <div className="bg-white border rounded-xl p-3"><span className="text-[10px] font-bold text-gray-400 block font-mono">RG SÓCIO</span><FileUploadBox field="rgSocioFiles" /></div>
-                            <div className="bg-white border rounded-xl p-3"><span className="text-[10px] font-bold text-gray-400 block font-mono">CPF SÓCIO</span><FileUploadBox field="cpfSocioFiles" /></div>
-                            <div className="bg-white border rounded-xl p-3"><span className="text-[10px] font-bold text-gray-400 block font-mono">RESIDÊNCIA SÓCIO</span><FileUploadBox field="residenciaSocioFiles" /></div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                      )}
 
-                  <div className="pt-2 border-t border-gray-100 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => handleNextStep(4)}
-                      className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition"
-                    >
-                      <span>Próxima Etapa</span>
-                      <ArrowRight size={13} />
-                    </button>
-                  </div>
+                      {/* PESSOA JURÍDICA ROUTE */}
+                      {isPJ && (
+                        <div className="space-y-4 animate-in fade-in">
+                          {['q4_cnpj', 'q4_contrato_social', 'q4_endereco_sede', 'q4_rg_socio', 'q4_cpf_socio', 'q4_residencia_socio'].map((field, idx) => {
+                            const labels = [
+                              '4.1 Você recebeu o Cartão CNPJ?',
+                              '4.2 Você recebeu o Contrato Social e Atos Constitutivos?',
+                              '4.3 Você recebeu o comprovante do endereço da sede da empresa?',
+                              '4.4 Você recebeu o RG do sócio administrador?',
+                              '4.5 Você recebeu o CPF do sócio administrador?',
+                              '4.6 Você recebeu o comprovante de residência do sócio administrador?'
+                            ];
+                            return (
+                              <div key={field} className="space-y-1">
+                                <p className="text-xs font-extrabold text-gray-800">{labels[idx]}</p>
+                                <div className="flex gap-4">
+                                  {['sim', 'nao'].map(o => (
+                                    <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-700">
+                                      <input type="radio" checked={wizardState[field] === o} onChange={() => saveWizardStateUpdate({ [field]: o })} />
+                                      <span>{o}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          <div className="space-y-3">
+                            <p className="text-xs font-extrabold text-gray-800">4.7 Deseja anexar os documentos mínimos obrigatórios agora?</p>
+                            <div className="flex gap-4">
+                              {['sim', 'nao'].map(o => (
+                                <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-700">
+                                  <input type="radio" checked={wizardState.q4_anexar_pj === o} onChange={() => saveWizardStateUpdate({ q4_anexar_pj: o })} />
+                                  <span>{o}</span>
+                                </label>
+                              ))}
+                            </div>
+                            {wizardState.q4_anexar_pj === 'sim' && (
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                <div className="bg-white border rounded-xl p-3"><span className="text-[10px] font-bold text-gray-400 block font-mono">CARTÃO CNPJ</span><FileUploadBox field="cnpjFiles" /></div>
+                                <div className="bg-white border rounded-xl p-3"><span className="text-[10px] font-bold text-gray-400 block font-mono">CONTRATO SOCIAL</span><FileUploadBox field="contratoSocialFiles" /></div>
+                                <div className="bg-white border rounded-xl p-3"><span className="text-[10px] font-bold text-gray-400 block font-mono">ENDEREÇO DA SEDE</span><FileUploadBox field="enderecoSedeFiles" /></div>
+                                <div className="bg-white border rounded-xl p-3"><span className="text-[10px] font-bold text-gray-400 block font-mono">RG SÓCIO</span><FileUploadBox field="rgSocioFiles" /></div>
+                                <div className="bg-white border rounded-xl p-3"><span className="text-[10px] font-bold text-gray-400 block font-mono">CPF SÓCIO</span><FileUploadBox field="cpfSocioFiles" /></div>
+                                <div className="bg-white border rounded-xl p-3"><span className="text-[10px] font-bold text-gray-400 block font-mono">RESIDÊNCIA SÓCIO</span><FileUploadBox field="residenciaSocioFiles" /></div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="pt-2 border-t border-gray-100 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleNextStep(4)}
+                          className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition"
+                        >
+                          <span>Próxima Etapa</span>
+                          <ArrowRight size={13} />
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -1460,7 +1515,7 @@ export default function SolicitacoesProvas() {
 
                   {/* 6.4 — RESUMO DA ETAPA 4 — DOCUMENTOS MÍNIMOS */}
                   <div className="bg-white border rounded-xl p-4 space-y-2">
-                    <h4 className="text-xs font-black text-indigo-950 uppercase font-mono border-b pb-1">6.4 — Resumo Documentos Mínimos Obrigatórios ({isPJ ? 'PJ' : 'PF'})</h4>
+                    <h4 className="text-xs font-black text-indigo-950 uppercase font-mono border-b pb-1">6.4 — Resumo Documentos Mínimos Obrigatórios ({isPJ ? 'Pessoa Jurídica' : 'Pessoa Física'})</h4>
                     <div className="text-xs font-semibold space-y-1">
                       {!isPJ ? (
                         <>
