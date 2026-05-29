@@ -547,8 +547,8 @@ export default function TipoServico() {
             <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">Categorização Técnica & Fórmula Todoist</h3>
             
             {clientName ? (
-              <p className="text-xs text-indigo-600 font-bold font-mono tracking-wide mt-1 uppercase">
-                Cliente Vinculado: {clientName} ({clientSlug})
+              <p className="text-xs text-indigo-600 font-bold tracking-wide mt-1 uppercase">
+                Cliente: {clientName}
               </p>
             ) : !fetching ? (
               <div className="mt-2 p-3.5 bg-red-50 border border-red-200 rounded-2xl text-red-900 text-xs flex gap-3 items-start">

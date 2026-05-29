@@ -334,11 +334,10 @@ export default function SolicitacoesInformacoes() {
         {/* TOP METADATA SUMMARY BAR IN COMPLIANCE WITH REGRA 2 */}
         {!fetching && caseObj && (
           <div className="bg-gray-50/70 border border-gray-150 rounded-2xl p-5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
               <div className="space-y-1">
                 <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">Cliente Titular</span>
                 <h4 className="text-xs font-bold text-gray-950 truncate max-w-[180px]">{clientName || 'Carregando...'}</h4>
-                <p className="text-[10px] text-gray-400 font-mono">Slug: {clientSlug || 'Sem slug'}</p>
               </div>
               <div className="space-y-1 sm:pl-4">
                 <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">Modalidade</span>
@@ -347,20 +346,11 @@ export default function SolicitacoesInformacoes() {
                   {caseObj.registrationTypeKey || 'peticao_inicial'}
                 </span>
               </div>
-              <div className="space-y-1 lg:pl-4">
+              <div className="space-y-1 sm:pl-4">
                 <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">Controle Operacional</span>
                 <div className="text-[10px] text-gray-600 space-y-0.5">
                   <div>Interno: <span className="font-bold text-gray-700">{caseObj.statusInterno || 'Em produção'}</span></div>
                   <div className="truncate max-w-[150px]">Público: <span className="font-bold text-indigo-700">{caseObj.statusPublicoCliente || 'Aguardando...'}</span></div>
-                </div>
-              </div>
-              <div className="space-y-1 lg:pl-4">
-                <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">Caso ID Técnico</span>
-                <p className="text-xs font-mono font-bold text-gray-700 truncate">{caseId}</p>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <span className="inline-block text-[8px] font-bold px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">
-                    ESTÁVEL
-                  </span>
                 </div>
               </div>
             </div>

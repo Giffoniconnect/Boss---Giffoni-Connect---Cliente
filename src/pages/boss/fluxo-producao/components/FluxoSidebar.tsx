@@ -264,9 +264,9 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
               </span>
             </div>
             
-            <p className="text-[12px] text-gray-400 mt-1 truncate flex items-center gap-1 font-mono uppercase tracking-wide">
+            <p className="text-[12px] text-gray-400 mt-1 truncate flex items-center gap-1 font-semibold uppercase tracking-wide">
               <FolderKanban size={10} />
-              {caseId ? `Caso Ativo: ${caseId}` : 'Rascunho de Cadastro Inicial'}
+              {caseId ? 'Caso Ativo' : 'Rascunho de Cadastro Inicial'}
             </p>
           </div>
         </div>

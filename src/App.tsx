@@ -22,6 +22,11 @@ import GoogleDocsIntegration from './pages/boss/integracoes/GoogleDocsIntegratio
 import WhatsappIntegration from './pages/boss/integracoes/WhatsappIntegration';
 import GmailIntegration from './pages/boss/integracoes/GmailIntegration';
 
+// Decoupled Technical Settings Pages
+import DetalhesTecnicos from './pages/boss/configuracoes/DetalhesTecnicos';
+import DetalhesTecnicosClientes from './pages/boss/configuracoes/DetalhesTecnicosClientes';
+import DetalhesTecnicosCasos from './pages/boss/configuracoes/DetalhesTecnicosCasos';
+
 // Modular Production Flow
 import FluxoHome from './pages/boss/fluxo-producao/FluxoHome';
 import PendenciasFluxo from './pages/boss/fluxo-producao/PendenciasFluxo';
@@ -164,6 +169,30 @@ const router = createBrowserRouter(
         element={
           <ProtectedRoute role="boss_admin">
             <GmailIntegration />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/detalhes-tecnicos" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DetalhesTecnicos />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/detalhes-tecnicos/clientes" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DetalhesTecnicosClientes />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/detalhes-tecnicos/casos" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DetalhesTecnicosCasos />
           </ProtectedRoute>
         } 
       />

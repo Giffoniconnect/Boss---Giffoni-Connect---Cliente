@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useColetaState } from '../hooks/useColetaState';
 import FluxoStepLayout from '../components/FluxoStepLayout';
+import EntregaDocumento from '../components/EntregaDocumento';
 import { 
   ArrowRight, FileText, UploadCloud, Trash2, ArrowLeft, 
   Check, AlertCircle, Sparkles, DollarSign, Calendar, Info, 
@@ -829,22 +830,19 @@ export default function ContratoHonorariosPJ() {
                     </div>
 
                     {/* Question 3.3 */}
-                    <div className="space-y-1">
-                      <p className="text-xs font-extrabold text-gray-800">3.3 Você enviou o contrato ao departamento jurídico da empresa?</p>
-                      <div className="flex flex-wrap gap-3 mt-1.5 font-semibold">
-                        {['fisica', 'whatsapp', 'email', 'outro'].map(ch => (
-                          <label key={ch} className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-700">
-                            <input 
-                              type="checkbox"
-                              checked={wizardState.q3_3?.includes(ch)}
-                              onChange={() => handleCheckboxToggle('q3_3', ch)}
-                              className="rounded text-indigo-600"
-                            />
-                            <span className="capitalize">{ch === 'fisica' ? 'Física / Assinatura Manual' : ch}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
+                    <EntregaDocumento
+                      tipoDocumento="contrato"
+                      tipoPessoa="PJ"
+                      googleDocsUrl={caseObj?.contratoHonorariosGoogleDocsUrl || ''}
+                      whatsappCliente={client?.pjDadosResponsavel?.pj_whatsappResponsavel || client?.pjDadosEmpresa?.pj_whatsappEmpresa || client?.pjData?.pj_whatsappEmpresa || client?.pjData?.pj_whatsappResponsavel || ''}
+                      emailCliente={client?.pjDadosEmpresa?.pj_emailEmpresa || client?.pjDadosEmpresa?.pj_emailCorporativo || client?.pjData?.pj_emailEmpresa || client?.pjData?.pj_emailCorporativo || ''}
+                      nomeCliente={clientName}
+                      selectedMethods={wizardState.q3_3 || []}
+                      onMethodsChange={(newMethods: string[]) => saveWizardStateUpdate({ q3_3: newMethods })}
+                      outroValue={wizardState.q3_3_outro || ''}
+                      onOutroChange={(val: string) => saveWizardStateUpdate({ q3_3_outro: val })}
+                      questionNumber="3.3"
+                    />
 
                     {/* Question 3.4 */}
                     <div className="space-y-1">

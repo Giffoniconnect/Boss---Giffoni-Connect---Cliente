@@ -590,6 +590,13 @@ export default function Configuracoes() {
           >
             Documentos Padrão
           </button>
+          <button
+            type="button"
+            onClick={() => navigate('/boss-giffoni-clientes/configuracoes/detalhes-tecnicos')}
+            className="px-4 py-2 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer text-gray-400 hover:text-gray-900"
+          >
+            Detalhes Técnicos
+          </button>
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useColetaState } from '../hooks/useColetaState';
 import FluxoStepLayout from '../components/FluxoStepLayout';
+import EntregaDocumento from '../components/EntregaDocumento';
 import { 
   ArrowRight, FileText, UploadCloud, Trash2, ArrowLeft, 
   Settings, CheckSquare, Sparkles, Check, AlertCircle, RefreshCw 
@@ -14,6 +15,8 @@ export default function ProcuracaoPF() {
     error,
     success,
     clientName,
+    client,
+    caseObj,
     wizardState,
     saveWizardStateUpdate,
     triggerSimulation,
@@ -147,31 +150,19 @@ export default function ProcuracaoPF() {
               {wizardState.q1_1 === 'sim' && (
                 <div className="space-y-4 border-l-2 border-indigo-200 pl-4 animate-in fade-in duration-200">
                   
-                  <div className="space-y-1">
-                    <p className="text-xs font-extrabold text-gray-800">1.2 Você enviou a procuração ao cliente?</p>
-                    <div className="flex flex-wrap gap-3 mt-1.5">
-                      {['fisica', 'whatsapp', 'email', 'outro'].map(ch => (
-                        <label key={ch} className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-gray-700 lowercase">
-                          <input 
-                            type="checkbox"
-                            checked={wizardState.q1_2?.includes(ch)}
-                            onChange={() => handleCheckboxToggle('q1_2', ch)}
-                            className="rounded text-indigo-600"
-                          />
-                          <span className="capitalize">{ch === 'fisica' ? 'Física (Mão)' : ch}</span>
-                        </label>
-                      ))}
-                    </div>
-                    {wizardState.q1_2?.includes('outro') && (
-                      <input 
-                        type="text" 
-                        placeholder="Descreva o canal utilizado" 
-                        value={wizardState.q1_2_outro || ''}
-                        onChange={(e) => saveWizardStateUpdate({ q1_2_outro: e.target.value })}
-                        className="mt-2 w-full max-w-md px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold"
-                      />
-                    )}
-                  </div>
+                  <EntregaDocumento
+                    tipoDocumento="procuracao"
+                    tipoPessoa="PF"
+                    googleDocsUrl={caseObj?.procuracaoGoogleDocsUrl || ''}
+                    whatsappCliente={client?.pfDadosPessoais?.pf_whatsapp || client?.pfDadosPessoais?.pf_telefone || client?.pfData?.pf_whatsapp || client?.pfData?.pf_telefone || ''}
+                    emailCliente={client?.pfDadosPessoais?.pf_email || client?.pfData?.pf_email || ''}
+                    nomeCliente={clientName}
+                    selectedMethods={wizardState.q1_2 || []}
+                    onMethodsChange={(newMethods: string[]) => saveWizardStateUpdate({ q1_2: newMethods })}
+                    outroValue={wizardState.q1_2_outro || ''}
+                    onOutroChange={(val: string) => saveWizardStateUpdate({ q1_2_outro: val })}
+                    questionNumber="1.2"
+                  />
 
                   <div className="space-y-1">
                     <p className="text-xs font-extrabold text-gray-800">1.3 O cliente assinou a procuração?</p>

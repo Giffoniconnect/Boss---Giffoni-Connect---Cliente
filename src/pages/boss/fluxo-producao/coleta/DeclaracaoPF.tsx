@@ -1,6 +1,7 @@
 import React from 'react';
 import { useColetaState } from '../hooks/useColetaState';
 import FluxoStepLayout from '../components/FluxoStepLayout';
+import EntregaDocumento from '../components/EntregaDocumento';
 import { 
   ArrowRight, FileText, UploadCloud, Trash2, ArrowLeft, 
   Check, AlertCircle, Sparkles 
@@ -14,6 +15,8 @@ export default function DeclaracaoPF() {
     error,
     success,
     clientName,
+    client,
+    caseObj,
     wizardState,
     saveWizardStateUpdate,
     triggerSimulation,
@@ -172,31 +175,19 @@ export default function DeclaracaoPF() {
 
                   {wizardState.q2_2 === 'sim' && (
                     <>
-                      <div className="space-y-1">
-                        <p className="text-xs font-extrabold text-gray-800">2.3 Você enviou a declaração?</p>
-                        <div className="flex flex-wrap gap-3 mt-1.5">
-                          {['fisica', 'whatsapp', 'email', 'outro'].map(ch => (
-                            <label key={ch} className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-gray-700">
-                              <input 
-                                type="checkbox"
-                                checked={wizardState.q2_3?.includes(ch)}
-                                onChange={() => handleCheckboxToggle('q2_3', ch)}
-                                className="rounded text-indigo-600"
-                              />
-                              <span className="capitalize">{ch === 'fisica' ? 'Física (Mão)' : ch}</span>
-                            </label>
-                          ))}
-                        </div>
-                        {wizardState.q2_3?.includes('outro') && (
-                          <input 
-                            type="text" 
-                            placeholder="Descreva o canal utilizado" 
-                            value={wizardState.q2_3_outro || ''}
-                            onChange={(e) => saveWizardStateUpdate({ q2_3_outro: e.target.value })}
-                            className="mt-2 w-full max-w-md px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold"
-                          />
-                        )}
-                      </div>
+                      <EntregaDocumento
+                        tipoDocumento="declaracao"
+                        tipoPessoa="PF"
+                        googleDocsUrl={caseObj?.declaracaoPobrezaGoogleDocsUrl || ''}
+                        whatsappCliente={client?.pfDadosPessoais?.pf_whatsapp || client?.pfDadosPessoais?.pf_telefone || client?.pfData?.pf_whatsapp || client?.pfData?.pf_telefone || ''}
+                        emailCliente={client?.pfDadosPessoais?.pf_email || client?.pfData?.pf_email || ''}
+                        nomeCliente={clientName}
+                        selectedMethods={wizardState.q2_3 || []}
+                        onMethodsChange={(newMethods: string[]) => saveWizardStateUpdate({ q2_3: newMethods })}
+                        outroValue={wizardState.q2_3_outro || ''}
+                        onOutroChange={(val: string) => saveWizardStateUpdate({ q2_3_outro: val })}
+                        questionNumber="2.3"
+                      />
 
                       <div className="space-y-1">
                         <p className="text-xs font-extrabold text-gray-800">2.4 O cliente assinou a declaração?</p>

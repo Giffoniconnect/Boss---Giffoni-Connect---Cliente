@@ -674,8 +674,8 @@ export default function DadosCaso() {
           <div>
             <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">Entrevista Inicial / Questionário 5W2H</h3>
             {clientName && (
-              <p className="text-[11px] text-indigo-650 font-bold font-mono tracking-wide mt-1 uppercase">
-                Cliente Associado: {clientName} ({clientSlug})
+              <p className="text-[11px] text-indigo-650 font-bold tracking-wide mt-1 uppercase">
+                Cliente: {clientName}
               </p>
             )}
             <p className="text-xs text-gray-500 mt-1">
