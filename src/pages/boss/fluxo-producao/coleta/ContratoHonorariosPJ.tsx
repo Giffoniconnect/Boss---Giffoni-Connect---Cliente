@@ -43,6 +43,7 @@ export default function ContratoHonorariosPJ() {
   const [formTotalAmount, setFormTotalAmount] = useState<string>('0');
   const [formPaymentMethod, setFormPaymentMethod] = useState('Cartão de Crédito');
   const [formInstallments, setFormInstallments] = useState<number>(1);
+  const [formPaymentMode, setFormPaymentMode] = useState<'avista' | 'parcelado'>('avista');
   const [formFirstDueDate, setFormFirstDueDate] = useState('');
   const [formFinancialStatus, setFormFinancialStatus] = useState<any>('pendente');
   const [formVisibleToClient, setFormVisibleToClient] = useState(true);
@@ -52,8 +53,7 @@ export default function ContratoHonorariosPJ() {
   const [formNotes, setFormNotes] = useState('');
 
   // Service type state fields for SubEtapa 1
-  const [serviceMacroType, setServiceMacroType] = useState('judicial');
-  const [registrationTypeKey, setRegistrationTypeKey] = useState('peticao_inicial');
+  const [contractedServiceType, setContractedServiceType] = useState('');
 
   // Manual configuration flag for step 2
   const [gdocsConfirmed, setGdocsConfirmed] = useState(false);
@@ -64,8 +64,7 @@ export default function ContratoHonorariosPJ() {
   // Sync service types from caseObj
   useEffect(() => {
     if (caseObj) {
-      setServiceMacroType(caseObj.serviceMacroType || 'judicial');
-      setRegistrationTypeKey(caseObj.registrationTypeKey || 'peticao_inicial');
+      setContractedServiceType(caseObj.contractedServiceType || '');
     }
   }, [caseObj]);
 
@@ -103,6 +102,7 @@ export default function ContratoHonorariosPJ() {
           setFormTotalAmount(String(fee.totalAmount || 0));
           setFormPaymentMethod(fee.paymentMethod || 'Cartão de Crédito');
           setFormInstallments(fee.installments || 1);
+          setFormPaymentMode(fee.paymentMode || (fee.installments > 1 ? 'parcelado' : 'avista'));
           setFormFirstDueDate(fee.firstDueDate || '');
           setFormFinancialStatus(fee.financialStatus || 'pendente');
           setFormVisibleToClient(fee.visibleToClient !== false);
@@ -110,6 +110,7 @@ export default function ContratoHonorariosPJ() {
           setFormContractLinked(fee.contractLinked === true);
           setFormPaymentProvider(fee.paymentProvider || 'manual_temporario');
           setFormNotes(fee.notes || '');
+          setContractedServiceType(fee.contractedServiceType || '');
           setFinancialSaved(true);
         }
       } catch (e) {
@@ -169,6 +170,9 @@ export default function ContratoHonorariosPJ() {
       return;
     }
 
+    const calculatedInstallments = formPaymentMode === 'avista' ? 1 : (Number(formInstallments) || 1);
+    const calculatedInstallmentAmount = parseFloat((parsedAmount / calculatedInstallments).toFixed(2)) || 0;
+
     const nowISO = new Date().toISOString();
     try {
       const payload: any = {
@@ -178,7 +182,9 @@ export default function ContratoHonorariosPJ() {
         chargeType: resolvedChargeType,
         totalAmount: parsedAmount,
         paymentMethod: formPaymentMethod,
-        installments: Number(formInstallments) || 1,
+        paymentMode: formPaymentMode,
+        installments: calculatedInstallments,
+        installmentAmount: calculatedInstallmentAmount,
         firstDueDate: formFirstDueDate,
         financialStatus: formFinancialStatus,
         visibleToClient: formVisibleToClient,
@@ -189,6 +195,7 @@ export default function ContratoHonorariosPJ() {
         contractVisibleToClient: true,
         paymentProvider: formPaymentProvider,
         notes: formNotes.trim(),
+        contractedServiceType: contractedServiceType.trim(),
         archived: false,
         updatedAt: nowISO,
         createdAt: nowISO
@@ -205,21 +212,8 @@ export default function ContratoHonorariosPJ() {
       }
 
       // Automatically update cases references
-      let resolvedRegType = '';
-      if (registrationTypeKey === 'peticao_inicial') {
-        resolvedRegType = 'Petição Inicial a Ajuizar';
-      } else if (registrationTypeKey === 'processo-judicial-em-andamento') {
-        resolvedRegType = 'Processo Judicial em Andamento';
-      } else if (registrationTypeKey === 'requerimento-administrativo') {
-        resolvedRegType = 'Requerimento Administrativo';
-      } else if (registrationTypeKey === 'outro-servico-administrativo') {
-        resolvedRegType = 'Outro Serviço Administrativo';
-      }
-
       const caseUpdates: any = {
-        serviceMacroType,
-        registrationTypeKey,
-        registrationType: resolvedRegType,
+        contractedServiceType: contractedServiceType.trim(),
         updatedAt: nowISO
       };
 
@@ -235,10 +229,7 @@ export default function ContratoHonorariosPJ() {
         await setDoc(doc(db, 'casos', caseId!), {
           id: caseId!,
           caseId: caseId!,
-          tipo: resolvedRegType,
-          caseType: resolvedRegType,
-          registrationTypeKey,
-          registrationType: resolvedRegType,
+          contractedServiceType: contractedServiceType.trim(),
           updatedAt: nowISO
         }, { merge: true });
       } catch (mirrorErr) {
@@ -300,6 +291,32 @@ export default function ContratoHonorariosPJ() {
       </div>
     );
   };
+
+  const parsedTotal = parseFloat(formTotalAmount) || 0;
+  const computedInstallments = formPaymentMode === 'avista' ? 1 : (formInstallments || 1);
+  const computedInstallmentAmount = parseFloat((parsedTotal / computedInstallments).toFixed(2)) || 0;
+  const formattedTotal = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(parsedTotal);
+  const formattedInstallment = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(computedInstallmentAmount);
+
+  let resumoTexto = '';
+  if (formPaymentMode === 'avista') {
+    resumoTexto = `Pagamento único à vista de ${formattedTotal}`;
+    if (formFirstDueDate) {
+      const parts = formFirstDueDate.split('-');
+      if (parts.length === 3) {
+        resumoTexto += `, com vencimento em ${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+    }
+    resumoTexto += '.';
+  } else {
+    resumoTexto = `${computedInstallments} parcelas de ${formattedInstallment}`;
+    if (formFirstDueDate) {
+      const parts = formFirstDueDate.split('-');
+      const day = parts[2] ? parseInt(parts[2], 10) : '';
+      resumoTexto += `, vencendo todo dia ${day}`;
+    }
+    resumoTexto += '.';
+  }
 
   return (
     <FluxoStepLayout stepName="Coleta de Documentos" caseId={caseId}>
@@ -416,51 +433,15 @@ export default function ContratoHonorariosPJ() {
                       <Sparkles size={14} className="text-indigo-600" /> Tipo do Serviço Contratado
                     </h5>
                     
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Macrotipo */}
-                      <div className="space-y-1">
-                        <label className="block text-[9.5px] font-black uppercase text-gray-500 tracking-wider font-mono">Macrotipo do Serviço</label>
-                        <select
-                          value={serviceMacroType}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setServiceMacroType(val);
-                            if (val === 'judicial') {
-                              setRegistrationTypeKey('peticao_inicial');
-                            } else {
-                              setRegistrationTypeKey('requerimento-administrativo');
-                            }
-                          }}
-                          className="w-full px-3 py-2 bg-white border border-gray-150 rounded-xl text-xs font-semibold text-gray-855 outline-none focus:ring-2 focus:ring-indigo-100"
-                        >
-                          <option value="judicial">Judicial</option>
-                          <option value="extrajudicial">Extrajudicial</option>
-                        </select>
-                      </div>
-
-                      {/* Subtipo */}
-                      <div className="space-y-1">
-                        <label className="block text-[9.5px] font-black uppercase text-gray-500 tracking-wider font-mono">Subtipo do Serviço</label>
-                        {serviceMacroType === 'judicial' ? (
-                          <select
-                            value={registrationTypeKey}
-                            onChange={(e) => setRegistrationTypeKey(e.target.value)}
-                            className="w-full px-3 py-2 bg-white border border-gray-150 rounded-xl text-xs font-semibold text-gray-855 outline-none focus:ring-2 focus:ring-indigo-100"
-                          >
-                            <option value="peticao_inicial">Petição Inicial</option>
-                            <option value="processo-judicial-em-andamento">Processo Judicial em Andamento</option>
-                          </select>
-                        ) : (
-                          <select
-                            value={registrationTypeKey}
-                            onChange={(e) => setRegistrationTypeKey(e.target.value)}
-                            className="w-full px-3 py-2 bg-white border border-gray-150 rounded-xl text-xs font-semibold text-gray-855 outline-none focus:ring-2 focus:ring-indigo-100"
-                          >
-                            <option value="requerimento-administrativo">Requerimento Administrativo</option>
-                            <option value="outro-servico-administrativo">Outro Serviço Administrativo</option>
-                          </select>
-                        )}
-                      </div>
+                    <div className="space-y-1">
+                      <label className="block text-[9.5px] font-black uppercase text-gray-400 tracking-wider font-mono">TIPO DO SERVIÇO CONTRATADO</label>
+                      <input
+                        type="text"
+                        value={contractedServiceType}
+                        onChange={(e) => setContractedServiceType(e.target.value)}
+                        placeholder="Ex: Ação revisional bancária, execução de alimentos, defesa trabalhista, inventário, consultoria contratual..."
+                        className="w-full px-3 py-2 bg-white border border-gray-150 rounded-xl text-xs font-semibold text-gray-855 outline-none focus:ring-2 focus:ring-indigo-105"
+                      />
                     </div>
                   </div>
                   
@@ -495,6 +476,43 @@ export default function ContratoHonorariosPJ() {
                     )}
                   </div>
 
+                  {/* Como será a forma de pagamento? */}
+                  <div className="md:col-span-2 space-y-2 border border-gray-100 bg-gray-50/50 p-4 rounded-2xl">
+                    <label className="block text-[10px] font-black uppercase text-gray-500 tracking-wider">Como será a forma de pagamento?</label>
+                    <div className="flex gap-6">
+                      <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-gray-700">
+                        <input
+                          type="radio"
+                          name="paymentMode"
+                          value="avista"
+                          checked={formPaymentMode === 'avista'}
+                          onChange={() => {
+                            setFormPaymentMode('avista');
+                            setFormInstallments(1);
+                          }}
+                          className="text-indigo-600 focus:ring-indigo-100 h-4 w-4"
+                        />
+                        À vista
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-bold text-gray-700">
+                        <input
+                          type="radio"
+                          name="paymentMode"
+                          value="parcelado"
+                          checked={formPaymentMode === 'parcelado'}
+                          onChange={() => {
+                            setFormPaymentMode('parcelado');
+                            if (formInstallments <= 1) {
+                              setFormInstallments(2);
+                            }
+                          }}
+                          className="text-indigo-600 focus:ring-indigo-100 h-4 w-4"
+                        />
+                        Parcelado
+                      </label>
+                    </div>
+                  </div>
+
                   {/* Valor total */}
                   <div className="space-y-1">
                     <label className="block text-[10px] font-black uppercase text-gray-500 tracking-wider">Valor total (BRL) *</label>
@@ -508,18 +526,22 @@ export default function ContratoHonorariosPJ() {
                     />
                   </div>
 
-                  {/* Parcelas */}
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-black uppercase text-gray-500 tracking-wider">Parcelas</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={formInstallments}
-                      onChange={(e) => setFormInstallments(Number(e.target.value) || 1)}
-                      className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl text-xs font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100"
-                      required
-                    />
-                  </div>
+                  {/* Parcelas se parcelado */}
+                  {formPaymentMode === 'parcelado' ? (
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-black uppercase text-gray-500 tracking-wider">Número de parcelas *</label>
+                      <input
+                        type="number"
+                        min="2"
+                        value={formInstallments}
+                        onChange={(e) => setFormInstallments(Number(e.target.value) || 2)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl text-xs font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100"
+                        required
+                      />
+                    </div>
+                  ) : (
+                    <div className="hidden"></div>
+                  )}
 
                   {/* Meio de Recebimento */}
                   <div className="space-y-1">
@@ -538,6 +560,21 @@ export default function ContratoHonorariosPJ() {
                     </select>
                   </div>
 
+                  {/* Card informativo de dinheiro fisico */}
+                  {formPaymentMethod === 'Dinheiro físico' && (
+                    <div className="md:col-span-2 bg-blue-50 border border-blue-100 rounded-2xl p-4 space-y-1.5 text-xs text-blue-950 animate-fade-in">
+                      <div className="font-mono font-black text-[10px] uppercase tracking-wider text-blue-800 flex items-center gap-1.5">
+                        <Info size={14} className="text-blue-500" /> AUTOMAÇÃO FUTURA — RECIBO EM DINHEIRO FÍSICO
+                      </div>
+                      <p className="font-semibold text-[11px]">
+                        Espaço reservado para futura automação Google Docs de geração automática de recibo de pagamento em dinheiro físico.
+                      </p>
+                      <p className="text-[10px] text-blue-600/80 font-mono">
+                        Observação técnica: A geração real do recibo será implementada em build próprio, com integração ao Google Docs.
+                      </p>
+                    </div>
+                  )}
+
                   {/* Primeiro Vencimento */}
                   <div className="space-y-1">
                     <label className="block text-[10px] font-black uppercase text-gray-500 tracking-wider">Primeiro Vencimento</label>
@@ -547,6 +584,28 @@ export default function ContratoHonorariosPJ() {
                       onChange={(e) => setFormFirstDueDate(e.target.value)}
                       className="w-full px-3 py-2 bg-gray-50 border border-gray-150 rounded-xl text-xs font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100"
                     />
+                  </div>
+
+                  {/* Resumo do Planejamento Financeiro */}
+                  <div className="md:col-span-2 bg-emerald-50/40 border border-emerald-100 rounded-2xl p-4 space-y-2 text-xs text-emerald-950">
+                    <div className="font-mono font-black text-[10px] uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                      <CheckCircle2 size={14} className="text-emerald-500" /> Resumo do Planejamento Financeiro
+                    </div>
+                    <div className="space-y-1">
+                      <p className="font-semibold"><span className="text-gray-400 font-normal">Valor total:</span> {formattedTotal}</p>
+                      {formPaymentMode === 'parcelado' && (
+                        <>
+                          <p className="font-semibold"><span className="text-gray-400 font-normal">Número de parcelas:</span> {computedInstallments}</p>
+                          <p className="font-semibold"><span className="text-gray-400 font-normal">Valor de cada parcela:</span> {formattedInstallment}</p>
+                        </>
+                      )}
+                      {formFirstDueDate && (
+                        <p className="font-semibold"><span className="text-gray-400 font-normal">Vencimento inicial:</span> {formFirstDueDate.split('-').reverse().join('/')}</p>
+                      )}
+                      <div className="mt-2 pt-2 border-t border-emerald-150/60 font-bold text-emerald-900 bg-emerald-100/30 p-2 rounded-xl">
+                        Resumo: {resumoTexto}
+                      </div>
+                    </div>
                   </div>
 
                   {/* Status Financeiro Geral */}
