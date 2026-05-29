@@ -315,7 +315,7 @@ export default function Dashboard() {
           
           <button 
             type="button"
-            onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao/cadastro')}
+            onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao')}
             className="flex items-center justify-between p-5 rounded-2xl border border-gray-150 bg-white text-left hover:border-gray-300 hover:shadow-2xs transition-all group shadow-3xs cursor-pointer"
           >
             <div className="flex items-center gap-3">

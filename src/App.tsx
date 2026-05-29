@@ -15,7 +15,6 @@ import BossEditorPainelCliente from './pages/boss/EditorPainelCliente';
 // Modular Production Flow
 import FluxoHome from './pages/boss/fluxo-producao/FluxoHome';
 import PendenciasFluxo from './pages/boss/fluxo-producao/PendenciasFluxo';
-import CadastroFluxo from './pages/boss/fluxo-producao/CadastroFluxo';
 import TipoServico from './pages/boss/fluxo-producao/TipoServico';
 import DadosCaso from './pages/boss/fluxo-producao/DadosCaso';
 import SolicitacoesInformacoes from './pages/boss/fluxo-producao/SolicitacoesInformacoes';
@@ -123,14 +122,6 @@ const router = createBrowserRouter(
         element={
           <ProtectedRoute role="boss_admin">
             <PendenciasFluxo />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/boss-giffoni-clientes/fluxo-producao/cadastro" 
-        element={
-          <ProtectedRoute role="boss_admin">
-            <CadastroFluxo />
           </ProtectedRoute>
         } 
       />
