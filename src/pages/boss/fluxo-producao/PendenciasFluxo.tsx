@@ -32,6 +32,50 @@ import { motion } from 'motion/react';
 export default function PendenciasFluxo() {
   const navigate = useNavigate();
 
+  // Helper functions for localized descriptive labels without technical jargon
+  const getDadosCaso = (item: any) => {
+    if (item.type === 'client') {
+      return item.subtitle || `Cadastro do Cliente - Slug: /${item.slug || ''}`;
+    }
+    if (item.type === 'client_no_case') {
+      return item.subtitle || 'Cliente cadastrado sem caso ativo vinculado.';
+    }
+    
+    const formula = item.todoistFormula || item.formulaTodoist || item.previewTodoist || item.todoistPreview;
+    if (formula) return formula;
+    
+    let rawType = item.registrationType || item.actionCategory || item.actionType || 'Tipo de serviço não definido';
+    let typeFriendly = rawType;
+    if (typeof rawType === 'string') {
+      const lower = rawType.toLowerCase();
+      if (lower === 'judicial') typeFriendly = 'Processo Judicial em Andamento';
+      else if (lower === 'inicial' || lower === 'peticao_inicial') typeFriendly = 'Petição Inicial a Ajuizar';
+      else if (lower === 'administrativo' || lower === 'requerimento_administrativo') typeFriendly = 'Requerimento Administrativo';
+      else if (lower === 'recorrente' || lower === 'recurso') typeFriendly = 'Recurso em Andamento';
+      else if (lower === 'consultoria' || lower === 'consultivo') typeFriendly = 'Consultoria Jurídica';
+    }
+    return `Caso #${item.id || ''} — ${typeFriendly}`;
+  };
+
+  const getFinanceiroPendenteDesc = (item: any) => {
+    if (item.financeiroStatusDescription) return item.financeiroStatusDescription;
+    if (item.financialPendingReason) return item.financialPendingReason;
+    if (item.financeiroMessage) return item.financeiroMessage;
+    if (item.billingPendingReason) return item.billingPendingReason;
+
+    if (item.financeiroStatus === 'pendente') {
+      return 'Lançamento de faturamento ou parcelas contratuais pendentes de compensação.';
+    }
+    if (item.financialPending === true) {
+      return 'Aguardando validação/adiantamento de guias judiciais ou custas de cartório.';
+    }
+    if (item.billingPending === true) {
+      return 'Gateway de cobrança reportou pendência ou falta de assinatura de recorrência.';
+    }
+
+    return 'Necessário definir modelo de cobrança, faturar custas processuais ou registrar contratação de honorários.';
+  };
+
   // Load cases and incomplete clients from firebase
   const [casesList, setCasesList] = useState<any[]>([]);
   const [incompleteClients, setIncompleteClients] = useState<any[]>([]);
@@ -440,7 +484,7 @@ export default function PendenciasFluxo() {
 
   return (
     <BossLayout>
-      <div id="fluxo-producao-pendencias-v2" className="space-y-6 animate-fade-in max-w-7xl mx-auto px-4 md:px-0">
+      <div id="fluxo-producao-pendencias-v2" className="space-y-6 animate-fade-in max-w-[1600px] mx-auto px-4 md:px-6 2xl:px-8">
         
         {/* TOP HEADER CONTROLS */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-5">
@@ -511,12 +555,12 @@ export default function PendenciasFluxo() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
               
               {/* LEFT COLUMN: THE 11 PRIORITIZED DIVISIONS */}
-              <div className="lg:col-span-6 space-y-3">
+              <div className="lg:col-span-5 xl:col-span-4 space-y-3">
                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">
                   Divisões do Fluxo Produtivo
                 </span>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
                   {categoriesMetadata.map((cat) => {
                     const CatIcon = cat.icon;
                     const itemsList = filteredCategoriesMap[cat.key] || [];
@@ -561,7 +605,7 @@ export default function PendenciasFluxo() {
               </div>
 
               {/* RIGHT COLUMN: PENDECIES DATA CONTAINER */}
-              <div className="lg:col-span-6 bg-gray-50/50 border border-gray-150 rounded-2xl p-5 flex flex-col justify-between min-h-[420px]">
+              <div className="lg:col-span-7 xl:col-span-8 bg-gray-50/50 border border-gray-150 rounded-2xl p-5 flex flex-col justify-between min-h-[420px]">
                 <div>
                   
                   {/* Selected Category Metadata */}
@@ -605,45 +649,82 @@ export default function PendenciasFluxo() {
                     }
 
                     return (
-                      <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
-                        {activeList.map((item, idx) => (
-                          <div
-                            key={item.id || idx}
-                            className="bg-white border border-gray-100 rounded-xl p-3 flex items-center justify-between gap-4 hover:border-gray-200 transition-all hover:shadow-xs"
-                          >
-                            <div className="min-w-0 space-y-1">
-                              <div className="flex items-center gap-2">
-                                <span className={`text-[9px] font-bold border rounded px-1.5 py-0.2 ${item.badgeStyle}`}>
-                                  {item.badge}
-                                </span>
-                                {item.sectionLabel && (
-                                  <span className="text-[9px] font-semibold text-gray-400 uppercase font-mono">
-                                    • {item.sectionLabel}
+                      <div className="space-y-4 max-h-[600px] overflow-y-auto pr-1">
+                        {activeList.map((item, idx) => {
+                          const isFinanceiroPendente = selectedCategory === 'financeiro_pendente' || item.financeiroStatus === 'pendente' || item.financialPending === true || item.billingPending === true;
+                          return (
+                            <div
+                              key={item.id || idx}
+                              className="bg-white border border-gray-150 rounded-2xl p-5 flex flex-col justify-between space-y-4 hover:border-gray-300 transition-all hover:shadow-xs animate-fade-in"
+                            >
+                              <div className="space-y-3.5">
+                                {/* Linha superior */}
+                                <div className="flex items-center gap-2">
+                                  <span className={`text-[9px] font-black uppercase border tracking-wider rounded px-2 py-0.5 ${item.badgeStyle}`}>
+                                    {item.badge}
                                   </span>
+                                  {item.sectionLabel && (
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider font-mono">
+                                      • {item.sectionLabel}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Nome do Cliente */}
+                                <div className="space-y-1">
+                                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block font-sans">
+                                    Nome do Cliente
+                                  </span>
+                                  <h5 className="font-extrabold text-sm text-gray-900 whitespace-normal break-words leading-snug uppercase">
+                                    {item.title || 'Incompleto'}
+                                  </h5>
+                                </div>
+
+                                {/* Dados do Caso */}
+                                <div className="space-y-1">
+                                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block font-sans">
+                                    Dados do Caso
+                                  </span>
+                                  <p className="text-xs font-semibold text-gray-700 whitespace-normal break-words leading-snug">
+                                    {getDadosCaso(item)}
+                                  </p>
+                                </div>
+
+                                {/* Se houver pendência financeira */}
+                                {isFinanceiroPendente && (
+                                  <div className="space-y-1.5 p-3.5 bg-red-50/50 border border-red-150 rounded-xl">
+                                    <span className="text-[10px] font-black text-red-600 uppercase tracking-widest block font-sans">
+                                      Financeiro Pendente
+                                    </span>
+                                    <p className="text-xs font-semibold text-red-850 whitespace-normal break-words leading-snug">
+                                      {getFinanceiroPendenteDesc(item)}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {/* Outros Detalhes (p. ex. se Sem Caso) */}
+                                {item.isNoCase && item.details && (
+                                  <div className="p-3 bg-amber-50/80 border border-amber-200 text-amber-850 text-xs font-semibold rounded-xl leading-normal">
+                                    {item.details}
+                                  </div>
                                 )}
                               </div>
-                              <h5 className="font-extrabold text-xs text-gray-900 truncate uppercase mt-1">
-                                {item.title || 'Incompleto'}
-                              </h5>
-                              <p className="text-[10px] text-gray-500 truncate">{item.subtitle}</p>
-                              {item.isNoCase && item.details && (
-                                <div className="mt-1.5 p-2 bg-amber-50/80 border border-amber-200 text-amber-805 text-[10px] font-semibold rounded-lg leading-tight">
-                                  {item.details}
-                                </div>
-                              )}
-                            </div>
 
-                            <button
-                              type="button"
-                              onClick={item.go}
-                              className="shrink-0 bg-gray-950 hover:bg-black text-white hover:scale-105 py-1.5 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider flex items-center gap-1 cursor-pointer transition-all shadow-3xs"
-                              id={`resume-action-${item.id}`}
-                            >
-                              {item.actionLabel || 'Retomar'}
-                              <ChevronRight size={11} />
-                            </button>
-                          </div>
-                        ))}
+                              {/* Botão */}
+                              <div className="pt-3.5 border-t border-gray-100 flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={item.go}
+                                  className="bg-gray-950 hover:bg-black text-white hover:scale-[1.02] py-2 px-4 rounded-xl text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-all shadow-sm"
+                                  id={`resume-action-${item.id}`}
+                                >
+                                  <span>{item.actionLabel || 'Continuar'}</span>
+                                  <ChevronRight size={12} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     );
                   })()}

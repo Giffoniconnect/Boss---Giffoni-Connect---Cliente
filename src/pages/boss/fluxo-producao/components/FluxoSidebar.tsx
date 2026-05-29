@@ -298,7 +298,7 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
 
       {/* ROW 2: HORIZONTAL TIMELINE PROCESS */}
       <div className="relative">
-        <div className="flex items-center gap-2.5 overflow-x-auto pb-1.5 scrollbar-none select-none scroll-smooth">
+        <div className="flex flex-wrap items-center gap-2.5 pb-1.5 select-none">
           {activeSteps.map((step, idx) => {
             const isCadastro = step.id === 'cadastro';
             let stepUrl = '';

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BossLayout } from '../../components/Layout';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
@@ -162,6 +163,7 @@ interface ConnectorConfig {
 }
 
 export default function Configuracoes() {
+  const navigate = useNavigate();
   const [activeSubTab, setActiveSubTab] = useState<ConfigSubTab>('links');
   const [portalLink, setPortalLink] = useState(DEFAULT_PORTAL_LINK);
   const [portalExternalMode, setPortalExternalMode] = useState<'ai_studio_preview' | 'dominio_publicado'>('ai_studio_preview');
@@ -918,9 +920,133 @@ export default function Configuracoes() {
 
                 {/* API CONNECTORS GRID */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  
-                  {/* STRIPE CARD */}
-                  <div className="bg-white border border-gray-150 rounded-3xl p-6 flex flex-col justify-between space-y-4">
+                  {[
+                    {
+                      key: 'stripe',
+                      name: 'Stripe Gateway',
+                      category: 'Faturamento e Recorrência',
+                      desc: 'Processador global de faturas, cartões de crédito e custas judiciais para clientes nacionais e estrangeiros.',
+                      route: '/boss-giffoni-clientes/configuracoes/integracoes-stripe',
+                      icon: CreditCard,
+                      iconBg: 'bg-indigo-50',
+                      iconColor: 'text-indigo-600'
+                    },
+                    {
+                      key: 'asaas',
+                      name: 'Asaas S.A.',
+                      category: 'Boleto e Pix Consolidado',
+                      desc: 'Módulo de faturamento nacional para cobranças estruturadas via boleto bancário dinâmico e PIX unificado com avisos fáticos.',
+                      route: '/boss-giffoni-clientes/configuracoes/integracoes-asaas',
+                      icon: Landmark,
+                      iconBg: 'bg-emerald-50',
+                      iconColor: 'text-emerald-700'
+                    },
+                    {
+                      key: 'googleDrive',
+                      name: 'Google Drive',
+                      category: 'Repositório de Casos',
+                      desc: 'Garante a centralização automatizada das provas coletadas no fluxo de produção criando pastas por cliente/caso.',
+                      route: '/boss-giffoni-clientes/configuracoes/integracoes-google-drive',
+                      icon: FolderOpen,
+                      iconBg: 'bg-amber-50',
+                      iconColor: 'text-amber-600'
+                    },
+                    {
+                      key: 'todoist',
+                      name: 'Todoist Tasks',
+                      category: 'Gargalos e Tarefas Internas',
+                      desc: 'Mapeamento fático de pendências corporativas, tarefas imediatas e gargalos urgentes do PJe.',
+                      route: '/boss-giffoni-clientes/configuracoes/integracoes-todoist',
+                      icon: CheckSquare,
+                      iconBg: 'bg-rose-50',
+                      iconColor: 'text-rose-600'
+                    },
+                    {
+                      key: 'googleCalendar',
+                      name: 'Google Agenda',
+                      category: 'Reuniões e Prazos',
+                      desc: 'Alerta automatizado ao advogado sobre reuniões marcadas e prazos cruciais das providências BOSS.',
+                      route: '/boss-giffoni-clientes/configuracoes/integracoes-google-calendar',
+                      icon: CalendarDays,
+                      iconBg: 'bg-blue-50',
+                      iconColor: 'text-blue-600'
+                    },
+                    {
+                      key: 'googleDocs',
+                      name: 'Integrações Google Docs',
+                      category: 'Geração de Minutas e Peças',
+                      desc: 'Criação de novos documentos automatizados (procuração, declaração, honorários, recibos) sob demanda.',
+                      route: '/boss-giffoni-clientes/configuracoes/integracoes-google-docs',
+                      icon: FileText,
+                      iconBg: 'bg-cyan-50',
+                      iconColor: 'text-cyan-600'
+                    },
+                    {
+                      key: 'whatsapp',
+                      name: 'WhatsApp Gateway',
+                      category: 'Notificações Automáticas',
+                      desc: 'Canal fático de comunicação imediata com o cliente, alertas de documentos, faturamento e andamentos.',
+                      route: '/boss-giffoni-clientes/configuracoes/integracoes-whatsapp',
+                      icon: MessageSquare,
+                      iconBg: 'bg-emerald-50',
+                      iconColor: 'text-emerald-600'
+                    },
+                    {
+                      key: 'gmail',
+                      name: 'Gmail & E-mail',
+                      category: 'Backup e Alertas Formais',
+                      desc: 'Dispara e-mails formais com links de agendamentos, faturas e relatórios de integridade fáticos dos dados.',
+                      route: '/boss-giffoni-clientes/configuracoes/integracoes-gmail',
+                      icon: Mail,
+                      iconBg: 'bg-red-50',
+                      iconColor: 'text-red-r60 text-red-650 text-red-600'
+                    }
+                  ].map((connector) => {
+                    const status = connectors[connector.key as keyof typeof connectors]?.status || 'não_configurado';
+                    const IconComp = connector.icon;
+                    return (
+                      <div key={connector.key} className="bg-white border border-gray-150 rounded-3xl p-6 flex flex-col justify-between space-y-4 shadow-sm hover:shadow-md transition duration-150">
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-center gap-2.5">
+                              <div className={`w-9 h-9 ${connector.iconBg} ${connector.iconColor} rounded-xl flex items-center justify-center font-bold`}>
+                                <IconComp size={18} />
+                              </div>
+                              <div>
+                                <h4 className="text-xs font-black uppercase text-gray-900 tracking-tight">{connector.name}</h4>
+                                <p className="text-[10px] text-gray-450 font-medium">{connector.category}</p>
+                              </div>
+                            </div>
+                            <span className={`px-2 py-0.5 text-[8px] font-black uppercase border tracking-wider rounded-md ${getStatusStyle(status)}`}>
+                              {status.replace('_', ' ')}
+                            </span>
+                          </div>
+
+                          <p className="text-[11px] text-gray-500 leading-normal font-semibold">
+                            {connector.desc}
+                          </p>
+                        </div>
+
+                        <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+                          <span className="text-[10px] text-gray-400 font-mono">ID: {connector.key}</span>
+                          <button
+                            type="button"
+                            onClick={() => navigate(connector.route)}
+                            className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold uppercase rounded-xl transition duration-150 cursor-pointer flex items-center gap-1.5"
+                          >
+                            <span>Abrir integração</span>
+                            <ExternalLink size={10} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* LEGACY INLINE CONFIGURATORS HIDDEN TO ENSURE EXCELLENT NAVIGATION TRANSITION */}
+                  {false && (
+                    <>
+                      {/* STRIPE CARD */}
+                      <div className="bg-white border border-gray-150 rounded-3xl p-6 flex flex-col justify-between space-y-4">
                     <div className="space-y-2">
                       <div className="flex justify-between items-start">
                         <div className="flex items-center gap-2.5">
@@ -1843,6 +1969,8 @@ export default function Configuracoes() {
                       )}
                     </div>
                   </div>
+                    </>
+                  )}
 
                   {/* RENDERING CUSTOM CONNECTORS CREATED BY THE BOSS IN BUILD 5 */}
                   {customConnectors.map((c) => (

@@ -12,6 +12,16 @@ import CentralControle from './pages/boss/CentralControle';
 import BossPortalClientePreview from './pages/boss/PortalClientePreview';
 import BossEditorPainelCliente from './pages/boss/EditorPainelCliente';
 
+// Connector Integrations
+import StripeIntegration from './pages/boss/integracoes/StripeIntegration';
+import AsaasIntegration from './pages/boss/integracoes/AsaasIntegration';
+import GoogleDriveIntegration from './pages/boss/integracoes/GoogleDriveIntegration';
+import TodoistIntegration from './pages/boss/integracoes/TodoistIntegration';
+import GoogleCalendarIntegration from './pages/boss/integracoes/GoogleCalendarIntegration';
+import GoogleDocsIntegration from './pages/boss/integracoes/GoogleDocsIntegration';
+import WhatsappIntegration from './pages/boss/integracoes/WhatsappIntegration';
+import GmailIntegration from './pages/boss/integracoes/GmailIntegration';
+
 // Modular Production Flow
 import FluxoHome from './pages/boss/fluxo-producao/FluxoHome';
 import PendenciasFluxo from './pages/boss/fluxo-producao/PendenciasFluxo';
@@ -90,6 +100,70 @@ const router = createBrowserRouter(
         element={
           <ProtectedRoute role="boss_admin">
             <BossConfiguracoes />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/integracoes-stripe" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <StripeIntegration />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/integracoes-asaas" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <AsaasIntegration />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/integracoes-google-drive" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <GoogleDriveIntegration />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/integracoes-todoist" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <TodoistIntegration />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/integracoes-google-calendar" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <GoogleCalendarIntegration />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/integracoes-google-docs" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <GoogleDocsIntegration />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/integracoes-whatsapp" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <WhatsappIntegration />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/integracoes-gmail" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <GmailIntegration />
           </ProtectedRoute>
         } 
       />
