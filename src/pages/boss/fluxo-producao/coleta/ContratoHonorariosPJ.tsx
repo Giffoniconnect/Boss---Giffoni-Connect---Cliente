@@ -7,7 +7,7 @@ import {
   ShieldAlert, FileCheck, CheckCircle2, ChevronRight, Lock, 
   HelpCircle, Sparkle, Ban, Coins
 } from 'lucide-react';
-import { collection, query, where, getDocs, getDoc, doc, updateDoc, addDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, getDoc, doc, updateDoc, addDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
 
 export default function ContratoHonorariosPJ() {
@@ -51,11 +51,23 @@ export default function ContratoHonorariosPJ() {
   const [formPaymentProvider, setFormPaymentProvider] = useState<any>('manual_temporario');
   const [formNotes, setFormNotes] = useState('');
 
+  // Service type state fields for SubEtapa 1
+  const [serviceMacroType, setServiceMacroType] = useState('judicial');
+  const [registrationTypeKey, setRegistrationTypeKey] = useState('peticao_inicial');
+
   // Manual configuration flag for step 2
   const [gdocsConfirmed, setGdocsConfirmed] = useState(false);
 
   // Active step manager
   const [activeSubStep, setActiveSubStep] = useState<1 | 2 | 3>(1);
+
+  // Sync service types from caseObj
+  useEffect(() => {
+    if (caseObj) {
+      setServiceMacroType(caseObj.serviceMacroType || 'judicial');
+      setRegistrationTypeKey(caseObj.registrationTypeKey || 'peticao_inicial');
+    }
+  }, [caseObj]);
 
   // Load financial record if exists
   useEffect(() => {
@@ -192,13 +204,45 @@ export default function ContratoHonorariosPJ() {
         setFinancialDocId(docRef.id);
       }
 
-      // Automatically update cases references hasFinancialRecord
+      // Automatically update cases references
+      let resolvedRegType = '';
+      if (registrationTypeKey === 'peticao_inicial') {
+        resolvedRegType = 'Petição Inicial a Ajuizar';
+      } else if (registrationTypeKey === 'processo-judicial-em-andamento') {
+        resolvedRegType = 'Processo Judicial em Andamento';
+      } else if (registrationTypeKey === 'requerimento-administrativo') {
+        resolvedRegType = 'Requerimento Administrativo';
+      } else if (registrationTypeKey === 'outro-servico-administrativo') {
+        resolvedRegType = 'Outro Serviço Administrativo';
+      }
+
+      const caseUpdates: any = {
+        serviceMacroType,
+        registrationTypeKey,
+        registrationType: resolvedRegType,
+        updatedAt: nowISO
+      };
+
       if (formVisibleToClient) {
-        await updateDoc(doc(db, 'cases', caseId!), {
-          financialStatus: formFinancialStatus,
-          hasFinancialRecord: true,
+        caseUpdates.financialStatus = formFinancialStatus;
+        caseUpdates.hasFinancialRecord = true;
+      }
+
+      await updateDoc(doc(db, 'cases', caseId!), caseUpdates);
+
+      // Mirror document update (e.g., casos collection)
+      try {
+        await setDoc(doc(db, 'casos', caseId!), {
+          id: caseId!,
+          caseId: caseId!,
+          tipo: resolvedRegType,
+          caseType: resolvedRegType,
+          registrationTypeKey,
+          registrationType: resolvedRegType,
           updatedAt: nowISO
-        });
+        }, { merge: true });
+      } catch (mirrorErr) {
+        console.warn('Silent mirror save warning:', mirrorErr);
       }
 
       setSuccess('Faturamento agendado com sucesso.');
@@ -316,9 +360,9 @@ export default function ContratoHonorariosPJ() {
                     : 'bg-white border-gray-150 text-gray-500 hover:text-gray-900'
                 }`}
               >
-                <span className="block font-sans text-[8.5px] font-black uppercase tracking-wider text-indigo-600 mb-0.5">SubEtapa 1</span>
+                <span className="block font-sans text-[8.5px] font-black uppercase tracking-wider text-indigo-600 mb-0.5">SubEtapa 1 de 3</span>
                 <span className="text-[11px] font-extrabold flex items-center gap-1 truncate">
-                  💰 Faturamento {financialSaved && <Check size={12} className="text-emerald-500 shrink-0" />}
+                  💰 Tipo & Faturamento {financialSaved && <Check size={12} className="text-emerald-500 shrink-0" />}
                 </span>
               </button>
 
@@ -332,9 +376,9 @@ export default function ContratoHonorariosPJ() {
                     : 'bg-white border-gray-150 text-gray-500 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed'
                 }`}
               >
-                <span className="block font-sans text-[8.5px] font-black uppercase tracking-wider text-indigo-600 mb-0.5">SubEtapa 2</span>
+                <span className="block font-sans text-[8.5px] font-black uppercase tracking-wider text-indigo-600 mb-0.5">SubEtapa 2 de 3</span>
                 <span className="text-[11px] font-extrabold flex items-center gap-1 truncate">
-                  📄 Workspace {gdocsConfirmed && <Check size={12} className="text-emerald-500 shrink-0" />}
+                  📄 Automação GDocs {gdocsConfirmed && <Check size={12} className="text-emerald-500 shrink-0" />}
                 </span>
               </button>
 
@@ -348,9 +392,9 @@ export default function ContratoHonorariosPJ() {
                     : 'bg-white border-gray-150 text-gray-500 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed'
                 }`}
               >
-                <span className="block font-sans text-[8.5px] font-black uppercase tracking-wider text-indigo-600 mb-0.5">SubEtapa 3</span>
+                <span className="block font-sans text-[8.5px] font-black uppercase tracking-wider text-indigo-600 mb-0.5">SubEtapa 3 de 3</span>
                 <span className="text-[11px] font-extrabold flex items-center gap-1 truncate">
-                  ⚖️ Auditoria {wizardState.q3_1 === 'sim' && wizardState.q3_4 === 'sim' && <Check size={12} className="text-emerald-500 shrink-0" />}
+                  ⚖️ Auditoria Contrato {wizardState.q3_1 === 'sim' && wizardState.q3_4 === 'sim' && <Check size={12} className="text-emerald-500 shrink-0" />}
                 </span>
               </button>
             </div>
@@ -360,12 +404,65 @@ export default function ContratoHonorariosPJ() {
               <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-2xs space-y-6">
                 <div className="border-b border-gray-100 pb-3">
                   <h4 className="text-xs font-black text-indigo-950 uppercase tracking-widest flex items-center gap-2">
-                    <DollarSign size={18} className="text-indigo-600" /> SubEtapa 1 — Agendar Novo Faturamento (PJ)
+                    <DollarSign size={18} className="text-indigo-600" /> SubEtapa 1 de 3 — Tipo do Serviço Contratado e Agendar Novo Faturamento
                   </h4>
-                  <p className="text-[11px] text-gray-400 mt-1">Configure as metas de faturamento e fluxo financeiro associadas corporativamente.</p>
+                  <p className="text-[11px] text-gray-400 mt-1">Selecione o tipo do serviço contratado e configure as metas de faturamento e fluxo financeiro associadas corporativamente.</p>
                 </div>
 
                 <form onSubmit={handleSaveFinancial} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* TIPO DO SERVIÇO CONTRATADO */}
+                  <div className="md:col-span-2 border border-indigo-100 bg-indigo-50/20 p-4 rounded-2xl space-y-3 mb-2 animate-fade-in">
+                    <h5 className="text-[10px] font-black uppercase text-indigo-950 tracking-wider flex items-center gap-1">
+                      <Sparkles size={14} className="text-indigo-600" /> Tipo do Serviço Contratado
+                    </h5>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Macrotipo */}
+                      <div className="space-y-1">
+                        <label className="block text-[9.5px] font-black uppercase text-gray-500 tracking-wider font-mono">Macrotipo do Serviço</label>
+                        <select
+                          value={serviceMacroType}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setServiceMacroType(val);
+                            if (val === 'judicial') {
+                              setRegistrationTypeKey('peticao_inicial');
+                            } else {
+                              setRegistrationTypeKey('requerimento-administrativo');
+                            }
+                          }}
+                          className="w-full px-3 py-2 bg-white border border-gray-150 rounded-xl text-xs font-semibold text-gray-855 outline-none focus:ring-2 focus:ring-indigo-100"
+                        >
+                          <option value="judicial">Judicial</option>
+                          <option value="extrajudicial">Extrajudicial</option>
+                        </select>
+                      </div>
+
+                      {/* Subtipo */}
+                      <div className="space-y-1">
+                        <label className="block text-[9.5px] font-black uppercase text-gray-500 tracking-wider font-mono">Subtipo do Serviço</label>
+                        {serviceMacroType === 'judicial' ? (
+                          <select
+                            value={registrationTypeKey}
+                            onChange={(e) => setRegistrationTypeKey(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-gray-150 rounded-xl text-xs font-semibold text-gray-855 outline-none focus:ring-2 focus:ring-indigo-100"
+                          >
+                            <option value="peticao_inicial">Petição Inicial</option>
+                            <option value="processo-judicial-em-andamento">Processo Judicial em Andamento</option>
+                          </select>
+                        ) : (
+                          <select
+                            value={registrationTypeKey}
+                            onChange={(e) => setRegistrationTypeKey(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-gray-150 rounded-xl text-xs font-semibold text-gray-855 outline-none focus:ring-2 focus:ring-indigo-100"
+                          >
+                            <option value="requerimento-administrativo">Requerimento Administrativo</option>
+                            <option value="outro-servico-administrativo">Outro Serviço Administrativo</option>
+                          </select>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                   
                   {/* Tipo da Cobrança */}
                   <div className="space-y-1">
@@ -563,10 +660,10 @@ export default function ContratoHonorariosPJ() {
                     <button
                       type="submit"
                       disabled={savingFinancial}
-                      className="px-5 py-2.5 bg-indigo-650 hover:bg-indigo-700 text-white text-[11px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                      className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
                     >
-                      {savingFinancial ? 'Agendando...' : 'Agendar / Salvar Faturamento'}
-                      <Check size={13} />
+                      {savingFinancial ? 'Salvando...' : 'Próxima Subetapa'}
+                      <ArrowRight size={13} />
                     </button>
                   </div>
                 </form>
@@ -578,7 +675,7 @@ export default function ContratoHonorariosPJ() {
               <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-2xs space-y-6">
                 <div className="border-b border-gray-100 pb-3">
                   <h4 className="text-xs font-black text-indigo-950 uppercase tracking-widest flex items-center gap-2">
-                    <Sparkles size={18} className="text-blue-600 animate-pulse" /> SubEtapa 2 — Automação Inteligente Google Docs
+                    <Sparkles size={18} className="text-blue-600 animate-pulse" /> SubEtapa 2 de 3 — Automação Inteligente Google Docs
                   </h4>
                   <p className="text-[11px] text-gray-400 mt-1">Espaço visual técnico reservado com antecedência para integração GDocs corporativo.</p>
                 </div>
@@ -604,7 +701,7 @@ export default function ContratoHonorariosPJ() {
                     onClick={handleConfirmGDocs}
                     className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[10.5px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
                   >
-                    Confirmar Geração de Contrato
+                    Próxima Subetapa
                     <ArrowRight size={13} />
                   </button>
                 </div>
@@ -616,7 +713,7 @@ export default function ContratoHonorariosPJ() {
               <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-2xs space-y-5">
                 <div className="border-b border-gray-100 pb-3">
                   <h4 className="text-xs font-black text-indigo-950 uppercase tracking-widest flex items-center gap-2">
-                    <FileCheck size={18} className="text-emerald-600" /> SubEtapa 3 — Auditoria Inteligente do Contrato Corporativo (PJ)
+                    <FileCheck size={18} className="text-emerald-600" /> SubEtapa 3 de 3 — Auditoria Inteligente do Contrato de Honorários
                   </h4>
                   <p className="text-[11px] text-gray-400 mt-1">Valide as formalidades do contrato de honorários advocatícios corporativos.</p>
                 </div>
