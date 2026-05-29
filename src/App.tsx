@@ -19,6 +19,19 @@ import TipoServico from './pages/boss/fluxo-producao/TipoServico';
 import DadosCaso from './pages/boss/fluxo-producao/DadosCaso';
 import SolicitacoesInformacoes from './pages/boss/fluxo-producao/SolicitacoesInformacoes';
 import SolicitacoesProvas from './pages/boss/fluxo-producao/SolicitacoesProvas';
+import CardIniciarColeta from './pages/boss/fluxo-producao/coleta/CardIniciarColeta';
+import ProcuracaoPF from './pages/boss/fluxo-producao/coleta/ProcuracaoPF';
+import ProcuracaoPJ from './pages/boss/fluxo-producao/coleta/ProcuracaoPJ';
+import DeclaracaoPF from './pages/boss/fluxo-producao/coleta/DeclaracaoPF';
+import DeclaracaoPJ from './pages/boss/fluxo-producao/coleta/DeclaracaoPJ';
+import ContratoHonorariosPF from './pages/boss/fluxo-producao/coleta/ContratoHonorariosPF';
+import ContratoHonorariosPJ from './pages/boss/fluxo-producao/coleta/ContratoHonorariosPJ';
+import DocumentosMinimosPF from './pages/boss/fluxo-producao/coleta/DocumentosMinimosPF';
+import DocumentosMinimosPJ from './pages/boss/fluxo-producao/coleta/DocumentosMinimosPJ';
+import DocumentosNecessidadePF from './pages/boss/fluxo-producao/coleta/DocumentosNecessidadePF';
+import DocumentosNecessidadePJ from './pages/boss/fluxo-producao/coleta/DocumentosNecessidadePJ';
+import DocumentosAuditoriaPF from './pages/boss/fluxo-producao/coleta/DocumentosAuditoriaPF';
+import DocumentosAuditoriaPJ from './pages/boss/fluxo-producao/coleta/DocumentosAuditoriaPJ';
 import FinanceiroFluxo from './pages/boss/fluxo-producao/FinanceiroFluxo';
 import EDRPFluxo from './pages/boss/fluxo-producao/EDRPFluxo';
 import RevisaoFluxo from './pages/boss/fluxo-producao/RevisaoFluxo';
@@ -241,7 +254,111 @@ const router = createBrowserRouter(
         path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacoes-provas" 
         element={
           <ProtectedRoute role="boss_admin">
-            <SolicitacoesProvas />
+            <CardIniciarColeta />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/card-iniciar-coleta-obrigatoria" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <CardIniciarColeta />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-procuracao-PF" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <ProcuracaoPF />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-procuracao-PJ" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <ProcuracaoPJ />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-declaracao-PF" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DeclaracaoPF />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-declaracao-PJ" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DeclaracaoPJ />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-contrato-PF" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <ContratoHonorariosPF />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-contrato-PJ" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <ContratoHonorariosPJ />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-minimos-PF" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DocumentosMinimosPF />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-minimos-PJ" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DocumentosMinimosPJ />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-necessidade-PF" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DocumentosNecessidadePF />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-necessidade-PJ" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DocumentosNecessidadePJ />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-auditoria-PF" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DocumentosAuditoriaPF />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-auditoria-PJ" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DocumentosAuditoriaPJ />
           </ProtectedRoute>
         } 
       />

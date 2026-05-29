@@ -188,7 +188,12 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
 
     if (stepId === 'solicitacoes-provas') {
       if (!caseObj) return 'uninitiated';
-      return (caseObj.evidenceStatus === 'concluido' || caseObj.evidenceCompleted) ? 'complete' : 'uninitiated';
+      const isOk = caseObj.evidenceStatus === 'concluido' || 
+                    caseObj.evidenceCompleted || 
+                    caseObj.coletaStatus === 'concluida' || 
+                    caseObj.statusProvas === 'concluido' ||
+                    caseObj.solicitacoesProvasWizardState?.step6_completed === true;
+      return isOk ? 'complete' : 'uninitiated';
     }
 
     if (stepId === 'solicitacoes-informacoes') {
