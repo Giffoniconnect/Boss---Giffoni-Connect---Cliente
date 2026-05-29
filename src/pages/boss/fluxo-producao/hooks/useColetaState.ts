@@ -50,11 +50,18 @@ export function useColetaState() {
     step1_completed: false, step2_completed: false, step3_completed: false, step4_completed: false, step5_completed: false, step6_completed: false
   });
 
-  const isPJ = client?.type === 'PJ' || !!client?.pjDadosEmpresa;
+  const tipoCliente = client?.type;
+  const isPF = tipoCliente === 'PF';
+  const isPJ = tipoCliente === 'PJ';
+  const tipoClienteValido = isPF || isPJ;
+
   const clientName = client 
-    ? (client.type === 'PF' 
+    ? (isPF 
         ? (client.pfDadosPessoais?.pf_nomeCompleto || client.pfData?.pf_nomeCompleto || 'Sem Nome') 
-        : (client.pjDadosEmpresa?.pj_razaoSocial || client.pjData?.pj_razaoSocial || 'Sem Razão Social'))
+        : isPJ 
+          ? (client.pjDadosEmpresa?.pj_razaoSocial || client.pjData?.pj_razaoSocial || 'Sem Razão Social')
+          : 'Tipo de cliente indefinido/inconsistente'
+      )
     : '';
   const clientSlug = client?.slug || '';
   const driveFolderId = client?.googleDriveClientFolderId || client?.gdriveFolderId || caseObj?.gdriveFolderId || '';
@@ -240,6 +247,9 @@ export function useColetaState() {
     setRequests,
     docTemplates,
     isPJ,
+    isPF,
+    tipoCliente,
+    tipoClienteValido,
     clientName,
     clientSlug,
     driveFolderId,

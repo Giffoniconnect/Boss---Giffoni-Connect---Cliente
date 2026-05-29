@@ -654,6 +654,27 @@ export default function EditarCadastroCliente() {
                   padding-top: 0.5rem !important;
                 }
               `}</style>
+              
+              {/* INTEGRITY ALERTS (VALIDAÇÃO DE INTEGRIDADE) */}
+              {clientType === 'PF' && !!(
+                (prevClientData?.pjData && Object.keys(prevClientData.pjData).some(k => !!prevClientData.pjData[k])) ||
+                (prevClientData?.pjDadosEmpresa && Object.keys(prevClientData.pjDadosEmpresa).some(k => !!prevClientData.pjDadosEmpresa[k]))
+              ) && (
+                <div className="p-4 bg-amber-50 border border-amber-250 rounded-2xl flex items-start gap-3 text-xs font-semibold text-amber-900 leading-relaxed">
+                  <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={16} />
+                  <div>Inconsistência detectada: cliente PF possui dados PJ residuais.</div>
+                </div>
+              )}
+
+              {clientType === 'PJ' && !!(
+                (prevClientData?.pfData && Object.keys(prevClientData.pfData).some(k => !!prevClientData.pfData[k])) ||
+                (prevClientData?.pfDadosPessoais && Object.keys(prevClientData.pfDadosPessoais).some(k => !!prevClientData.pfDadosPessoais[k]))
+              ) && (
+                <div className="p-4 bg-amber-50 border border-amber-250 rounded-2xl flex items-start gap-3 text-xs font-semibold text-amber-900 leading-relaxed">
+                  <AlertTriangle className="text-amber-600 shrink-0 mt-0.5" size={16} />
+                  <div>Inconsistência detectada: cliente PJ possui dados PF residuais.</div>
+                </div>
+              )}
 
               {clientType === 'PF' ? (
                 <PFForm data={formData} onChange={(d) => setFormData(d)} />

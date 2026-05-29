@@ -41,6 +41,7 @@ import ControladoriaFluxo from './pages/boss/fluxo-producao/ControladoriaFluxo';
 import RelatorioIntegridadeFluxo from './pages/boss/fluxo-producao/RelatorioIntegridadeFluxo';
 import Recadastramento from './pages/boss/fluxo-producao/Recadastramento';
 import EditarCadastroCliente from './pages/boss/fluxo-producao/EditarCadastroCliente';
+import CadastroFluxo from './pages/boss/fluxo-producao/CadastroFluxo';
 
 
 
@@ -127,6 +128,14 @@ const router = createBrowserRouter(
         element={
           <ProtectedRoute role="boss_admin">
             <FluxoHome />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/cadastro" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <CadastroFluxo />
           </ProtectedRoute>
         } 
       />

@@ -65,7 +65,7 @@ export default function CardIniciarColeta() {
               </div>
               <div>
                 <span className="text-[9px] font-black uppercase text-indigo-500 font-mono tracking-wider block">
-                  Regime Auto-Identificado pelo Sistema
+                  Tipo de cliente: {isPJ ? 'Pessoa Jurídica' : 'Pessoa Física'}
                 </span>
                 <h4 className="font-extrabold text-gray-950 text-sm mt-0.5">
                   {clientName || 'Cliente em Coleta'}
