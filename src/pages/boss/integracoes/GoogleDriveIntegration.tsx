@@ -7,43 +7,23 @@ import {
   FolderOpen, 
   ArrowLeft, 
   Save, 
-  Play, 
-  Terminal, 
-  AlertCircle, 
-  Check, 
+  ExternalLink,
+  Workflow,
+  ArrowRight,
+  Database,
+  CloudLightning,
+  AlertCircle,
+  Check,
   X,
   Info
 } from 'lucide-react';
-
-interface GoogleDriveConfig {
-  status: 'não_configurado' | 'preparado' | 'em_teste' | 'ativo' | 'erro';
-  folderStrategy: 'by_case' | 'centralized';
-  rootFolderIdPlaceholder: string;
-  serviceAccountPlaceholder: string;
-  buildUrl: string;
-  notes: string;
-}
 
 export default function GoogleDriveIntegration() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [buildUrl, setBuildUrl] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-
-  // Connection fields
-  const [config, setConfig] = useState<GoogleDriveConfig>({
-    status: 'não_configurado',
-    folderStrategy: 'by_case',
-    rootFolderIdPlaceholder: '',
-    serviceAccountPlaceholder: '',
-    buildUrl: '',
-    notes: ''
-  });
-
-  // Simulated logs
-  const [logs, setLogs] = useState<string[]>([]);
-  const [showLogs, setShowLogs] = useState(false);
-  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     async function loadConfig() {
@@ -52,15 +32,8 @@ export default function GoogleDriveIntegration() {
         const docSnap = await getDoc(doc(db, 'settings', 'connectors'));
         if (docSnap.exists()) {
           const data = docSnap.data();
-          if (data.googleDrive) {
-            setConfig({
-              status: data.googleDrive.status || 'não_configurado',
-              folderStrategy: data.googleDrive.folderStrategy || 'by_case',
-              rootFolderIdPlaceholder: data.googleDrive.rootFolderIdPlaceholder || '',
-              serviceAccountPlaceholder: data.googleDrive.serviceAccountPlaceholder || '',
-              buildUrl: data.googleDrive.buildUrl || '',
-              notes: data.googleDrive.notes || ''
-            });
+          if (data.googleDrive && data.googleDrive.buildUrl) {
+            setBuildUrl(data.googleDrive.buildUrl);
           }
         }
       } catch (err) {
@@ -78,70 +51,21 @@ export default function GoogleDriveIntegration() {
     setFeedback(null);
 
     try {
+      const urlValue = buildUrl.trim();
       await setDoc(doc(db, 'settings', 'connectors'), {
         googleDrive: {
-          status: config.status,
-          folderStrategy: config.folderStrategy,
-          rootFolderIdPlaceholder: config.rootFolderIdPlaceholder.trim(),
-          serviceAccountPlaceholder: config.serviceAccountPlaceholder.trim(),
-          buildUrl: config.buildUrl.trim(),
-          notes: config.notes.trim()
+          buildUrl: urlValue,
+          status: urlValue ? 'ativo' : 'não_configurado'
         },
         updatedAt: new Date().toISOString()
       }, { merge: true });
 
-      setFeedback({ type: 'success', message: 'Configurações de integração com Google Drive salvas na nuvem com sucesso!' });
-      
-      const timestamp = new Date().toLocaleTimeString();
-      setLogs(prev => [
-        ...prev,
-        `[${timestamp}] Configurações atualizadas e gravadas com sucesso no Firestore.`
-      ]);
+      setFeedback({ type: 'success', message: 'URL do Build Google Drive salva com sucesso!' });
     } catch (err: any) {
       console.error('Erro ao salvar Google Drive:', err);
       setFeedback({ type: 'error', message: `Erro ao salvar configurações: ${err.message || err}` });
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleTestConnection = () => {
-    setTesting(true);
-    const timestamp = new Date().toLocaleTimeString();
-    
-    const newLogs = [
-      `[${timestamp}] Inicializando aperto de mão lógico com Google Drive API...`,
-      `[${timestamp}] Validando credenciais da Service Account fática do projeto...`,
-      `[${timestamp}] Conectando ao Google Drive v3 API...`,
-      `[${timestamp}] Verificando permissão de escrita e criação de pastas no ID Raiz: [${config.rootFolderIdPlaceholder || 'Não informado'}]...`,
-      `[${timestamp}] Aviso: Teste real será ativado em build futuro com backend seguro.`,
-      `[${timestamp}] Canal retornado com status isolado: Simulador de Sucesso.`
-    ];
-
-    setTimeout(() => {
-      setLogs(prev => [...prev, ...newLogs]);
-      setTesting(false);
-      setShowLogs(true);
-    }, 1000);
-  };
-
-  const handleDisable = async () => {
-    const timestamp = new Date().toLocaleTimeString();
-    const updated = { ...config, status: 'não_configurado' as const };
-    setConfig(updated);
-    
-    try {
-      await setDoc(doc(db, 'settings', 'connectors'), {
-        googleDrive: updated,
-        updatedAt: new Date().toISOString()
-      }, { merge: true });
-      
-      setLogs(prev => [
-        ...prev,
-        `[${timestamp}] Provedor desativado voluntariamente pelo operador.`
-      ]);
-    } catch (err) {
-      console.error(err);
     }
   };
 
@@ -157,6 +81,8 @@ export default function GoogleDriveIntegration() {
       </BossLayout>
     );
   }
+
+  const isConfigured = buildUrl.trim().length > 0;
 
   return (
     <BossLayout>
@@ -177,125 +103,98 @@ export default function GoogleDriveIntegration() {
               </div>
               <div>
                 <h2 className="text-lg font-black text-gray-900 tracking-tight uppercase">Google Drive</h2>
-                <p className="text-xs text-gray-500 font-medium">Repositório de Documentos de Casos Judiciais</p>
+                <p className="text-xs text-gray-500 font-medium">Atalho Operacional e Configuração do Build Externo</p>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className={`px-2.5 py-1 text-[9px] font-black uppercase border tracking-wider rounded-lg ${
-              config.status === 'ativo' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
-              config.status === 'preparado' ? 'bg-blue-50 text-blue-800 border-blue-200' :
-              config.status === 'em_teste' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-              config.status === 'erro' ? 'bg-rose-50 text-rose-800 border-rose-200' :
-              'bg-gray-100 text-gray-500 border-gray-205'
+          <div>
+            <span className={`px-2.5 py-1 text-[10px] font-black uppercase border tracking-wider rounded-lg ${
+              isConfigured 
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                : 'bg-gray-100 text-gray-500 border-gray-200'
             }`}>
-              {config.status.replace('_', ' ')}
+              {isConfigured ? 'Ponte Ativa' : 'Não Configurado'}
             </span>
           </div>
         </div>
 
-        {/* Info card */}
-        <div className="bg-slate-900 border border-slate-950 p-6 rounded-[2rem] flex gap-3.5 text-slate-100 shadow-xl">
+        {/* Informational Panel: The Decision Explanation */}
+        <div className="bg-slate-900 border border-slate-950 p-6 rounded-[2rem] flex gap-4 text-slate-100 shadow-xl">
           <Info size={24} className="text-amber-400 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <p className="text-xs font-black uppercase tracking-wider text-amber-400 font-mono">Conector Google Drive Ativo • BOSS v5</p>
+          <div className="space-y-2 col-span-11">
+            <p className="text-xs font-black uppercase tracking-wider text-amber-400 font-mono">Ponte de Integração Ativa • Modelo Desacoplado</p>
             <p className="text-xs text-slate-300 leading-relaxed font-semibold">
-              Garante a centralização automatizada das provas coletadas no fluxo de produção, criando pastas por cliente/caso para auditoria do advogado e do PJe.
+              O Portal BOSS não armazena credenciais confidenciais ou se conecta diretamente ao Google Drive por questões de segurança. A operação é delegada a um build externo e seguro.
+            </p>
+            <p className="text-xs text-slate-400 font-bold leading-relaxed">
+              “As credenciais, pasta destino, autenticação e testes reais do Google Drive são configurados exclusivamente no build Google Drive.”
             </p>
           </div>
         </div>
 
-        {/* Warn card */}
-        <div className="bg-amber-50 border border-amber-150 p-4 rounded-2xl flex gap-2.5 text-amber-950">
-          <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
-          <p className="text-[11px] leading-relaxed font-semibold">
-            <strong className="uppercase">Segurança Técnica:</strong> Esta chave secreta não deve ser armazenada diretamente no frontend legado. Em ambiente de produção, certifique-se de mover para variáveis de ambiente seguras no backend (Cloud Run / Functions).
-          </p>
+        {/* Visual Architecture Diagram */}
+        <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-sm space-y-4">
+          <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Como funciona o fluxo de integração:</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-center pt-2">
+            
+            {/* Step 1 */}
+            <div className="bg-gray-50 border border-gray-150 rounded-2xl p-4 text-center space-y-1">
+              <Database className="w-5 h-5 mx-auto text-blue-600" />
+              <p className="text-[11px] font-black uppercase tracking-tight text-gray-800">Portal BOSS</p>
+              <p className="text-[10px] text-gray-500 font-medium leading-tight">Gera os dados e envia payload do cliente</p>
+            </div>
+
+            {/* Arrow */}
+            <div className="hidden md:flex justify-center text-gray-400">
+              <ArrowRight className="w-5 h-5" />
+            </div>
+
+            {/* Step 2 */}
+            <div className="bg-amber-50/55 border border-amber-150 rounded-2xl p-4 text-center space-y-1">
+              <CloudLightning className="w-5 h-5 mx-auto text-amber-600 animate-pulse" />
+              <p className="text-[11px] font-black uppercase tracking-tight text-amber-900">Build Google Drive</p>
+              <p className="text-[10px] text-amber-800 font-medium leading-tight">Recebe, processa e cria/localiza pasta no Drive</p>
+            </div>
+
+            {/* Arrow */}
+            <div className="hidden md:flex justify-center text-gray-400">
+              <ArrowRight className="w-5 h-5" />
+            </div>
+
+            {/* Step 3 */}
+            <div className="bg-emerald-50/40 border border-emerald-150 rounded-2xl p-4 text-center space-y-1">
+              <FolderOpen className="w-5 h-5 mx-auto text-emerald-600" />
+              <p className="text-[11px] font-black uppercase tracking-tight text-emerald-950">Retorno & Sincronia</p>
+              <p className="text-[10px] text-emerald-800 font-medium leading-tight">Devolve o UID/link e o BOSS salva no cadastro</p>
+            </div>
+
+          </div>
         </div>
 
-        {/* MAIN CONFIGURATION FORM */}
+        {/* Core Quick Form Card */}
         <form onSubmit={handleSave} className="bg-white border border-gray-150 rounded-3xl p-6 md:p-8 space-y-6 shadow-sm">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            
-            <div className="space-y-1 md:col-span-2">
-              <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Folder ID Raiz (Público) *</label>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">URL do Build Google Drive / API URL *</label>
               <input
-                type="text"
+                type="url"
                 required
-                value={config.rootFolderIdPlaceholder}
-                onChange={(e) => setConfig({ ...config, rootFolderIdPlaceholder: e.target.value })}
-                placeholder="1A_Lp93Sks..."
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100"
+                value={buildUrl}
+                onChange={(e) => setBuildUrl(e.target.value)}
+                placeholder="https://aistudio.google.com/apps/e39f8816-ffed-4965-babb-f904b4e36102"
+                className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500"
               />
-            </div>
-
-            <div className="space-y-1 md:col-span-2">
-              <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Service Account Credentials (Seguro/JSON) *</label>
-              <textarea
-                required
-                rows={4}
-                value={config.serviceAccountPlaceholder}
-                onChange={(e) => setConfig({ ...config, serviceAccountPlaceholder: e.target.value })}
-                placeholder='{ "type": "service_account", "project_id": "boss-auth-3023", ... }'
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100"
-              />
-            </div>
-
-            <div className="space-y-1 md:col-span-2">
-              <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">URL do Build Google Drive (Webhook / API URL) *</label>
-              <input
-                type="text"
-                required
-                value={config.buildUrl}
-                onChange={(e) => setConfig({ ...config, buildUrl: e.target.value })}
-                placeholder="https://ais-dev-xxxx-599536317399.us-east1.run.app"
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Estratégia de Pastas *</label>
-              <select
-                value={config.folderStrategy}
-                onChange={(e) => setConfig({ ...config, folderStrategy: e.target.value as any })}
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer"
-              >
-                <option value="by_case">Pasta Nova por Caso</option>
-                <option value="centralized">Centralizada em ID Único</option>
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Status Conexão *</label>
-              <select
-                value={config.status}
-                onChange={(e) => setConfig({ ...config, status: e.target.value as any })}
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer"
-              >
-                <option value="não_configurado">Não Configurado</option>
-                <option value="preparado">Preparado</option>
-                <option value="em_teste">Em Testes</option>
-                <option value="ativo">Ativo</option>
-                <option value="erro">Erro</option>
-              </select>
-            </div>
-
-            <div className="space-y-1 md:col-span-2">
-              <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Notas Internas de Integração</label>
-              <textarea
-                value={config.notes}
-                onChange={(e) => setConfig({ ...config, notes: e.target.value })}
-                rows={3}
-                placeholder="Observações complementares fáticas sobre este barramento..."
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100"
-              />
+              <p className="text-[10px] text-gray-500 leading-relaxed font-semibold">
+                Utilize o endpoint ou URL do Applet secundário para onde o Portal BOSS enviará as solicitações de criação de pasta.
+              </p>
             </div>
           </div>
 
           {feedback && (
             <div className={`p-4 rounded-xl text-xs font-semibold flex items-center justify-between ${
-              feedback.type === 'success' ? 'bg-emerald-50 text-emerald-900 border border-emerald-100' : 'bg-rose-50 text-rose-900 border border-rose-100'
+              feedback.type === 'success' ? 'bg-emerald-50 text-emerald-950 border border-emerald-250 animate-fadeIn' : 'bg-rose-50 text-rose-950 border border-rose-250 animate-fadeIn'
             }`}>
               <div className="flex items-center gap-2">
                 <AlertCircle size={15} />
@@ -308,81 +207,27 @@ export default function GoogleDriveIntegration() {
           )}
 
           {/* Form Actions */}
-          <div className="pt-4 border-t border-gray-100 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={testing}
-                onClick={handleTestConnection}
-                className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 disabled:opacity-50 text-xs font-bold uppercase rounded-xl transition flex items-center gap-2 cursor-pointer"
-              >
-                <Play size={12} />
-                <span>{testing ? 'Testando...' : 'Testar Conexão'}</span>
-              </button>
+          <div className="pt-5 border-t border-gray-150 flex flex-wrap items-center justify-between gap-4">
+            <a
+              href="https://aistudio.google.com/apps/e39f8816-ffed-4965-babb-f904b4e36102?showPreview=true&showAssistant=true"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-800 text-xs font-bold uppercase rounded-xl transition flex items-center gap-2 border border-slate-200 shadow-xs cursor-pointer"
+            >
+              <ExternalLink size={13} />
+              <span>Abrir Build Google Drive</span>
+            </a>
 
-              <button
-                type="button"
-                onClick={() => setShowLogs(!showLogs)}
-                className="px-3 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-bold uppercase rounded-xl transition flex items-center gap-2"
-              >
-                <Terminal size={12} />
-                <span>Logs</span>
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {config.status !== 'não_configurado' && (
-                <button
-                  type="button"
-                  onClick={handleDisable}
-                  className="px-4 py-2 hover:bg-red-50 text-red-500 rounded-xl text-xs font-bold uppercase transition"
-                >
-                  Desativar
-                </button>
-              )}
-
-              <button
-                type="submit"
-                disabled={saving}
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-sm disabled:opacity-50 cursor-pointer"
-              >
-                <Save size={14} />
-                <span>{saving ? 'Gravando...' : 'Salvar Alterações'}</span>
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-sm disabled:opacity-50 cursor-pointer"
+            >
+              <Save size={14} />
+              <span>{saving ? 'Gravando...' : 'Salvar URL do Build'}</span>
+            </button>
           </div>
         </form>
-
-        {/* LOG PANEL */}
-        {showLogs && (
-          <div className="bg-slate-900 border border-slate-950 p-5 rounded-3xl text-slate-100 font-mono text-xs space-y-3 shadow-xl">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-              <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider flex items-center gap-2">
-                <Terminal size={14} className="text-indigo-400" />
-                <span>Terminal Simulator Logs — Google Drive</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowLogs(false)}
-                className="text-slate-400 hover:text-white font-sans text-xs font-semibold"
-              >
-                Ocultar
-              </button>
-            </div>
-
-            <div className="max-h-[180px] overflow-y-auto space-y-1.5 bg-slate-950 p-4 rounded-2xl shadow-inner scrollbar-thin">
-              {logs.length === 0 ? (
-                <div className="text-slate-500 italic">Nenhum log gravado neste ciclo de visualização. Clique em "Testar Conexão" para obter dados fáticos.</div>
-              ) : (
-                logs.map((log, i) => (
-                  <div key={i} className="leading-relaxed hover:bg-slate-900/60 p-0.5 rounded transition">
-                    {log}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </BossLayout>
   );

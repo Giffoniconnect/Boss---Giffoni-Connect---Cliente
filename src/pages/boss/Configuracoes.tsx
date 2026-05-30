@@ -39,6 +39,7 @@ import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
+  Info,
   Globe
 } from 'lucide-react';
 
@@ -1338,88 +1339,35 @@ export default function Configuracoes() {
                           </div>
                           <div>
                             <h4 className="text-xs font-black uppercase text-gray-900 tracking-tight">Google Drive</h4>
-                            <p className="text-[10px] text-gray-450 font-medium">Repositório de Caso Judicial</p>
+                            <p className="text-[10px] text-gray-450 font-medium">Atalho Operacional do Build</p>
                           </div>
                         </div>
-                        <span className={`px-2 py-0.5 text-[8px] font-black uppercase border tracking-wider rounded-md ${getStatusStyle(connectors.googleDrive?.status)}`}>
-                          {connectors.googleDrive?.status?.replace('_', ' ')}
+                        <span className={`px-2 py-0.5 text-[8px] font-black uppercase border tracking-wider rounded-md ${getStatusStyle(connectors.googleDrive?.buildUrl ? 'ativo' : 'não_configurado')}`}>
+                          {connectors.googleDrive?.buildUrl ? 'ATIVO' : 'NÃO CONFIGURADO'}
                         </span>
                       </div>
 
                       <p className="text-[11px] text-gray-500 leading-normal">
-                        Nuvem para consolidação automatizada das provas, dividindo pastas em nomenclatura unificada para auditoria judicial.
+                        O Portal BOSS não armazena credenciais por questões de segurança. A conexão e criação de pastas em lote são delegadas a um build externo e seguro.
                       </p>
                     </div>
 
-                    <div className="bg-red-50/50 p-3 rounded-xl text-[10px] text-red-800 leading-normal font-semibold flex gap-1.5 items-start">
-                      <AlertCircle size={12} className="text-red-550 mt-0.5 shrink-0" />
-                      <span>Esta chave secreta não deve ser armazenada no frontend. Em produção, mover para backend/Cloud Functions/env seguro.</span>
+                    <div className="bg-amber-50/50 p-3 rounded-xl text-[10px] text-amber-900 leading-normal font-semibold flex gap-1.5 items-start">
+                      <Info size={12} className="text-amber-600 mt-0.5 shrink-0" />
+                      <span>As credenciais, pasta destino e autenticação real com Google Drive são configuradas exclusivamente no build externo.</span>
                     </div>
 
                     {expandedConnector === 'googleDrive' && (
                       <div className="pt-3 border-t border-gray-100 space-y-3 animate-fadeIn">
-                        <div className="grid grid-cols-1 gap-2.5">
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-bold uppercase text-gray-505">Folder ID Raiz (Público)</label>
-                            <input
-                              type="text"
-                              value={connectors.googleDrive?.rootFolderIdPlaceholder || ''}
-                              onChange={(e) => updateIndividualConnector('googleDrive', 'rootFolderIdPlaceholder', e.target.value)}
-                              placeholder="1A_Lp93Sks..."
-                              className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono text-gray-700 outline-none"
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-bold uppercase text-gray-505">Service Account Credentials (Seguro)</label>
-                            <input
-                              type="password"
-                              value={connectors.googleDrive?.serviceAccountPlaceholder || ''}
-                              onChange={(e) => updateIndividualConnector('googleDrive', 'serviceAccountPlaceholder', e.target.value)}
-                              placeholder="{ type: service_account, ... }"
-                              className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono text-gray-700 outline-none"
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-bold uppercase text-gray-505">URL do Build Google Drive (Webhook / API)</label>
-                            <input
-                              type="text"
-                              value={connectors.googleDrive?.buildUrl || ''}
-                              onChange={(e) => updateIndividualConnector('googleDrive', 'buildUrl', e.target.value)}
-                              placeholder="https://ais-dev-xxxx-599536317399.us-east1.run.app"
-                              className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono text-gray-700 outline-none"
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="space-y-1">
-                              <label className="text-[9px] font-bold uppercase text-gray-505">Estratégia de Pastas</label>
-                              <select
-                                value={connectors.googleDrive?.folderStrategy || 'by_case'}
-                                onChange={(e) => updateIndividualConnector('googleDrive', 'folderStrategy', e.target.value)}
-                                className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-semibold text-gray-850 outline-none cursor-pointer"
-                              >
-                                <option value="by_case">Pasta Nova por Caso</option>
-                                <option value="centralized">Centralizada em ID Único</option>
-                              </select>
-                            </div>
-
-                            <div className="space-y-1">
-                              <label className="text-[9px] font-bold uppercase text-gray-505">Status</label>
-                              <select
-                                value={connectors.googleDrive?.status || 'não_configurado'}
-                                onChange={(e) => updateIndividualConnector('googleDrive', 'status', e.target.value)}
-                                className="w-full px-2 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-semibold text-gray-850 outline-none cursor-pointer"
-                              >
-                                <option value="não_configurado">Não Configurado</option>
-                                <option value="preparado">Preparado</option>
-                                <option value="em_teste">Em Testes</option>
-                                <option value="ativo">Ativo</option>
-                                <option value="erro">Erro</option>
-                              </select>
-                            </div>
-                          </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold uppercase text-gray-505">URL do Build Google Drive (Webhook / API)</label>
+                          <input
+                            type="text"
+                            value={connectors.googleDrive?.buildUrl || ''}
+                            onChange={(e) => updateIndividualConnector('googleDrive', 'buildUrl', e.target.value)}
+                            placeholder="https://ais-dev-xxxx-599536317399.us-east1.run.app"
+                            className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono text-gray-700 outline-none"
+                          />
                         </div>
                       </div>
                     )}
@@ -1433,33 +1381,15 @@ export default function Configuracoes() {
                         {expandedConnector === 'googleDrive' ? 'Fechar' : 'Configurar'}
                       </button>
 
-                      <button
-                        type="button"
-                        onClick={() => handleTestConnection('googleDrive')}
-                        className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-[10px] font-bold uppercase rounded-lg text-indigo-700 transition flex items-center gap-1"
+                      <a
+                        href="https://aistudio.google.com/apps/e39f8816-ffed-4965-babb-f904b4e36102?showPreview=true&showAssistant=true"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-[10px] font-bold uppercase rounded-lg text-amber-700 transition flex items-center gap-1"
                       >
-                        <Play size={10} />
-                        <span>Testar</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setShowLogsConnector(showLogsConnector === 'googleDrive' ? null : 'googleDrive')}
-                        className="p-1 px-2 bg-gray-50 hover:bg-gray-100 rounded-lg text-gray-650 transition"
-                        title="Ver Logs"
-                      >
-                        <Terminal size={11} />
-                      </button>
-
-                      {connectors.googleDrive?.status !== 'não_configurado' && (
-                        <button
-                          type="button"
-                          onClick={() => handleDisableConnector('googleDrive')}
-                          className="px-2.5 py-1.5 text-[10px] font-bold hover:text-red-500 text-red-450 rounded-lg transition"
-                        >
-                          Desativar
-                        </button>
-                      )}
+                        <ExternalLink size={10} />
+                        <span>Abrir Build</span>
+                      </a>
                     </div>
                   </div>
 
