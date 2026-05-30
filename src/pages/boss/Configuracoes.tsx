@@ -152,6 +152,7 @@ interface ConnectorConfig {
   folderStrategy?: string;
   rootFolderIdPlaceholder?: string;
   serviceAccountPlaceholder?: string;
+  buildUrl?: string;
   projectStrategy?: string;
   tokenPlaceholder?: string;
   calendarStrategy?: string;
@@ -215,6 +216,7 @@ export default function Configuracoes() {
       folderStrategy: 'by_case',
       rootFolderIdPlaceholder: '',
       serviceAccountPlaceholder: '',
+      buildUrl: '',
       notes: ''
     },
     todoist: {
@@ -470,7 +472,7 @@ export default function Configuracoes() {
         setConnectors({
           stripe: { status: 'não_configurado', mode: 'test', publishableKey: '', secretKeyPlaceholder: '', webhookSecretPlaceholder: '', notes: '' },
           asaas: { status: 'não_configurado', mode: 'sandbox', publicInfo: '', apiKeyPlaceholder: '', webhookSecretPlaceholder: '', notes: '' },
-          googleDrive: { status: 'não_configurado', folderStrategy: 'by_case', rootFolderIdPlaceholder: '', serviceAccountPlaceholder: '', notes: '' },
+          googleDrive: { status: 'não_configurado', folderStrategy: 'by_case', rootFolderIdPlaceholder: '', serviceAccountPlaceholder: '', buildUrl: '', notes: '' },
           todoist: { status: 'não_configurado', projectStrategy: 'single_workspace', tokenPlaceholder: '', notes: '' },
           googleCalendar: { status: 'não_configurado', calendarStrategy: 'shared', calendarIdPlaceholder: '', notes: '' },
           googleDocs: { status: 'não_configurado', templatesStrategy: 'standard_procuracao', notes: '' },
@@ -1375,6 +1377,17 @@ export default function Configuracoes() {
                               value={connectors.googleDrive?.serviceAccountPlaceholder || ''}
                               onChange={(e) => updateIndividualConnector('googleDrive', 'serviceAccountPlaceholder', e.target.value)}
                               placeholder="{ type: service_account, ... }"
+                              className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono text-gray-700 outline-none"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold uppercase text-gray-505">URL do Build Google Drive (Webhook / API)</label>
+                            <input
+                              type="text"
+                              value={connectors.googleDrive?.buildUrl || ''}
+                              onChange={(e) => updateIndividualConnector('googleDrive', 'buildUrl', e.target.value)}
+                              placeholder="https://ais-dev-xxxx-599536317399.us-east1.run.app"
                               className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono text-gray-700 outline-none"
                             />
                           </div>

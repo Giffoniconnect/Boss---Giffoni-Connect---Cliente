@@ -20,6 +20,7 @@ interface GoogleDriveConfig {
   folderStrategy: 'by_case' | 'centralized';
   rootFolderIdPlaceholder: string;
   serviceAccountPlaceholder: string;
+  buildUrl: string;
   notes: string;
 }
 
@@ -35,6 +36,7 @@ export default function GoogleDriveIntegration() {
     folderStrategy: 'by_case',
     rootFolderIdPlaceholder: '',
     serviceAccountPlaceholder: '',
+    buildUrl: '',
     notes: ''
   });
 
@@ -56,6 +58,7 @@ export default function GoogleDriveIntegration() {
               folderStrategy: data.googleDrive.folderStrategy || 'by_case',
               rootFolderIdPlaceholder: data.googleDrive.rootFolderIdPlaceholder || '',
               serviceAccountPlaceholder: data.googleDrive.serviceAccountPlaceholder || '',
+              buildUrl: data.googleDrive.buildUrl || '',
               notes: data.googleDrive.notes || ''
             });
           }
@@ -81,6 +84,7 @@ export default function GoogleDriveIntegration() {
           folderStrategy: config.folderStrategy,
           rootFolderIdPlaceholder: config.rootFolderIdPlaceholder.trim(),
           serviceAccountPlaceholder: config.serviceAccountPlaceholder.trim(),
+          buildUrl: config.buildUrl.trim(),
           notes: config.notes.trim()
         },
         updatedAt: new Date().toISOString()
@@ -234,6 +238,18 @@ export default function GoogleDriveIntegration() {
                 value={config.serviceAccountPlaceholder}
                 onChange={(e) => setConfig({ ...config, serviceAccountPlaceholder: e.target.value })}
                 placeholder='{ "type": "service_account", "project_id": "boss-auth-3023", ... }'
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100"
+              />
+            </div>
+
+            <div className="space-y-1 md:col-span-2">
+              <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">URL do Build Google Drive (Webhook / API URL) *</label>
+              <input
+                type="text"
+                required
+                value={config.buildUrl}
+                onChange={(e) => setConfig({ ...config, buildUrl: e.target.value })}
+                placeholder="https://ais-dev-xxxx-599536317399.us-east1.run.app"
                 className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100"
               />
             </div>

@@ -39,7 +39,7 @@ export default function EditarCadastroCliente() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const [driveNotice, setDriveNotice] = useState<boolean>(false);
+  const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
 
   const [clientId, setClientId] = useState<string | null>(null);
   const [clientType, setClientType] = useState<'PF' | 'PJ' | null>(null);
@@ -503,15 +503,138 @@ export default function EditarCadastroCliente() {
     }
   };
 
-  const handleSimulateDriveStatus = (status: 'aguardando' | 'criada' | 'falha', url: string, id: string, log: string) => {
-    setFormData((prev: any) => ({
-      ...prev,
-      googleDriveClientFolderStatus: status,
-      googleDriveClientFolderUrl: url,
-      googleDriveClientFolderId: id,
-      googleDriveClientFolderLogFalha: log,
-      googleDriveClientFolderUpdatedAt: status !== 'aguardando' ? new Date().toISOString() : ''
-    }));
+  const handleCreateDriveFolder = async () => {
+    if (!clientId) {
+      setError('Não foi possível identificar o ID do cliente.');
+      return;
+    }
+
+    if (formData.googleDriveClientFolderId) {
+      setError('A pasta do cliente no Google Drive já existe e está sincronizada.');
+      return;
+    }
+
+    setIsCreatingFolder(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      console.log("Fetching settings/connectors...");
+      const connDoc = await getDoc(doc(db, 'settings', 'connectors'));
+      let buildUrl = '';
+      if (connDoc.exists()) {
+        const data = connDoc.data();
+        if (data.googleDrive && data.googleDrive.buildUrl) {
+          buildUrl = data.googleDrive.buildUrl.trim();
+        }
+      }
+
+      if (!buildUrl) {
+        throw new Error("A URL do Google Drive Build não foi configurada nas Configurações do BOSS. Acesse Configurações -> Connectors -> Google Drive e informe a URL ativa do seu Applet.");
+      }
+
+      const payload = clientType === 'PF' ? {
+        clientType: "PF",
+        portalClientId: clientId,
+        caseId: caseId || '',
+        clientFolderName: formData.pf_nomeCompleto || '',
+        originBlock: "pfDadosPessoais",
+        originField: "nomeCompleto"
+      } : {
+        clientType: "PJ",
+        portalClientId: clientId,
+        caseId: caseId || '',
+        clientFolderName: formData.pj_nomeFantasia || formData.pj_razaoSocial || '',
+        originBlock: "pjDadosEmpresa",
+        originField: "nomeFantasia"
+      };
+
+      const pendingState = {
+        googleDriveClientFolderStatus: 'aguardando',
+        googleDriveClientFolderUrl: '',
+        googleDriveClientFolderId: '',
+        googleDriveClientFolderLogFalha: '',
+        googleDriveClientFolderUpdatedAt: new Date().toISOString()
+      };
+
+      setFormData((prev: any) => ({
+        ...prev,
+        ...pendingState
+      }));
+
+      const clientRef = doc(db, 'clients', clientId);
+      const clienteLegacyRef = doc(db, 'clientes', clientId);
+      await setDoc(clientRef, pendingState, { merge: true });
+      await setDoc(clienteLegacyRef, pendingState, { merge: true });
+
+      console.log("Posting payload to Google Drive Build...", buildUrl, payload);
+      
+      let targetEndpoint = buildUrl;
+      if (!targetEndpoint.endsWith('/api/create-folder') && !targetEndpoint.includes('/webhook') && !targetEndpoint.includes('/api/')) {
+        targetEndpoint = `${targetEndpoint.endsWith('/') ? targetEndpoint.slice(0, -1) : targetEndpoint}/api/create-folder`;
+      }
+
+      const response = await fetch(targetEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Servidor respondeu com código ${response.status}: ${errorText || 'Sem detalhes'}`);
+      }
+
+      const returnData = await response.json();
+      console.log("Google Drive Build response:", returnData);
+
+      const successState = {
+        googleDriveClientFolderStatus: returnData.googleDriveStatus === 'success' || returnData.googleDriveStatus === 'criada' ? 'criada' : 'falha',
+        googleDriveClientFolderUrl: returnData.googleDriveClientFolderUrl || '',
+        googleDriveClientFolderId: returnData.googleDriveClientFolderId || '',
+        googleDriveClientFolderLogFalha: returnData.googleDriveStatus === 'failed' ? (returnData.googleDriveClientFolderLogFalha || 'A criação falhou') : '',
+        googleDriveClientFolderUpdatedAt: returnData.googleDriveCreatedAt || new Date().toISOString()
+      };
+
+      setFormData((prev: any) => ({
+        ...prev,
+        ...successState
+      }));
+
+      await setDoc(clientRef, successState, { merge: true });
+      await setDoc(clienteLegacyRef, successState, { merge: true });
+
+      if (successState.googleDriveClientFolderStatus === 'criada') {
+        setSuccess('Pasta do cliente criada e sincronizada com sucesso no Google Drive!');
+      } else {
+        throw new Error(successState.googleDriveClientFolderLogFalha || 'A automação retornou falha na criação.');
+      }
+
+    } catch (err: any) {
+      console.error("Error creating Google Drive folder:", err);
+      const failState = {
+        googleDriveClientFolderStatus: 'falha' as const,
+        googleDriveClientFolderLogFalha: err.message || String(err),
+        googleDriveClientFolderUpdatedAt: new Date().toISOString()
+      };
+      setFormData((prev: any) => ({
+        ...prev,
+        ...failState
+      }));
+      try {
+        const clientRef = doc(db, 'clients', clientId);
+        const clienteLegacyRef = doc(db, 'clientes', clientId);
+        await setDoc(clientRef, failState, { merge: true });
+        await setDoc(clienteLegacyRef, failState, { merge: true });
+      } catch (innerErr) {
+        console.error("Could not write failState to database:", innerErr);
+      }
+      setError(`Falha ao criar pasta: ${err.message || err}`);
+    } finally {
+      setIsCreatingFolder(false);
+    }
   };
 
   if (loading) {
@@ -718,63 +841,63 @@ export default function EditarCadastroCliente() {
                     </div>
                   </div>
 
-                  {driveNotice && (
-                    <div className="p-3 bg-indigo-50 border border-indigo-200 text-indigo-955 rounded-xl text-xs flex items-center justify-between font-semibold animate-in fade-in duration-200">
-                      <div className="flex items-center gap-2">
-                        <Activity className="text-indigo-600 animate-pulse" size={14} />
-                        <span>Integração Google Drive será ativada em build futuro.</span>
-                      </div>
-                      <button 
-                        type="button" 
-                        onClick={() => setDriveNotice(false)} 
-                        className="text-indigo-400 hover:text-indigo-600 font-bold ml-2 text-xs"
-                      >
-                        Fechar
-                      </button>
-                    </div>
-                  )}
-
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-1">
                     <div className="space-y-4">
                       <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block font-mono">
                         Status da Automação
                       </span>
 
-                      {formData.googleDriveClientFolderStatus === 'criada' && (
-                        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 text-xs flex items-center gap-2 font-semibold">
-                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                          <span>Pasta criada com sucesso</span>
-                        </div>
-                      )}
-
-                      {formData.googleDriveClientFolderStatus === 'falha' && (
-                        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-950 text-xs flex flex-col gap-2 font-semibold">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                            <span>Falha na criação da pasta</span>
+                      <div className="space-y-3">
+                        {formData.googleDriveClientFolderStatus === 'criada' && (
+                          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 text-xs flex items-center gap-2 font-semibold">
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span>Pasta criada com sucesso</span>
                           </div>
-                          {formData.googleDriveClientFolderLogFalha && (
-                            <div className="w-full bg-red-100/50 p-2.5 rounded-lg border border-red-250 text-red-900 font-mono text-[11px] max-h-32 overflow-y-auto break-all">
-                              {formData.googleDriveClientFolderLogFalha}
+                        )}
+
+                        {formData.googleDriveClientFolderStatus === 'falha' && (
+                          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-955 text-xs flex flex-col gap-2 font-semibold">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                              <span>Falha na criação da pasta</span>
                             </div>
+                            {formData.googleDriveClientFolderLogFalha && (
+                              <div className="w-full bg-red-100/50 p-2.5 rounded-lg border border-red-250 text-red-900 font-mono text-[11px] max-h-32 overflow-y-auto break-all">
+                                {formData.googleDriveClientFolderLogFalha}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {formData.googleDriveClientFolderStatus === 'aguardando' && (
+                          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-955 text-xs flex items-center gap-2 font-semibold">
+                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                            <span>Aguardando criação...</span>
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          disabled={isCreatingFolder || formData.googleDriveClientFolderStatus === 'criada'}
+                          onClick={handleCreateDriveFolder}
+                          className={`w-full inline-flex items-center justify-center gap-2 font-extrabold px-4 py-2.5 rounded-xl transition-all text-xs cursor-pointer shadow-xs ${
+                            isCreatingFolder || formData.googleDriveClientFolderStatus === 'criada'
+                              ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                              : 'bg-indigo-600 hover:bg-indigo-750 text-white'
+                          }`}
+                        >
+                          {isCreatingFolder ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Sincronizando com Google Drive...</span>
+                            </>
+                          ) : formData.googleDriveClientFolderStatus === 'criada' ? (
+                            <span>Pasta de Provas Ativa</span>
+                          ) : (
+                            <span>Criar pasta do cliente no Google Drive</span>
                           )}
-                        </div>
-                      )}
-
-                      {formData.googleDriveClientFolderStatus === 'aguardando' && (
-                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs flex items-center gap-2 font-semibold">
-                          <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
-                          <span>Aguardando criação</span>
-                        </div>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => setDriveNotice(true)}
-                        className="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-750 text-white font-extrabold px-4 py-2.5 rounded-xl transition-all text-xs cursor-pointer shadow-xs"
-                      >
-                        Criar pasta do cliente no Google Drive
-                      </button>
+                        </button>
+                      </div>
                     </div>
 
                     <div className="space-y-4">
@@ -826,42 +949,6 @@ export default function EditarCadastroCliente() {
                           </a>
                         )}
                       </div>
-                    </div>
-                  </div>
-
-                  {/* SIMULATOR COMPONENT */}
-                  <div className="p-3 border border-gray-150 bg-white rounded-2xl space-y-2 mt-4">
-                    <span className="text-[10.5px] uppercase font-black text-gray-400 block border-b border-gray-50 pb-1 font-mono tracking-wider">
-                      ⚡ Simular Retorno da Automação (Fase de Testes)
-                    </span>
-                    <div className="flex gap-2 flex-wrap text-xs">
-                      <button
-                        type="button"
-                        onClick={() => handleSimulateDriveStatus('aguardando', '', '', '')}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
-                          formData.googleDriveClientFolderStatus === 'aguardando' ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
-                        }`}
-                      >
-                        Aguardando
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSimulateDriveStatus('criada', `https://drive.google.com/drive/folders/showcase-giffoni-${clientId || 'client_id'}`, `folder_drv_${clientId || '123'}`, '')}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
-                          formData.googleDriveClientFolderStatus === 'criada' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
-                        }`}
-                      >
-                        Sucesso
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSimulateDriveStatus('falha', '', '', '[Erro de Conexão: 401 Unauthorized] Usuário autenticador sem permissão de escrita no diretório raiz do Drive da Giffoni Connect.')}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
-                          formData.googleDriveClientFolderStatus === 'falha' ? 'bg-red-100 border-red-300 text-red-800' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
-                        }`}
-                      >
-                        Falha
-                      </button>
                     </div>
                   </div>
                 </div>

@@ -51,8 +51,8 @@ export default function ClientCasosList() {
   }, [slug]);
 
   const clientName = clientData?.type === 'PF' 
-    ? (clientData.pfDadosPessoais?.pf_nomeCompleto || clientData.pfData?.pf_nomeCompleto)
-    : (clientData.pjDadosEmpresa?.pj_razaoSocial || clientData.pjData?.pj_razaoSocial);
+    ? (clientData?.pfDadosPessoais?.pf_nomeCompleto || clientData?.pfData?.pf_nomeCompleto || '')
+    : (clientData?.pjDadosEmpresa?.pj_razaoSocial || clientData?.pjData?.pj_razaoSocial || '');
 
   return (
     <ClientLayout slug={slug || ''} clientName={clientName}>

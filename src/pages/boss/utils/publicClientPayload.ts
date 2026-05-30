@@ -64,19 +64,19 @@ export function buildPublicClientPayload(
 ): PublicClientPayload {
   // Determine client direct public identity
   const name = client?.type === 'PF'
-    ? (client.pfDadosPessoais?.pf_nomeCompleto || client.pfData?.pf_nomeCompleto || 'Sem Nome')
-    : (client.pjDadosEmpresa?.pj_razaoSocial || client.pjData?.pj_razaoSocial || 'Sem Razão Social');
+    ? (client?.pfDadosPessoais?.pf_nomeCompleto || client?.pfData?.pf_nomeCompleto || 'Sem Nome')
+    : (client?.pjDadosEmpresa?.pj_razaoSocial || client?.pjData?.pj_razaoSocial || 'Sem Razão Social');
 
   const publicContactData = client?.type === 'PF'
     ? {
-        email: client.pfContato?.pf_email || client.pfData?.pf_email,
-        phone: client.pfContato?.pf_telefone || client.pfData?.pf_telefone,
-        whatsapp: client.pfContato?.pf_whatsapp || client.pfData?.pf_whatsapp,
+        email: client?.pfContato?.pf_email || client?.pfData?.pf_email,
+        phone: client?.pfContato?.pf_telefone || client?.pfData?.pf_telefone,
+        whatsapp: client?.pfContato?.pf_whatsapp || client?.pfData?.pf_whatsapp,
       }
     : {
-        email: client.pjContatoEmpresa?.pj_emailEmpresa || client.pjData?.pj_emailEmpresa,
-        phone: client.pjContatoEmpresa?.pj_telefoneEmpresa || client.pjData?.pj_telefoneEmpresa,
-        whatsapp: client.pjContatoEmpresa?.pj_whatsappEmpresa || client.pjData?.pj_whatsappEmpresa,
+        email: client?.pjContatoEmpresa?.pj_emailEmpresa || client?.pjData?.pj_emailEmpresa,
+        phone: client?.pjContatoEmpresa?.pj_telefoneEmpresa || client?.pjData?.pj_telefoneEmpresa,
+        whatsapp: client?.pjContatoEmpresa?.pj_whatsappEmpresa || client?.pjData?.pj_whatsappEmpresa,
       };
 
   // Only include visible cases & filter public properties
