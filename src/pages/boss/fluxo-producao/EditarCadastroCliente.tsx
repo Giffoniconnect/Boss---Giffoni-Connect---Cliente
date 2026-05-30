@@ -574,12 +574,16 @@ export default function EditarCadastroCliente() {
         targetEndpoint = `${targetEndpoint.endsWith('/') ? targetEndpoint.slice(0, -1) : targetEndpoint}/api/create-folder`;
       }
 
-      const response = await fetch(targetEndpoint, {
+      // Use the server-side proxy to bypass CORS/fetch blocking in sandboxed browser environments
+      const response = await fetch('/api/proxy-google-drive', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          targetEndpoint,
+          payload
+        })
       });
 
       if (!response.ok) {
