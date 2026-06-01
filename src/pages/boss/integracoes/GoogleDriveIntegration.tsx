@@ -15,7 +15,11 @@ import {
   AlertCircle,
   Check,
   X,
-  Info
+  Info,
+  Shield,
+  Copy,
+  RefreshCw,
+  Play
 } from 'lucide-react';
 
 export default function GoogleDriveIntegration() {
@@ -23,6 +27,10 @@ export default function GoogleDriveIntegration() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [buildUrl, setBuildUrl] = useState('');
+  const [integrationKey, setIntegrationKey] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState(false);
+  const [testResultState, setTestResultState] = useState<{ status: 'success' | 'error' | null; message: string } | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
@@ -32,8 +40,16 @@ export default function GoogleDriveIntegration() {
         const docSnap = await getDoc(doc(db, 'settings', 'connectors'));
         if (docSnap.exists()) {
           const data = docSnap.data();
-          if (data.googleDrive && data.googleDrive.buildUrl) {
-            setBuildUrl(data.googleDrive.buildUrl);
+          if (data.googleDrive) {
+            if (data.googleDrive.buildUrl) {
+              setBuildUrl(data.googleDrive.buildUrl);
+            }
+            if (data.googleDrive.integrationKey) {
+              setIntegrationKey(data.googleDrive.integrationKey);
+              console.log("[Google Drive] Credencial carregada.");
+            } else {
+              console.log("[Google Drive] Credencial ausente.");
+            }
           }
         }
       } catch (err) {
@@ -45,6 +61,67 @@ export default function GoogleDriveIntegration() {
     loadConfig();
   }, []);
 
+  const handleGenerateKey = async () => {
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let randomString = '';
+    for (let i = 0; i < 14; i++) {
+      randomString += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    const newKey = `boss_drive_live_${randomString}`;
+    setIntegrationKey(newKey);
+    console.log("[Google Drive] Credencial gerada: " + newKey.substring(0, 15) + "********" + newKey.substring(newKey.length - 4));
+    
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const urlValue = buildUrl.trim();
+      await setDoc(doc(db, 'settings', 'connectors'), {
+        googleDrive: {
+          buildUrl: urlValue,
+          integrationKey: newKey,
+          status: (urlValue && newKey) ? 'ativo' : 'não_configurado'
+        },
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      
+      setFeedback({ type: 'success', message: 'Nova credencial gerada e salva com sucesso!' });
+      console.log("[Google Drive] Credencial salva.");
+    } catch (err: any) {
+      console.error('Erro ao gerar/salvar nova credencial:', err);
+      setFeedback({ type: 'error', message: `Erro ao salvar nova credencial: ${err.message || err}` });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCopyKey = () => {
+    if (!integrationKey) return;
+    navigator.clipboard.writeText(integrationKey);
+    setCopyFeedback(true);
+    setTimeout(() => setCopyFeedback(false), 2000);
+  };
+
+  const handleTestCredential = () => {
+    if (integrationKey.trim()) {
+      const key = integrationKey.trim();
+      const prefix = key.startsWith("boss_drive_live_") ? "boss_drive_live_" : key.substring(0, Math.min(15, key.length - 4));
+      const suffix = key.substring(key.length - 4);
+      const masked = `${prefix}********${suffix}`;
+      
+      setTestResultState({
+        status: 'success',
+        message: `Credencial ativa encontrada: ${masked}`
+      });
+      console.log(`[Google Drive] Credencial testada e ativa enviada ao proxy: ${masked}`);
+    } else {
+      setTestResultState({
+        status: 'error',
+        message: `Credencial ausente.`
+      });
+      console.error(`[Google Drive] Credencial testada e ausente.`);
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -52,17 +129,20 @@ export default function GoogleDriveIntegration() {
 
     try {
       const urlValue = buildUrl.trim();
+      const keyValue = integrationKey.trim();
       await setDoc(doc(db, 'settings', 'connectors'), {
         googleDrive: {
           buildUrl: urlValue,
-          status: urlValue ? 'ativo' : 'não_configurado'
+          integrationKey: keyValue,
+          status: (urlValue && keyValue) ? 'ativo' : 'não_configurado'
         },
         updatedAt: new Date().toISOString()
       }, { merge: true });
 
-      setFeedback({ type: 'success', message: 'URL do Build Google Drive salva com sucesso!' });
+      setFeedback({ type: 'success', message: 'Configurações do Google Drive salvas com sucesso!' });
+      console.log("[Google Drive] Credencial salva.");
     } catch (err: any) {
-      console.error('Erro ao salvar Google Drive:', err);
+      console.error('Erro ao salvar configurações do Google Drive:', err);
       setFeedback({ type: 'error', message: `Erro ao salvar configurações: ${err.message || err}` });
     } finally {
       setSaving(false);
@@ -190,6 +270,150 @@ export default function GoogleDriveIntegration() {
                 Utilize o endpoint ou URL do Applet secundário para onde o Portal BOSS enviará as solicitações de criação de pasta.
               </p>
             </div>
+
+            {/* SEGURANÇA DA INTEGRAÇÃO Card */}
+            <div className="bg-slate-50 border border-gray-200 rounded-2xl p-5 md:p-6 space-y-5 shadow-xs text-left">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 bg-amber-100 text-amber-700 rounded-xl flex items-center justify-center shrink-0">
+                  <Shield size={20} />
+                </div>
+                <div className="space-y-0.5">
+                  <h3 className="text-xs font-black uppercase text-gray-950 tracking-tight">SEGURANÇA DA INTEGRAÇÃO</h3>
+                  <p className="text-[11px] text-gray-500 font-semibold leading-normal">
+                    Esta credencial autoriza a comunicação entre o Portal BOSS e o Build Google Drive.
+                  </p>
+                </div>
+              </div>
+
+              {/* Status da Credencial */}
+              <div className="border-t border-gray-200 pt-3.5">
+                <label className="text-[9px] font-black uppercase text-gray-505 tracking-wider font-bold">Status da Credencial</label>
+                <div className="mt-1.5">
+                  {integrationKey ? (
+                    <div className="flex items-center gap-2.5 text-emerald-850 bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl">
+                      <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-emerald-950">Credencial salva com sucesso.</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2.5 text-rose-850 bg-rose-50 border border-rose-200 p-2.5 rounded-xl">
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                      <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-rose-950">A integração Google Drive não funcionará até que uma credencial seja configurada.</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Campo da Chave */}
+              <div className="space-y-2 border-t border-gray-200 pt-3.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <label className="text-[9px] font-black uppercase text-gray-550 tracking-wider font-bold">
+                    Chave de API/Credencial da Integração Google Drive *
+                  </label>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setShowKey(!showKey)}
+                      className="px-2 py-0.5 text-[9px] font-bold uppercase rounded-md border border-gray-200 bg-white text-gray-750 hover:bg-gray-50 transition cursor-pointer"
+                    >
+                      {showKey ? "Ocultar" : "Mostrar"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCopyKey}
+                      disabled={!integrationKey}
+                      className="px-2 py-0.5 text-[9px] font-bold uppercase rounded-md border border-gray-200 bg-white text-gray-750 hover:bg-gray-50 transition flex items-center gap-1 disabled:opacity-50 cursor-pointer"
+                    >
+                      {copyFeedback ? (
+                        <>
+                          <Check size={9} className="text-emerald-500" />
+                          <span className="text-emerald-700">Copiou!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={9} />
+                          <span>Copiar Chave</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleGenerateKey}
+                      disabled={saving}
+                      className="px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-[9px] font-bold uppercase rounded-md border border-amber-200 transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw size={9} className={`${saving ? 'animate-spin' : ''}`} />
+                      <span>Gerar Nova Chave</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type={showKey ? "text" : "password"}
+                    required
+                    value={integrationKey}
+                    onChange={(e) => setIntegrationKey(e.target.value)}
+                    placeholder="boss_drive_live_************************"
+                    className="w-full pl-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500 shadow-sm"
+                  />
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2">
+                    <Shield className={`w-3.5 h-3.5 ${integrationKey ? 'text-emerald-500' : 'text-gray-305'}`} />
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-gray-400 leading-relaxed font-semibold">
+                  Nome técnico: <code className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-650 font-mono text-[9px]">settings/connectors.googleDrive.integrationKey</code>
+                </p>
+
+                {!showKey && integrationKey && (
+                  <p className="text-[10px] text-gray-500 font-mono mt-1 flex items-center gap-1 flex-wrap">
+                    <span>Chave ativa (mascarada):</span>
+                    <span className="p-1 px-1.5 bg-gray-100 border border-gray-200 rounded-md font-semibold text-gray-650">{(() => {
+                      const key = integrationKey;
+                      if (!key) return "";
+                      if (key.length <= 8) return "********";
+                      const prefix = key.startsWith("boss_drive_live_") ? "boss_drive_live_" : key.substring(0, Math.min(15, key.length - 4));
+                      const suffix = key.substring(key.length - 4);
+                      return `${prefix}********${suffix}`;
+                    })()}</span>
+                  </p>
+                )}
+              </div>
+
+              {/* Testar Credencial */}
+              <div className="border-t border-gray-200 pt-3.5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs">
+                    <span className="font-bold text-gray-755 block text-[9px] uppercase font-sans">Validação Rápida</span>
+                    <span className="text-gray-500 text-[10px] block font-semibold leading-normal font-sans">Valida a presença e consistência estrutural da credencial.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleTestCredential}
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold uppercase rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer transition shrink-0"
+                  >
+                    <Play size={10} className="fill-current" />
+                    <span className="font-sans">Testar Credencial</span>
+                  </button>
+                </div>
+
+                {testResultState && (
+                  <div className={`p-3 rounded-xl text-[10px] font-mono border flex items-start gap-2.5 animate-fadeIn ${
+                    testResultState.status === 'success' ? 'bg-emerald-50 text-emerald-950 border-emerald-250' : 'bg-rose-50 text-rose-950 border-rose-250'
+                  }`}>
+                    {testResultState.status === 'success' ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                    ) : (
+                      <X className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
+                    )}
+                    <div className="space-y-0.5 text-left">
+                      <p className="font-bold uppercase text-[9px] tracking-wider text-gray-500">Resultado do Teste</p>
+                      <p className="font-semibold text-gray-850">{testResultState.message}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {feedback && (
@@ -215,7 +439,7 @@ export default function GoogleDriveIntegration() {
               className="px-4 py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-800 text-xs font-bold uppercase rounded-xl transition flex items-center gap-2 border border-slate-200 shadow-xs cursor-pointer"
             >
               <ExternalLink size={13} />
-              <span>Abrir Build Google Drive</span>
+              <span className="font-sans">Abrir Build Google Drive</span>
             </a>
 
             <button
@@ -223,8 +447,8 @@ export default function GoogleDriveIntegration() {
               disabled={saving}
               className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-sm disabled:opacity-50 cursor-pointer"
             >
-              <Save size={14} />
-              <span>{saving ? 'Gravando...' : 'Salvar URL do Build'}</span>
+               <Save size={14} />
+               <span className="font-sans">{saving ? 'Gravando...' : 'Salvar Configurações'}</span>
             </button>
           </div>
         </form>

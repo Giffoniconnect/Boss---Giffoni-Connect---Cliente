@@ -575,8 +575,11 @@ export default function EditarCadastroCliente() {
       }
 
       if (!integrationKey) {
+        console.error("[Google Drive] Credencial ausente ao tentar criar pasta.");
         throw new Error("A chave de integração Google Drive não foi configurada no Portal BOSS.");
       }
+
+      console.log("[Google Drive] Credencial utilizada na criação da pasta: " + (integrationKey ? integrationKey.substring(0, Math.min(15, integrationKey.length - 4)) + "..." : "ausente"));
 
       const payload = clientType === 'PF' ? {
         clientType: "PF",

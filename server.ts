@@ -23,29 +23,31 @@ app.post("/api/proxy-google-drive", async (req, res) => {
       console.log("[Proxy] Payload recebido:", JSON.stringify(payload));
     }
 
-    if (!integrationKey) {
-      console.error("[Proxy] Chave de integração Google Drive ausente no Portal BOSS.");
-      return res.status(400).json({ error: "Chave de integração Google Drive ausente no Portal BOSS." });
-    }
-
-    const maskKey = (key: string) => {
-      if (!key) return "";
-      if (key.length <= 8) return "********";
-      // Ensure if it starts with boss_drive_live_ we retain that structure
-      const prefix = key.startsWith("boss_drive_live_") ? "boss_drive_live_" : key.substring(0, Math.min(15, key.length - 4));
-      const suffix = key.substring(key.length - 4);
-      return `${prefix}********${suffix}`;
+    let isCompatibilityMode = false;
+    let finalHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
     };
 
-    console.log(`[Proxy] Chave de integração Google Drive recebida: ${maskKey(integrationKey)}`);
-    console.log(`[Proxy] Encaminhando header X-BOSS-Google-Drive-Integration-Key.`);
+    if (!integrationKey) {
+      console.log("[Proxy] Chave de integração Google Drive ausente no Portal BOSS. Ativando Modo compatibilidade.");
+      isCompatibilityMode = true;
+    } else {
+      const maskKey = (key: string) => {
+        if (!key) return "";
+        if (key.length <= 8) return "********";
+        const prefix = key.startsWith("boss_drive_live_") ? "boss_drive_live_" : key.substring(0, Math.min(15, key.length - 4));
+        const suffix = key.substring(key.length - 4);
+        return `${prefix}********${suffix}`;
+      };
+
+      console.log(`[Proxy] Chave de integração Google Drive recebida: ${maskKey(integrationKey)}`);
+      console.log(`[Proxy] Encaminhando header X-BOSS-Google-Drive-Integration-Key.`);
+      finalHeaders["X-BOSS-Google-Drive-Integration-Key"] = integrationKey;
+    }
 
     const response = await fetch(targetEndpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-BOSS-Google-Drive-Integration-Key": integrationKey,
-      },
+      headers: finalHeaders,
       body: JSON.stringify(payload),
     });
 
