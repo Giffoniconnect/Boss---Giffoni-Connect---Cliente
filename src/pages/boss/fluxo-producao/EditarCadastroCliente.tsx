@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import FluxoStepLayout from './components/FluxoStepLayout';
 
@@ -45,6 +45,16 @@ export default function EditarCadastroCliente() {
   const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
   const [connectorBuildUrl, setConnectorBuildUrl] = useState<string>('');
   const [copiedMotivo, setCopiedMotivo] = useState<boolean>(false);
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+      }
+    };
+  }, []);
 
   const formatDate = (isoStr: string) => {
     if (!isoStr) return '';
@@ -554,49 +564,31 @@ export default function EditarCadastroCliente() {
     setSuccess(null);
 
     try {
-      console.log("Fetching settings/connectors...");
-      const connDoc = await getDoc(doc(db, 'settings', 'connectors'));
-      let buildUrl = '';
-      let integrationKey = '';
-      if (connDoc.exists()) {
-        const data = connDoc.data();
-        if (data.googleDrive) {
-          if (data.googleDrive.buildUrl) {
-            buildUrl = data.googleDrive.buildUrl.trim();
-          }
-          if (data.googleDrive.integrationKey) {
-            integrationKey = data.googleDrive.integrationKey.trim();
-          }
-        }
-      }
+      // 1. Definição do nome do cliente baseado no tipo
+      const clientFolderName = clientType === 'PF'
+        ? (formData.pf_nomeCompleto || '')
+        : (formData.pj_nomeFantasia || formData.pj_razaoSocial || '');
 
-      if (!buildUrl) {
-        throw new Error("A URL do Google Drive Build não foi configurada nas Configurações do BOSS. Acesse Configurações -> Connectors -> Google Drive e informe a URL ativa do seu Applet.");
-      }
+      // 2. Criação do documento de Job no Firestore para o barramento
+      const jobCollRef = collection(db, 'googleDriveJobs');
+      const jobDocRef = doc(jobCollRef); // Auto-generate ID
+      const jobId = jobDocRef.id;
 
-      if (!integrationKey) {
-        console.error("[Google Drive] Credencial ausente ao tentar criar pasta.");
-        throw new Error("A chave de integração Google Drive não foi configurada no Portal BOSS.");
-      }
+      setCurrentJobId(jobId);
 
-      console.log("[Google Drive] Credencial utilizada na criação da pasta: " + (integrationKey ? integrationKey.substring(0, Math.min(15, integrationKey.length - 4)) + "..." : "ausente"));
-
-      const payload = clientType === 'PF' ? {
-        clientType: "PF",
+      const jobPayload = {
+        id: jobId,
+        createdAt: new Date().toISOString(),
+        status: 'pending',
+        clientType: clientType || 'PF',
         portalClientId: clientId,
         caseId: caseId || '',
-        clientFolderName: formData.pf_nomeCompleto || '',
-        originBlock: "pfDadosPessoais",
-        originField: "nomeCompleto"
-      } : {
-        clientType: "PJ",
-        portalClientId: clientId,
-        caseId: caseId || '',
-        clientFolderName: formData.pj_nomeFantasia || formData.pj_razaoSocial || '',
-        originBlock: "pjDadosEmpresa",
-        originField: "nomeFantasia"
+        clientFolderName: clientFolderName,
+        originBlock: "fluxo-producao",
+        originField: "clientFolder"
       };
 
+      // Set initial status is 'aguardando' in Firestore for client
       const pendingState = {
         googleDriveClientFolderStatus: 'aguardando',
         googleDriveClientFolderUrl: '',
@@ -615,174 +607,83 @@ export default function EditarCadastroCliente() {
       await setDoc(clientRef, pendingState, { merge: true });
       await setDoc(clienteLegacyRef, pendingState, { merge: true });
 
-      console.log("Posting payload to Google Drive Build...", buildUrl, payload);
-      
-      let targetEndpoint = buildUrl;
-      if (!targetEndpoint.endsWith('/api/create-folder') && !targetEndpoint.includes('/webhook') && !targetEndpoint.includes('/api/')) {
-        targetEndpoint = `${targetEndpoint.endsWith('/') ? targetEndpoint.slice(0, -1) : targetEndpoint}/api/create-folder`;
+      // Envia o documento para a coleção googleDriveJobs do Firestore como barramento
+      await setDoc(jobDocRef, jobPayload);
+      console.log(`[Google Drive Bus] Job criado no Firestore: ${jobId}`, jobPayload);
+
+      // Cancelar qualquer escuta ativa anterior por segurança
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
       }
 
-      // Use the server-side proxy to bypass CORS/fetch blocking in sandboxed browser environments
-      const response = await fetch('/api/proxy-google-drive', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          targetEndpoint,
-          payload,
-          integrationKey
-        })
+      // 3. Monitoramento em tempo real do processamento do Job
+      const unsubscribe = onSnapshot(jobDocRef, async (snapshot) => {
+        if (!snapshot.exists()) return;
+
+        const jobData = snapshot.data();
+        if (jobData.status === 'success') {
+          // Processado com Sucesso!
+          const extractedUrl = jobData.googleDriveClientFolderUrl || jobData.folderUrl || jobData.url || '';
+          const extractedId = jobData.googleDriveClientFolderId || jobData.folderId || jobData.id || '';
+
+          const successState = {
+            googleDriveClientFolderStatus: 'criada' as const,
+            googleDriveClientFolderUrl: extractedUrl,
+            googleDriveClientFolderId: extractedId,
+            googleDriveClientFolderLogFalha: '',
+            googleDriveClientFolderUpdatedAt: jobData.updatedAt || new Date().toISOString(),
+            googleDriveStatus: 'success'
+          };
+
+          setFormData((prev: any) => ({
+            ...prev,
+            ...successState
+          }));
+
+          await setDoc(clientRef, successState, { merge: true });
+          await setDoc(clienteLegacyRef, successState, { merge: true });
+
+          setSuccess('Pasta do cliente criada e sincronizada com sucesso no Google Drive!');
+          setIsCreatingFolder(false);
+          setCurrentJobId(null);
+          if (unsubscribeRef.current) {
+            unsubscribeRef.current();
+            unsubscribeRef.current = null;
+          }
+        } else if (jobData.status === 'failed') {
+          // Falhou!
+          const errorMsg = jobData.error || jobData.message || jobData.logFalha || jobData.errorMessage || 'Automação retornou falha na criação da pasta.';
+          const failState = {
+            googleDriveClientFolderStatus: 'falha' as const,
+            googleDriveClientFolderLogFalha: errorMsg,
+            googleDriveClientFolderUpdatedAt: jobData.updatedAt || new Date().toISOString(),
+            googleDriveStatus: 'failed'
+          };
+
+          setFormData((prev: any) => ({
+            ...prev,
+            ...failState
+          }));
+
+          await setDoc(clientRef, failState, { merge: true });
+          await setDoc(clienteLegacyRef, failState, { merge: true });
+
+          setError(`Falha ao criar pasta: ${errorMsg}`);
+          setIsCreatingFolder(false);
+          setCurrentJobId(null);
+          if (unsubscribeRef.current) {
+            unsubscribeRef.current();
+            unsubscribeRef.current = null;
+          }
+        }
+      }, (err) => {
+        console.error("Erro no onSnapshot do job:", err);
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        let displayError = errorText || 'Sem detalhes';
-        try {
-          const parsed = JSON.parse(errorText);
-          if (parsed && typeof parsed === 'object' && parsed.error) {
-            displayError = parsed.error;
-          }
-        } catch (e) {
-          // Keep raw text
-        }
-        throw new Error(displayError);
-      }
-
-      const returnData = await response.json();
-      console.log("Google Drive Build response:", returnData);
-
-      // Extrair todas as chaves possíveis para máxima resiliência na interpretação do JSON de resposta
-      let rawStatus = (
-        returnData.googleDriveStatus || 
-        returnData.status || 
-        returnData.googleDriveClientFolderStatus || 
-        returnData.googleDrive?.status || 
-        returnData.data?.status || 
-        returnData.data?.googleDriveStatus || 
-        ""
-      ).toLowerCase();
-
-      let extractedUrl = 
-        returnData.googleDriveClientFolderUrl || 
-        returnData.folderUrl || 
-        returnData.googleDriveFolderUrl || 
-        returnData.url ||
-        returnData.googleDrive?.folderUrl ||
-        returnData.googleDrive?.url ||
-        returnData.data?.googleDriveClientFolderUrl ||
-        returnData.data?.folderUrl ||
-        "";
-
-      let extractedId = 
-        returnData.googleDriveClientFolderId || 
-        returnData.folderId || 
-        returnData.id ||
-        returnData.googleDriveFolderId ||
-        returnData.googleDrive?.folderId ||
-        returnData.googleDrive?.id ||
-        returnData.data?.googleDriveClientFolderId ||
-        returnData.data?.folderId ||
-        "";
-
-      // Se veio no formato de texto encapsulado pelo proxy, vamos inspecionar o texto para maior flexibilidade
-      if (returnData.text && typeof returnData.text === 'string') {
-        const textVal = returnData.text.trim();
-        console.log("[Google Drive] Encontrado campo texto bruto de retorno:", textVal);
-        
-        // Tentar extrair URL de dentro do texto se presente
-        const urlRegex = /(https?:\/\/[^\s]+)/;
-        const match = textVal.match(urlRegex);
-        if (match && match[0]) {
-          const detectedUrl = match[0];
-          if (detectedUrl.includes('drive.google.com') || detectedUrl.includes('google.com')) {
-            extractedUrl = detectedUrl;
-            // Tentar extrair um folder ID do link do drive
-            const idMatch = detectedUrl.match(/folders\/([a-zA-Z0-9-_]+)/) || detectedUrl.match(/id=([a-zA-Z0-9-_]+)/);
-            if (idMatch && idMatch[1]) {
-              extractedId = idMatch[1];
-            }
-          }
-        }
-
-        // Se o texto parece um erro ou sucesso, atualizar rawStatus
-        const textLower = textVal.toLowerCase();
-        if (textLower.includes('erro') || textLower.includes('error') || textLower.includes('fail') || textLower.includes('falha')) {
-          if (!rawStatus) rawStatus = 'error';
-        } else if (textLower.includes('success') || textLower.includes('sucesso') || textLower.includes('criado') || textLower.includes('criada') || textLower.includes('created') || textLower.includes('ok')) {
-          if (!rawStatus) rawStatus = 'success';
-        }
-      }
-
-      const hasUrlOrId = !!(extractedUrl || extractedId);
-
-      // Determinar o sucesso da operação de forma inteligente
-      const isSuccess = 
-        rawStatus === 'success' || 
-        rawStatus === 'criada' || 
-        rawStatus === 'created' || 
-        rawStatus === 'linked' || 
-        rawStatus === 'ok' || 
-        returnData.success === true || 
-        returnData.success === 'true' ||
-        (hasUrlOrId && rawStatus !== 'failed' && rawStatus !== 'error' && rawStatus !== 'falha');
-
-      let extractedError = 
-        returnData.googleDriveClientFolderLogFalha || 
-        returnData.googleDriveLogFalha || 
-        returnData.logFalha || 
-        returnData.error || 
-        returnData.errorMessage || 
-        returnData.message || 
-        returnData.msg ||
-        returnData.reason ||
-        returnData.description ||
-        returnData.details ||
-        returnData.err ||
-        (returnData.text && typeof returnData.text === 'string' && returnData.text) ||
-        returnData.googleDrive?.error ||
-        returnData.data?.error ||
-        "";
-
-      if (typeof extractedError === 'object') {
-        try {
-          extractedError = JSON.stringify(extractedError);
-        } catch {
-          extractedError = String(extractedError);
-        }
-      }
-
-      // Se a automação não indicou sucesso e não conseguimos extrair uma mensagem de erro clara do retorno,
-      // vamos serializar o retorno inteiro para que o BOSS mostre exatamente o payload de resposta do webhook/automação.
-      if (!isSuccess && !extractedError) {
-        extractedError = `A automação retornou um status não-sucesso sem um campo 'error' explícito. Resposta completa: ${JSON.stringify(returnData)}`;
-      }
-
-      const successState = {
-        googleDriveClientFolderStatus: isSuccess ? ('criada' as const) : ('falha' as const),
-        googleDriveClientFolderUrl: extractedUrl,
-        googleDriveClientFolderId: extractedId,
-        googleDriveClientFolderLogFalha: isSuccess ? "" : extractedError,
-        googleDriveClientFolderUpdatedAt: returnData.googleDriveCreatedAt || new Date().toISOString()
-      };
-
-      setFormData((prev: any) => ({
-        ...prev,
-        ...successState
-      }));
-
-      await setDoc(clientRef, successState, { merge: true });
-      await setDoc(clienteLegacyRef, successState, { merge: true });
-
-      if (successState.googleDriveClientFolderStatus === 'criada') {
-        setSuccess('Pasta do cliente criada e sincronizada com sucesso no Google Drive!');
-      } else {
-        console.error("Error creating Google Drive folder:", successState.googleDriveClientFolderLogFalha || "A automação indicou erro, mas sem log descritivo.");
-        setError(successState.googleDriveClientFolderLogFalha || "A automação retornou falha na criação.");
-      }
+      unsubscribeRef.current = unsubscribe;
 
     } catch (err: any) {
-      console.error("Error creating Google Drive folder:", err);
+      console.error("Error creating Google Drive job:", err);
       const failState = {
         googleDriveClientFolderStatus: 'falha' as const,
         googleDriveClientFolderLogFalha: err.message || String(err),
@@ -801,8 +702,8 @@ export default function EditarCadastroCliente() {
         console.error("Could not write failState to database:", innerErr);
       }
       setError(`Falha ao criar pasta: ${err.message || err}`);
-    } finally {
       setIsCreatingFolder(false);
+      setCurrentJobId(null);
     }
   };
 
@@ -1024,19 +925,19 @@ export default function EditarCadastroCliente() {
                           </div>
                         )}
 
-                        {formData.googleDriveClientFolderStatus === 'falha' && (
-                          <div className="p-4 bg-rose-50 border border-rose-250 rounded-2xl text-rose-950 text-xs flex flex-col gap-3 font-semibold shadow-xs">
+                         {formData.googleDriveClientFolderStatus === 'falha' && (
+                          <div className="p-4 bg-rose-50 border border-rose-250 rounded-2xl text-rose-950 text-xs flex flex-col gap-3 font-semibold shadow-xs animate-in fade-in duration-200">
                             <div className="flex items-center gap-2 text-rose-700 font-bold">
                               <AlertCircle size={15} />
                               <span className="text-[13px] font-black uppercase tracking-tight">Falha na criação da pasta</span>
                             </div>
                             <p className="text-xs text-rose-800 leading-relaxed font-semibold">
-                              A automação retornou falha na criação.
+                              Automação retornou falha.
                             </p>
                             
                             <div className="bg-white/85 border border-rose-150 p-3 rounded-xl space-y-2">
                               <div className="text-[10px] font-black uppercase text-rose-900 tracking-wider font-mono">
-                                Motivo da falha:
+                                Motivo:
                               </div>
                               <div className="font-mono text-[11px] text-rose-955 leading-relaxed break-all select-all whitespace-pre-wrap max-h-36 overflow-y-auto">
                                 {formData.googleDriveClientFolderLogFalha?.trim()
@@ -1049,7 +950,7 @@ export default function EditarCadastroCliente() {
                             {formData.googleDriveClientFolderUpdatedAt && (
                               <div className="flex items-center gap-1.5 text-[10px] text-rose-700 font-bold font-mono">
                                 <Clock size={11} />
-                                <span>Última tentativa: {formatDate(formData.googleDriveClientFolderUpdatedAt)}</span>
+                                <span>Data: {formatDate(formData.googleDriveClientFolderUpdatedAt)}</span>
                               </div>
                             )}
 
@@ -1081,7 +982,32 @@ export default function EditarCadastroCliente() {
                         {formData.googleDriveClientFolderStatus === 'aguardando' && (
                           <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-955 text-xs flex items-center gap-2 font-semibold">
                             <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
-                            <span>Aguardando criação...</span>
+                            <span>Aguardando processamento do Google Drive.</span>
+                          </div>
+                        )}
+
+                        {isCreatingFolder && currentJobId && (
+                          <div className="p-4 bg-slate-900 border border-slate-800 text-slate-100 rounded-2xl space-y-2.5 font-mono text-[11px] leading-relaxed shadow-xs animate-in slide-in-from-top-1 duration-200 select-text">
+                            <div className="flex items-center gap-2 border-b border-slate-800 pb-2 mb-2 text-slate-400">
+                              <Loader2 size={12} className="animate-spin text-indigo-400" />
+                              <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400">Logs do Barramento Firestore</span>
+                            </div>
+                            <div className="space-y-1.5">
+                              <p className="flex items-start gap-2">
+                                <span className="text-emerald-500 font-bold">✔</span>
+                                <span className="text-slate-300">Solicitação enviada ao barramento Firestore.</span>
+                              </p>
+                              <p className="flex items-start gap-2">
+                                <span className="text-emerald-500 font-bold">✔</span>
+                                <span className="text-slate-300 border-0 m-0 p-0">
+                                  Job ID criado: <code className="bg-slate-800 text-amber-300 px-1.5 py-0.5 rounded font-bold select-all text-[11px]">{currentJobId}</code>
+                                </span>
+                              </p>
+                              <div className="flex items-start gap-2 font-semibold text-amber-400 animate-pulse">
+                                <span>⌛</span>
+                                <span>Aguardando processamento pelo Google Drive Build.</span>
+                              </div>
+                            </div>
                           </div>
                         )}
 
@@ -1103,7 +1029,7 @@ export default function EditarCadastroCliente() {
                           ) : formData.googleDriveClientFolderStatus === 'criada' ? (
                             <span>Pasta de Provas Ativa</span>
                           ) : (
-                            <span>Criar pasta do cliente no Google Drive</span>
+                            <span>Automação Google Drive — Pasta do Cliente</span>
                           )}
                         </button>
                       </div>
