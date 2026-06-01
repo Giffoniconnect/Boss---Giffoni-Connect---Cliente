@@ -557,15 +557,25 @@ export default function EditarCadastroCliente() {
       console.log("Fetching settings/connectors...");
       const connDoc = await getDoc(doc(db, 'settings', 'connectors'));
       let buildUrl = '';
+      let integrationKey = '';
       if (connDoc.exists()) {
         const data = connDoc.data();
-        if (data.googleDrive && data.googleDrive.buildUrl) {
-          buildUrl = data.googleDrive.buildUrl.trim();
+        if (data.googleDrive) {
+          if (data.googleDrive.buildUrl) {
+            buildUrl = data.googleDrive.buildUrl.trim();
+          }
+          if (data.googleDrive.integrationKey) {
+            integrationKey = data.googleDrive.integrationKey.trim();
+          }
         }
       }
 
       if (!buildUrl) {
         throw new Error("A URL do Google Drive Build não foi configurada nas Configurações do BOSS. Acesse Configurações -> Connectors -> Google Drive e informe a URL ativa do seu Applet.");
+      }
+
+      if (!integrationKey) {
+        throw new Error("A chave de integração Google Drive não foi configurada no Portal BOSS.");
       }
 
       const payload = clientType === 'PF' ? {
@@ -617,7 +627,8 @@ export default function EditarCadastroCliente() {
         },
         body: JSON.stringify({
           targetEndpoint,
-          payload
+          payload,
+          integrationKey
         })
       });
 

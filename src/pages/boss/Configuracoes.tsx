@@ -154,6 +154,7 @@ interface ConnectorConfig {
   rootFolderIdPlaceholder?: string;
   serviceAccountPlaceholder?: string;
   buildUrl?: string;
+  integrationKey?: string;
   projectStrategy?: string;
   tokenPlaceholder?: string;
   calendarStrategy?: string;
@@ -188,6 +189,7 @@ export default function Configuracoes() {
   const [expandedConnector, setExpandedConnector] = useState<string | null>(null);
   const [portalCardExpanded, setPortalCardExpanded] = useState(false);
   const [portalUpdatedAt, setPortalUpdatedAt] = useState<string | null>(null);
+  const [showDriveKey, setShowDriveKey] = useState(false);
   
   // Simulated tools state
   const [testResult, setTestResult] = useState<{[key: string]: string}>({});
@@ -218,6 +220,7 @@ export default function Configuracoes() {
       rootFolderIdPlaceholder: '',
       serviceAccountPlaceholder: '',
       buildUrl: '',
+      integrationKey: '',
       notes: ''
     },
     todoist: {
@@ -473,7 +476,7 @@ export default function Configuracoes() {
         setConnectors({
           stripe: { status: 'não_configurado', mode: 'test', publishableKey: '', secretKeyPlaceholder: '', webhookSecretPlaceholder: '', notes: '' },
           asaas: { status: 'não_configurado', mode: 'sandbox', publicInfo: '', apiKeyPlaceholder: '', webhookSecretPlaceholder: '', notes: '' },
-          googleDrive: { status: 'não_configurado', folderStrategy: 'by_case', rootFolderIdPlaceholder: '', serviceAccountPlaceholder: '', buildUrl: '', notes: '' },
+          googleDrive: { status: 'não_configurado', folderStrategy: 'by_case', rootFolderIdPlaceholder: '', serviceAccountPlaceholder: '', buildUrl: '', integrationKey: '', notes: '' },
           todoist: { status: 'não_configurado', projectStrategy: 'single_workspace', tokenPlaceholder: '', notes: '' },
           googleCalendar: { status: 'não_configurado', calendarStrategy: 'shared', calendarIdPlaceholder: '', notes: '' },
           googleDocs: { status: 'não_configurado', templatesStrategy: 'standard_procuracao', notes: '' },
@@ -1368,6 +1371,38 @@ export default function Configuracoes() {
                             placeholder="https://ais-dev-xxxx-599536317399.us-east1.run.app"
                             className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono text-gray-700 outline-none"
                           />
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center">
+                            <label className="text-[9px] font-bold uppercase text-gray-505">Chave de Integração Google Drive</label>
+                            <button
+                              type="button"
+                              onClick={() => setShowDriveKey(!showDriveKey)}
+                              className="text-[9px] font-bold uppercase text-amber-600 hover:text-amber-700 transition cursor-pointer"
+                            >
+                              {showDriveKey ? "Mascarar" : "Mostrar"}
+                            </button>
+                          </div>
+                          <input
+                            type={showDriveKey ? "text" : "password"}
+                            value={connectors.googleDrive?.integrationKey || ''}
+                            onChange={(e) => updateIndividualConnector('googleDrive', 'integrationKey', e.target.value)}
+                            placeholder="boss_drive_live_xxxxx"
+                            className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono text-gray-700 outline-none"
+                          />
+                          {!showDriveKey && connectors.googleDrive?.integrationKey && (
+                            <p className="text-[10px] text-gray-500 font-mono mt-1">
+                              Chave ativa (mascarada): <span className="p-1 px-1.5 bg-gray-100 border border-gray-200 rounded-md font-semibold text-gray-650">{(() => {
+                                const key = connectors.googleDrive.integrationKey;
+                                if (!key) return "";
+                                if (key.length <= 8) return "********";
+                                const prefix = key.startsWith("boss_drive_live_") ? "boss_drive_live_" : key.substring(0, Math.min(15, key.length - 4));
+                                const suffix = key.substring(key.length - 4);
+                                return `${prefix}********${suffix}`;
+                              })()}</span>
+                            </p>
+                          )}
                         </div>
                       </div>
                     )}
