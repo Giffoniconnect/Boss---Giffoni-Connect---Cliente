@@ -19,7 +19,8 @@ import {
   Shield,
   Copy,
   RefreshCw,
-  Play
+  Play,
+  Pencil
 } from 'lucide-react';
 
 export default function GoogleDriveIntegration() {
@@ -32,6 +33,21 @@ export default function GoogleDriveIntegration() {
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [testResultState, setTestResultState] = useState<{ status: 'success' | 'error' | null; message: string } | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  
+  // New States for URL Endpoint Validation
+  const [testingUrl, setTestingUrl] = useState(false);
+  const [urlValidationState, setUrlValidationState] = useState<{ status: 'success' | 'error' | null; message: string; isValid?: boolean } | null>(null);
+
+  // States and functions for toggleable edit and copy of buildUrl
+  const [isEditingUrl, setIsEditingUrl] = useState(false);
+  const [copyUrlFeedback, setCopyUrlFeedback] = useState(false);
+
+  const handleCopyUrl = () => {
+    if (!buildUrl) return;
+    navigator.clipboard.writeText(buildUrl);
+    setCopyUrlFeedback(true);
+    setTimeout(() => setCopyUrlFeedback(false), 2000);
+  };
 
   useEffect(() => {
     async function loadConfig() {
@@ -61,7 +77,78 @@ export default function GoogleDriveIntegration() {
     loadConfig();
   }, []);
 
+  const handleTestApiEndpoint = async () => {
+    const trimmed = buildUrl.trim();
+    if (!trimmed) {
+      setUrlValidationState({
+        status: 'error',
+        message: 'Por favor, insira a URL do Build Google Drive antes de testar.'
+      });
+      return;
+    }
+
+    // Client-side quick check
+    if (trimmed.includes("aistudio.google.com/apps") || trimmed.includes("accounts.google.com")) {
+      setUrlValidationState({
+        status: 'error',
+        message: 'A URL configurada não é uma API. Ela abriu uma página de login do Google. Use a URL pública do runtime/Cloud Run do Build Google Drive.',
+        isValid: false
+      });
+      return;
+    }
+
+    setTestingUrl(true);
+    setUrlValidationState(null);
+    try {
+      const response = await fetch('/api/validate-build-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ buildUrl: trimmed })
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || `Erro HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.isValid) {
+        setUrlValidationState({
+          status: 'success',
+          message: data.message || 'URL da API validada com sucesso.',
+          isValid: true
+        });
+      } else {
+        setUrlValidationState({
+          status: 'error',
+          message: data.message || 'Erro ao validar URL da API.',
+          isValid: false
+        });
+      }
+    } catch (err: any) {
+      console.error('Erro de validação:', err);
+      setUrlValidationState({
+        status: 'error',
+        message: `Falha ao conectar na URL: ${err.message || err}`,
+        isValid: false
+      });
+    } finally {
+      setTestingUrl(false);
+    }
+  };
+
   const handleGenerateKey = async () => {
+    const urlValue = buildUrl.trim();
+    if (urlValue && (urlValue.includes("aistudio.google.com/apps") || urlValue.includes("accounts.google.com"))) {
+      setFeedback({
+        type: 'error',
+        message: 'Geração bloqueada: A URL configurada não é válida para a API (não pode ser aistudio.google.com ou accounts.google.com).'
+      });
+      return;
+    }
+
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let randomString = '';
     for (let i = 0; i < 14; i++) {
@@ -74,7 +161,6 @@ export default function GoogleDriveIntegration() {
     setSaving(true);
     setFeedback(null);
     try {
-      const urlValue = buildUrl.trim();
       await setDoc(doc(db, 'settings', 'connectors'), {
         googleDrive: {
           buildUrl: urlValue,
@@ -124,12 +210,57 @@ export default function GoogleDriveIntegration() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    const urlValue = buildUrl.trim();
+    const keyValue = integrationKey.trim();
+
+    // 1. Direct block list validation
+    if (urlValue.includes("aistudio.google.com/apps") || urlValue.includes("accounts.google.com")) {
+      setFeedback({
+        type: 'error',
+        message: 'Salvamento bloqueado: A URL configurada não é uma API de produção (não pode ser aistudio.google.com ou accounts.google.com). Use a URL do Cloud Run (ex: ais-dev-....run.app).'
+      });
+      setUrlValidationState({
+        status: 'error',
+        message: 'A URL configurada não é uma API. Ela abriu uma página de login do Google. Use a URL pública do runtime/Cloud Run do Build Google Drive.',
+        isValid: false
+      });
+      return;
+    }
+
     setSaving(true);
     setFeedback(null);
 
     try {
-      const urlValue = buildUrl.trim();
-      const keyValue = integrationKey.trim();
+      // 2. Query endpoint validation API before committing settings
+      const valRes = await fetch('/api/validate-build-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ buildUrl: urlValue })
+      });
+
+      if (valRes.ok) {
+        const valData = await valRes.json();
+        if (!valData.isValid) {
+          setUrlValidationState({
+            status: 'error',
+            message: valData.message,
+            isValid: false
+          });
+          setFeedback({
+            type: 'error',
+            message: `Alerta Forte de Configuração: Não foi possível validar este endpoint. ${valData.message}`
+          });
+          setSaving(false);
+          return;
+        } else {
+          setUrlValidationState({
+            status: 'success',
+            message: 'URL da API validada com sucesso.',
+            isValid: true
+          });
+        }
+      }
+
       await setDoc(doc(db, 'settings', 'connectors'), {
         googleDrive: {
           buildUrl: urlValue,
@@ -139,7 +270,7 @@ export default function GoogleDriveIntegration() {
         updatedAt: new Date().toISOString()
       }, { merge: true });
 
-      setFeedback({ type: 'success', message: 'Configurações do Google Drive salvas com sucesso!' });
+      setFeedback({ type: 'success', message: 'Configurações do Google Drive salvas e validadas com sucesso!' });
       console.log("[Google Drive] Credencial salva.");
     } catch (err: any) {
       console.error('Erro ao salvar configurações do Google Drive:', err);
@@ -256,18 +387,113 @@ export default function GoogleDriveIntegration() {
         {/* Core Quick Form Card */}
         <form onSubmit={handleSave} className="bg-white border border-gray-150 rounded-3xl p-6 md:p-8 space-y-6 shadow-sm">
           <div className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">URL do Build Google Drive / API URL *</label>
-              <input
-                type="url"
-                required
-                value={buildUrl}
-                onChange={(e) => setBuildUrl(e.target.value)}
-                placeholder="https://aistudio.google.com/apps/e39f8816-ffed-4965-babb-f904b4e36102"
-                className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500"
-              />
+            <div className="space-y-3.5 border-b border-gray-100 pb-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">URL do Build Google Drive / API URL *</label>
+                  <span className={`px-2 py-0.5 text-[8px] font-bold rounded ${isEditingUrl ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-500'}`}>
+                    {isEditingUrl ? "Modo Edição" : "Visualização"}
+                  </span>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleTestApiEndpoint}
+                    disabled={testingUrl}
+                    className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 text-[9px] font-bold uppercase rounded-md border border-amber-200 transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw size={9} className={`${testingUrl ? 'animate-spin' : ''}`} />
+                    <span>{testingUrl ? "Validando..." : "Testar endpoint /api/create-folder"}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCopyUrl}
+                    disabled={!buildUrl}
+                    className="px-2.5 py-1 bg-white hover:bg-gray-50 text-gray-700 text-[9px] font-bold uppercase rounded-md border border-gray-200 transition flex items-center gap-1 cursor-pointer disabled:opacity-50 shadow-xs"
+                  >
+                    {copyUrlFeedback ? (
+                      <>
+                        <Check size={9} className="text-emerald-500" />
+                        <span className="text-emerald-700">Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={9} />
+                        <span>Copiar URL</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingUrl(!isEditingUrl)}
+                    className={`px-2.5 py-1 transition flex items-center gap-1 text-[9px] font-bold uppercase rounded-md border cursor-pointer shadow-xs ${
+                      isEditingUrl 
+                        ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100" 
+                        : "bg-white hover:bg-gray-50 text-gray-750 border-gray-200"
+                    }`}
+                  >
+                    {isEditingUrl ? (
+                      <>
+                        <Check size={9} className="text-emerald-600" />
+                        <span>Concluir</span>
+                      </>
+                    ) : (
+                      <>
+                        <Pencil size={9} className="text-gray-500" />
+                        <span>Editar</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="relative">
+                <input
+                  type="url"
+                  required
+                  disabled={!isEditingUrl}
+                  value={buildUrl}
+                  onChange={(e) => {
+                    setBuildUrl(e.target.value);
+                    setUrlValidationState(null);
+                  }}
+                  placeholder="https://ais-dev-...run.app"
+                  className={`w-full px-3.5 py-2.5 rounded-xl text-xs font-mono outline-none transition-all shadow-sm ${
+                    isEditingUrl 
+                      ? "bg-white border-2 border-amber-500 text-gray-900 focus:ring-4 focus:ring-amber-100" 
+                      : "bg-gray-100/80 border border-gray-200 text-gray-500 cursor-not-allowed select-all font-semibold"
+                  }`}
+                />
+                {!isEditingUrl && buildUrl && (
+                  <div className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[9px] text-gray-400 font-bold bg-white px-1.5 py-0.5 rounded border border-gray-200 uppercase select-none pointer-events-none shadow-xs">
+                    🔒 Bloqueado (Clique em Editar)
+                  </div>
+                )}
+              </div>
+
+              {urlValidationState && (
+                <div className={`p-4 rounded-xl text-xs font-semibold flex items-start gap-2.5 border animate-fadeIn leading-relaxed ${
+                  urlValidationState.status === 'success' 
+                    ? 'bg-emerald-50 text-emerald-950 border-emerald-250' 
+                    : 'bg-rose-50 text-rose-950 border-rose-250 font-sans'
+                }`}>
+                  {urlValidationState.status === 'success' ? (
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  )}
+                  <div className="space-y-1">
+                    <p className="font-bold uppercase text-[9px] tracking-wider text-gray-400">Resultado da Validação</p>
+                    <p className="font-semibold text-[11px] leading-relaxed select-text">{urlValidationState.message}</p>
+                  </div>
+                </div>
+              )}
+
               <p className="text-[10px] text-gray-500 leading-relaxed font-semibold">
-                Utilize o endpoint ou URL do Applet secundário para onde o Portal BOSS enviará as solicitações de criação de pasta.
+                Utilize o endpoint ou URL pública do Applet secundário para onde o Portal BOSS enviará as solicitações de criação de pasta. É obrigatório ser a URL de produção pública do runtime/Cloud Run do Build Google Drive (ex: <code className="bg-gray-100 px-1 py-0.5 rounded font-mono text-gray-600 font-bold">https://ais-dev-....run.app</code>).
               </p>
             </div>
 

@@ -637,14 +637,23 @@ export default function EditarCadastroCliente() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Servidor respondeu com código ${response.status}: ${errorText || 'Sem detalhes'}`);
+        let displayError = errorText || 'Sem detalhes';
+        try {
+          const parsed = JSON.parse(errorText);
+          if (parsed && typeof parsed === 'object' && parsed.error) {
+            displayError = parsed.error;
+          }
+        } catch (e) {
+          // Keep raw text
+        }
+        throw new Error(displayError);
       }
 
       const returnData = await response.json();
       console.log("Google Drive Build response:", returnData);
 
       // Extrair todas as chaves possíveis para máxima resiliência na interpretação do JSON de resposta
-      const rawStatus = (
+      let rawStatus = (
         returnData.googleDriveStatus || 
         returnData.status || 
         returnData.googleDriveClientFolderStatus || 
@@ -654,7 +663,7 @@ export default function EditarCadastroCliente() {
         ""
       ).toLowerCase();
 
-      const extractedUrl = 
+      let extractedUrl = 
         returnData.googleDriveClientFolderUrl || 
         returnData.folderUrl || 
         returnData.googleDriveFolderUrl || 
@@ -665,7 +674,7 @@ export default function EditarCadastroCliente() {
         returnData.data?.folderUrl ||
         "";
 
-      const extractedId = 
+      let extractedId = 
         returnData.googleDriveClientFolderId || 
         returnData.folderId || 
         returnData.id ||
@@ -675,6 +684,35 @@ export default function EditarCadastroCliente() {
         returnData.data?.googleDriveClientFolderId ||
         returnData.data?.folderId ||
         "";
+
+      // Se veio no formato de texto encapsulado pelo proxy, vamos inspecionar o texto para maior flexibilidade
+      if (returnData.text && typeof returnData.text === 'string') {
+        const textVal = returnData.text.trim();
+        console.log("[Google Drive] Encontrado campo texto bruto de retorno:", textVal);
+        
+        // Tentar extrair URL de dentro do texto se presente
+        const urlRegex = /(https?:\/\/[^\s]+)/;
+        const match = textVal.match(urlRegex);
+        if (match && match[0]) {
+          const detectedUrl = match[0];
+          if (detectedUrl.includes('drive.google.com') || detectedUrl.includes('google.com')) {
+            extractedUrl = detectedUrl;
+            // Tentar extrair um folder ID do link do drive
+            const idMatch = detectedUrl.match(/folders\/([a-zA-Z0-9-_]+)/) || detectedUrl.match(/id=([a-zA-Z0-9-_]+)/);
+            if (idMatch && idMatch[1]) {
+              extractedId = idMatch[1];
+            }
+          }
+        }
+
+        // Se o texto parece um erro ou sucesso, atualizar rawStatus
+        const textLower = textVal.toLowerCase();
+        if (textLower.includes('erro') || textLower.includes('error') || textLower.includes('fail') || textLower.includes('falha')) {
+          if (!rawStatus) rawStatus = 'error';
+        } else if (textLower.includes('success') || textLower.includes('sucesso') || textLower.includes('criado') || textLower.includes('criada') || textLower.includes('created') || textLower.includes('ok')) {
+          if (!rawStatus) rawStatus = 'success';
+        }
+      }
 
       const hasUrlOrId = !!(extractedUrl || extractedId);
 
@@ -689,16 +727,36 @@ export default function EditarCadastroCliente() {
         returnData.success === 'true' ||
         (hasUrlOrId && rawStatus !== 'failed' && rawStatus !== 'error' && rawStatus !== 'falha');
 
-      const extractedError = 
+      let extractedError = 
         returnData.googleDriveClientFolderLogFalha || 
         returnData.googleDriveLogFalha || 
         returnData.logFalha || 
         returnData.error || 
         returnData.errorMessage || 
         returnData.message || 
+        returnData.msg ||
+        returnData.reason ||
+        returnData.description ||
+        returnData.details ||
+        returnData.err ||
+        (returnData.text && typeof returnData.text === 'string' && returnData.text) ||
         returnData.googleDrive?.error ||
         returnData.data?.error ||
         "";
+
+      if (typeof extractedError === 'object') {
+        try {
+          extractedError = JSON.stringify(extractedError);
+        } catch {
+          extractedError = String(extractedError);
+        }
+      }
+
+      // Se a automação não indicou sucesso e não conseguimos extrair uma mensagem de erro clara do retorno,
+      // vamos serializar o retorno inteiro para que o BOSS mostre exatamente o payload de resposta do webhook/automação.
+      if (!isSuccess && !extractedError) {
+        extractedError = `A automação retornou um status não-sucesso sem um campo 'error' explícito. Resposta completa: ${JSON.stringify(returnData)}`;
+      }
 
       const successState = {
         googleDriveClientFolderStatus: isSuccess ? ('criada' as const) : ('falha' as const),
