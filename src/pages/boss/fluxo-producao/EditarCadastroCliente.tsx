@@ -23,7 +23,10 @@ import {
   Building2,
   FolderOpen,
   ExternalLink,
-  Activity
+  Activity,
+  Copy,
+  Clock,
+  AlertCircle
 } from 'lucide-react';
 import { flowRoutes } from './utils/flowRoutes';
 import { normalizeCpfCnpj, isValidCpf, isValidCnpj } from './utils/documentUtils';
@@ -40,6 +43,25 @@ export default function EditarCadastroCliente() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
+  const [connectorBuildUrl, setConnectorBuildUrl] = useState<string>('');
+  const [copiedMotivo, setCopiedMotivo] = useState<boolean>(false);
+
+  const formatDate = (isoStr: string) => {
+    if (!isoStr) return '';
+    try {
+      const d = new Date(isoStr);
+      return d.toLocaleString('pt-BR');
+    } catch {
+      return isoStr;
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedMotivo(true);
+    setTimeout(() => setCopiedMotivo(false), 2000);
+  };
 
   const [clientId, setClientId] = useState<string | null>(null);
   const [clientType, setClientType] = useState<'PF' | 'PJ' | null>(null);
@@ -193,6 +215,19 @@ export default function EditarCadastroCliente() {
         }
 
         setClientId(cid);
+
+        // Try fetching Google Drive build URL from settings/connectors on initialization
+        try {
+          const connDoc = await getDoc(doc(db, 'settings', 'connectors'));
+          if (connDoc.exists()) {
+            const data = connDoc.data();
+            if (data.googleDrive && data.googleDrive.buildUrl) {
+              setConnectorBuildUrl(data.googleDrive.buildUrl.trim());
+            }
+          }
+        } catch (settingsErr) {
+          console.error("Erro ao carregar settings/connectors no EditarCadastroCliente:", settingsErr);
+        }
 
         // 2. Fetch client data from clients/{clientId}
         const clientRef = doc(db, 'clients', cid);
@@ -594,11 +629,68 @@ export default function EditarCadastroCliente() {
       const returnData = await response.json();
       console.log("Google Drive Build response:", returnData);
 
+      // Extrair todas as chaves possíveis para máxima resiliência na interpretação do JSON de resposta
+      const rawStatus = (
+        returnData.googleDriveStatus || 
+        returnData.status || 
+        returnData.googleDriveClientFolderStatus || 
+        returnData.googleDrive?.status || 
+        returnData.data?.status || 
+        returnData.data?.googleDriveStatus || 
+        ""
+      ).toLowerCase();
+
+      const extractedUrl = 
+        returnData.googleDriveClientFolderUrl || 
+        returnData.folderUrl || 
+        returnData.googleDriveFolderUrl || 
+        returnData.url ||
+        returnData.googleDrive?.folderUrl ||
+        returnData.googleDrive?.url ||
+        returnData.data?.googleDriveClientFolderUrl ||
+        returnData.data?.folderUrl ||
+        "";
+
+      const extractedId = 
+        returnData.googleDriveClientFolderId || 
+        returnData.folderId || 
+        returnData.id ||
+        returnData.googleDriveFolderId ||
+        returnData.googleDrive?.folderId ||
+        returnData.googleDrive?.id ||
+        returnData.data?.googleDriveClientFolderId ||
+        returnData.data?.folderId ||
+        "";
+
+      const hasUrlOrId = !!(extractedUrl || extractedId);
+
+      // Determinar o sucesso da operação de forma inteligente
+      const isSuccess = 
+        rawStatus === 'success' || 
+        rawStatus === 'criada' || 
+        rawStatus === 'created' || 
+        rawStatus === 'linked' || 
+        rawStatus === 'ok' || 
+        returnData.success === true || 
+        returnData.success === 'true' ||
+        (hasUrlOrId && rawStatus !== 'failed' && rawStatus !== 'error' && rawStatus !== 'falha');
+
+      const extractedError = 
+        returnData.googleDriveClientFolderLogFalha || 
+        returnData.googleDriveLogFalha || 
+        returnData.logFalha || 
+        returnData.error || 
+        returnData.errorMessage || 
+        returnData.message || 
+        returnData.googleDrive?.error ||
+        returnData.data?.error ||
+        "";
+
       const successState = {
-        googleDriveClientFolderStatus: returnData.googleDriveStatus === 'success' || returnData.googleDriveStatus === 'criada' ? 'criada' : 'falha',
-        googleDriveClientFolderUrl: returnData.googleDriveClientFolderUrl || '',
-        googleDriveClientFolderId: returnData.googleDriveClientFolderId || '',
-        googleDriveClientFolderLogFalha: returnData.googleDriveStatus === 'failed' ? (returnData.googleDriveClientFolderLogFalha || 'A criação falhou') : '',
+        googleDriveClientFolderStatus: isSuccess ? ('criada' as const) : ('falha' as const),
+        googleDriveClientFolderUrl: extractedUrl,
+        googleDriveClientFolderId: extractedId,
+        googleDriveClientFolderLogFalha: isSuccess ? "" : extractedError,
         googleDriveClientFolderUpdatedAt: returnData.googleDriveCreatedAt || new Date().toISOString()
       };
 
@@ -613,7 +705,8 @@ export default function EditarCadastroCliente() {
       if (successState.googleDriveClientFolderStatus === 'criada') {
         setSuccess('Pasta do cliente criada e sincronizada com sucesso no Google Drive!');
       } else {
-        throw new Error(successState.googleDriveClientFolderLogFalha || 'A automação retornou falha na criação.');
+        console.error("Error creating Google Drive folder:", successState.googleDriveClientFolderLogFalha || "A automação indicou erro, mas sem log descritivo.");
+        setError(successState.googleDriveClientFolderLogFalha || "A automação retornou falha na criação.");
       }
 
     } catch (err: any) {
@@ -860,16 +953,56 @@ export default function EditarCadastroCliente() {
                         )}
 
                         {formData.googleDriveClientFolderStatus === 'falha' && (
-                          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-955 text-xs flex flex-col gap-2 font-semibold">
-                            <div className="flex items-center gap-2">
-                              <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                              <span>Falha na criação da pasta</span>
+                          <div className="p-4 bg-rose-50 border border-rose-250 rounded-2xl text-rose-950 text-xs flex flex-col gap-3 font-semibold shadow-xs">
+                            <div className="flex items-center gap-2 text-rose-700 font-bold">
+                              <AlertCircle size={15} />
+                              <span className="text-[13px] font-black uppercase tracking-tight">Falha na criação da pasta</span>
                             </div>
-                            {formData.googleDriveClientFolderLogFalha && (
-                              <div className="w-full bg-red-100/50 p-2.5 rounded-lg border border-red-250 text-red-900 font-mono text-[11px] max-h-32 overflow-y-auto break-all">
-                                {formData.googleDriveClientFolderLogFalha}
+                            <p className="text-xs text-rose-800 leading-relaxed font-semibold">
+                              A automação retornou falha na criação.
+                            </p>
+                            
+                            <div className="bg-white/85 border border-rose-150 p-3 rounded-xl space-y-2">
+                              <div className="text-[10px] font-black uppercase text-rose-900 tracking-wider font-mono">
+                                Motivo da falha:
+                              </div>
+                              <div className="font-mono text-[11px] text-rose-955 leading-relaxed break-all select-all whitespace-pre-wrap max-h-36 overflow-y-auto">
+                                {formData.googleDriveClientFolderLogFalha?.trim()
+                                  ? formData.googleDriveClientFolderLogFalha
+                                  : "o sistema não recebeu detalhes do erro. Verifique os logs do Build Google Drive."
+                                }
+                              </div>
+                            </div>
+
+                            {formData.googleDriveClientFolderUpdatedAt && (
+                              <div className="flex items-center gap-1.5 text-[10px] text-rose-700 font-bold font-mono">
+                                <Clock size={11} />
+                                <span>Última tentativa: {formatDate(formData.googleDriveClientFolderUpdatedAt)}</span>
                               </div>
                             )}
+
+                            <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-rose-100">
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(formData.googleDriveClientFolderLogFalha || "o sistema não recebeu detalhes do erro. Verifique os logs do Build Google Drive.")}
+                                className="px-3 py-2 bg-white hover:bg-rose-100 border border-rose-200 text-rose-900 font-black uppercase tracking-wider rounded-lg text-[9px] transition flex items-center gap-1.5 cursor-pointer shadow-3xs"
+                              >
+                                <Copy size={11} />
+                                <span>{copiedMotivo ? 'Copiado!' : 'Copiar motivo da falha'}</span>
+                              </button>
+
+                              {connectorBuildUrl && (
+                                <a
+                                  href={`${connectorBuildUrl}${connectorBuildUrl.includes('showPreview=true') ? '' : '?showPreview=true&showAssistant=true'}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-3 py-2 bg-rose-600 hover:bg-rose-700 border border-rose-700 text-white font-black uppercase tracking-wider rounded-lg text-[9px] transition flex items-center gap-1.5 cursor-pointer shadow-3xs"
+                                >
+                                  <ExternalLink size={11} />
+                                  <span>Abrir Build Google Drive</span>
+                                </a>
+                              )}
+                            </div>
                           </div>
                         )}
 
