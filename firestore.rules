@@ -253,5 +253,32 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+
+    // -------------------------------------------------------------------------
+    // GOOGLE DRIVE JOBS QUEUE
+    // -------------------------------------------------------------------------
+    match /googleDriveJobs/{jobId} {
+      function isValidGoogleDriveJob(data) {
+        return data.keys().hasAll(['status', 'clientType', 'portalClientId', 'caseId', 'clientFolderName', 'createdAt']) &&
+               data.status is string &&
+               data.clientType is string &&
+               data.portalClientId is string &&
+               data.caseId is string &&
+               data.clientFolderName is string &&
+               data.createdAt is string;
+      }
+
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidGoogleDriveJob(request.resource.data);
+      allow update: if isSignedIn() && (
+        isValidGoogleDriveJob(request.resource.data) && (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'folderId', 'folderUrl', 'processedAt', 'errorMessage', 'error', 'message', 'logFalha',
+            'googleDriveClientFolderId', 'googleDriveClientFolderUrl', 'updatedAt'
+          ])
+        )
+      );
+      allow delete: if false;
+    }
   }
 }

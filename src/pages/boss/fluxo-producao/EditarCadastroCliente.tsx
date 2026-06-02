@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc, collection, onSnapshot } from 'firebase/firestore';
-import { db } from '../../../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../../../lib/firebase';
 import FluxoStepLayout from './components/FluxoStepLayout';
 
 // Core dynamic sub-forms
@@ -604,12 +604,28 @@ export default function EditarCadastroCliente() {
 
       const clientRef = doc(db, 'clients', clientId);
       const clienteLegacyRef = doc(db, 'clientes', clientId);
-      await setDoc(clientRef, pendingState, { merge: true });
-      await setDoc(clienteLegacyRef, pendingState, { merge: true });
+      
+      try {
+        await setDoc(clientRef, pendingState, { merge: true });
+        await setDoc(clienteLegacyRef, pendingState, { merge: true });
+        console.log("[Firestore] Permissão Firestore validada para alteração do status do cliente.");
+      } catch (clientErr: any) {
+        if (clientErr.message?.includes('permission') || clientErr.code === 'permission-denied') {
+          console.error("[Firestore] Falha de permissão Firestore ao atualizar status do cliente.");
+        }
+        handleFirestoreError(clientErr, OperationType.WRITE, `clients/${clientId}`);
+      }
 
       // Envia o documento para a coleção googleDriveJobs do Firestore como barramento
-      await setDoc(jobDocRef, jobPayload);
-      console.log(`[Google Drive Bus] Job criado no Firestore: ${jobId}`, jobPayload);
+      try {
+        await setDoc(jobDocRef, jobPayload);
+        console.log("[Firestore] Permissão Firestore validada. Job criado no Firestore: " + jobId, jobPayload);
+      } catch (jobErr: any) {
+        if (jobErr.message?.includes('permission') || jobErr.code === 'permission-denied') {
+          console.error("[Firestore] Falha de permissão Firestore ao criar job.");
+        }
+        handleFirestoreError(jobErr, OperationType.WRITE, `googleDriveJobs/${jobId}`);
+      }
 
       // Cancelar qualquer escuta ativa anterior por segurança
       if (unsubscribeRef.current) {
@@ -621,7 +637,14 @@ export default function EditarCadastroCliente() {
         if (!snapshot.exists()) return;
 
         const jobData = snapshot.data();
+
+        // Log que o job foi recebido pelo Worker quando sair do status 'pending'
+        if (jobData.status !== 'pending') {
+          console.log(`[Google Drive Bus] Job recebido pelo Worker Google Drive. Status atual: ${jobData.status}`);
+        }
+
         if (jobData.status === 'success') {
+          console.log("[Google Drive Bus] Job atualizado com sucesso.");
           // Processado com Sucesso!
           const extractedUrl = jobData.googleDriveClientFolderUrl || jobData.folderUrl || jobData.url || '';
           const extractedId = jobData.googleDriveClientFolderId || jobData.folderId || jobData.id || '';
@@ -651,6 +674,7 @@ export default function EditarCadastroCliente() {
             unsubscribeRef.current = null;
           }
         } else if (jobData.status === 'failed') {
+          console.log("[Google Drive Bus] Job atualizado com sucesso (com status de falha).");
           // Falhou!
           const errorMsg = jobData.error || jobData.message || jobData.logFalha || jobData.errorMessage || 'Automação retornou falha na criação da pasta.';
           const failState = {
@@ -676,13 +700,20 @@ export default function EditarCadastroCliente() {
             unsubscribeRef.current = null;
           }
         }
-      }, (err) => {
-        console.error("Erro no onSnapshot do job:", err);
+      }, (onSnapError) => {
+        console.error("Erro no onSnapshot do job:", onSnapError);
+        if (onSnapError.message?.includes('permission') || onSnapError.code === 'permission-denied') {
+          console.error("[Firestore] Falha de permissão Firestore ao ouvir atualizações do Job.");
+        }
+        handleFirestoreError(onSnapError, OperationType.GET, `googleDriveJobs/${jobId}`);
       });
 
       unsubscribeRef.current = unsubscribe;
 
     } catch (err: any) {
+      if (err.message?.includes('permission') || err.code === 'permission-denied') {
+        console.error("[Firestore] Falha de permissão Firestore.");
+      }
       console.error("Error creating Google Drive job:", err);
       const failState = {
         googleDriveClientFolderStatus: 'falha' as const,
