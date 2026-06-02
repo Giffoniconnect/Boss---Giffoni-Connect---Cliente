@@ -273,5 +273,25 @@ service cloud.firestore {
       allow update: if isSignedIn() && isValidGoogleDriveJob(request.resource.data);
       allow delete: if false;
     }
+
+    // -------------------------------------------------------------------------
+    // GOOGLE DOCS JOBS QUEUE
+    // -------------------------------------------------------------------------
+    match /googleDocsJobs/{jobId} {
+      function isValidGoogleDocsJob(data) {
+        return data.keys().hasAll(['status', 'clientType', 'portalClientId', 'caseId', 'documentType', 'createdAt']) &&
+               data.status is string &&
+               data.clientType is string &&
+               data.portalClientId is string &&
+               data.caseId is string &&
+               data.documentType is string &&
+               data.createdAt is string;
+      }
+
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidGoogleDocsJob(request.resource.data);
+      allow update: if isSignedIn() && isValidGoogleDocsJob(request.resource.data);
+      allow delete: if false;
+    }
   }
 }

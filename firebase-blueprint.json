@@ -317,6 +317,67 @@
         "processedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["status", "clientType", "portalClientId", "caseId", "clientFolderName", "createdAt"]
+    },
+    "GoogleDocsJob": {
+      "title": "Google Docs Integration Job",
+      "description": "Fila de processamento assíncrono para geração de documentos no Google Docs.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "source": { "type": "string" },
+        "target": { "type": "string" },
+        "documentType": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "success", "failed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "caseId": { "type": "string" },
+        "portalClientId": { "type": "string" },
+        "clientType": { "type": "string" },
+        "destinationFolderId": { "type": "string" },
+        "destinationFolderUrl": { "type": "string" },
+        "templateKey": { "type": "string" },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "nomeCompleto": { "type": "string" },
+            "nacionalidade": { "type": "string" },
+            "estadoCivil": { "type": "string" },
+            "profissao": { "type": "string" },
+            "cpf": { "type": "string" },
+            "rg": { "type": "string" },
+            "endereco": { "type": "string" },
+            "numero": { "type": "string" },
+            "complemento": { "type": "string" },
+            "bairro": { "type": "string" },
+            "cidade": { "type": "string" },
+            "estado": { "type": "string" },
+            "cep": { "type": "string" },
+            "email": { "type": "string" },
+            "telefone": { "type": "string" },
+            "whatsapp": { "type": "string" },
+            "localAssinatura": { "type": "string" },
+            "advogadoNome": { "type": "string" },
+            "advogadoOab": { "type": "string" },
+            "dataAssinatura": { "type": "string" }
+          }
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "googleDocsId": { "type": "string" },
+            "googleDocsUrl": { "type": "string" },
+            "fileName": { "type": "string" }
+          }
+        },
+        "errorCode": { "type": "string" },
+        "errorMessage": { "type": "string" },
+        "logs": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "version": { "type": "number" }
+      },
+      "required": ["status", "clientType", "portalClientId", "caseId", "documentType", "createdAt"]
     }
   },
   "firestore": {
@@ -379,6 +440,10 @@
     "googleDriveJobs": {
       "schema": "GoogleDriveJob",
       "description": "Fila de processamento de integração com o Google Drive."
+    },
+    "googleDocsJobs": {
+      "schema": "GoogleDocsJob",
+      "description": "Fila de processamento de geração automatizada de documentos no Google Docs/Drive."
     }
   }
 }
