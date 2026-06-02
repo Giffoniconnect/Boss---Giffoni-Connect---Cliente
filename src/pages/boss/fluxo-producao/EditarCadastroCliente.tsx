@@ -10,6 +10,7 @@ import { PJForm } from '../../../modules/boss/components/forms/PJForm';
 import { SocioForm } from '../../../modules/boss/components/forms/SocioForm';
 import { AccessForm } from '../../../modules/boss/components/forms/AccessForm';
 import { BankingForm } from '../../../modules/boss/components/forms/BankingForm';
+import GoogleDriveJobsLogsPanel from '../../../components/GoogleDriveJobsLogsPanel';
 
 import { 
   ArrowLeft, 
@@ -1117,6 +1118,21 @@ export default function EditarCadastroCliente() {
                       </div>
                     </div>
                   </div>
+                </div>
+
+                {/* operational logs area */}
+                <div className="mt-6 border-t border-gray-100 pt-5 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Activity className="text-amber-500 animate-pulse" size={15} />
+                    <h4 className="text-[10px] font-black uppercase text-gray-500 tracking-wider font-mono">
+                      Fluxo de Logs Operacionais da Integração (Tempo Real)
+                    </h4>
+                  </div>
+                  <GoogleDriveJobsLogsPanel 
+                    clientId={clientId} 
+                    currentJobId={currentJobId} 
+                    onSelectJobId={setCurrentJobId} 
+                  />
                 </div>
               </div>
             </div>

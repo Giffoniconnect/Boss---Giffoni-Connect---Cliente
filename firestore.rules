@@ -270,14 +270,7 @@ service cloud.firestore {
 
       allow read: if isSignedIn();
       allow create: if isSignedIn() && isValidGoogleDriveJob(request.resource.data);
-      allow update: if isSignedIn() && (
-        isValidGoogleDriveJob(request.resource.data) && (
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'status', 'folderId', 'folderUrl', 'processedAt', 'errorMessage', 'error', 'message', 'logFalha',
-            'googleDriveClientFolderId', 'googleDriveClientFolderUrl', 'updatedAt'
-          ])
-        )
-      );
+      allow update: if isSignedIn() && isValidGoogleDriveJob(request.resource.data);
       allow delete: if false;
     }
   }

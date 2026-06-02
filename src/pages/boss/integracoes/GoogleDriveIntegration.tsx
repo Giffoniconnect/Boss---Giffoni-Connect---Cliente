@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { BossLayout } from '../../../components/Layout';
+import GoogleDriveJobsLogsPanel from '../../../components/GoogleDriveJobsLogsPanel';
 import { 
   FolderOpen, 
   ArrowLeft, 
@@ -20,7 +21,8 @@ import {
   Copy,
   RefreshCw,
   Play,
-  Pencil
+  Pencil,
+  Activity
 } from 'lucide-react';
 
 export default function GoogleDriveIntegration() {
@@ -41,6 +43,7 @@ export default function GoogleDriveIntegration() {
   // States and functions for toggleable edit and copy of buildUrl
   const [isEditingUrl, setIsEditingUrl] = useState(false);
   const [copyUrlFeedback, setCopyUrlFeedback] = useState(false);
+  const [activeTab, setActiveTab] = useState<'config' | 'logs'>('config');
 
   const handleCopyUrl = () => {
     if (!buildUrl) return;
@@ -330,7 +333,47 @@ export default function GoogleDriveIntegration() {
           </div>
         </div>
 
-        {/* Informational Panel: The Decision Explanation */}
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-gray-150 gap-4 mb-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('config')}
+            className={`pb-2.5 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+              activeTab === 'config'
+                ? 'border-amber-600 text-amber-900 font-extrabold font-mono'
+                : 'border-transparent text-gray-450 hover:text-gray-900 font-semibold'
+            }`}
+          >
+            Configurações da Ponte
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('logs')}
+            className={`pb-2.5 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+              activeTab === 'logs'
+                ? 'border-amber-600 text-amber-900 font-extrabold font-mono'
+                : 'border-transparent text-gray-450 hover:text-gray-900 font-semibold'
+            }`}
+          >
+            Logs da Integração
+          </button>
+        </div>
+
+        {activeTab === 'logs' && (
+          <div className="space-y-4 animate-fadeIn">
+            <div className="bg-amber-50/40 border border-amber-200/60 rounded-3xl p-5 text-sm text-gray-700 space-y-1">
+              <h3 className="font-extrabold uppercase text-[10px] tracking-wider text-amber-800 font-mono">Fila de Logs Resumida • Google Drive</h3>
+              <p className="text-[11.5px] text-gray-500 font-medium leading-relaxed">
+                Abaixo estão listados todos os logs operacionais das integrações. Você pode acompanhar em tempo real o andamento e reprocessar qualquer job com pendência ou falha.
+              </p>
+            </div>
+            <GoogleDriveJobsLogsPanel />
+          </div>
+        )}
+
+        {activeTab === 'config' && (
+          <>
+            {/* Informational Panel: The Decision Explanation */}
         <div className="bg-slate-900 border border-slate-950 p-6 rounded-[2rem] flex gap-4 text-slate-100 shadow-xl">
           <Info size={24} className="text-amber-400 shrink-0 mt-0.5" />
           <div className="space-y-2 col-span-11">
@@ -678,6 +721,8 @@ export default function GoogleDriveIntegration() {
             </button>
           </div>
         </form>
+          </>
+        )}
       </div>
     </BossLayout>
   );
