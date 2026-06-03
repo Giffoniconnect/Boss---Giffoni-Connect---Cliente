@@ -26,6 +26,8 @@ interface GoogleDocsConfig {
   status: 'não_configurado' | 'preparado' | 'em_teste' | 'ativo' | 'erro';
   templatesStrategy: string;
   notes: string;
+  endpointUrl: string;
+  integrationKey: string;
 }
 
 export default function GoogleDocsIntegration() {
@@ -38,7 +40,9 @@ export default function GoogleDocsIntegration() {
   const [config, setConfig] = useState<GoogleDocsConfig>({
     status: 'não_configurado',
     templatesStrategy: 'standard_procuracao',
-    notes: ''
+    notes: '',
+    endpointUrl: '',
+    integrationKey: ''
   });
 
   // Simulated logs
@@ -57,7 +61,9 @@ export default function GoogleDocsIntegration() {
             setConfig({
               status: data.googleDocs.status || 'não_configurado',
               templatesStrategy: data.googleDocs.templatesStrategy || '',
-              notes: data.googleDocs.notes || ''
+              notes: data.googleDocs.notes || '',
+              endpointUrl: data.googleDocs.endpointUrl || '',
+              integrationKey: data.googleDocs.integrationKey || ''
             });
           }
         }
@@ -80,7 +86,9 @@ export default function GoogleDocsIntegration() {
         googleDocs: {
           status: config.status,
           templatesStrategy: config.templatesStrategy.trim(),
-          notes: config.notes.trim()
+          notes: config.notes.trim(),
+          endpointUrl: config.endpointUrl.trim(),
+          integrationKey: config.integrationKey.trim()
         },
         updatedAt: new Date().toISOString()
       }, { merge: true });
@@ -107,10 +115,10 @@ export default function GoogleDocsIntegration() {
     const newLogs = [
       `[${timestamp}] Inicializando aperto de mão lógico com Google Docs API...`,
       `[${timestamp}] Verificando token de serviço e credenciais OAuth...`,
+      `[${timestamp}] Endpoint GDI configurado: ${config.endpointUrl || 'Nenhum'}`,
       `[${timestamp}] Carregando modelo base ID: [${config.templatesStrategy || 'Não fornecido'}]...`,
       `[${timestamp}] Teste fático de substituição nos campos coringa de simulação de preenchimento...`,
-      `[${timestamp}] Aviso: Teste real será ativado em build futuro com backend seguro.`,
-      `[${timestamp}] Canal retornado com status isolado: Simulador de Sucesso.`
+      `[${timestamp}] Canal retornado com status isolado: Conexão simulada com sucesso.`
     ];
 
     setTimeout(() => {
@@ -127,7 +135,10 @@ export default function GoogleDocsIntegration() {
     
     try {
       await setDoc(doc(db, 'settings', 'connectors'), {
-        googleDocs: updated,
+        googleDocs: {
+          ...updated,
+          status: 'não_configurado'
+        },
         updatedAt: new Date().toISOString()
       }, { merge: true });
       
@@ -224,6 +235,29 @@ export default function GoogleDocsIntegration() {
         <form onSubmit={handleSave} className="bg-white border border-gray-150 rounded-3xl p-6 md:p-8 space-y-6 shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             
+            <div className="space-y-1 md:col-span-2">
+              <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">URL do receptor GDI (Webhook / Endpoint) *</label>
+              <input
+                type="text"
+                required
+                value={config.endpointUrl}
+                onChange={(e) => setConfig({ ...config, endpointUrl: e.target.value })}
+                placeholder="ex: https://seu-endpoint.gdi-job"
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100"
+              />
+            </div>
+
+            <div className="space-y-1 md:col-span-2">
+              <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Chave de Integração (Token / Key)</label>
+              <input
+                type="password"
+                value={config.integrationKey}
+                onChange={(e) => setConfig({ ...config, integrationKey: e.target.value })}
+                placeholder="Insira a chave secreta de autenticação do GDI"
+                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100"
+              />
+            </div>
+
             <div className="space-y-1 md:col-span-2">
               <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Estratégia de Modelos (Templates Google Docs Folder/ID) *</label>
               <input

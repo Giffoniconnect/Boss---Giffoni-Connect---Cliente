@@ -19,7 +19,8 @@ service cloud.firestore {
       // We also check for the boss_admin role in the users collection.
       return isSignedIn() && (
         request.auth.token.email == 'direito.rgr@gmail.com' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'boss_admin'
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'boss_admin')
       );
     }
 
@@ -63,7 +64,9 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /clients/{clientId} {
       function isOwnClient() {
-        return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId == clientId;
+        return isSignedIn() && 
+               exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId == clientId;
       }
 
       allow read: if isAdmin() || isOwnClient();
@@ -82,8 +85,13 @@ service cloud.firestore {
       }
 
       function belongsToUser() {
-        let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-        return isSignedIn() && (isAdmin() || (userDoc.role == 'client' && resource.data.clientId == userDoc.clientId));
+        return isSignedIn() && (
+          isAdmin() || (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'client' &&
+            resource.data.clientId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId
+          )
+        );
       }
 
       allow read: if isAdmin() || belongsToUser();
@@ -98,9 +106,14 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     
     function canAccessCase(caseId) {
-      let caseData = get(/databases/$(database)/documents/cases/$(caseId)).data;
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-      return isAdmin() || (userDoc.role == 'client' && caseData.clientId == userDoc.clientId);
+      return isSignedIn() && (
+        isAdmin() || (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          exists(/databases/$(database)/documents/cases/$(caseId)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'client' &&
+          get(/databases/$(database)/documents/cases/$(caseId)).data.clientId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId
+        )
+      );
     }
 
     function isVisibleToClient(data) {
@@ -143,8 +156,14 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /caseInformationRequests/{requestId} {
       function canAccessRequest(data) {
-        let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-        return isAdmin() || (userDoc.role == 'client' && data.clientId == userDoc.clientId && data.get('visibleToClient', false) == true);
+        return isSignedIn() && (
+          isAdmin() || (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'client' &&
+            data.clientId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId &&
+            data.get('visibleToClient', false) == true
+          )
+        );
       }
 
       allow read: if isAdmin() || resource.data.get('visibleToClient', false) == true || (isSignedIn() && canAccessRequest(resource.data));
@@ -158,8 +177,14 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /caseEvidenceRequests/{requestId} {
       function canAccessEvidenceRequest(data) {
-        let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-        return isAdmin() || (userDoc.role == 'client' && data.clientId == userDoc.clientId && data.get('visibleToClient', false) == true);
+        return isSignedIn() && (
+          isAdmin() || (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'client' &&
+            data.clientId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId &&
+            data.get('visibleToClient', false) == true
+          )
+        );
       }
 
       allow read: if isAdmin() || resource.data.get('visibleToClient', false) == true || (isSignedIn() && canAccessEvidenceRequest(resource.data));
