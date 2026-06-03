@@ -190,6 +190,7 @@ export default function Configuracoes() {
   const [portalCardExpanded, setPortalCardExpanded] = useState(false);
   const [portalUpdatedAt, setPortalUpdatedAt] = useState<string | null>(null);
   const [showDriveKey, setShowDriveKey] = useState(false);
+  const [showDocsKey, setShowDocsKey] = useState(false);
   
   // Simulated tools state
   const [testResult, setTestResult] = useState<{[key: string]: string}>({});
@@ -1694,6 +1695,49 @@ export default function Configuracoes() {
                               placeholder="ex: id_modelo_contrato_standard"
                               className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono text-gray-700 outline-none"
                             />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold uppercase text-gray-505">URL Base do GDI (Webhook / API)</label>
+                            <input
+                              type="text"
+                              value={connectors.googleDocs?.buildUrl || ''}
+                              onChange={(e) => updateIndividualConnector('googleDocs', 'buildUrl', e.target.value)}
+                              placeholder="https://gdi-xxxx-599536317399.us-east1.run.app"
+                              className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono text-gray-700 outline-none"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="flex justify-between items-center">
+                              <label className="text-[9px] font-bold uppercase text-gray-505">Chave de Integração GDI</label>
+                              <button
+                                type="button"
+                                onClick={() => setShowDocsKey(!showDocsKey)}
+                                className="text-[9px] font-bold uppercase text-amber-600 hover:text-amber-700 transition cursor-pointer"
+                              >
+                                {showDocsKey ? "Mascarar" : "Mostrar"}
+                              </button>
+                            </div>
+                            <input
+                              type={showDocsKey ? "text" : "password"}
+                              value={connectors.googleDocs?.integrationKey || ''}
+                              onChange={(e) => updateIndividualConnector('googleDocs', 'integrationKey', e.target.value)}
+                              placeholder="boss_docs_live_xxxxx"
+                              className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono text-gray-700 outline-none"
+                            />
+                            {!showDocsKey && connectors.googleDocs?.integrationKey && (
+                              <p className="text-[10px] text-gray-500 font-mono mt-1">
+                                Chave ativa (mascarada): <span className="p-1 px-1.5 bg-gray-100 border border-gray-200 rounded-md font-semibold text-gray-655">{(() => {
+                                  const key = connectors.googleDocs.integrationKey;
+                                  if (!key) return "";
+                                  if (key.length <= 8) return "********";
+                                  const prefix = key.substring(0, Math.min(15, key.length - 4));
+                                  const suffix = key.substring(key.length - 4);
+                                  return `${prefix}********${suffix}`;
+                                })()}</span>
+                              </p>
+                            )}
                           </div>
 
                           <div className="space-y-1">

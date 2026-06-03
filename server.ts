@@ -97,6 +97,89 @@ app.post("/api/proxy-google-drive", async (req, res) => {
   }
 });
 
+// Proxy requests to the Google Docs Integration (GDI) to keep keys hidden & bypass CORS
+app.post("/api/proxy-google-docs", async (req, res) => {
+  try {
+    console.log("[Proxy Docs] Proxy Google Docs acionado.");
+    const { targetEndpoint, payload, integrationKey } = req.body;
+
+    if (!targetEndpoint) {
+      return res.status(400).json({ error: "O campo targetEndpoint é obrigatório." });
+    }
+    
+    const trimmedUrl = targetEndpoint.trim();
+    console.log(`[Proxy Docs] Endpoint destino recebido: ${trimmedUrl}`);
+
+    if (trimmedUrl.includes("aistudio.google.com/apps") || trimmedUrl.includes("accounts.google.com")) {
+      return res.status(400).json({
+        error: "A URL configurada não é uma API pública e protegida de produção. Ela aponta para a visualização administrativa do AI Studio ou de login do Google."
+      });
+    }
+
+    if (payload) {
+      console.log("[Proxy Docs] Payload recebido:", JSON.stringify(payload));
+    }
+
+    let finalHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    if (integrationKey) {
+      const maskKey = (key: string) => {
+        if (!key) return "";
+        if (key.length <= 8) return "********";
+        return key.substring(0, Math.min(15, key.length - 4)) + "********" + key.substring(key.length - 4);
+      };
+      console.log(`[Proxy Docs] Chave de integração Google Docs recebida: ${maskKey(integrationKey)}`);
+      finalHeaders["X-BOSS-Google-Docs-Integration-Key"] = integrationKey;
+    } else {
+      console.log("[Proxy Docs] Chave de integração Google Docs ausente!");
+    }
+
+    const response = await fetch(trimmedUrl, {
+      method: "POST",
+      headers: finalHeaders,
+      body: JSON.stringify(payload),
+    });
+
+    const status = response.status;
+    const contentType = response.headers.get("content-type") || "";
+
+    const text = await response.text();
+    console.log(`[Proxy Docs] Resposta recebida da API externa GDI. Status: ${status}, Content-Type: ${contentType}`);
+
+    const isHtmlResponse = contentType.includes("html") || 
+                           text.trim().startsWith("<") || 
+                           text.toLowerCase().includes("<!doctype html") || 
+                           text.toLowerCase().includes("<html");
+
+    if (isHtmlResponse) {
+      console.error(`[Proxy Docs] Detetada resposta HTML da rota de API.`);
+      return res.status(400).json({
+        error: "A URL do GDI configurada em Configurações > Integrações não é uma API válida (retornou HTML). Por favor, use a URL pública real do webhook do GDI."
+      });
+    }
+
+    if (!response.ok) {
+      console.error(`[Proxy Docs] Erro do GDI externo (${status}):`, text);
+      return res.status(status).json({ error: text || `O GDI externo retornou o status de erro ${status}` });
+    }
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { text };
+    }
+
+    console.log(`[Proxy Docs] Resposta parseada com sucesso do GDI:`, data);
+    return res.status(200).json(data);
+  } catch (err: any) {
+    console.error("[Proxy Docs] Exception:", err);
+    return res.status(500).json({ error: `Falha na ponte do servidor (Proxy Docs): ${err.message || err}` });
+  }
+});
+
 // Validate Google Drive Build URL to prevent using admin pages or HTML pages as APIs
 app.post("/api/validate-build-url", async (req, res) => {
   try {

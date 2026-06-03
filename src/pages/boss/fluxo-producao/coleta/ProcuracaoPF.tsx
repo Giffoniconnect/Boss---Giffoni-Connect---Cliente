@@ -4,9 +4,10 @@ import FluxoStepLayout from '../components/FluxoStepLayout';
 import EntregaDocumento from '../components/EntregaDocumento';
 import { 
   ArrowRight, FileText, UploadCloud, Trash2, ArrowLeft, 
-  Settings, CheckSquare, Sparkles, Check, AlertCircle, RefreshCw, ExternalLink
+  Settings, CheckSquare, Sparkles, Check, AlertCircle, RefreshCw, ExternalLink,
+  Copy, FolderOpen
 } from 'lucide-react';
-import { doc, setDoc, updateDoc, query, collection, where, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, query, collection, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
 
 export default function ProcuracaoPF() {
@@ -33,6 +34,17 @@ export default function ProcuracaoPF() {
 
   const [activeJob, setActiveJob] = React.useState<any>(null);
   const [forceNewVersion, setForceNewVersion] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+
+  const handleCopyLink = (url: string) => {
+    if (!url) return;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(err => {
+      console.error("Erro ao copiar link:", err);
+    });
+  };
 
   // Real-time synchronization and monitoring hook
   React.useEffect(() => {
@@ -142,8 +154,37 @@ export default function ProcuracaoPF() {
   };
 
   const handleSendJob = async () => {
-    if (!driveFolderId) {
-      setError("Não é possível enviar a Procuração para o Google Docs Integration porque a pasta do cliente ainda não possui googleDriveClientFolderId.");
+    // 1. Antes de enviar, validar: caseId, clientId, destinationFolderId, destinationFolderUrl, nomeCompleto, cpf
+    const targetCaseId = caseId;
+    const targetClientId = caseObj?.clientId || '';
+    const destinationFolderId = driveFolderId;
+    const destinationFolderUrl = driveFolderUrl;
+    const nomeCompleto = client?.pfDadosPessoais?.pf_nomeCompleto || client?.pfData?.pf_nomeCompleto || '';
+    const cpf = client?.pfDadosPessoais?.pf_cpf || client?.pfData?.pf_cpf || '';
+
+    if (!targetCaseId) {
+      setError("Erro de validação: caseId do caso está ausente.");
+      return;
+    }
+    if (!targetClientId) {
+      setError("Erro de validação: clientId do caso está ausente.");
+      return;
+    }
+    // 2. Se não houver destinationFolderId: bloquear envio e mostrar mensagem específica
+    if (!destinationFolderId) {
+      setError("Não é possível gerar a Procuração porque a pasta Google Drive do cliente ainda não foi vinculada.");
+      return;
+    }
+    if (!destinationFolderUrl) {
+      setError("Não é possível gerar a Procuração porque a URL da pasta Google Drive está ausente.");
+      return;
+    }
+    if (!nomeCompleto) {
+      setError("Não é possível gerar a Procuração porque o Nome Completo do cliente está ausente no cadastro.");
+      return;
+    }
+    if (!cpf) {
+      setError("Não é possível gerar a Procuração porque o CPF do cliente está ausente no cadastro.");
       return;
     }
 
@@ -151,15 +192,49 @@ export default function ProcuracaoPF() {
     setError(null);
     setSuccess(null);
 
+    const timestampDataLoaded = new Date().toISOString();
+    const timestampFolderFound = new Date().toISOString();
+
+    // Setup initial logs using required codes
+    const initialLogs = [
+      {
+        action: "PORTAL_PROC_PF_DATA_LOADED",
+        timestamp: timestampDataLoaded,
+        message: "Dados do cliente e da procuração pf carregados e validados no Portal BOSS."
+      },
+      {
+        action: "PORTAL_PROC_PF_FOLDER_FOUND",
+        timestamp: timestampFolderFound,
+        message: `Diretório Google Drive do cliente localizado com sucesso ID: ${destinationFolderId}.`
+      }
+    ];
+
+    const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
     try {
-      const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
+      // Fetch GDI connection settings from Firestore
+      const connectorsSnap = await getDoc(doc(db, 'settings', 'connectors'));
+      let gdiBaseUrl = '';
+      let gdiIntegrationKey = '';
+
+      if (connectorsSnap.exists()) {
+        const data = connectorsSnap.data();
+        if (data.googleDocs) {
+          gdiBaseUrl = data.googleDocs.buildUrl || '';
+          gdiIntegrationKey = data.googleDocs.integrationKey || '';
+        }
+      }
+
+      if (!gdiBaseUrl) {
+        throw new Error("A URL do Google Docs Integration (GDI) não está configurada. Por favor, acesse Configurações > Integrações e preencha as credenciais.");
+      }
+
       const payload = {
-        nomeCompleto: client?.pfDadosPessoais?.pf_nomeCompleto || client?.pfData?.pf_nomeCompleto || '',
+        nomeCompleto,
         nacionalidade: client?.pfDadosPessoais?.pf_nacionalidade || client?.pfData?.pf_nacionalidade || '',
         estadoCivil: client?.pfDadosPessoais?.pf_estadoCivil || client?.pfData?.pf_estadoCivil || '',
         profissao: client?.pfDadosPessoais?.pf_profissao || client?.pfData?.pf_profissao || '',
-        cpf: client?.pfDadosPessoais?.pf_cpf || client?.pfData?.pf_cpf || '',
+        cpf,
         rg: client?.pfDadosPessoais?.pf_rg || client?.pfData?.pf_rg || '',
         endereco: client?.pfDadosPessoais?.pf_endereco || client?.pfData?.pf_endereco || '',
         numero: client?.pfDadosPessoais?.pf_numero || client?.pfData?.pf_numero || '',
@@ -180,19 +255,33 @@ export default function ProcuracaoPF() {
       const currentVersion = caseObj?.procuracaoVersion || 1;
       const nextVersion = caseObj?.procuracaoGoogleDocsUrl ? currentVersion + 1 : 1;
 
-      const newJob = {
+      // Log: request started
+      initialLogs.push({
+        action: "PORTAL_PROC_PF_GDI_REQUEST_STARTED",
+        timestamp: new Date().toISOString(),
+        message: "Efetuando disparo HTTP real para o webhook do receptor GDI..."
+      });
+
+      // 4. Enquanto envia: status = "enviando_para_gdi"
+      const caseDocRef = doc(db, 'cases', targetCaseId);
+      await updateDoc(caseDocRef, {
+        procuracaoStatus: "enviando_para_gdi"
+      });
+
+      // Maintain internal job log document for tracking on interface
+      const initialJob = {
         id: jobId,
         source: "Portal BOSS Clientes",
-        target: "Google Docs Integrations",
+        target: "GDI",
         documentType: "procuracao_pf",
         status: "pending",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        caseId: caseId,
-        portalClientId: caseObj?.clientId || '',
+        caseId: targetCaseId,
+        portalClientId: targetClientId,
         clientType: "PF",
-        destinationFolderId: driveFolderId,
-        destinationFolderUrl: driveFolderUrl,
+        destinationFolderId,
+        destinationFolderUrl,
         templateKey: "procuracao-pf",
         version: nextVersion,
         payload,
@@ -203,40 +292,143 @@ export default function ProcuracaoPF() {
         },
         errorCode: null,
         errorMessage: null,
-        logs: [
-          {
-            action: "PORTAL_PROC_PF_DATA_LOADED",
-            timestamp: new Date().toISOString(),
-            message: "Dados da Procuração PF carregados com sucesso."
-          },
-          {
-            action: driveFolderId ? "PORTAL_PROC_PF_FOLDER_FOUND" : "PORTAL_PROC_PF_FOLDER_MISSING",
-            timestamp: new Date().toISOString(),
-            message: driveFolderId ? `Diretório Google Drive do Cliente localizado (${driveFolderId}).` : "Pasta do Google Drive não localizada."
-          },
-          {
-            action: "PORTAL_PROC_PF_JOB_CREATED",
-            timestamp: new Date().toISOString(),
-            message: `Job ${jobId} criado na coleção googleDocsJobs.`
-          },
-          {
-            action: "PORTAL_PROC_PF_JOB_SENT",
-            timestamp: new Date().toISOString(),
-            message: `Job ${jobId} enviado ao processador de Integrações do Google Docs.`
-          }
-        ]
+        logs: initialLogs
       };
 
-      await setDoc(doc(db, 'googleDocsJobs', jobId), newJob);
-      
+      await setDoc(doc(db, 'googleDocsJobs', jobId), initialJob);
+
+      // Align endpoint path
+      let targetEndpoint = gdiBaseUrl.trim();
+      if (!targetEndpoint.endsWith("/api/webhook/gdi-job")) {
+        if (targetEndpoint.endsWith("/")) {
+          targetEndpoint += "api/webhook/gdi-job";
+        } else {
+          targetEndpoint += "/api/webhook/gdi-job";
+        }
+      }
+
+      const externalPayload = {
+        source: "Portal BOSS Clientes",
+        target: "GDI",
+        documentType: "procuracao_pf",
+        caseId: targetCaseId,
+        clientId: targetClientId,
+        clientType: "PF",
+        destinationFolderId,
+        destinationFolderUrl,
+        templateKey: "procuracao-pf",
+        payload
+      };
+
+      // 3. Enviar requisição real para o GDI via Proxy
+      const proxyResponse = await fetch("/api/proxy-google-docs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          targetEndpoint,
+          payload: externalPayload,
+          integrationKey: gdiIntegrationKey
+        })
+      });
+
+      const responseText = await proxyResponse.text();
+      let responseData: any;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = { error: responseText };
+      }
+
+      if (!proxyResponse.ok) {
+        throw new Error(responseData.error || responseData.errorMessage || "O GDI retornou erro na criação do documento.");
+      }
+
+      // Successful fields mapped from GDI response
+      const googleDocsId = responseData.googleDocsId || responseData.id || '';
+      const googleDocsUrl = responseData.googleDocsUrl || responseData.url || '';
+      const generatedAt = responseData.generatedAt || new Date().toISOString();
+      const outputFolderId = responseData.destinationFolderId || destinationFolderId;
+      const outputFolderUrl = responseData.destinationFolderUrl || destinationFolderUrl;
+      const gdiResponseLogs = responseData.logs || [];
+
+      // Combine logs
+      const successLogs = [
+        ...initialLogs,
+        {
+          action: "PORTAL_PROC_PF_GDI_RESPONSE_SUCCESS",
+          timestamp: new Date().toISOString(),
+          message: `GDI retornou documento gerado com sucesso. ID: ${googleDocsId}`
+        },
+        ...gdiResponseLogs,
+        {
+          action: "PORTAL_PROC_PF_CASE_UPDATED",
+          timestamp: new Date().toISOString(),
+          message: "Caso atualizado no Portal com as referências físicas e URLs da Procuração PF."
+        }
+      ];
+
+      // 5. Se o GDI retornar sucesso, salvar no caso
+      await updateDoc(caseDocRef, {
+        procuracaoStatus: "criada",
+        procuracaoGoogleDocsId: googleDocsId,
+        procuracaoGoogleDocsUrl: googleDocsUrl,
+        procuracaoGeneratedAt: generatedAt,
+        procuracaoDestinationFolderId: outputFolderId,
+        procuracaoDestinationFolderUrl: outputFolderUrl,
+        procuracaoGoogleDocsJobLogs: successLogs,
+        procuracaoVersion: nextVersion,
+        procuracaoGoogleDocsJobId: jobId
+      });
+
+      // Update internal job logs in real time
+      await updateDoc(doc(db, 'googleDocsJobs', jobId), {
+        status: "success",
+        updatedAt: new Date().toISOString(),
+        result: {
+          googleDocsId,
+          googleDocsUrl,
+          fileName: `Procuração PF - V${nextVersion}`
+        },
+        logs: successLogs
+      });
+
       await saveWizardStateUpdate({ q1_1: 'sim' });
 
       setForceNewVersion(false);
-      setSuccess("Job enviado ao Build Google Docs Integration.");
-      setTimeout(() => setSuccess(null), 3000);
+      setSuccess("Procuração PF gerada e indexada no GDI com sucesso!");
+      setTimeout(() => setSuccess(null), 5000);
     } catch (err: any) {
-      console.error(err);
-      setError(`Erro ao disparar automação: ${err.message}`);
+      console.error("[GDI Execution Failed]", err);
+      const errorMessage = err.message || "Erro desconhecido durante o processamento do GDI.";
+
+      const failureLogs = [
+        ...initialLogs,
+        {
+          action: "PORTAL_PROC_PF_GDI_RESPONSE_FAILED",
+          timestamp: new Date().toISOString(),
+          message: `Ocorreu uma falha na geração/integração com o GDI: ${errorMessage}`
+        }
+      ];
+
+      // 6. Se o GDI retornar falha, salvar
+      const caseDocRef = doc(db, 'cases', targetCaseId);
+      await updateDoc(caseDocRef, {
+        procuracaoStatus: "falha",
+        procuracaoLogFalha: errorMessage,
+        procuracaoGoogleDocsJobLogs: failureLogs,
+        procuracaoGoogleDocsJobId: jobId
+      });
+
+      await updateDoc(doc(db, 'googleDocsJobs', jobId), {
+        status: "failed",
+        updatedAt: new Date().toISOString(),
+        errorMessage,
+        logs: failureLogs
+      });
+
+      setError(`Erro na automação real do GDI: ${errorMessage}`);
     } finally {
       setSaving(false);
     }
@@ -424,17 +616,17 @@ export default function ProcuracaoPF() {
                     ) : (
                       <div className="space-y-4">
                         {/* Se estiver aguardando / processando o job */}
-                        {activeJob?.status === 'pending' ? (
-                          <div className="bg-white border border-indigo-150 rounded-2xl p-5 space-y-4 shadow-3xs animate-pulse">
+                        {activeJob?.status === 'pending' || saving ? (
+                          <div className="bg-white border border-indigo-150 rounded-2xl p-5 space-y-4 shadow-3xs animate-pulse font-sans">
                             <div className="flex items-center justify-between gap-3 border-b border-gray-100 pb-3">
                               <div className="flex items-center gap-2">
                                 <RefreshCw className="text-indigo-600 animate-spin" size={17} />
                                 <span className="text-xs font-black uppercase text-indigo-700 tracking-wider">
-                                  Aguardando geração da Procuração pelo Build Google Docs.
+                                  {saving ? "Enviando dados ao GDI..." : "Aguardando geração da Procuração pelo GDI..."}
                                 </span>
                               </div>
                               <span className="text-[10px] text-slate-400 font-bold font-mono">
-                                Job ID: {activeJob.id}
+                                Job ID: {activeJob?.id || 'gdi-job'}
                               </span>
                             </div>
 
@@ -444,7 +636,7 @@ export default function ProcuracaoPF() {
                               </div>
                             </div>
 
-                            {activeJob?.logs && activeJob.logs.length > 0 && (
+                            {activeJob?.logs && activeJob.logs.length > 0 ? (
                               <div className="mt-3 bg-slate-50 rounded-xl p-3.5 border border-gray-150/50 space-y-2">
                                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest font-mono">Etapas dos Logs em Tempo Real</p>
                                 <div className="space-y-1.5 text-xs text-slate-600 font-medium">
@@ -457,7 +649,14 @@ export default function ProcuracaoPF() {
                                   ))}
                                 </div>
                               </div>
-                            )}
+                            ) : saving ? (
+                              <div className="mt-3 bg-slate-50 rounded-xl p-3.5 border border-gray-150/50 space-y-2">
+                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest font-mono font-bold">Transmitindo dados com segurança</p>
+                                <p className="text-xs text-slate-600 leading-relaxed font-semibold">
+                                  Enviando payload certificado contendo dados pessoais fáticos do cliente e identificador da pasta de destino para geração da procuração judicial padrão.
+                                </p>
+                              </div>
+                            ) : null}
                           </div>
                         ) : (
                           <div className="space-y-4">
@@ -470,7 +669,7 @@ export default function ProcuracaoPF() {
                                 <button
                                   type="button"
                                   onClick={() => setForceNewVersion(false)}
-                                  className="text-xs font-black text-slate-500 hover:text-slate-800 uppercase"
+                                  className="text-xs font-black text-slate-500 hover:text-slate-800 uppercase cursor-pointer whitespace-nowrap"
                                 >
                                   Cancelar
                                 </button>
@@ -482,7 +681,7 @@ export default function ProcuracaoPF() {
                                 type="button"
                                 disabled={saving}
                                 onClick={handleSendJob}
-                                className="w-full md:w-auto px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm hover:shadow transition-all cursor-pointer"
+                                className="w-full md:w-auto px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm hover:shadow transition-all cursor-pointer font-bold animate-pulse-slow"
                               >
                                 <Sparkles size={14} className="animate-pulse" />
                                 <span>{forceNewVersion ? 'Gerar Nova Versão' : 'Enviar para Google Docs Integration'}</span>
@@ -490,9 +689,9 @@ export default function ProcuracaoPF() {
                             </div>
 
                             {activeJob && activeJob.status !== 'pending' && (
-                              <div className="mt-4 pt-3.5 border-t border-gray-150/70 space-y-3">
+                              <div className="mt-4 pt-3.5 border-t border-gray-150/70 space-y-3 animate-fadeIn">
                                 <div className="flex items-center justify-between gap-4">
-                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider text-slate-400">Última Operação Registrada</p>
+                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Última Operação Registrada</p>
                                   <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
                                     activeJob.status === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' : 'bg-red-50 text-red-700 border border-red-150'
                                   }`}>
@@ -501,30 +700,59 @@ export default function ProcuracaoPF() {
                                 </div>
 
                                 {activeJob.status === 'success' ? (
-                                  <div className="p-3.5 bg-emerald-50/40 border border-emerald-150 rounded-xl space-y-2">
+                                  <div className="p-3.5 bg-emerald-50/40 border border-emerald-150 rounded-xl space-y-3">
                                     <div className="flex items-start gap-2">
                                       <Check size={15} className="text-emerald-600 mt-0.5 shrink-0" />
                                       <div className="space-y-1">
-                                        <p className="text-xs text-emerald-900 font-extrabold">A Procuração PF foi criada e processada com sucesso!</p>
-                                        <p className="text-[11px] text-emerald-800 font-medium">Pasta sincronizada. Você pode visualizar o documento finalizado no link abaixo ou nas opções do formulário.</p>
+                                        <p className="text-xs text-emerald-900 font-extrabold leading-normal">A Procuração PF foi criada e processada com sucesso!</p>
+                                        <p className="text-[11px] text-emerald-800 font-medium font-semibold">Pasta sincronizada. Você pode gerenciar o documento através das ações rápidas abaixo:</p>
                                       </div>
                                     </div>
                                     
-                                    {activeJob.result?.googleDocsUrl && (
-                                      <div className="pt-1">
+                                    <div className="pt-2 flex flex-wrap gap-2.5">
+                                      {/* 1. Abrir Procuração */}
+                                      {activeJob.result?.googleDocsUrl && (
                                         <a
                                           href={activeJob.result.googleDocsUrl}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-black uppercase tracking-wider transition-all shadow-3xs"
+                                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-3xs cursor-pointer font-bold"
                                         >
-                                          <ExternalLink size={11} /> Abrir Procuração Google Docs
+                                          <ExternalLink size={12} /> Abrir Procuração
                                         </a>
-                                      </div>
-                                    )}
+                                      )}
+
+                                      {/* 2. Abrir Pasta do Cliente */}
+                                      {(activeJob.destinationFolderUrl || driveFolderUrl) && (
+                                        <a
+                                          href={activeJob.destinationFolderUrl || driveFolderUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-gray-50 text-slate-800 rounded-xl text-[10px] font-black uppercase tracking-wider border border-gray-250 transition-all shadow-3xs cursor-pointer font-bold"
+                                        >
+                                          <FolderOpen size={12} /> Abrir Pasta do Cliente
+                                        </a>
+                                      )}
+
+                                      {/* 3. Copiar Link da Procuração */}
+                                      {activeJob.result?.googleDocsUrl && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleCopyLink(activeJob.result?.googleDocsUrl)}
+                                          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border shadow-3xs cursor-pointer font-bold ${
+                                            copied 
+                                              ? 'bg-emerald-50 border-emerald-300 text-emerald-800' 
+                                              : 'bg-white border-gray-205 hover:bg-gray-50 text-gray-700'
+                                          }`}
+                                        >
+                                          {copied ? <Check size={12} /> : <Copy size={12} />}
+                                          <span>{copied ? "Copiado!" : "Copiar Link"}</span>
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 ) : (
-                                  <div className="p-3.5 bg-rose-50/50 border border-rose-150 rounded-xl flex items-start gap-2 text-xs">
+                                  <div className="p-3.5 bg-rose-50/50 border border-rose-150 rounded-xl flex items-start gap-2 text-xs font-sans">
                                     <AlertCircle size={15} className="text-rose-500 mt-0.5 shrink-0" />
                                     <div>
                                       <p className="font-extrabold text-rose-950 uppercase tracking-widest text-[9px] font-mono">Erro de Processamento</p>
