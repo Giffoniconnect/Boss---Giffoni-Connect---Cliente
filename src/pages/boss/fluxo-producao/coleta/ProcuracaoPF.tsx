@@ -5,7 +5,7 @@ import EntregaDocumento from '../components/EntregaDocumento';
 import { 
   ArrowRight, FileText, UploadCloud, Trash2, ArrowLeft, 
   Settings, CheckSquare, Sparkles, Check, AlertCircle, RefreshCw, ExternalLink,
-  Copy, FolderOpen
+  Copy, FolderOpen, FileCode
 } from 'lucide-react';
 import { doc, getDoc, setDoc, updateDoc, query, collection, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
@@ -32,9 +32,144 @@ export default function ProcuracaoPF() {
     setSaving
   } = useColetaState();
 
+  const [localCaseObj, setLocalCaseObj] = React.useState<any>(null);
+
+  // Sync with caseObj from hook on mount/load
+  React.useEffect(() => {
+    if (caseObj) {
+      setLocalCaseObj(caseObj);
+    }
+  }, [caseObj]);
+
+  // Set up real-time listener for current case to react to changes and cleanups
+  React.useEffect(() => {
+    if (!caseId) return;
+    const unsubscribe = onSnapshot(doc(db, 'cases', caseId), (snapshot) => {
+      if (snapshot.exists()) {
+        setLocalCaseObj(snapshot.data());
+      }
+    }, (err) => {
+      console.error("Erro na escuta de cases:", err);
+    });
+    return () => unsubscribe();
+  }, [caseId]);
+
   const [activeJob, setActiveJob] = React.useState<any>(null);
   const [forceNewVersion, setForceNewVersion] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
+  const [sentPayload, setSentPayload] = React.useState<any>(null);
+  const [showPayload, setShowPayload] = React.useState(false);
+  const [copiedPayload, setCopiedPayload] = React.useState(false);
+
+  const isMockUrl = (url: string | null | undefined): boolean => {
+    if (!url) return false;
+    const lower = url.toLowerCase();
+    return (
+      lower.includes('mock') ||
+      lower.includes('fake') ||
+      lower.includes('teste') ||
+      lower.includes('diagnostic') ||
+      lower.includes('localhost') ||
+      lower.includes('undefined') ||
+      lower.includes('null')
+    );
+  };
+
+  // Check and auto-clean mock/invalid references on client load
+  React.useEffect(() => {
+    if (!caseId || !localCaseObj) return;
+    const url = localCaseObj.procuracaoGoogleDocsUrl;
+    if (url && isMockUrl(url)) {
+      const runCleanup = async () => {
+        try {
+          const caseDocRef = doc(db, 'cases', caseId);
+          await updateDoc(caseDocRef, {
+            procuracaoGoogleDocsId: "",
+            procuracaoGoogleDocsUrl: "",
+            procuracaoStatus: "pendente",
+            procuracaoGeneratedAt: "",
+            procuracaoLogFalha: "",
+            procuracaoGoogleDocsJobId: "",
+            procuracaoGoogleDocsJobLogs: [
+              {
+                action: "PORTAL_PROC_PF_INVALID_REFERENCE_REMOVED",
+                timestamp: new Date().toISOString(),
+                message: "A referência de Procuração inválida ou mockada contendo URLs não operacionais foi limpa automaticamente pelo sistema BOSS."
+              }
+            ]
+          });
+          // Update local state immediately to avoid flashing
+          setLocalCaseObj((prev: any) => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              procuracaoGoogleDocsId: "",
+              procuracaoGoogleDocsUrl: "",
+              procuracaoStatus: "pendente",
+              procuracaoGeneratedAt: "",
+              procuracaoLogFalha: "",
+              procuracaoGoogleDocsJobId: ""
+            };
+          });
+        } catch (err) {
+          console.error("Erro na limpeza automática de referência mockada:", err);
+        }
+      };
+      runCleanup();
+    }
+  }, [caseId, localCaseObj]);
+
+  const currentCase = localCaseObj || caseObj;
+
+  const getAuditPayload = () => {
+    if (sentPayload) return sentPayload;
+    if (activeJob?.payload) {
+      return {
+        documentType: activeJob.documentType || 'procuracao_pf',
+        caseId: activeJob.caseId || caseId,
+        clientId: activeJob.portalClientId || currentCase?.clientId || '',
+        clientType: activeJob.clientType || 'PF',
+        destinationFolderId: activeJob.destinationFolderId || driveFolderId,
+        destinationFolderUrl: activeJob.destinationFolderUrl || driveFolderUrl,
+        templateKey: activeJob.templateKey || 'procuracao-pf',
+        payload: activeJob.payload
+      };
+    }
+    return null;
+  };
+
+  const handleClearMockReference = async () => {
+    if (!caseId) return;
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const caseDocRef = doc(db, 'cases', caseId);
+      const clearLogs = [
+        {
+          action: "PORTAL_PROC_PF_MOCK_REFERENCE_CLEARED",
+          timestamp: new Date().toISOString(),
+          message: "A referência de Procuração mockada foi limpa com absoluto sucesso pelo usuário."
+        }
+      ];
+      await updateDoc(caseDocRef, {
+        procuracaoGoogleDocsId: "",
+        procuracaoGoogleDocsUrl: "",
+        procuracaoStatus: "pendente",
+        procuracaoGeneratedAt: "",
+        procuracaoLogFalha: "",
+        procuracaoGoogleDocsJobId: "",
+        procuracaoGoogleDocsJobLogs: clearLogs
+      });
+      setSuccess("Referência mockada limpa com absoluto sucesso!");
+      setTimeout(() => setSuccess(null), 4000);
+    } catch (err: any) {
+      console.error("Erro ao limpar referência mockada:", err);
+      setError(`Falha ao limpar referência mockada: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleCopyLink = (url: string) => {
     if (!url) return;
@@ -58,7 +193,7 @@ export default function ProcuracaoPF() {
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
-        const jobs = snapshot.docs.map(d => d.data());
+        const jobs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
         jobs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setActiveJob(jobs[0]);
       } else {
@@ -73,7 +208,7 @@ export default function ProcuracaoPF() {
 
   // Synchronize case fields when job status changes
   React.useEffect(() => {
-    if (!activeJob || !caseObj) return;
+    if (!activeJob || !currentCase) return;
 
     const isJobSuccess = activeJob.status === 'success';
     const isJobFailed = activeJob.status === 'failed';
@@ -82,7 +217,7 @@ export default function ProcuracaoPF() {
 
     const updateCaseFromJob = async () => {
       try {
-        if (isJobSuccess && caseObj.procuracaoGoogleDocsJobId !== activeJob.id) {
+        if (isJobSuccess && currentCase.procuracaoGoogleDocsJobId !== activeJob.id) {
           const hasResultLog = activeJob.logs?.some((l: any) => l.action === 'PORTAL_PROC_PF_RESULT_RECEIVED');
           
           let updatedLogs = [...(activeJob.logs || [])];
@@ -116,7 +251,7 @@ export default function ProcuracaoPF() {
             procuracaoDestinationFolderUrl: activeJob.destinationFolderUrl || '',
             procuracaoVersion: activeJob.version || 1
           });
-        } else if (isJobFailed && caseObj.procuracaoGoogleDocsJobId !== activeJob.id) {
+        } else if (isJobFailed && currentCase.procuracaoGoogleDocsJobId !== activeJob.id) {
           const hasFailLog = activeJob.logs?.some((l: any) => l.action === 'PORTAL_PROC_PF_FAILED');
           
           let updatedLogs = [...(activeJob.logs || [])];
@@ -145,7 +280,7 @@ export default function ProcuracaoPF() {
     };
 
     updateCaseFromJob();
-  }, [activeJob, caseObj, caseId]);
+  }, [activeJob, currentCase, caseId]);
 
   const handleNextPhase = () => {
     saveWizardStateUpdate({ step1_completed: true }).then(() => {
@@ -156,7 +291,7 @@ export default function ProcuracaoPF() {
   const handleSendJob = async () => {
     // 1. Antes de enviar, validar: caseId, clientId, destinationFolderId, destinationFolderUrl, nomeCompleto, cpf
     const targetCaseId = caseId;
-    const targetClientId = caseObj?.clientId || '';
+    const targetClientId = currentCase?.clientId || '';
     const destinationFolderId = driveFolderId;
     const destinationFolderUrl = driveFolderUrl;
     const nomeCompleto = client?.pfDadosPessoais?.pf_nomeCompleto || client?.pfData?.pf_nomeCompleto || '';
@@ -210,8 +345,12 @@ export default function ProcuracaoPF() {
     ];
 
     const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const caseDocRef = doc(db, 'cases', targetCaseId);
 
     try {
+      // Clean up past errors
+      setError(null);
+
       // Fetch GDI connection settings from Firestore
       const connectorsSnap = await getDoc(doc(db, 'settings', 'connectors'));
       let gdiBaseUrl = '';
@@ -220,13 +359,29 @@ export default function ProcuracaoPF() {
       if (connectorsSnap.exists()) {
         const data = connectorsSnap.data();
         if (data.googleDocs) {
-          gdiBaseUrl = data.googleDocs.buildUrl || '';
+          gdiBaseUrl = data.googleDocs.buildUrl || data.googleDocs.endpointUrl || '';
           gdiIntegrationKey = data.googleDocs.integrationKey || '';
+        }
+        // Fallback to googleDrive configuration if googleDocs configuration is empty
+        if (!gdiBaseUrl && data.googleDrive) {
+          gdiBaseUrl = data.googleDrive.buildUrl || '';
+        }
+        if (!gdiIntegrationKey && data.googleDrive) {
+          gdiIntegrationKey = data.googleDrive.integrationKey || '';
         }
       }
 
+      // Validar conexão antes de enviar
       if (!gdiBaseUrl) {
-        throw new Error("A URL do Google Docs Integration (GDI) não está configurada. Por favor, acesse Configurações > Integrações e preencha as credenciais.");
+        throw new Error("URL do GDI não configurada em settings/connectors.googleDocs.buildUrl.");
+      }
+
+      if (!gdiIntegrationKey) {
+        throw new Error("Chave de integração do GDI não configurada em settings/connectors.googleDocs.integrationKey.");
+      }
+
+      if (!gdiBaseUrl.toLowerCase().startsWith('http://') && !gdiBaseUrl.toLowerCase().startsWith('https://')) {
+        throw new Error("A URL do GDI precisa começar com http ou https.");
       }
 
       const payload = {
@@ -252,8 +407,8 @@ export default function ProcuracaoPF() {
         dataAssinatura: "data da assinatura eletrônica"
       };
 
-      const currentVersion = caseObj?.procuracaoVersion || 1;
-      const nextVersion = caseObj?.procuracaoGoogleDocsUrl ? currentVersion + 1 : 1;
+      const currentVersion = currentCase?.procuracaoVersion || 1;
+      const nextVersion = currentCase?.procuracaoGoogleDocsUrl ? currentVersion + 1 : 1;
 
       // Log: request started
       initialLogs.push({
@@ -263,7 +418,6 @@ export default function ProcuracaoPF() {
       });
 
       // 4. Enquanto envia: status = "enviando_para_gdi"
-      const caseDocRef = doc(db, 'cases', targetCaseId);
       await updateDoc(caseDocRef, {
         procuracaoStatus: "enviando_para_gdi"
       });
@@ -320,6 +474,21 @@ export default function ProcuracaoPF() {
         payload
       };
 
+      // Guard payload audit state
+      setSentPayload(externalPayload);
+
+      // Log: proxy called
+      initialLogs.push({
+        action: "PORTAL_PROC_PF_PROXY_CALLED",
+        timestamp: new Date().toISOString(),
+        message: `Disparando requisição real via proxy /api/proxy-google-docs para o GDI.`
+      });
+
+      await updateDoc(doc(db, 'googleDocsJobs', jobId), {
+        logs: initialLogs,
+        updatedAt: new Date().toISOString()
+      });
+
       // 3. Enviar requisição real para o GDI via Proxy
       const proxyResponse = await fetch("/api/proxy-google-docs", {
         method: "POST",
@@ -333,6 +502,18 @@ export default function ProcuracaoPF() {
         })
       });
 
+      // Log: proxy response received
+      initialLogs.push({
+        action: "PORTAL_PROC_PF_PROXY_RESPONSE_RECEIVED",
+        timestamp: new Date().toISOString(),
+        message: `Resposta de conexão recebida via proxy. Canal retornado com status HTTP: ${proxyResponse.status}`
+      });
+
+      await updateDoc(doc(db, 'googleDocsJobs', jobId), {
+        logs: initialLogs,
+        updatedAt: new Date().toISOString()
+      });
+
       const responseText = await proxyResponse.text();
       let responseData: any;
       try {
@@ -342,7 +523,15 @@ export default function ProcuracaoPF() {
       }
 
       if (!proxyResponse.ok) {
-        throw new Error(responseData.error || responseData.errorMessage || "O GDI retornou erro na criação do documento.");
+        // Detailed error description for proxy integration diagnostics
+        const errorDetail = `Falha na API Proxy (Status HTTP: ${proxyResponse.status}). Error: ${responseData.error || responseData.errorMessage || responseText || "Erro não mapeado"}\n` +
+          `targetEndpoint: ${targetEndpoint}\n` +
+          `Chave de Integração Presente (integrationKey): ${gdiIntegrationKey ? "sim" : "não"}\n` +
+          `documentType: procuracao_pf\n` +
+          `caseId: ${targetCaseId}\n` +
+          `clientId: ${targetClientId}`;
+
+        throw new Error(errorDetail);
       }
 
       // Successful fields mapped from GDI response
@@ -352,6 +541,34 @@ export default function ProcuracaoPF() {
       const outputFolderId = responseData.destinationFolderId || destinationFolderId;
       const outputFolderUrl = responseData.destinationFolderUrl || destinationFolderUrl;
       const gdiResponseLogs = responseData.logs || [];
+
+      // 7. NÃO SALVAR SUCESSO SE O RETORNO FOR MOCK
+      if (isMockUrl(googleDocsUrl)) {
+        const mockErrorLogs = [
+          ...initialLogs,
+          {
+            action: "PORTAL_PROC_PF_GDI_RETURNED_MOCK_URL",
+            timestamp: new Date().toISOString(),
+            message: "O GDI retornou link inválido/mockado. Documento real não foi criado."
+          }
+        ];
+
+        await updateDoc(caseDocRef, {
+          procuracaoStatus: "falha",
+          procuracaoLogFalha: "O GDI retornou link inválido/mockado. Documento real não foi criado.",
+          procuracaoGoogleDocsJobLogs: mockErrorLogs,
+          procuracaoGoogleDocsJobId: jobId
+        });
+
+        await updateDoc(doc(db, 'googleDocsJobs', jobId), {
+          status: "failed",
+          updatedAt: new Date().toISOString(),
+          errorMessage: "O GDI retornou link inválido/mockado. Documento real não foi criado.",
+          logs: mockErrorLogs
+        });
+
+        throw new Error("O GDI retornou link inválido/mockado. Documento real não foi criado.");
+      }
 
       // Combine logs
       const successLogs = [
@@ -413,7 +630,6 @@ export default function ProcuracaoPF() {
       ];
 
       // 6. Se o GDI retornar falha, salvar
-      const caseDocRef = doc(db, 'cases', targetCaseId);
       await updateDoc(caseDocRef, {
         procuracaoStatus: "falha",
         procuracaoLogFalha: errorMessage,
@@ -507,9 +723,12 @@ export default function ProcuracaoPF() {
             
             {/* NOTIFICATION TOASTS */}
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-900 text-xs font-semibold flex gap-2 items-center">
-                <AlertCircle size={14} className="text-red-600 shrink-0" />
-                <span>{error}</span>
+              <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-900 text-xs font-semibold flex gap-3 items-start select-all">
+                <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-extrabold text-[10px] uppercase text-red-950 tracking-wide font-mono">Erro de Processamento / Configuração</p>
+                  <pre className="whitespace-pre-wrap font-mono text-[11px] text-red-905 leading-relaxed">{error}</pre>
+                </div>
               </div>
             )}
             {success && (
@@ -577,29 +796,42 @@ export default function ProcuracaoPF() {
                       )}
                     </div>
 
-                    {/* Regra Anti-Duplicidade */}
-                    {caseObj?.procuracaoGoogleDocsUrl && !forceNewVersion ? (
-                      <div className="bg-amber-50/50 border border-amber-200 rounded-2xl p-4.5 space-y-3.5 animate-in slide-in-from-top-1 duration-200">
+                    {currentCase?.procuracaoGoogleDocsUrl && !isMockUrl(currentCase.procuracaoGoogleDocsUrl) && !forceNewVersion ? (
+                      <div className="bg-white border border-slate-150 rounded-2xl p-5 space-y-4 shadow-3xs animate-in slide-in-from-top-1 duration-200">
                         <div className="flex items-start gap-3">
-                          <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5 animate-bounce" />
-                          <div className="space-y-0.5">
-                            <h3 className="text-xs font-black text-amber-950 uppercase tracking-wide">Procuração Detectada</h3>
-                            <p className="text-xs text-amber-900 font-medium">
-                              Já existe uma Procuração gerada para este caso.
+                          <div className="p-2.5 bg-indigo-50 border border-indigo-150 rounded-xl text-indigo-600">
+                            <FileText size={20} />
+                          </div>
+                          <div className="space-y-1">
+                            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Procuração Gerada</h3>
+                            <p className="text-xs text-slate-500 leading-relaxed font-semibold">
+                              O documento de Procuração PF já foi indexado e está disponível para preenchimento de assinaturas.
                             </p>
                           </div>
                         </div>
                         
-                        <div className="flex flex-wrap gap-2.5 pt-1">
+                        <div className="flex flex-wrap gap-2.5 pt-1.5">
                           <a
-                            href={caseObj.procuracaoGoogleDocsUrl}
+                            href={currentCase.procuracaoGoogleDocsUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold uppercase rounded-xl transition-all shadow-3xs cursor-pointer"
+                            className="inline-flex items-center gap-2 px-4.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase rounded-xl transition-all shadow-3xs cursor-pointer font-bold"
                           >
                             <ExternalLink size={13} />
-                            Abrir Procuração existente
+                            Abrir Procuração
                           </a>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyLink(currentCase.procuracaoGoogleDocsUrl)}
+                            className={`inline-flex items-center gap-1.5 px-4.5 py-2 rounded-xl text-xs font-black uppercase transition-all border shadow-3xs cursor-pointer font-bold ${
+                              copied 
+                                ? 'bg-emerald-50 border-emerald-300 text-emerald-800' 
+                                : 'bg-white border-gray-250 hover:bg-gray-50 text-gray-700'
+                            }`}
+                          >
+                            {copied ? <Check size={13} /> : <Copy size={13} />}
+                            <span>{copied ? "Copiado!" : "Copiar Link"}</span>
+                          </button>
                           <button
                             type="button"
                             onClick={() => {
@@ -607,7 +839,7 @@ export default function ProcuracaoPF() {
                               setSuccess(null);
                               setForceNewVersion(true);
                             }}
-                            className="px-4 py-2 bg-white hover:bg-gray-50 border border-slate-205 text-slate-800 text-xs font-extrabold uppercase rounded-xl transition-all shadow-3xs cursor-pointer"
+                            className="px-4.5 py-2 bg-white hover:bg-gray-50 border border-gray-250 text-slate-800 text-xs font-black uppercase rounded-xl transition-all shadow-3xs cursor-pointer font-bold"
                           >
                             Gerar nova versão
                           </button>
@@ -622,12 +854,9 @@ export default function ProcuracaoPF() {
                               <div className="flex items-center gap-2">
                                 <RefreshCw className="text-indigo-600 animate-spin" size={17} />
                                 <span className="text-xs font-black uppercase text-indigo-700 tracking-wider">
-                                  {saving ? "Enviando dados ao GDI..." : "Aguardando geração da Procuração pelo GDI..."}
+                                  Gerando procuração segura... Por favor, aguarde alguns instantes.
                                 </span>
                               </div>
-                              <span className="text-[10px] text-slate-400 font-bold font-mono">
-                                Job ID: {activeJob?.id || 'gdi-job'}
-                              </span>
                             </div>
 
                             <div className="space-y-2">
@@ -635,36 +864,14 @@ export default function ProcuracaoPF() {
                                 <div className="bg-indigo-600 h-full rounded-full animate-infinite-loading w-3/4"></div>
                               </div>
                             </div>
-
-                            {activeJob?.logs && activeJob.logs.length > 0 ? (
-                              <div className="mt-3 bg-slate-50 rounded-xl p-3.5 border border-gray-150/50 space-y-2">
-                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest font-mono">Etapas dos Logs em Tempo Real</p>
-                                <div className="space-y-1.5 text-xs text-slate-600 font-medium">
-                                  {activeJob.logs.map((log: any, idx: number) => (
-                                    <div key={idx} className="flex items-start gap-2 animate-in fade-in">
-                                      <span className="text-indigo-500 font-extrabold">✓</span>
-                                      <span className="text-[11px] font-mono font-bold text-indigo-900 border-r border-indigo-100 pr-1.5 whitespace-nowrap">{log.action}</span>
-                                      <span className="text-slate-600 break-words">{log.message}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            ) : saving ? (
-                              <div className="mt-3 bg-slate-50 rounded-xl p-3.5 border border-gray-150/50 space-y-2">
-                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest font-mono font-bold">Transmitindo dados com segurança</p>
-                                <p className="text-xs text-slate-600 leading-relaxed font-semibold">
-                                  Enviando payload certificado contendo dados pessoais fáticos do cliente e identificador da pasta de destino para geração da procuração judicial padrão.
-                                </p>
-                              </div>
-                            ) : null}
                           </div>
                         ) : (
                           <div className="space-y-4">
                             {forceNewVersion && (
-                              <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl flex items-center justify-between gap-4 animate-in slide-in-from-top-1 text-xs">
+                              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-4 animate-in slide-in-from-top-1 text-xs">
                                 <div className="flex items-center gap-2 text-amber-950 font-semibold md:truncate">
                                   <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 animate-ping" />
-                                  <span>Iniciando controle de versão { (caseObj?.procuracaoVersion || 1) + 1 }. Uma nova cópia será catalogada.</span>
+                                  <span>Iniciando controle de versão { (currentCase?.procuracaoVersion || 1) + 1 }. Uma nova cópia será salva.</span>
                                 </div>
                                 <button
                                   type="button"
@@ -681,85 +888,20 @@ export default function ProcuracaoPF() {
                                 type="button"
                                 disabled={saving}
                                 onClick={handleSendJob}
-                                className="w-full md:w-auto px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm hover:shadow transition-all cursor-pointer font-bold animate-pulse-slow"
+                                className="w-full md:w-auto px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm hover:shadow transition-all cursor-pointer font-bold"
                               >
-                                <Sparkles size={14} className="animate-pulse" />
-                                <span>{forceNewVersion ? 'Gerar Nova Versão' : 'Enviar para Google Docs Integration'}</span>
+                                <Sparkles size={14} />
+                                <span>{forceNewVersion ? 'Gerar Nova Versão' : 'Gerar Procuração'}</span>
                               </button>
                             </div>
 
-                            {activeJob && activeJob.status !== 'pending' && (
-                              <div className="mt-4 pt-3.5 border-t border-gray-150/70 space-y-3 animate-fadeIn">
-                                <div className="flex items-center justify-between gap-4">
-                                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Última Operação Registrada</p>
-                                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                                    activeJob.status === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' : 'bg-red-50 text-red-700 border border-red-150'
-                                  }`}>
-                                    {activeJob.status === 'success' ? 'Sincronizado' : 'Erro'}
-                                  </span>
+                            {activeJob && activeJob.status === 'failed' && (
+                              <div className="p-3.5 bg-rose-50 border border-rose-150 rounded-xl flex items-start gap-2.5 text-xs">
+                                <AlertCircle size={15} className="text-rose-500 mt-0.5 shrink-0" />
+                                <div>
+                                  <p className="font-extrabold text-rose-950 uppercase tracking-widest text-[9px] font-mono">Erro de Geração</p>
+                                  <p className="text-rose-900 font-semibold mt-1">Ocorreu uma falha ao gerar a procuração. Por favor, verifique os dados cadastrais do cliente e tente novamente.</p>
                                 </div>
-
-                                {activeJob.status === 'success' ? (
-                                  <div className="p-3.5 bg-emerald-50/40 border border-emerald-150 rounded-xl space-y-3">
-                                    <div className="flex items-start gap-2">
-                                      <Check size={15} className="text-emerald-600 mt-0.5 shrink-0" />
-                                      <div className="space-y-1">
-                                        <p className="text-xs text-emerald-900 font-extrabold leading-normal">A Procuração PF foi criada e processada com sucesso!</p>
-                                        <p className="text-[11px] text-emerald-800 font-medium font-semibold">Pasta sincronizada. Você pode gerenciar o documento através das ações rápidas abaixo:</p>
-                                      </div>
-                                    </div>
-                                    
-                                    <div className="pt-2 flex flex-wrap gap-2.5">
-                                      {/* 1. Abrir Procuração */}
-                                      {activeJob.result?.googleDocsUrl && (
-                                        <a
-                                          href={activeJob.result.googleDocsUrl}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-3xs cursor-pointer font-bold"
-                                        >
-                                          <ExternalLink size={12} /> Abrir Procuração
-                                        </a>
-                                      )}
-
-                                      {/* 2. Abrir Pasta do Cliente */}
-                                      {(activeJob.destinationFolderUrl || driveFolderUrl) && (
-                                        <a
-                                          href={activeJob.destinationFolderUrl || driveFolderUrl}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white hover:bg-gray-50 text-slate-800 rounded-xl text-[10px] font-black uppercase tracking-wider border border-gray-250 transition-all shadow-3xs cursor-pointer font-bold"
-                                        >
-                                          <FolderOpen size={12} /> Abrir Pasta do Cliente
-                                        </a>
-                                      )}
-
-                                      {/* 3. Copiar Link da Procuração */}
-                                      {activeJob.result?.googleDocsUrl && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleCopyLink(activeJob.result?.googleDocsUrl)}
-                                          className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border shadow-3xs cursor-pointer font-bold ${
-                                            copied 
-                                              ? 'bg-emerald-50 border-emerald-300 text-emerald-800' 
-                                              : 'bg-white border-gray-205 hover:bg-gray-50 text-gray-700'
-                                          }`}
-                                        >
-                                          {copied ? <Check size={12} /> : <Copy size={12} />}
-                                          <span>{copied ? "Copiado!" : "Copiar Link"}</span>
-                                        </button>
-                                      )}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="p-3.5 bg-rose-50/50 border border-rose-150 rounded-xl flex items-start gap-2 text-xs font-sans">
-                                    <AlertCircle size={15} className="text-rose-500 mt-0.5 shrink-0" />
-                                    <div>
-                                      <p className="font-extrabold text-rose-950 uppercase tracking-widest text-[9px] font-mono">Erro de Processamento</p>
-                                      <p className="text-rose-900 font-bold mt-0.5">{activeJob.errorMessage || 'Erro inesperado na geração do documento pelo build integrador.'}</p>
-                                    </div>
-                                  </div>
-                                )}
                               </div>
                             )}
                           </div>
@@ -794,7 +936,7 @@ export default function ProcuracaoPF() {
                   <EntregaDocumento
                     tipoDocumento="procuracao"
                     tipoPessoa="PF"
-                    googleDocsUrl={caseObj?.procuracaoGoogleDocsUrl || ''}
+                    googleDocsUrl={currentCase?.procuracaoGoogleDocsUrl || ''}
                     whatsappCliente={client?.pfDadosPessoais?.pf_whatsapp || client?.pfDadosPessoais?.pf_telefone || client?.pfData?.pf_whatsapp || client?.pfData?.pf_telefone || ''}
                     emailCliente={client?.pfDadosPessoais?.pf_email || client?.pfData?.pf_email || ''}
                     nomeCliente={clientName}

@@ -96,8 +96,8 @@ service cloud.firestore {
 
       allow read: if isAdmin() || belongsToUser();
       allow create: if isAdmin() && isValidCase(request.resource.data);
-      allow update: if (isAdmin() && isValidCase(request.resource.data)) || 
-                     (belongsToUser() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastUpdate'])); // Example: allow minimal updates if needed
+      allow update: if isAdmin() || 
+                     (belongsToUser() && request.resource.data.clientId == resource.data.clientId);
       allow delete: if isAdmin();
     }
 

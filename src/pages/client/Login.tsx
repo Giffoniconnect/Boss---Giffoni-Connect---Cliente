@@ -28,9 +28,23 @@ export default function ClientLogin() {
           }
 
           const clientId = portalData.clientId;
-          const clientSnap = await getDoc(doc(db, 'clients', clientId));
-          if (clientSnap.exists()) {
-            setClientInfo({ id: clientSnap.id, ...clientSnap.data() });
+          try {
+            const clientSnap = await getDoc(doc(db, 'clients', clientId));
+            if (clientSnap.exists()) {
+              setClientInfo({ id: clientSnap.id, ...clientSnap.data() });
+              return;
+            }
+          } catch (e) {
+            console.warn("Firestore unrestricted read disabled. Falling back to stylized slug name.");
+            const formattedName = slug
+              .split('-')
+              .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+              .join(' ');
+            setClientInfo({
+              id: clientId,
+              type: 'PF',
+              pfDadosPessoais: { pf_nomeCompleto: formattedName }
+            });
             return;
           }
         }
