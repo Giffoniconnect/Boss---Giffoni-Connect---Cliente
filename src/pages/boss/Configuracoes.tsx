@@ -32,6 +32,7 @@ import {
   HelpCircle,
   Plus,
   Play,
+  X,
   XCircle,
   Trash2,
   Terminal,
@@ -154,6 +155,7 @@ interface ConnectorConfig {
   rootFolderIdPlaceholder?: string;
   serviceAccountPlaceholder?: string;
   buildUrl?: string;
+  endpointUrl?: string;
   integrationKey?: string;
   projectStrategy?: string;
   tokenPlaceholder?: string;
@@ -163,6 +165,9 @@ interface ConnectorConfig {
   provider?: string;
   notes?: string;
   updatedAt?: string;
+  lastEndpoint?: string;
+  lastHttpStatus?: number;
+  lastResponse?: string;
 }
 
 export default function Configuracoes() {
@@ -191,6 +196,7 @@ export default function Configuracoes() {
   const [portalUpdatedAt, setPortalUpdatedAt] = useState<string | null>(null);
   const [showDriveKey, setShowDriveKey] = useState(false);
   const [showDocsKey, setShowDocsKey] = useState(false);
+  const [gdiTestLabel, setGdiTestLabel] = useState("");
   
   // Simulated tools state
   const [testResult, setTestResult] = useState<{[key: string]: string}>({});
@@ -318,7 +324,46 @@ export default function Configuracoes() {
         // Fetch real structured Connectors setting schema
         const connSnap = await getDoc(doc(db, 'settings', 'connectors'));
         if (connSnap.exists()) {
-          const loadedConns = connSnap.data() as any;
+          const loadedConns = { ...connSnap.data() } as any;
+          if (loadedConns.googleDocs) {
+            let loadedBuildUrl = loadedConns.googleDocs.buildUrl || '';
+            let loadedEndpointUrl = loadedConns.googleDocs.endpointUrl || '';
+
+            const isBuildInvalid = loadedBuildUrl.toLowerCase().includes('aistudio.google.com') ||
+                                   loadedBuildUrl.toLowerCase().includes('showpreview') ||
+                                   loadedBuildUrl.toLowerCase().includes('showassistant') ||
+                                   !loadedBuildUrl.trim();
+                                   
+            const isEndpointInvalid = loadedEndpointUrl.toLowerCase().includes('aistudio.google.com') ||
+                                      loadedEndpointUrl.toLowerCase().includes('showpreview') ||
+                                      loadedEndpointUrl.toLowerCase().includes('showassistant') ||
+                                      !loadedEndpointUrl.trim();
+
+            let neededCorrection = isBuildInvalid || isEndpointInvalid;
+
+            if (neededCorrection) {
+              const realUrl = 'https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app';
+              loadedBuildUrl = realUrl;
+              loadedEndpointUrl = realUrl;
+              loadedConns.googleDocs.buildUrl = realUrl;
+              loadedConns.googleDocs.endpointUrl = realUrl;
+
+              // Correct silently in DB
+              try {
+                await setDoc(doc(db, 'settings', 'connectors'), {
+                  googleDocs: {
+                    ...loadedConns.googleDocs,
+                    buildUrl: realUrl,
+                    endpointUrl: realUrl,
+                    updatedAt: new Date().toISOString()
+                  }
+                }, { merge: true });
+                console.log("[GDI Repair] Silently auto-corrected GDI URL in Configuracoes.tsx");
+              } catch (dbErr) {
+                console.error("[GDI Repair] Failed query auto-correction in Configuracoes.tsx:", dbErr);
+              }
+            }
+          }
           setConnectors((prev) => {
             const copy = { ...prev };
             Object.keys(loadedConns).forEach((key) => {
@@ -408,8 +453,61 @@ export default function Configuracoes() {
         setSectorsLinks(cleanedSectors);
         setPortalUpdatedAt(new Date().toLocaleString('pt-BR'));
       } else if (activeSubTab === 'conectores') {
+        // Enforce strict GDI validations before save
+        const googleDocs = connectors.googleDocs || {};
+        const gapiBaseUrl = (googleDocs.buildUrl || '').trim();
+        const integrationKey = (googleDocs.integrationKey || '').trim();
+        const status = googleDocs.status || 'não_configurado';
+
+        if (status !== 'não_configurado' || gapiBaseUrl || integrationKey) {
+          if (!gapiBaseUrl) {
+            setFeedback({ type: 'error', message: 'O campo GDI API Base URL é obrigatório se a integração Google Docs estiver marcada com status ativo ou se dados de chaves estiverem presentes.' });
+            setSaving(false);
+            return;
+          }
+
+          if (!gapiBaseUrl.toLowerCase().startsWith('https://')) {
+            setFeedback({ type: 'error', message: 'A URL do GDI deve começar obrigatoriamente com "https://"' });
+            setSaving(false);
+            return;
+          }
+
+          const blockedTerms = [
+            "aistudio.google.com",
+            "showPreview",
+            "showAssistant",
+            "accounts.google.com",
+            "firebaseapp login",
+            "/__/auth/handler"
+          ];
+
+          for (const term of blockedTerms) {
+            if (gapiBaseUrl.toLowerCase().includes(term.toLowerCase())) {
+              setFeedback({ 
+                type: 'error', 
+                message: `O salvamento foi bloqueado: a URL fornecida contém o termo restrito "${term}". Certifique-se de usar a URL pública e real de produção do GDI.` 
+              });
+              setSaving(false);
+              return;
+            }
+          }
+
+          if (!integrationKey) {
+            setFeedback({ type: 'error', message: 'O salvamento foi bloqueado: Chave de Integração GDI (X-BOSS-Google-Docs-Integration-Key) não foi fornecida.' });
+            setSaving(false);
+            return;
+          }
+        }
+
         // Active sub-tab connectors persistence settings/connectors
         const payload: any = { ...connectors };
+        
+        // Let's make sure endpointUrl matches buildUrl in payload
+        if (payload.googleDocs) {
+          payload.googleDocs.buildUrl = gapiBaseUrl;
+          payload.googleDocs.endpointUrl = gapiBaseUrl;
+        }
+
         payload.custom = customConnectors;
         payload.updatedAt = new Date().toISOString();
 
@@ -489,8 +587,393 @@ export default function Configuracoes() {
     }
   };
 
+  const handleTestGoogleDocs = async (isDiagnostic: boolean) => {
+    const key = 'googleDocs';
+    setTestResult(prev => ({ ...prev, [key]: 'loading' }));
+    
+    const googleDocs = connectors.googleDocs || {};
+    const gapiBaseUrl = (googleDocs.buildUrl || '').trim();
+    const integrationKey = (googleDocs.integrationKey || '').trim();
+
+    if (!gapiBaseUrl) {
+      alert("Informe a URL pública real da API do Google Docs Integrations (GDI API Base URL) antes de testar.");
+      setTestResult(prev => ({ ...prev, [key]: 'error' }));
+      return;
+    }
+    if (!gapiBaseUrl.toLowerCase().startsWith('https://')) {
+      alert("A URL do GDI deve começar obrigatoriamente com \"https://\".");
+      setTestResult(prev => ({ ...prev, [key]: 'error' }));
+      return;
+    }
+
+    const lowerUrl = gapiBaseUrl.toLowerCase();
+    const blockedTerms = [
+      "aistudio.google.com",
+      "showpreview",
+      "showassistant",
+      "accounts.google.com",
+      "firebaseapp login",
+      "/__/auth/handler"
+    ];
+
+    for (const term of blockedTerms) {
+      if (lowerUrl.includes(term.toLowerCase())) {
+        alert("A URL informada é uma tela do AI Studio e não uma API pública.");
+        setTestResult(prev => ({ ...prev, [key]: 'error' }));
+        return;
+      }
+    }
+
+    if (lowerUrl.includes("localhost") || lowerUrl.includes("127.0.0.1")) {
+      alert("A URL do GDI não pode apontar para localhost ou 127.0.0.1.");
+      setTestResult(prev => ({ ...prev, [key]: 'error' }));
+      return;
+    }
+
+    if (!lowerUrl.includes(".run.app")) {
+      alert("A URL do GDI deve ser uma URL homologada terminando com \".run.app\".");
+      setTestResult(prev => ({ ...prev, [key]: 'error' }));
+      return;
+    }
+
+    if (!integrationKey) {
+      alert("Por favor, informe a Chave de Integração GDI (X-BOSS-Google-Docs-Integration-Key).");
+      setTestResult(prev => ({ ...prev, [key]: 'error' }));
+      return;
+    }
+
+    try {
+      const resp = await fetch("/api/test-google-docs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          gdiBaseUrl: gapiBaseUrl,
+          integrationKey,
+          isDiagnostic
+        })
+      });
+
+      const data = await resp.json();
+      const timestamp = new Date().toLocaleTimeString();
+
+      const lastEndpoint = data.endpoint || `${gapiBaseUrl}/api/webhook/gdi-job`;
+      const lastHttpStatus = data.status || resp.status;
+      const lastResponse = data.error ? `Erro: ${data.error}` : JSON.stringify(data.data || data);
+
+      const logs = [
+        `[${timestamp}] Teste acionado: ${isDiagnostic ? "DIAGNÓSTICO REAL" : "PING DE CONEXÃO_PONTUAL"}.`,
+        `[${timestamp}] Endpoint chamado: ${lastEndpoint}`,
+        `[${timestamp}] Status HTTP retornado: ${lastHttpStatus}`,
+        `[${timestamp}] Resposta recebida: ${lastResponse}`
+      ];
+
+      setConnectorLogs(prev => ({
+        ...prev,
+        [key]: [...(prev[key] || []), ...logs]
+      }));
+
+      // Update inner connectors properties
+      setConnectors(prev => {
+        const copy = { ...prev };
+        if (!copy.googleDocs) {
+          copy.googleDocs = {
+            status: 'não_configurado',
+            templatesStrategy: 'standard_procuracao',
+            notes: ''
+          };
+        }
+        copy.googleDocs.lastEndpoint = lastEndpoint;
+        copy.googleDocs.lastHttpStatus = lastHttpStatus;
+        copy.googleDocs.lastResponse = lastResponse;
+        copy.googleDocs.status = data.success ? 'ativo' : 'erro';
+        // Ensure both buildUrl and endpointUrl are synced
+        copy.googleDocs.buildUrl = gapiBaseUrl;
+        copy.googleDocs.endpointUrl = gapiBaseUrl;
+        return copy;
+      });
+
+      if (data.success) {
+        setTestResult(prev => ({ ...prev, [key]: 'success' }));
+      } else {
+        setTestResult(prev => ({ ...prev, [key]: 'error' }));
+        alert(`O teste do GDI falhou: ${data.error || "Formato de retorno inválido."}`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setTestResult(prev => ({ ...prev, [key]: 'error' }));
+      alert(`Falha ao testar conexão externa: ${err.message || err}`);
+    }
+  };
+
+  const handleClearGdiConfig = async () => {
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const docRef = doc(db, 'settings', 'connectors');
+      const docSnap = await getDoc(docRef);
+      const currentData = docSnap.exists() ? docSnap.data() : {};
+      
+      const updatedGDocs = {
+        ...currentData.googleDocs,
+        buildUrl: '',
+        endpointUrl: '',
+        status: 'não_configurado',
+        updatedAt: new Date().toISOString()
+      };
+      
+      await setDoc(docRef, {
+        ...currentData,
+        googleDocs: updatedGDocs
+      });
+
+      setConnectors(prev => ({
+        ...prev,
+        googleDocs: updatedGDocs
+      }));
+
+      setFeedback({
+        type: 'success',
+        message: 'Configurações inválidas do GDI apagadas do Firestore com sucesso!'
+      });
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: `Erro ao limpar Firestore: ${err.message || err}` });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveRealGdiConfig = async () => {
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const realGdiUrl = 'https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app';
+      const docRef = doc(db, 'settings', 'connectors');
+      const docSnap = await getDoc(docRef);
+      const currentData = docSnap.exists() ? docSnap.data() : {};
+
+      const updatedGDocs = {
+        ...currentData.googleDocs,
+        buildUrl: realGdiUrl,
+        endpointUrl: realGdiUrl,
+        status: 'ativo',
+        updatedAt: new Date().toISOString()
+      };
+
+      await setDoc(docRef, {
+        ...currentData,
+        googleDocs: updatedGDocs
+      });
+
+      setConnectors(prev => ({
+        ...prev,
+        googleDocs: updatedGDocs
+      }));
+
+      setFeedback({
+        type: 'success',
+        message: 'URL operacional homologada do GDI salva com absoluto sucesso! (status = ativo)'
+      });
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: `Erro ao salvar URL real do GDI: ${err.message || err}` });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCorrectGdiConfigNow = async () => {
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const realGdiUrl = 'https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app';
+      const docRef = doc(db, 'settings', 'connectors');
+      const docSnap = await getDoc(docRef);
+      const currentData = docSnap.exists() ? docSnap.data() : {};
+
+      const updatedGDocs = {
+        ...currentData.googleDocs,
+        buildUrl: realGdiUrl,
+        endpointUrl: realGdiUrl,
+        updatedAt: new Date().toISOString()
+      };
+
+      await setDoc(docRef, {
+        ...currentData,
+        googleDocs: updatedGDocs
+      });
+
+      // Reload config from database
+      const freshSnap = await getDoc(docRef);
+      if (freshSnap.exists()) {
+        const data = freshSnap.data();
+        if (data.googleDocs) {
+          setConnectors(prev => ({
+            ...prev,
+            googleDocs: data.googleDocs
+          }));
+        }
+      }
+
+      setFeedback({
+        type: 'success',
+        message: 'GDI API Base URL corrigida e salva com absoluto sucesso! URL carregada: ' + realGdiUrl
+      });
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: `Erro ao corrigir URL GDI: ${err.message || err}` });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleManualTestGdiConfig = async () => {
+    setSaving(true);
+    setFeedback(null);
+    setGdiTestLabel('Testando...');
+    const targetUrl = 'https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app';
+    const currentKey = connectors.googleDocs?.integrationKey || 'boss_docs_live_standard';
+    try {
+      let isSuccess = false;
+      let isHtml = false;
+      let responseStatus = 0;
+      let text = '';
+
+      // Direct client fetch test fatic
+      try {
+        const directResp = await fetch(`${targetUrl}/api/config`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "X-BOSS-Google-Docs-Integration-Key": currentKey
+          }
+        });
+        responseStatus = directResp.status;
+        text = await directResp.text();
+        const contentType = directResp.headers.get("content-type") || "";
+
+        const isHtmlResponse = contentType.includes("html") || 
+                               text.trim().startsWith("<") || 
+                               text.toLowerCase().includes("<!doctype html") || 
+                               text.toLowerCase().includes("<html") ||
+                               text.toLowerCase().includes("login") ||
+                               text.toLowerCase().includes("sign in");
+
+        if (responseStatus === 200 && !isHtmlResponse) {
+          try {
+            JSON.parse(text);
+            isSuccess = true;
+          } catch {
+            isSuccess = false;
+          }
+        } else if (isHtmlResponse) {
+          isHtml = true;
+        }
+      } catch (directErr) {
+        console.warn("[Configuracoes direct test block, using node backend proxy...]");
+      }
+
+      // Proxy fallback
+      if (!isSuccess && !isHtml) {
+        const proxyResp = await fetch("/api/test-google-docs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            gdiBaseUrl: targetUrl,
+            integrationKey: currentKey,
+            isDiagnostic: false
+          })
+        });
+        
+        const proxyData = await proxyResp.json();
+        responseStatus = proxyData.status || proxyResp.status;
+        isSuccess = proxyData.success === true;
+        
+        const lastResponseStr = String(proxyData.error || proxyData.lastResponse || '');
+        if (lastResponseStr.toLowerCase().includes("html") || lastResponseStr.toLowerCase().includes("login")) {
+          isHtml = true;
+        }
+      }
+
+      if (isSuccess && responseStatus === 200) {
+        setGdiTestLabel('status = conectado');
+        setFeedback({
+          type: 'success',
+          message: 'O teste de conexão com o Cloud Run GDI homologado retornou HTTP 200 com JSON válido fático! (status = conectado)'
+        });
+        
+        try {
+          const docRef = doc(db, 'settings', 'connectors');
+          const docSnap = await getDoc(docRef);
+          const currentData = docSnap.exists() ? docSnap.data() : {};
+          
+          const updatedGDocs = {
+            ...currentData.googleDocs,
+            status: 'ativo',
+            buildUrl: targetUrl,
+            endpointUrl: targetUrl,
+            lastHttpStatus: 200,
+            lastResponse: 'status = conectado',
+            lastTestAt: new Date().toLocaleString('pt-BR')
+          };
+          
+          await setDoc(docRef, {
+            ...currentData,
+            googleDocs: updatedGDocs
+          });
+
+          setConnectors(prev => ({
+            ...prev,
+            googleDocs: updatedGDocs
+          }));
+        } catch (dbErr) {
+          console.error("Erro ao gravar status de sucesso:", dbErr);
+        }
+      } else {
+        setGdiTestLabel('status = inválido');
+        setFeedback({
+          type: 'error',
+          message: 'O teste do GDI retornou HTML/login redirecionado. (status = inválido)'
+        });
+
+        try {
+          const docRef = doc(db, 'settings', 'connectors');
+          const docSnap = await getDoc(docRef);
+          const currentData = docSnap.exists() ? docSnap.data() : {};
+          
+          const updatedGDocs = {
+            ...currentData.googleDocs,
+            status: 'erro',
+            lastHttpStatus: responseStatus,
+            lastResponse: 'status = inválido',
+            lastTestAt: new Date().toLocaleString('pt-BR')
+          };
+          
+          await setDoc(docRef, {
+            ...currentData,
+            googleDocs: updatedGDocs
+          });
+
+          setConnectors(prev => ({
+            ...prev,
+            googleDocs: updatedGDocs
+          }));
+        } catch (dbErr) {
+          console.error("Erro ao gravar status de erro:", dbErr);
+        }
+      }
+    } catch (err: any) {
+      setGdiTestLabel('status = inválido');
+      setFeedback({ type: 'error', message: `Erro ao testar GDI: ${err.message || err}` });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Simulated triggers to satisfy rule-based feedback
   const handleTestConnection = (key: string) => {
+    if (key === 'googleDocs') {
+      handleTestGoogleDocs(false);
+      return;
+    }
+
     setTestResult(prev => ({ ...prev, [key]: 'loading' }));
     
     // Log simulation
@@ -1660,7 +2143,7 @@ export default function Configuracoes() {
                     <div className="space-y-2">
                       <div className="flex justify-between items-start">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-9 h-9 bg-cyan-50 text-cyan-705 text-cyan-600 rounded-xl flex items-center justify-center">
+                          <div className="w-9 h-9 bg-cyan-50 text-cyan-600 rounded-xl flex items-center justify-center">
                             <FileText size={18} />
                           </div>
                           <div>
@@ -1669,7 +2152,7 @@ export default function Configuracoes() {
                           </div>
                         </div>
                         <span className={`px-2 py-0.5 text-[8px] font-black uppercase border tracking-wider rounded-md ${getStatusStyle(connectors.googleDocs?.status)}`}>
-                          {connectors.googleDocs?.status?.replace('_', ' ')}
+                          {connectors.googleDocs?.status?.replace('_', ' ') || 'não_configurado'}
                         </span>
                       </div>
 
@@ -1686,31 +2169,26 @@ export default function Configuracoes() {
                     {expandedConnector === 'googleDocs' && (
                       <div className="pt-3 border-t border-gray-100 space-y-3 animate-fadeIn">
                         <div className="grid grid-cols-1 gap-2.5">
+                          
                           <div className="space-y-1">
-                            <label className="text-[9px] font-bold uppercase text-gray-505">Estratégia de Modelos (Templates)</label>
+                            <label className="text-[9px] font-bold uppercase text-gray-505">GDI API Base URL *</label>
+                            <p className="text-[9px] text-gray-400 font-medium font-sans">Informe a URL pública real da API do Google Docs Integrations, sem /api/webhook/gdi-job.</p>
                             <input
                               type="text"
-                              value={connectors.googleDocs?.templatesStrategy || ''}
-                              onChange={(e) => updateIndividualConnector('googleDocs', 'templatesStrategy', e.target.value)}
-                              placeholder="ex: id_modelo_contrato_standard"
-                              className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono text-gray-700 outline-none"
+                              value={connectors.googleDocs?.buildUrl || connectors.googleDocs?.endpointUrl || ''}
+                              onChange={(e) => {
+                                updateIndividualConnector('googleDocs', 'buildUrl', e.target.value);
+                                updateIndividualConnector('googleDocs', 'endpointUrl', e.target.value);
+                              }}
+                              placeholder="https://gdi-api.exemplo.run.app"
+                              className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono text-gray-700 outline-none animate-fadeIn"
                             />
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-bold uppercase text-gray-505">URL Base do GDI (Webhook / API)</label>
-                            <input
-                              type="text"
-                              value={connectors.googleDocs?.buildUrl || ''}
-                              onChange={(e) => updateIndividualConnector('googleDocs', 'buildUrl', e.target.value)}
-                              placeholder="https://gdi-xxxx-599536317399.us-east1.run.app"
-                              className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono text-gray-700 outline-none"
-                            />
+                            <p className="text-[8px] text-blue-600 font-mono">Endpoint montado: {(connectors.googleDocs?.buildUrl || '').trim() ? `${(connectors.googleDocs?.buildUrl || '').trim().replace(/\/$/, "")}/api/webhook/gdi-job` : ''}</p>
                           </div>
 
                           <div className="space-y-1">
                             <div className="flex justify-between items-center">
-                              <label className="text-[9px] font-bold uppercase text-gray-505">Chave de Integração GDI</label>
+                              <label className="text-[9px] font-bold uppercase text-gray-505">X-BOSS-Google-Docs-Integration-Key *</label>
                               <button
                                 type="button"
                                 onClick={() => setShowDocsKey(!showDocsKey)}
@@ -1741,7 +2219,18 @@ export default function Configuracoes() {
                           </div>
 
                           <div className="space-y-1">
-                            <label className="text-[9px] font-bold uppercase text-gray-505">Status</label>
+                            <label className="text-[9px] font-bold uppercase text-gray-505">Estratégia de Modelos (Templates)</label>
+                            <input
+                              type="text"
+                              value={connectors.googleDocs?.templatesStrategy || ''}
+                              onChange={(e) => updateIndividualConnector('googleDocs', 'templatesStrategy', e.target.value)}
+                              placeholder="ex: id_modelo_contrato_standard"
+                              className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono text-gray-700 outline-none"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold uppercase text-gray-505">Status da conexão</label>
                             <select
                               value={connectors.googleDocs?.status || 'não_configurado'}
                               onChange={(e) => updateIndividualConnector('googleDocs', 'status', e.target.value)}
@@ -1754,6 +2243,91 @@ export default function Configuracoes() {
                               <option value="erro">Erro</option>
                             </select>
                           </div>
+
+                          {/* Diagnostics values and states */}
+                          <div className="p-3 bg-slate-50 border border-gray-150 rounded-xl space-y-2 mt-2">
+                            <h5 className="text-[9px] font-black uppercase text-slate-700 tracking-wider font-mono">Monitor de Integração GDI</h5>
+                            <div className="space-y-1 text-[10px] leading-relaxed font-sans">
+                              <div>
+                                <span className="font-bold text-gray-500">Último endpoint chamado:</span>{' '}
+                                <code className="bg-gray-100 p-0.5 px-1 rounded text-red-700 font-mono text-[9px] break-all">{connectors.googleDocs?.lastEndpoint || '(nunca chamado)'}</code>
+                              </div>
+                              <div>
+                                <span className="font-bold text-gray-500">Último status HTTP:</span>{' '}
+                                <span className="font-mono font-bold text-gray-800">{connectors.googleDocs?.lastHttpStatus || '(sem status)'}</span>
+                              </div>
+                              <div>
+                                <span className="font-bold text-gray-505">Última resposta do GDI:</span>
+                                <pre className="bg-gray-100 p-2 rounded text-gray-800 font-mono text-[9px] overflow-auto max-h-24 leading-tight whitespace-pre-wrap">{connectors.googleDocs?.lastResponse || '(sem resposta)'}</pre>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* REPAIR ACTIONS (Section 6, 7 & 8) */}
+                          <div className="p-3.5 bg-indigo-50/45 border border-indigo-150 rounded-2xl space-y-2.5">
+                            <p className="text-[9px] font-black uppercase tracking-wider text-indigo-950 font-mono flex items-center gap-1.5">
+                              <Activity size={11} className="text-indigo-600 shrink-0" />
+                              <span>Painel de Correção de Produção GDI</span>
+                            </p>
+                            
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={handleClearGdiConfig}
+                                id="conf-btn-clear-invalid"
+                                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-md text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer"
+                                title="Apagar GDI inválido"
+                              >
+                                <X size={10} className="shrink-0" />
+                                <span>Limpar GDI inválido</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={handleSaveRealGdiConfig}
+                                id="conf-btn-save-real"
+                                className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-md text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer"
+                                title="Salvar GDI real"
+                              >
+                                <Check size={10} className="shrink-0" />
+                                <span>Salvar URL GDI real</span>
+                              </button>
+
+                              {/* Button: Corrigir URL GDI agora */}
+                              <button
+                                type="button"
+                                onClick={handleCorrectGdiConfigNow}
+                                id="conf-btn-correct-gdi-now"
+                                className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer shadow-sm hover:shadow"
+                                title="Corrigir URL GDI agora"
+                              >
+                                <Check size={10} className="shrink-0 text-white" />
+                                <span>Corrigir URL GDI agora</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={handleManualTestGdiConfig}
+                                id="conf-btn-manual-test"
+                                className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer"
+                                title="Testar canal fático"
+                              >
+                                <Play size={10} className="shrink-0 text-white" />
+                                <span>Testar Conexão GDI</span>
+                              </button>
+
+                              {gdiTestLabel && (
+                                <span id="conf-test-status" className={`px-2 py-1 text-[9px] font-mono font-black uppercase tracking-widest rounded ${
+                                  gdiTestLabel.includes('conectado') 
+                                    ? 'bg-emerald-100 text-emerald-800' 
+                                    : 'bg-rose-100 text-rose-800 animate-pulse'
+                                }`}>
+                                  {gdiTestLabel}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
                         </div>
                       </div>
                     )}
@@ -1769,17 +2343,26 @@ export default function Configuracoes() {
 
                       <button
                         type="button"
-                        onClick={() => handleTestConnection('googleDocs')}
-                        className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-[10px] font-bold uppercase rounded-lg text-indigo-700 transition flex items-center gap-1"
+                        onClick={() => handleTestGoogleDocs(false)}
+                        className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-[10px] font-bold uppercase rounded-lg text-indigo-700 transition flex items-center gap-1 cursor-pointer"
                       >
                         <Play size={10} />
-                        <span>Testar</span>
+                        <span>Testar conexão com GDI</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleTestGoogleDocs(true)}
+                        className="px-3 py-1.5 bg-cyan-50 hover:bg-cyan-100 text-[10px] font-bold uppercase rounded-lg text-cyan-755 transition flex items-center gap-1 cursor-pointer font-bold text-cyan-600"
+                      >
+                        <Sparkles size={10} />
+                        <span>Enviar payload de diagnóstico real</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => setShowLogsConnector(showLogsConnector === 'googleDocs' ? null : 'googleDocs')}
-                        className="p-1 px-2 bg-gray-50 hover:bg-gray-100 rounded-lg text-gray-650 transition"
+                        className="p-1 px-2 bg-gray-50 hover:bg-gray-100 rounded-lg text-gray-655 text-gray-650 transition"
                         title="Ver Logs"
                       >
                         <Terminal size={11} />

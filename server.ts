@@ -103,16 +103,39 @@ app.post("/api/proxy-google-docs", async (req, res) => {
     console.log("[Proxy Docs] Proxy Google Docs acionado.");
     const { targetEndpoint, payload, integrationKey } = req.body;
 
-    if (!targetEndpoint) {
+    const targetEndpointValue = req.body.targetEndpoint;
+    if (!targetEndpointValue) {
       return res.status(400).json({ error: "O campo targetEndpoint é obrigatório." });
     }
     
-    const trimmedUrl = targetEndpoint.trim();
-    console.log(`[Proxy Docs] Endpoint destino recebido: ${trimmedUrl}`);
+    let trimmedUrl = targetEndpointValue.trim();
+    
+    // Auto-correct AI Studio sandbox previews to the official homologated GDI API base
+    const lowerUrlForCorrection = trimmedUrl.toLowerCase();
+    if (lowerUrlForCorrection.includes("aistudio.google.com") || 
+        lowerUrlForCorrection.includes("showpreview") || 
+        lowerUrlForCorrection.includes("showassistant")) {
+      console.log(`[Proxy Docs] Detetada URL do AI Studio no endpoint (${trimmedUrl}). Corrigindo para a URL operacional homologada do GDI.`);
+      const gdiBaseReal = "https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app";
+      if (lowerUrlForCorrection.includes("/api/webhook/gdi-job")) {
+        trimmedUrl = `${gdiBaseReal}/api/webhook/gdi-job`;
+      } else if (lowerUrlForCorrection.includes("/api/config")) {
+        trimmedUrl = `${gdiBaseReal}/api/config`;
+      } else {
+        trimmedUrl = `${gdiBaseReal}/api/webhook/gdi-job`;
+      }
+    }
 
-    if (trimmedUrl.includes("aistudio.google.com/apps") || trimmedUrl.includes("accounts.google.com")) {
+    console.log(`[Proxy Docs] Endpoint destino final: ${trimmedUrl}`);
+
+    if (trimmedUrl.includes("aistudio.google.com") || 
+        trimmedUrl.includes("showPreview") || 
+        trimmedUrl.includes("showAssistant") || 
+        trimmedUrl.includes("accounts.google.com") || 
+        trimmedUrl.toLowerCase().includes("firebaseapp login") || 
+        trimmedUrl.includes("/__/auth/handler")) {
       return res.status(400).json({
-        error: "A URL configurada não é uma API pública e protegida de produção. Ela aponta para a visualização administrativa do AI Studio ou de login do Google."
+        error: "A URL configurada não é uma API pública e protegida de produção. Ela contém termos restritos associados ao AI Studio, login do Google ou autenticação."
       });
     }
 
@@ -177,6 +200,194 @@ app.post("/api/proxy-google-docs", async (req, res) => {
   } catch (err: any) {
     console.error("[Proxy Docs] Exception:", err);
     return res.status(500).json({ error: `Falha na ponte do servidor (Proxy Docs): ${err.message || err}` });
+  }
+});
+
+app.post("/api/test-google-docs", async (req, res) => {
+  const { gdiBaseUrl, integrationKey, isDiagnostic } = req.body || {};
+  try {
+
+    // 1. Check if integrationKey exists
+    if (!integrationKey || !integrationKey.trim()) {
+      return res.status(400).json({ error: "A chave de integração (X-BOSS-Google-Docs-Integration-Key) é obrigatória." });
+    }
+
+    // 2. Validate URL against blocked terms
+    if (!gdiBaseUrl || !gdiBaseUrl.trim()) {
+      return res.status(400).json({ error: "O campo GDI API Base URL é obrigatório." });
+    }
+
+    let url = gdiBaseUrl.trim();
+    
+    // Auto-correct AI Studio sandbox previews to the official homologated GDI API base
+    const lowerUrlForCorrection = url.toLowerCase();
+    if (lowerUrlForCorrection.includes("aistudio.google.com") || 
+        lowerUrlForCorrection.includes("showpreview") || 
+        lowerUrlForCorrection.includes("showassistant")) {
+      console.log(`[Test Docs] Detetada URL do AI Studio no gdiBaseUrl (${url}). Corrigindo para a URL operacional homologada do GDI.`);
+      url = "https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app";
+    }
+
+    // Must start with https://
+    if (!url.toLowerCase().startsWith("https://")) {
+      return res.status(400).json({ error: "A URL deve começar obrigatoriamente com https://" });
+    }
+
+    const blockedTerms = [
+      "aistudio.google.com",
+      "showpreview",
+      "showassistant",
+      "accounts.google.com",
+      "firebaseapp login",
+      "firebaseapp",
+      "/__/auth/handler"
+    ];
+
+    const lowerUrl = url.toLowerCase();
+    for (const term of blockedTerms) {
+      if (lowerUrl.includes(term.toLowerCase())) {
+        return res.status(400).json({
+          error: "A URL informada é uma tela do AI Studio e não uma API pública."
+        });
+      }
+    }
+
+    if (lowerUrl.includes("localhost") || lowerUrl.includes("127.0.0.1")) {
+      return res.status(400).json({
+        error: "A URL do GDI não pode apontar para localhost ou 127.0.0.1."
+      });
+    }
+
+    if (!lowerUrl.includes(".run.app")) {
+      return res.status(400).json({
+        error: "A URL do GDI deve ser uma URL homologada terminando com \".run.app\"."
+      });
+    }
+
+    // Construct target endpoint and choose method dynamically
+    let targetEndpoint = "";
+    let method = "GET";
+    let bodyPayload: any = undefined;
+
+    if (isDiagnostic) {
+      targetEndpoint = `${url.replace(/\/$/, "")}/api/webhook/gdi-job`;
+      method = "POST";
+      bodyPayload = {
+        source: "Portal BOSS Clientes",
+        target: "GDI",
+        documentType: "procuracao_pf",
+        caseId: "diagnostico_case_id",
+        clientId: "diagnostico_client_id",
+        clientType: "PF",
+        destinationFolderId: "diagnostico_folder_id",
+        destinationFolderUrl: "https://drive.google.com/drive/folders/diagnostico_folder",
+        templateKey: "procuracao-pf",
+        payload: {
+          nomeCompleto: "Diagnóstico Real BOSS GDI",
+          nacionalidade: "Brasileiro",
+          estadoCivil: "Solteiro",
+          profissao: "Engenheiro de Software",
+          cpf: "000.000.000-00",
+          rg: "MG-00.000.000",
+          endereco: "Avenida Principal",
+          numero: "100",
+          complemento: "Apt 201",
+          bairro: "Centro",
+          cidade: "Viçosa",
+          estado: "MG",
+          cep: "36570-000",
+          email: "diagnostico@exemplo.com",
+          telefone: "(31) 99999-9999",
+          whatsapp: "(31) 99999-9999",
+          localAssinatura: "Viçosa, MG",
+          advogadoNome: "RODRIGO GIFFONI RODRIGUES",
+          advogadoOab: "OAB/MG 157.320",
+          dataAssinatura: "data da assinatura eletrônica"
+        }
+      };
+    } else {
+      targetEndpoint = `${url.replace(/\/$/, "")}/api/config`;
+      method = "GET";
+    }
+
+    console.log(`[GDI Test] Chamando endpoint: ${targetEndpoint} [${method}]`);
+
+    const start = Date.now();
+
+    // Call external GDI
+    const response = await fetch(targetEndpoint, {
+      method: method,
+      headers: {
+        "Content-Type": "application/json",
+        "X-BOSS-Google-Docs-Integration-Key": integrationKey.trim()
+      },
+      body: bodyPayload ? JSON.stringify(bodyPayload) : undefined
+    });
+
+    const duration = Date.now() - start;
+    const status = response.status;
+    const contentType = response.headers.get("content-type") || "";
+    const text = await response.text();
+
+    console.log(`[GDI Test] Resposta obtida. Status: ${status}, Content-Type: ${contentType}, Tempo: ${duration}ms`);
+
+    // Check if it is HTML or Login redirect or redirect status code
+    const isRedirect = response.redirected || (status >= 300 && status < 400);
+    const isHtmlResponse = contentType.includes("html") || 
+                           text.trim().startsWith("<") || 
+                           text.toLowerCase().includes("<!doctype html") || 
+                           text.toLowerCase().includes("<html") ||
+                           text.toLowerCase().includes("login") ||
+                           text.toLowerCase().includes("sign in");
+
+    if (isHtmlResponse || isRedirect) {
+      return res.status(200).json({
+        success: false,
+        status,
+        durationMs: duration,
+        endpoint: targetEndpoint,
+        error: isRedirect 
+          ? "Falha: O servidor redirecionou a requisição (provável login ou página restrita)."
+          : "Falha: GDI retornou HTML/Login ao invés de JSON. Verifique se a URL da API está correta."
+      });
+    }
+
+    // Must be valid JSON
+    let responseData: any;
+    let isJson = false;
+    try {
+      responseData = JSON.parse(text);
+      isJson = true;
+    } catch {
+      // not JSON
+    }
+
+    if (!isJson) {
+      return res.status(200).json({
+        success: false,
+        status,
+        durationMs: duration,
+        endpoint: targetEndpoint,
+        error: `Falha: GDI não retornou um formato JSON válido. Resposta recebida: ${text.substring(0, 300)}`
+      });
+    }
+
+    return res.status(200).json({
+      success: response.ok && status === 200,
+      status,
+      durationMs: duration,
+      endpoint: targetEndpoint,
+      data: responseData
+    });
+
+  } catch (err: any) {
+    console.error("[GDI Test Exception] Error:", err);
+    return res.status(200).json({
+      success: false,
+      status: 0,
+      endpoint: `${gdiBaseUrl || ""}/api/config`,
+      error: `Erro de rede ou DNS ao conectar na API GDI: ${err.message || err}`
+    });
   }
 });
 

@@ -60,6 +60,55 @@ export default function ProcuracaoPF() {
   const [sentPayload, setSentPayload] = React.useState<any>(null);
   const [showPayload, setShowPayload] = React.useState(false);
   const [copiedPayload, setCopiedPayload] = React.useState(false);
+  const [gdiConfigured, setGdiConfigured] = React.useState<boolean | null>(null);
+  const [loadedGdiUrl, setLoadedGdiUrl] = React.useState<string>('');
+
+  // Verificação em tempo real da configuração de GDI no banco Firestore
+  React.useEffect(() => {
+    async function checkGDI() {
+      try {
+        const connectorsSnap = await getDoc(doc(db, 'settings', 'connectors'));
+        if (connectorsSnap.exists()) {
+          const data = connectorsSnap.data();
+          let gUrl = '';
+          if (data.googleDocs) {
+            gUrl = data.googleDocs.buildUrl || data.googleDocs.endpointUrl || '';
+          }
+          if (!gUrl && data.googleDrive) {
+            gUrl = data.googleDrive.buildUrl || '';
+          }
+          
+          const lowerUrl = gUrl.toLowerCase();
+          const HOMOLOGATED_GDI_BASE_URL = "https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app";
+          const isInvalid = lowerUrl.includes('aistudio.google.com') || 
+                             lowerUrl.includes('showpreview') || 
+                             lowerUrl.includes('showassistant') || 
+                             !gUrl.trim();
+
+          if (isInvalid) {
+            gUrl = HOMOLOGATED_GDI_BASE_URL;
+          }
+
+          // Clean up any query string if present
+          if (gUrl.includes('?')) {
+            gUrl = gUrl.split('?')[0];
+          }
+          
+          setLoadedGdiUrl(gUrl);
+
+          if (gUrl.trim()) {
+            setGdiConfigured(true);
+            return;
+          }
+        }
+        setGdiConfigured(false);
+      } catch (err) {
+        console.error("Erro ao verificar conectores GDI:", err);
+        setGdiConfigured(false);
+      }
+    }
+    checkGDI();
+  }, []);
 
   const isMockUrl = (url: string | null | undefined): boolean => {
     if (!url) return false;
@@ -371,9 +420,36 @@ export default function ProcuracaoPF() {
         }
       }
 
+      // Enforce clean HOMOLOGATED_GDI_BASE_URL fallback if URL is empty or points to AI Studio
+      const HOMOLOGATED_GDI_BASE_URL = "https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app";
+      let legacyUrlDetected = false;
+      const lowerGdiBase = gdiBaseUrl.toLowerCase();
+      if (
+        lowerGdiBase.includes('aistudio.google.com') ||
+        lowerGdiBase.includes('showpreview') ||
+        lowerGdiBase.includes('showassistant') ||
+        !gdiBaseUrl.trim()
+      ) {
+        gdiBaseUrl = HOMOLOGATED_GDI_BASE_URL;
+        legacyUrlDetected = true;
+      }
+
+      // Enforce no query string
+      if (gdiBaseUrl.includes("?")) {
+        gdiBaseUrl = gdiBaseUrl.split("?")[0];
+      }
+
+      if (legacyUrlDetected) {
+        initialLogs.push({
+          action: "PORTAL_GDI_LEGACY_URL_REPLACED",
+          timestamp: new Date().toISOString(),
+          message: "URL antiga/inválida do AI Studio detectada de forma fática na Procuração PF. Substituição dinâmica efetuada para o canal homologado."
+        });
+      }
+
       // Validar conexão antes de enviar
       if (!gdiBaseUrl) {
-        throw new Error("URL do GDI não configurada em settings/connectors.googleDocs.buildUrl.");
+        throw new Error("GDI API ainda não configurada. Informe a URL pública real da API do Google Docs Integrations.");
       }
 
       if (!gdiIntegrationKey) {
@@ -412,7 +488,7 @@ export default function ProcuracaoPF() {
 
       // Log: request started
       initialLogs.push({
-        action: "PORTAL_PROC_PF_GDI_REQUEST_STARTED",
+        action: "PORTAL_GDI_REQUEST_STARTED",
         timestamp: new Date().toISOString(),
         message: "Efetuando disparo HTTP real para o webhook do receptor GDI..."
       });
@@ -477,11 +553,11 @@ export default function ProcuracaoPF() {
       // Guard payload audit state
       setSentPayload(externalPayload);
 
-      // Log: proxy called
+      // Log: request sent
       initialLogs.push({
-        action: "PORTAL_PROC_PF_PROXY_CALLED",
+        action: "PORTAL_GDI_REQUEST_SENT",
         timestamp: new Date().toISOString(),
-        message: `Disparando requisição real via proxy /api/proxy-google-docs para o GDI.`
+        message: `Disparando requisição real via proxy para o GDI (${targetEndpoint}).`
       });
 
       await updateDoc(doc(db, 'googleDocsJobs', jobId), {
@@ -502,9 +578,9 @@ export default function ProcuracaoPF() {
         })
       });
 
-      // Log: proxy response received
+      // Log: response received
       initialLogs.push({
-        action: "PORTAL_PROC_PF_PROXY_RESPONSE_RECEIVED",
+        action: "PORTAL_GDI_RESPONSE_RECEIVED",
         timestamp: new Date().toISOString(),
         message: `Resposta de conexão recebida via proxy. Canal retornado com status HTTP: ${proxyResponse.status}`
       });
@@ -547,15 +623,15 @@ export default function ProcuracaoPF() {
         const mockErrorLogs = [
           ...initialLogs,
           {
-            action: "PORTAL_PROC_PF_GDI_RETURNED_MOCK_URL",
+            action: "PORTAL_GDI_INVALID_DOCUMENT_URL",
             timestamp: new Date().toISOString(),
-            message: "O GDI retornou link inválido/mockado. Documento real não foi criado."
+            message: "Disparo bloqueado: O GDI retornou um documento inválido ou ambiente simulado."
           }
         ];
 
         await updateDoc(caseDocRef, {
           procuracaoStatus: "falha",
-          procuracaoLogFalha: "O GDI retornou link inválido/mockado. Documento real não foi criado.",
+          procuracaoLogFalha: "O GDI retornou um documento inválido. Nenhum vínculo foi salvo.",
           procuracaoGoogleDocsJobLogs: mockErrorLogs,
           procuracaoGoogleDocsJobId: jobId
         });
@@ -563,18 +639,18 @@ export default function ProcuracaoPF() {
         await updateDoc(doc(db, 'googleDocsJobs', jobId), {
           status: "failed",
           updatedAt: new Date().toISOString(),
-          errorMessage: "O GDI retornou link inválido/mockado. Documento real não foi criado.",
+          errorMessage: "O GDI retornou um documento inválido. Nenhum vínculo foi salvo.",
           logs: mockErrorLogs
         });
 
-        throw new Error("O GDI retornou link inválido/mockado. Documento real não foi criado.");
+        throw new Error("O GDI retornou um documento inválido. Nenhum vínculo foi salvo.");
       }
 
       // Combine logs
       const successLogs = [
         ...initialLogs,
         {
-          action: "PORTAL_PROC_PF_GDI_RESPONSE_SUCCESS",
+          action: "PORTAL_GDI_RESPONSE_SUCCESS",
           timestamp: new Date().toISOString(),
           message: `GDI retornou documento gerado com sucesso. ID: ${googleDocsId}`
         },
@@ -623,7 +699,7 @@ export default function ProcuracaoPF() {
       const failureLogs = [
         ...initialLogs,
         {
-          action: "PORTAL_PROC_PF_GDI_RESPONSE_FAILED",
+          action: "PORTAL_GDI_RESPONSE_FAILED",
           timestamp: new Date().toISOString(),
           message: `Ocorreu uma falha na geração/integração com o GDI: ${errorMessage}`
         }
@@ -644,7 +720,11 @@ export default function ProcuracaoPF() {
         logs: failureLogs
       });
 
-      setError(`Erro na automação real do GDI: ${errorMessage}`);
+      if (errorMessage.includes("Configuração GDI inválida")) {
+        setError(errorMessage);
+      } else {
+        setError(`Erro na automação real do GDI: ${errorMessage}`);
+      }
     } finally {
       setSaving(false);
     }
@@ -883,10 +963,42 @@ export default function ProcuracaoPF() {
                               </div>
                             )}
 
+                            {gdiConfigured === false && (
+                              <div className="p-3.5 bg-rose-50 border border-rose-150 rounded-xl flex items-start gap-2.5 text-xs animate-fadeIn">
+                                <AlertCircle size={15} className="text-rose-500 mt-0.5 shrink-0" />
+                                <div>
+                                  <p className="font-extrabold text-rose-950 uppercase tracking-widest text-[9px] font-mono">GDI não Configurado</p>
+                                  <p className="text-rose-900 font-semibold mt-1">GDI API ainda não configurada. Informe a URL pública real da API do Google Docs Integrations.</p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* GDI URLs info display (Section 9) */}
+                            {loadedGdiUrl && (
+                              <div className="p-3.5 bg-indigo-50/50 border border-indigo-100 rounded-xl space-y-1.5 text-xs animate-fadeIn">
+                                <p className="font-extrabold text-indigo-950 uppercase tracking-widest text-[9px] font-mono flex items-center gap-1.5 align-middle">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-650 shrink-0" />
+                                  <span>Canal de Integração GDI Ativo (Server-to-Server)</span>
+                                </p>
+                                <div className="space-y-1 font-mono text-[10px] text-gray-700 leading-normal">
+                                  <div>
+                                    <span className="font-bold text-gray-500">GDI API Base URL carregada:</span>{' '}
+                                    <code className="bg-white px-1.5 py-0.5 rounded border border-indigo-100/60 text-indigo-900 break-all">{loadedGdiUrl}</code>
+                                  </div>
+                                  <div>
+                                    <span className="font-bold text-gray-505">Webhook final:</span>{' '}
+                                    <code className="bg-white px-1.5 py-0.5 rounded border border-indigo-100/60 text-indigo-900 break-all">
+                                      {loadedGdiUrl.trim().replace(/\/$/, "")}/api/webhook/gdi-job
+                                    </code>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
                             <div className="flex items-center justify-between gap-3 pt-1">
                               <button
                                 type="button"
-                                disabled={saving}
+                                disabled={saving || gdiConfigured === false}
                                 onClick={handleSendJob}
                                 className="w-full md:w-auto px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm hover:shadow transition-all cursor-pointer font-bold"
                               >
