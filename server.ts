@@ -297,6 +297,179 @@ app.post("/api/proxy-google-docs", async (req, res) => {
   }
 });
 
+// Live revalidation endpoint for GDI matching exact validations of Task 1
+app.post("/api/proxy-google-docs/revalidate", async (req, res) => {
+  try {
+    const { endpointUrl, integrationKey } = req.body || {};
+    if (!endpointUrl || !integrationKey) {
+      return res.status(400).json({
+        success: false,
+        error: "URL e chave de integração são obrigatórias para revalidação."
+      });
+    }
+
+    let url = endpointUrl.trim();
+    if (url.endsWith("/")) {
+      url = url.slice(0, -1);
+    }
+    if (url.includes("?")) {
+      url = url.split("?")[0];
+    }
+
+    // Safeguards for restricted domains (Task 8)
+    const lowerUrl = url.toLowerCase();
+    const blockedTerms = [
+      "aistudio.google.com",
+      "showpreview",
+      "showassistant",
+      "accounts.google.com",
+      "localhost",
+      "127.0.0.1",
+      "/__/auth/handler"
+    ];
+    for (const term of blockedTerms) {
+      if (lowerUrl.includes(term)) {
+        return res.status(200).json({
+          success: false,
+          error: `URL inválida: contém termo proibido (${term}).`,
+          failedEndpoint: url,
+          failedStatus: 400,
+          failedContentType: "text/plain",
+          failedResponseText: `Refusado por conter termo restrito (${term}).`
+        });
+      }
+    }
+
+    const healthUrl = `${url}/api/health`;
+    const webhookReadyUrl = `${url}/api/webhook/gdi-job`;
+
+    const incomingCookie = req.headers["cookie"] || "";
+    const headers = {
+      "X-BOSS-Google-Docs-Integration-Key": integrationKey.trim(),
+      "Accept": "application/json"
+    };
+
+    console.log(`[PORTAL_GDI_LIVE_REVALIDATION_STARTED] Server calling GET ${healthUrl}`);
+    let healthText = "";
+    let healthStatus = 0;
+    let healthContentType = "";
+    try {
+      const { response, text } = await smartFetch(healthUrl, { method: "GET", headers }, incomingCookie);
+      healthStatus = response.status;
+      healthContentType = response.headers.get("content-type") || "";
+      healthText = text;
+    } catch (e: any) {
+      healthStatus = 0;
+      healthText = e.message || String(e);
+    }
+
+    console.log(`[PORTAL_GDI_LIVE_REVALIDATION_STARTED] Server calling GET ${webhookReadyUrl}`);
+    let webhookText = "";
+    let webhookStatus = 0;
+    let webhookContentType = "";
+    try {
+      const { response, text } = await smartFetch(webhookReadyUrl, { method: "GET", headers }, incomingCookie);
+      webhookStatus = response.status;
+      webhookContentType = response.headers.get("content-type") || "";
+      webhookText = text;
+    } catch (e: any) {
+      webhookStatus = 0;
+      webhookText = e.message || String(e);
+    }
+
+    // Parse & Validate health JSON (success === true, status === "operational", service === "gdi", webhook === "/api/webhook/gdi-job")
+    let healthJson: any = null;
+    let healthValid = false;
+    try {
+      healthJson = JSON.parse(healthText);
+      healthValid = (
+        healthJson &&
+        healthJson.success === true &&
+        healthJson.status === "operational" &&
+        healthJson.service === "gdi" &&
+        healthJson.webhook === "/api/webhook/gdi-job"
+      );
+    } catch (e) {
+      // not JSON
+    }
+
+    // Parse & Validate webhook ready JSON (success === true, status === "ready", service === "gdi", expectedMethod === "POST")
+    let webhookJson: any = null;
+    let webhookValid = false;
+    try {
+      webhookJson = JSON.parse(webhookText);
+      webhookValid = (
+        webhookJson &&
+        webhookJson.success === true &&
+        webhookJson.status === "ready" &&
+        webhookJson.service === "gdi" &&
+        webhookJson.expectedMethod === "POST"
+      );
+    } catch (e) {
+      // not JSON
+    }
+
+    if (healthValid && webhookValid) {
+      console.log("[PORTAL_GDI_LIVE_REVALIDATION_SUCCESS] Dual server checks passed operational criteria.");
+      return res.status(200).json({
+        success: true,
+        healthUrl,
+        webhookReadyUrl
+      });
+    }
+
+    // Formulate descriptive error diagnostics (Task 2)
+    let errorDetail = "";
+    let failedEndpoint = "";
+    let failedStatus = 0;
+    let failedContentType = "";
+    let failedResponseText = "";
+
+    if (!healthValid) {
+      failedEndpoint = healthUrl;
+      failedStatus = healthStatus;
+      failedContentType = healthContentType;
+      failedResponseText = healthText;
+      if (healthStatus === 0) {
+        errorDetail = `Serviço inacessível ou falha de rede ao conectar no healthcheck. Erro: ${healthText}`;
+      } else if (!healthJson) {
+        errorDetail = `O GDI não retornou JSON válido no healthcheck (Status HTTP: ${healthStatus}).`;
+      } else {
+        errorDetail = `GDI respondeu JSON mas violou os campos operacionais requeridos (sucesso: ${healthJson.success}, status: ${healthJson.status}, service: ${healthJson.service}, webhook: ${healthJson.webhook}).`;
+      }
+    } else {
+      failedEndpoint = webhookReadyUrl;
+      failedStatus = webhookStatus;
+      failedContentType = webhookContentType;
+      failedResponseText = webhookText;
+      if (webhookStatus === 0) {
+        errorDetail = `Serviço inacessível ou falha de rede ao conectar no webhook check. Erro: ${webhookText}`;
+      } else if (!webhookJson) {
+        errorDetail = `O GDI não retornou JSON válido no webhook check (Status HTTP: ${webhookStatus}).`;
+      } else {
+        errorDetail = `GDI respondeu JSON no webhook check mas violou campos (sucesso: ${webhookJson.success}, status: ${webhookJson.status}, service: ${webhookJson.service}, expectedMethod: ${webhookJson.expectedMethod}).`;
+      }
+    }
+
+    console.warn(`[PORTAL_GDI_LIVE_REVALIDATION_FAILED] ${errorDetail}`);
+
+    return res.status(200).json({
+      success: false,
+      error: errorDetail,
+      failedEndpoint,
+      failedStatus,
+      failedContentType,
+      failedResponseText: failedResponseText.substring(0, 500)
+    });
+  } catch (err: any) {
+    console.error("[PORTAL_GDI_LIVE_REVALIDATION_FAILED] Exception:", err);
+    return res.status(500).json({
+      success: false,
+      error: `Erro estrutural no proxy de revalidação: ${err.message}`
+    });
+  }
+});
+
 // Dedicated health-check endpoint for validating GDI integrations
 app.post("/api/proxy-google-docs/health-check", async (req, res) => {
   try {
