@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { doc, getDoc, setDoc, updateDoc, query, collection, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
+import { normalizeGdiStatus } from '../../../../lib/integrations/googleDocsStatus';
 
 export default function ProcuracaoPF() {
   const {
@@ -74,72 +75,65 @@ export default function ProcuracaoPF() {
   const [attemptStartedAt, setAttemptStartedAt] = React.useState<string | null>(null);
   const [showGenerationError, setShowGenerationError] = React.useState<boolean>(false);
 
-  // Verificação em tempo real da configuração de GDI no banco Firestore (sem qualquer fallback ou mutação indesejada)
+  // Verificação em tempo real da configuração de GDI no banco Firestore via onSnapshot (TAREFA 8 & TAREFA 7 & TAREFA 2)
   React.useEffect(() => {
-    async function checkGDI() {
+    const unsub = onSnapshot(doc(db, 'settings', 'connectors'), async (snapshot) => {
       try {
-        const connectorsSnap = await getDoc(doc(db, 'settings', 'connectors'));
-        if (connectorsSnap.exists()) {
-          const data = connectorsSnap.data();
-          let gUrl = '';
-          let gStatus = 'não_configurado';
+        if (snapshot.exists()) {
+          const data = snapshot.data();
           if (data.googleDocs) {
-            gUrl = data.googleDocs.endpointUrl || '';
-            gStatus = data.googleDocs.status || 'não_configurado';
-            setGoogleDocsConfig(data.googleDocs);
-          }
+            // TAREFA 7 - Migrar status legado "ativo" para "operacional" de forma resiliente
+            const rawStatus = data.googleDocs.status;
+            const lastHttp = data.googleDocs.lastHttpStatus;
+            if (rawStatus === "ativo" && (lastHttp === 200 || lastHttp === "200")) {
+              console.log("[Migration] PORTAL_GDI_LEGACY_STATUS_NORMALIZED");
+              try {
+                await updateDoc(doc(db, 'settings', 'connectors'), {
+                  "googleDocs.status": "operacional",
+                  "googleDocs.integrationOperationalStatus": "operacional",
+                  "googleDocs.lastHealthCheckStatus": "operational",
+                  "googleDocs.lastHttpStatus": 200,
+                  "googleDocs.lastHttpStatusReceived": 200,
+                  "googleDocs.lastServerToServerResult": "Migrado automaticamente do estado legado ativo para operacional.",
+                  "googleDocs.updatedAt": new Date().toISOString()
+                });
+                return; // Let the next snapshot trigger handle normal loading
+              } catch (migrationErr) {
+                console.error("Erro na migração automática de conector GDI:", migrationErr);
+              }
+            }
 
-          const lowerUrl = gUrl.toLowerCase();
-          const isInvalid = lowerUrl.includes('aistudio.google.com') || 
-                            lowerUrl.includes('showpreview') || 
-                            lowerUrl.includes('showassistant') || 
-                            lowerUrl.includes('accounts.google.com') ||
-                            lowerUrl.includes('localhost') ||
-                            lowerUrl.includes('127.0.0.1') ||
-                            lowerUrl.includes('/__/auth/handler') ||
-                            !gUrl.trim();
-
-          setGdiStatus(gStatus);
-
-          if (isInvalid) {
-            setLoadedGdiUrl('');
-            setGdiConfigured(false);
-            return;
-          }
-
-          // Clean up any query string if present
-          if (gUrl.includes('?')) {
-            gUrl = gUrl.split('?')[0];
-          }
-          
-          setLoadedGdiUrl(gUrl);
-          
-          // O conector só é considerado habilitado e configurado se o status for exatamente 'operacional'
-          // ou se for o status legado 'ativo' com lastHealthCheckStatus indicando operational/success ou se status code for 200
-          const isGdiOperational = gStatus === 'operacional' || 
-            (gStatus === 'ativo' && (
-              data.googleDocs?.lastHealthCheckStatus === 'operational' || 
-              data.googleDocs?.lastHealthCheckStatus === 'success' ||
-              data.googleDocs?.lastHttpStatus === 200 ||
-              data.googleDocs?.lastHttpStatus === '200'
-            ));
-
-          if (isGdiOperational) {
-            setGdiConfigured(true);
+            // Normalização unificada via utilitário de fonte única (TAREFA 1 & TAREFA 2)
+            const statusInfo = normalizeGdiStatus(data.googleDocs);
+            setGdiStatus(statusInfo.normalizedStatus);
+            setLoadedGdiUrl(statusInfo.endpointUrl);
+            setGdiConfigured(statusInfo.isOperational);
+            setGoogleDocsConfig({
+              ...data.googleDocs,
+              normalizedStatus: statusInfo.normalizedStatus,
+              operationalReason: statusInfo.reason,
+              targetEndpoint: statusInfo.targetEndpoint
+            });
           } else {
             setGdiConfigured(false);
+            setGdiStatus('não_configurado');
+            setGoogleDocsConfig(null);
           }
         } else {
           setGdiConfigured(false);
           setGdiStatus('não_configurado');
+          setGoogleDocsConfig(null);
         }
       } catch (err) {
-        console.error("Erro ao verificar conectores GDI:", err);
+        console.error("Erro ao escutar conectores GDI:", err);
         setGdiConfigured(false);
         setGdiStatus('não_configurado');
       }
-    }
-    checkGDI();
+    }, (err) => {
+      console.error("Erro na escuta de settings/connectors:", err);
+    });
+
+    return () => unsub();
   }, []);
 
   const isMockUrl = (url: string | null | undefined): boolean => {
@@ -261,23 +255,16 @@ export default function ProcuracaoPF() {
       if (connectorsSnap.exists()) {
         const data = connectorsSnap.data();
         if (data.googleDocs) {
-          setGoogleDocsConfig(data.googleDocs);
-          setGdiStatus(data.googleDocs.status || 'não_configurado');
-          const gUrl = data.googleDocs.endpointUrl || '';
-          const gStatus = data.googleDocs.status || 'não_configurado';
-          const isGdiOperational = gStatus === 'operacional' || 
-            (gStatus === 'ativo' && (
-              data.googleDocs.lastHealthCheckStatus === 'operational' || 
-              data.googleDocs.lastHealthCheckStatus === 'success' ||
-              data.googleDocs.lastHttpStatus === 200 ||
-              data.googleDocs.lastHttpStatus === '200'
-            ));
-          setLoadedGdiUrl(gUrl);
-          if (!isGdiOperational) {
-            setGdiConfigured(false);
-          } else {
-            setGdiConfigured(true);
-          }
+          const statusInfo = normalizeGdiStatus(data.googleDocs);
+          setGdiStatus(statusInfo.normalizedStatus);
+          setLoadedGdiUrl(statusInfo.endpointUrl);
+          setGdiConfigured(statusInfo.isOperational);
+          setGoogleDocsConfig({
+            ...data.googleDocs,
+            normalizedStatus: statusInfo.normalizedStatus,
+            operationalReason: statusInfo.reason,
+            targetEndpoint: statusInfo.targetEndpoint
+          });
         }
       }
       setSuccess("Configuração do GDI revalidada com sucesso!");
@@ -708,65 +695,25 @@ export default function ProcuracaoPF() {
     try {
       // Fetch GDI connection settings from Firestore
       const connectorsSnap = await getDoc(doc(db, 'settings', 'connectors'));
-      let gdiBaseUrl = '';
-      let gdiIntegrationKey = '';
-      let gdiStatus = 'não_configurado';
-      let lastHealthCheckStatus = '';
-      let lastHttpStatus: any = null;
+      let googleDocs: any = null;
 
       if (connectorsSnap.exists()) {
         const data = connectorsSnap.data();
-        if (data.googleDocs) {
-          gdiBaseUrl = data.googleDocs.endpointUrl || '';
-          gdiIntegrationKey = data.googleDocs.integrationKey || '';
-          gdiStatus = data.googleDocs.status || 'não_configurado';
-          lastHealthCheckStatus = data.googleDocs.lastHealthCheckStatus || '';
-          lastHttpStatus = data.googleDocs.lastHttpStatus;
-        }
+        googleDocs = data.googleDocs;
       }
 
-      // Validar se está operacional/ativo antes de prosseguir faticamente
-      const isGdiOperational = gdiStatus === 'operacional' || 
-        (gdiStatus === 'ativo' && (
-          lastHealthCheckStatus === 'operational' || 
-          lastHealthCheckStatus === 'success' ||
-          lastHttpStatus === 200 ||
-          lastHttpStatus === '200'
-        ));
+      const statusInfo = normalizeGdiStatus(googleDocs);
 
-      if (!isGdiOperational) {
-         throw new Error("Integração Google Docs/GDI não homologada. Acesse Configurações > Integrações Google Docs e execute Diagnosticar GDI.");
+      if (!statusInfo.isOperational) {
+        throw new Error(statusInfo.reason || "Integração Google Docs/GDI não homologada. Acesse Configurações > Integrações Google Docs e execute Diagnosticar GDI.");
       }
 
-      // Validar conexão antes de enviar
-      if (!gdiBaseUrl) {
-         throw new Error("GDI API ainda não configurada. Por favor, acesse Configurações > Integrações e configure o barramento de integração Google Docs.");
-      }
+      let gdiBaseUrl = statusInfo.endpointUrl;
+      const gdiIntegrationKey = (googleDocs?.integrationKey || '').trim();
 
-      const lowerGdiBase = gdiBaseUrl.toLowerCase();
-      if (
-        lowerGdiBase.includes('aistudio.google.com') ||
-        lowerGdiBase.includes('showpreview') ||
-        lowerGdiBase.includes('showassistant') ||
-        lowerGdiBase.includes('accounts.google.com') ||
-        lowerGdiBase.includes('localhost') ||
-        lowerGdiBase.includes('127.0.0.1') ||
-        lowerGdiBase.includes('/__/auth/handler')
-      ) {
-         throw new Error("A URL do GDI configurada em Configurações > Integrações não é uma API válida (retornou HTML). Por favor, use a URL pública real do webhook do GDI.");
-      }
-
-      // Enforce no query string
+      // Clean query string from GDI URL
       if (gdiBaseUrl.includes("?")) {
         gdiBaseUrl = gdiBaseUrl.split("?")[0];
-      }
-
-      if (!gdiIntegrationKey) {
-        throw new Error("Chave de integração do GDI não configurada em settings/connectors.googleDocs.integrationKey.");
-      }
-
-      if (!gdiBaseUrl.toLowerCase().startsWith('http://') && !gdiBaseUrl.toLowerCase().startsWith('https://')) {
-        throw new Error("A URL do GDI precisa começar com http ou https.");
       }
 
       const payload = {
@@ -1315,17 +1262,25 @@ export default function ProcuracaoPF() {
                             {gdiConfigured === false && (
                               <div className="p-3.5 bg-rose-50 border border-rose-150 rounded-xl flex items-start gap-2.5 text-xs animate-fadeIn">
                                 <AlertCircle size={15} className="text-rose-500 mt-0.5 shrink-0" />
-                                <div>
+                                <div className="space-y-1 w-full">
                                   <p className="font-extrabold text-rose-950 uppercase tracking-widest text-[9px] font-mono">GDI Desabilitado ou Não Homologado</p>
                                   <p className="text-rose-900 font-semibold mt-1">
-                                    {gdiStatus === 'não_configurado' ? 'O barramento GDI ainda não foi configurado.' :
-                                     gdiStatus === 'invalida' ? 'A URL configurada do GDI foi classificada como Inválida.' :
-                                     gdiStatus === 'parcial' ? 'A conexão com o GDI está marcada como Parcial (sem homologação de ambas as rotas).' :
-                                     gdiStatus === 'erro' ? 'A conexão com o GDI apresentou erros impeditivos de transmissão.' :
-                                     'A integração externa não está em status Ativo no sistema administrativo.'}
+                                    O barramento de emissão do GDI não está elegível para solicitações automáticas.
                                   </p>
-                                  <p className="text-rose-750 font-bold mt-1 text-[11px]">
-                                    Vá em <strong className="font-extrabold uppercase">Configurações &gt; Integrações (Google Docs)</strong> para submeter o endpoint a um Diagnóstico fático de API real e ativar o barramento de produção.
+                                  
+                                  <div className="mt-2 bg-white/70 p-2.5 rounded-lg border border-rose-200/50 font-mono text-[10px] text-rose-950 space-y-1">
+                                    <div><span className="font-bold text-rose-900 font-mono uppercase tracking-wide text-[9px]">Status lido no Firestore:</span> <span className="font-bold text-rose-800">{googleDocsConfig?.status || 'não_configurado'}</span></div>
+                                    <div><span className="font-bold text-rose-900 font-mono uppercase tracking-wide text-[9px]">Status normalizado:</span> <span className="font-bold text-rose-800">{gdiStatus}</span></div>
+                                    <div><span className="font-bold text-rose-900 font-mono uppercase tracking-wide text-[9px]">Endpoint:</span> <code className="bg-rose-50/50 px-1 rounded border border-rose-100 font-bold block overflow-x-auto my-0.5 py-0.5">{googleDocsConfig?.endpointUrl || 'N/A'}</code></div>
+                                    <div><span className="font-bold text-rose-900 font-mono uppercase tracking-wide text-[9px]">Chave presente:</span> <span className="font-bold text-rose-800">{googleDocsConfig?.integrationKey ? 'Sim' : 'Não'}</span></div>
+                                    <div className="pt-1.5 mt-1 border-t border-rose-150 leading-relaxed text-[11px] text-rose-900">
+                                      <span className="font-extrabold text-rose-950 font-mono uppercase tracking-wide text-[9px] block">Motivo do Rejeite:</span>
+                                      {googleDocsConfig?.operationalReason || 'Nenhum motivo de rejeição especificado.'}
+                                    </div>
+                                  </div>
+
+                                  <p className="text-rose-750 font-bold mt-1.5 text-[11px]">
+                                    Acesse <strong className="font-extrabold uppercase text-rose-900">Configurações &gt; Integrações (Google Docs)</strong> para submeter o endpoint a um Diagnóstico fático de API real e restaurar a conformidade de comunicação do Portal.
                                   </p>
                                 </div>
                               </div>

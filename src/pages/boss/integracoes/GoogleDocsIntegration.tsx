@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
+import { normalizeGdiStatus } from '../../../lib/integrations/googleDocsStatus';
 import { BossLayout } from '../../../components/Layout';
 import { 
   FileText, 
@@ -176,12 +177,12 @@ export default function GoogleDocsIntegration() {
       let errorMsgValue = '';
       let successMsgValue = '';
 
-      if (data.integrationOperationalStatus === 'operacional') {
+      const isSuccessful = data.integrationOperationalStatus === 'operacional';
+
+      if (isSuccessful) {
         newStatus = 'operacional';
         diagMsg = 'Canal fático de API diagnosticado como 100% OP e homologado para emissão real.';
         successMsgValue = `Sucesso em ${timestamp}: Conexão homologada com sucesso no endpoint.`;
-        setDiagnosticState('operacional');
-        setDiagnosticMessage(`Diagnóstico de Conexão Bem-Sucedido: O canal está 100% operacional no endpoint configurado!`);
         setFeedback({
           type: 'success',
           message: 'Excelente! O diagnóstico fático confirmou que a API e o barramento do GDI estão 🟢 Operacionais.'
@@ -189,10 +190,8 @@ export default function GoogleDocsIntegration() {
         setLogs(prev => [...prev, `[${timestamp}] Diagnóstico concluído com sucesso (STATUS: 🟢 Operacional).`]);
       } else if (data.integrationOperationalStatus === 'preview_server_to_server_blocked') {
         newStatus = 'erro';
-        diagMsg = 'O GDI pode estar acessível no navegador preview, mas o backend do Portal não conseguiu comunicação server-to-server com o runtime do GDI.';
+        diagMsg = 'O GDI pode estar acessível no navegador preview, mas o backend do Portal não conseguiu comunicação server-to-server with o runtime do GDI.';
         errorMsgValue = `Erro de Conexão (OAuth/Iframe Block - preview_server_to_server_blocked) em ${timestamp}`;
-        setDiagnosticState('erro');
-        setDiagnosticMessage(`Diagnóstico Negado: O GDI pode estar acessível no navegador preview, mas o backend do Portal não conseguiu comunicação server-to-server com o runtime do GDI devido ao bloqueio de proxy do preview.`);
         setFeedback({
           type: 'error',
           message: 'Bloqueio de Preview detectado: O backend do Portal recebeu resposta de redirecionamento ou login ao tentar falar com o GDI (Sessão não compartilhada server-to-server).'
@@ -201,8 +200,6 @@ export default function GoogleDocsIntegration() {
       } else if (data.integrationOperationalStatus === 'endpoint_publico_ok') {
         newStatus = 'parcial';
         diagMsg = data.lastPreviewWarning || 'O barramento respondeu, mas sem o contrato completo do GDI.';
-        setDiagnosticState('parcial');
-        setDiagnosticMessage(`Diagnóstico Parcial: O barramento respondeu, mas o contrato JSON está incompleto.`);
         setFeedback({
           type: 'error',
           message: 'Conexão Parcial: Endpoint respondeu, mas falhou na validação de contrato/JSON GDI.'
@@ -212,8 +209,6 @@ export default function GoogleDocsIntegration() {
         newStatus = 'erro';
         diagMsg = data.lastPreviewWarning || 'Falha de conexão com os barramentos do GDI.';
         errorMsgValue = `Erro de Conexão em ${timestamp}: ${data.lastServerToServerResult}`;
-        setDiagnosticState('erro');
-        setDiagnosticMessage(`Diagnóstico Falhou: ${data.lastServerToServerResult}`);
         setFeedback({
           type: 'error',
           message: `O diagnóstico fático falhou: ${data.lastPreviewWarning || 'Impossível mapear GDI.'}`
@@ -221,31 +216,33 @@ export default function GoogleDocsIntegration() {
         setLogs(prev => [...prev, `[${timestamp}] Falha no diagnóstico de barramento fático: ${data.lastServerToServerResult}`]);
       }
 
-      // Save updated configuration structure directly into Firestore as required by TAREFA 4
+      // Save updated configuration structure directly into Firestore canonically as required by TAREFA 4 & TAREFA 6
       const docRef = doc(db, 'settings', 'connectors');
       const docSnap = await getDoc(docRef);
       const currentData = docSnap.exists() ? docSnap.data() : {};
+      
       const updatedGDocs = {
         ...currentData.googleDocs,
         endpointUrl: targetUrl,
         integrationKey: integrationKey,
         status: newStatus,
+        integrationOperationalStatus: data.integrationOperationalStatus || (isSuccessful ? 'operacional' : 'erro'),
+        lastHealthCheckStatus: isSuccessful ? 'operational' : String((data.teste2 && data.teste2.httpStatus) || ''),
+        lastHttpStatus: isSuccessful ? 200 : ((data.teste2 && data.teste2.httpStatus) || 500),
+        lastHttpStatusReceived: isSuccessful ? 200 : ((data.teste2 && data.teste2.httpStatus) || 500),
         lastDiagnostic: diagMsg,
         lastError: errorMsgValue || currentData.googleDocs?.lastError || '',
         lastSuccess: successMsgValue || currentData.googleDocs?.lastSuccess || '',
         lastEndpointTested: targetUrl,
         lastContentTypeReceived: (data.teste2 && data.teste2.contentType) || 'application/json',
-        lastHttpStatusReceived: (data.teste2 && data.teste2.httpStatus) || 200,
         lastHealthCheckAt: timestamp,
-        lastHealthCheckStatus: String((data.teste2 && data.teste2.httpStatus) || ''),
         lastHealthCheckError: errorMsgValue || '',
         lastValidatedWebhookUrl: data.lastValidatedWebhookUrl || `${targetUrl}/api/webhook/gdi-job`,
         transportMode: 'http_webhook',
         environmentMode: data.environmentMode || 'production_server_to_server',
-        integrationOperationalStatus: data.integrationOperationalStatus || 'erro',
         lastPreviewWarning: data.lastPreviewWarning || '',
         lastServerToServerTestAt: data.lastServerToServerTestAt || new Date().toISOString(),
-        lastServerToServerResult: data.lastServerToServerResult || '',
+        lastServerToServerResult: isSuccessful ? "Sucesso: ambos os endpoints do GDI responderam JSON válido." : (data.lastServerToServerResult || ''),
         lastReceivedByGdiConfirmed: data.lastReceivedByGdiConfirmed || currentData.googleDocs?.lastReceivedByGdiConfirmed || 'não_confirmado',
         authProxyDetected: data.authProxyDetected || false,
         updatedAt: new Date().toISOString()
@@ -256,10 +253,17 @@ export default function GoogleDocsIntegration() {
         googleDocs: updatedGDocs
       });
 
+      // Normalize GDI status to update client-side state dynamically (TAREFA 3)
+      const statusInfo = normalizeGdiStatus(updatedGDocs);
+
       setConfig(prev => ({
         ...prev,
-        ...updatedGDocs
+        ...updatedGDocs,
+        status: statusInfo.normalizedStatus === 'operacional' ? 'operacional' : updatedGDocs.status
       }));
+
+      setDiagnosticState(statusInfo.normalizedStatus === 'preview_bloqueado' ? 'erro' : (statusInfo.normalizedStatus as any));
+      setDiagnosticMessage(statusInfo.reason);
 
     } catch (err: any) {
       setDiagnosticState('parcial');
@@ -421,35 +425,44 @@ export default function GoogleDocsIntegration() {
         setConnectionTestLabel('status = conectado');
         setFeedback({
           type: 'success',
-          message: 'O teste de conexão GDI com o Cloud Run retornou código HTTP 200 e JSON válido! (status = conectado)'
+          message: 'O teste de conexão GDI com o Cloud Run retornou código HTTP 200 e JSON válido! (status = operacional)'
         });
         
-        // Save test result silently in Firestore
+        // Save test result silently in Firestore with canonical values as required by TAREFA 5
         try {
           const docRef = doc(db, 'settings', 'connectors');
           const docSnap = await getDoc(docRef);
           const currentData = docSnap.exists() ? docSnap.data() : {};
           
+          const updatedGDocs = {
+            ...currentData.googleDocs,
+            endpointUrl: targetUrl,
+            status: 'operacional',
+            integrationOperationalStatus: 'operacional',
+            lastHealthCheckStatus: 'operational',
+            lastHttpStatus: 200,
+            lastHttpStatusReceived: 200,
+            lastServerToServerResult: 'Sucesso: ping fático manual do GDI respondeu 200 e JSON válido.',
+            lastResponse: 'status = conectado',
+            lastTestAt: new Date().toLocaleString('pt-BR'),
+            updatedAt: new Date().toISOString()
+          };
+
           await setDoc(docRef, {
             ...currentData,
-            googleDocs: {
-              ...currentData.googleDocs,
-              status: 'ativo',
-              endpointUrl: targetUrl,
-              lastHttpStatus: 200,
-              lastResponse: 'status = conectado',
-              lastTestAt: new Date().toLocaleString('pt-BR')
-            }
+            googleDocs: updatedGDocs
           });
           
+          const statusInfo = normalizeGdiStatus(updatedGDocs);
+
           setConfig(prev => ({
             ...prev,
-            status: 'ativo',
-            endpointUrl: targetUrl,
-            lastHttpStatus: 200,
-            lastResponse: 'status = conectado',
-            lastTestAt: new Date().toLocaleString('pt-BR')
+            ...updatedGDocs,
+            status: statusInfo.normalizedStatus === 'operacional' ? 'operacional' : updatedGDocs.status
           }));
+
+          setDiagnosticState(statusInfo.normalizedStatus === 'preview_bloqueado' ? 'erro' : (statusInfo.normalizedStatus as any));
+          setDiagnosticMessage(statusInfo.reason);
         } catch (dbErr) {
           console.error("[Manual test state write failure]:", dbErr);
         }
@@ -465,24 +478,30 @@ export default function GoogleDocsIntegration() {
           const docSnap = await getDoc(docRef);
           const currentData = docSnap.exists() ? docSnap.data() : {};
           
+          const updatedGDocs = {
+            ...currentData.googleDocs,
+            status: 'erro',
+            integrationOperationalStatus: 'erro',
+            lastHttpStatus: responseStatus,
+            lastResponse: 'status = inválido',
+            lastTestAt: new Date().toLocaleString('pt-BR'),
+            updatedAt: new Date().toISOString()
+          };
+
           await setDoc(docRef, {
             ...currentData,
-            googleDocs: {
-              ...currentData.googleDocs,
-              status: 'erro',
-              lastHttpStatus: responseStatus,
-              lastResponse: 'status = inválido',
-              lastTestAt: new Date().toLocaleString('pt-BR')
-            }
+            googleDocs: updatedGDocs
           });
+
+          const statusInfo = normalizeGdiStatus(updatedGDocs);
 
           setConfig(prev => ({
             ...prev,
-            status: 'erro',
-            lastHttpStatus: responseStatus,
-            lastResponse: 'status = inválido',
-            lastTestAt: new Date().toLocaleString('pt-BR')
+            ...updatedGDocs
           }));
+
+          setDiagnosticState(statusInfo.normalizedStatus === 'preview_bloqueado' ? 'erro' : (statusInfo.normalizedStatus as any));
+          setDiagnosticMessage(statusInfo.reason);
         } catch (dbErr) {
           console.error("[Manual test error state write failure]:", dbErr);
         }
@@ -496,9 +515,13 @@ export default function GoogleDocsIntegration() {
   };
 
   const handleCopyDiagnostic = () => {
+    const statusInfo = normalizeGdiStatus(config);
     const diagnosticPayload = {
       diagnosticState,
       diagnosticMessage,
+      normalizedStatus: statusInfo.normalizedStatus,
+      isOperational: statusInfo.isOperational,
+      operationalReason: statusInfo.reason,
       endpointUrl: config.endpointUrl,
       status: config.status,
       lastDiagnostic: config.lastDiagnostic || '',
@@ -524,56 +547,82 @@ export default function GoogleDocsIntegration() {
     async function loadConfig() {
       try {
         setLoading(true);
-        const docSnap = await getDoc(doc(db, 'settings', 'connectors'));
+        const docRef = doc(db, 'settings', 'connectors');
+        const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
           if (data.googleDocs) {
-            const loadedEndpointUrl = data.googleDocs.endpointUrl || '';
-            let statusVal = data.googleDocs.status || 'não_configurado';
-            if (statusVal === 'ativo') {
-              statusVal = 'operacional';
+            let configToUse = { ...data.googleDocs };
+
+            // TAREFA 7 - Migração automática de estado fático legado ativo para operacional
+            const rawStatus = configToUse.status;
+            const lastHttp = configToUse.lastHttpStatus;
+            if (rawStatus === "ativo" && (lastHttp === 200 || lastHttp === "200")) {
+              console.log("[Migration] PORTAL_GDI_LEGACY_STATUS_NORMALIZED-CONFIG");
+              const migratedFields = {
+                status: "operacional",
+                integrationOperationalStatus: "operacional",
+                lastHealthCheckStatus: "operational",
+                lastHttpStatus: 200,
+                lastHttpStatusReceived: 200,
+                lastServerToServerResult: "Migrado automaticamente do estado legado ativo para operacional no carregamento de configurações.",
+                updatedAt: new Date().toISOString()
+              };
+              configToUse = {
+                ...configToUse,
+                ...migratedFields
+              };
+              try {
+                await setDoc(docRef, {
+                  ...data,
+                  googleDocs: {
+                    ...data.googleDocs,
+                    ...migratedFields
+                  }
+                });
+              } catch (migrationErr) {
+                console.error("Erro na migração de status legado em configurações:", migrationErr);
+              }
             }
+
+            // Normalização de status unificada com utilitário único (TAREFA 3)
+            const statusInfo = normalizeGdiStatus(configToUse);
 
             setConfig({
-              status: statusVal,
-              templatesStrategy: data.googleDocs.templatesStrategy || '',
-              notes: data.googleDocs.notes || '',
-              endpointUrl: loadedEndpointUrl,
-              integrationKey: data.googleDocs.integrationKey || '',
-              lastEndpoint: data.googleDocs.lastEndpoint || '',
-              lastHttpStatus: data.googleDocs.lastHttpStatus || undefined,
-              lastResponse: data.googleDocs.lastResponse || '',
-              lastTestAt: data.googleDocs.lastTestAt || '',
-              lastSentPayload: data.googleDocs.lastSentPayload || null,
-              lastReceivedPayload: data.googleDocs.lastReceivedPayload || null,
-              lastDiagnostic: data.googleDocs.lastDiagnostic || '',
-              lastError: data.googleDocs.lastError || '',
-              lastSuccess: data.googleDocs.lastSuccess || '',
-              lastEndpointTested: data.googleDocs.lastEndpointTested || '',
-              lastContentTypeReceived: data.googleDocs.lastContentTypeReceived || '',
-              lastHttpStatusReceived: data.googleDocs.lastHttpStatusReceived || undefined,
-              lastHealthCheckAt: data.googleDocs.lastHealthCheckAt || '',
-              lastHealthCheckStatus: data.googleDocs.lastHealthCheckStatus || '',
-              lastHealthCheckError: data.googleDocs.lastHealthCheckError || '',
-              lastValidatedWebhookUrl: data.googleDocs.lastValidatedWebhookUrl || '',
-              transportMode: data.googleDocs.transportMode || 'http_webhook'
+              status: statusInfo.normalizedStatus === 'operacional' ? 'operacional' : (configToUse.status || 'não_configurado'),
+              templatesStrategy: configToUse.templatesStrategy || 'standard_procuracao',
+              notes: configToUse.notes || '',
+              endpointUrl: configToUse.endpointUrl || '',
+              integrationKey: configToUse.integrationKey || '',
+              lastEndpoint: configToUse.lastEndpoint || '',
+              lastHttpStatus: configToUse.lastHttpStatus || undefined,
+              lastResponse: configToUse.lastResponse || '',
+              lastTestAt: configToUse.lastTestAt || '',
+              lastSentPayload: configToUse.lastSentPayload || null,
+              lastReceivedPayload: configToUse.lastReceivedPayload || null,
+              lastDiagnostic: configToUse.lastDiagnostic || '',
+              lastError: configToUse.lastError || '',
+              lastSuccess: configToUse.lastSuccess || '',
+              lastEndpointTested: configToUse.lastEndpointTested || '',
+              lastContentTypeReceived: configToUse.lastContentTypeReceived || '',
+              lastHttpStatusReceived: configToUse.lastHttpStatusReceived || undefined,
+              lastHealthCheckAt: configToUse.lastHealthCheckAt || '',
+              lastHealthCheckStatus: configToUse.lastHealthCheckStatus || '',
+              lastHealthCheckError: configToUse.lastHealthCheckError || '',
+              lastValidatedWebhookUrl: configToUse.lastValidatedWebhookUrl || '',
+              transportMode: configToUse.transportMode || 'http_webhook',
+              environmentMode: configToUse.environmentMode || 'production_server_to_server',
+              integrationOperationalStatus: configToUse.integrationOperationalStatus || 'nao_configurado',
+              lastPreviewWarning: configToUse.lastPreviewWarning || '',
+              lastServerToServerResult: configToUse.lastServerToServerResult || '',
+              lastServerToServerTestAt: configToUse.lastServerToServerTestAt || '',
+              lastReceivedByGdiConfirmed: configToUse.lastReceivedByGdiConfirmed || 'não_confirmado',
+              authProxyDetected: configToUse.authProxyDetected || false
             });
 
-            if (statusVal === 'ativo' || statusVal === 'operacional') {
-              setDiagnosticState('operacional');
-              setDiagnosticMessage('Diagnóstico fático carregado como OK e operacional: Homologado.');
-            } else if (statusVal === 'invalida') {
-              setDiagnosticState('invalida');
-              setDiagnosticMessage('Diagnóstico fático carregado como Inválido.');
-            } else if (statusVal === 'parcial') {
-              setDiagnosticState('parcial');
-              setDiagnosticMessage('Diagnóstico fático carregado como Parcial.');
-            } else if (statusVal === 'erro') {
-              setDiagnosticState('erro');
-              setDiagnosticMessage('Diagnóstico fático carregado como em Erro.');
-            } else {
-              setDiagnosticState('sem_diagnostico');
-            }
+            // Set visual diagnosticState and diagnosticMessage according to normalized status (TAREFA 3)
+            setDiagnosticState(statusInfo.normalizedStatus === 'preview_bloqueado' ? 'erro' : (statusInfo.normalizedStatus as any));
+            setDiagnosticMessage(statusInfo.reason);
           }
         }
       } catch (err) {
