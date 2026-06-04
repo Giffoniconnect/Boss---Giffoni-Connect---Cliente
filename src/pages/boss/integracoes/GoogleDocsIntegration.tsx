@@ -162,6 +162,7 @@ export default function GoogleDocsIntegration() {
         ...currentData.googleDocs,
         buildUrl: realGdiUrl,
         endpointUrl: realGdiUrl,
+        status: 'ativo',
         updatedAt: new Date().toISOString()
       };
 
@@ -176,7 +177,7 @@ export default function GoogleDocsIntegration() {
         const data = freshSnap.data();
         if (data.googleDocs) {
           setConfig({
-            status: data.googleDocs.status || 'não_configurado',
+            status: data.googleDocs.status || 'ativo',
             templatesStrategy: data.googleDocs.templatesStrategy || '',
             notes: data.googleDocs.notes || '',
             endpointUrl: data.googleDocs.buildUrl || data.googleDocs.endpointUrl || '',
@@ -363,11 +364,19 @@ export default function GoogleDocsIntegration() {
             const isBuildInvalid = loadedBuildUrl.toLowerCase().includes('aistudio.google.com') ||
                                    loadedBuildUrl.toLowerCase().includes('showpreview') ||
                                    loadedBuildUrl.toLowerCase().includes('showassistant') ||
+                                   loadedBuildUrl.toLowerCase().includes('accounts.google.com') ||
+                                   loadedBuildUrl.toLowerCase().includes('localhost') ||
+                                   loadedBuildUrl.toLowerCase().includes('127.0.0.1') ||
+                                   loadedBuildUrl.toLowerCase().includes('/__/auth/handler') ||
                                    !loadedBuildUrl.trim();
                                    
             const isEndpointInvalid = loadedEndpointUrl.toLowerCase().includes('aistudio.google.com') ||
                                       loadedEndpointUrl.toLowerCase().includes('showpreview') ||
                                       loadedEndpointUrl.toLowerCase().includes('showassistant') ||
+                                      loadedEndpointUrl.toLowerCase().includes('accounts.google.com') ||
+                                      loadedEndpointUrl.toLowerCase().includes('localhost') ||
+                                      loadedEndpointUrl.toLowerCase().includes('127.0.0.1') ||
+                                      loadedEndpointUrl.toLowerCase().includes('/__/auth/handler') ||
                                       !loadedEndpointUrl.trim();
 
             let neededCorrection = isBuildInvalid || isEndpointInvalid;
@@ -382,11 +391,13 @@ export default function GoogleDocsIntegration() {
                   ...data.googleDocs,
                   buildUrl: realUrl,
                   endpointUrl: realUrl,
+                  status: 'ativo',
                   updatedAt: new Date().toISOString()
                 };
                 await setDoc(doc(db, 'settings', 'connectors'), {
+                  ...data,
                   googleDocs: updatedGDocs
-                }, { merge: true });
+                });
                 console.log("[GDI Repair] Silently auto-corrected invalid GDI URL inside GoogleDocsIntegration.tsx loading hook.");
               } catch (dbErr) {
                 console.error("[GDI Repair] Failed to update corrected GDI URL in DB:", dbErr);
@@ -394,7 +405,7 @@ export default function GoogleDocsIntegration() {
             }
 
             setConfig({
-              status: data.googleDocs.status || 'não_configurado',
+              status: neededCorrection ? 'ativo' : (data.googleDocs.status || 'não_configurado'),
               templatesStrategy: data.googleDocs.templatesStrategy || '',
               notes: data.googleDocs.notes || '',
               endpointUrl: loadedEndpointUrl,

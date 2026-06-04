@@ -83,10 +83,30 @@ export default function ProcuracaoPF() {
           const isInvalid = lowerUrl.includes('aistudio.google.com') || 
                              lowerUrl.includes('showpreview') || 
                              lowerUrl.includes('showassistant') || 
+                             lowerUrl.includes('accounts.google.com') ||
+                             lowerUrl.includes('localhost') ||
+                             lowerUrl.includes('127.0.0.1') ||
+                             lowerUrl.includes('/__/auth/handler') ||
                              !gUrl.trim();
 
           if (isInvalid) {
             gUrl = HOMOLOGATED_GDI_BASE_URL;
+            try {
+              const updatedGDocs = {
+                ...(data.googleDocs || {}),
+                buildUrl: HOMOLOGATED_GDI_BASE_URL,
+                endpointUrl: HOMOLOGATED_GDI_BASE_URL,
+                status: 'ativo',
+                updatedAt: new Date().toISOString()
+              };
+              await setDoc(doc(db, 'settings', 'connectors'), {
+                ...data,
+                googleDocs: updatedGDocs
+              });
+              console.log("[GDI Repair] Dynamic Firestore correction executed successfully inside checkGDI logic in ProcuracaoPF.tsx");
+            } catch (dbErr) {
+              console.error("[GDI Repair] Failed to update Firestore connectors settings in checkGDI:", dbErr);
+            }
           }
 
           // Clean up any query string if present
@@ -428,10 +448,33 @@ export default function ProcuracaoPF() {
         lowerGdiBase.includes('aistudio.google.com') ||
         lowerGdiBase.includes('showpreview') ||
         lowerGdiBase.includes('showassistant') ||
+        lowerGdiBase.includes('accounts.google.com') ||
+        lowerGdiBase.includes('localhost') ||
+        lowerGdiBase.includes('127.0.0.1') ||
+        lowerGdiBase.includes('/__/auth/handler') ||
         !gdiBaseUrl.trim()
       ) {
         gdiBaseUrl = HOMOLOGATED_GDI_BASE_URL;
         legacyUrlDetected = true;
+
+        // Perform actual write to database instead of memory-only fallback
+        try {
+          const connectorsData = connectorsSnap.exists() ? connectorsSnap.data() : {};
+          const updatedGDocs = {
+            ...(connectorsData.googleDocs || {}),
+            buildUrl: HOMOLOGATED_GDI_BASE_URL,
+            endpointUrl: HOMOLOGATED_GDI_BASE_URL,
+            status: 'ativo',
+            updatedAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'settings', 'connectors'), {
+            ...connectorsData,
+            googleDocs: updatedGDocs
+          });
+          console.log("[GDI Repair] Dynamic Firestore correction executed successfully inside handleSendJob logic in ProcuracaoPF.tsx");
+        } catch (dbErr) {
+          console.error("[GDI Repair] Failed to update corrected GDI URL in Firestore inside handleSendJob:", dbErr);
+        }
       }
 
       // Enforce no query string
@@ -445,6 +488,11 @@ export default function ProcuracaoPF() {
           timestamp: new Date().toISOString(),
           message: "URL antiga/inválida do AI Studio detectada de forma fática na Procuração PF. Substituição dinâmica efetuada para o canal homologado."
         });
+      }
+
+      // Block submission if database URL or displayed URL still reflects the old AI Studio paths
+      if (gdiBaseUrl.toLowerCase().includes('aistudio.google.com') || loadedGdiUrl.toLowerCase().includes('aistudio.google.com')) {
+        throw new Error("Erro de persistência crítico: A URL do GDI inválida do AI Studio ainda é detectada na tela ou no carregamento. Envio bloqueado.");
       }
 
       // Validar conexão antes de enviar

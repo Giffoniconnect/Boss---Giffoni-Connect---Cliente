@@ -332,11 +332,19 @@ export default function Configuracoes() {
             const isBuildInvalid = loadedBuildUrl.toLowerCase().includes('aistudio.google.com') ||
                                    loadedBuildUrl.toLowerCase().includes('showpreview') ||
                                    loadedBuildUrl.toLowerCase().includes('showassistant') ||
+                                   loadedBuildUrl.toLowerCase().includes('accounts.google.com') ||
+                                   loadedBuildUrl.toLowerCase().includes('localhost') ||
+                                   loadedBuildUrl.toLowerCase().includes('127.0.0.1') ||
+                                   loadedBuildUrl.toLowerCase().includes('/__/auth/handler') ||
                                    !loadedBuildUrl.trim();
                                    
             const isEndpointInvalid = loadedEndpointUrl.toLowerCase().includes('aistudio.google.com') ||
                                       loadedEndpointUrl.toLowerCase().includes('showpreview') ||
                                       loadedEndpointUrl.toLowerCase().includes('showassistant') ||
+                                      loadedEndpointUrl.toLowerCase().includes('accounts.google.com') ||
+                                      loadedEndpointUrl.toLowerCase().includes('localhost') ||
+                                      loadedEndpointUrl.toLowerCase().includes('127.0.0.1') ||
+                                      loadedEndpointUrl.toLowerCase().includes('/__/auth/handler') ||
                                       !loadedEndpointUrl.trim();
 
             let neededCorrection = isBuildInvalid || isEndpointInvalid;
@@ -347,18 +355,21 @@ export default function Configuracoes() {
               loadedEndpointUrl = realUrl;
               loadedConns.googleDocs.buildUrl = realUrl;
               loadedConns.googleDocs.endpointUrl = realUrl;
+              loadedConns.googleDocs.status = 'ativo';
 
               // Correct silently in DB
               try {
                 await setDoc(doc(db, 'settings', 'connectors'), {
+                  ...loadedConns,
                   googleDocs: {
                     ...loadedConns.googleDocs,
                     buildUrl: realUrl,
                     endpointUrl: realUrl,
+                    status: 'ativo',
                     updatedAt: new Date().toISOString()
                   }
-                }, { merge: true });
-                console.log("[GDI Repair] Silently auto-corrected GDI URL in Configuracoes.tsx");
+                });
+                console.log("[GDI Repair] Silently auto-corrected GDI URL & status in Configuracoes.tsx");
               } catch (dbErr) {
                 console.error("[GDI Repair] Failed query auto-correction in Configuracoes.tsx:", dbErr);
               }
@@ -793,6 +804,7 @@ export default function Configuracoes() {
         ...currentData.googleDocs,
         buildUrl: realGdiUrl,
         endpointUrl: realGdiUrl,
+        status: 'ativo',
         updatedAt: new Date().toISOString()
       };
 

@@ -8,6 +8,104 @@ const PORT = 3000;
 // Parse JSON payloads
 app.use(express.json());
 
+async function getCloudRunIdToken(targetAudience: string): Promise<string | null> {
+  try {
+    const url = `http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?audience=${encodeURIComponent(targetAudience)}`;
+    const response = await fetch(url, {
+      headers: { "Metadata-Flavor": "Google" }
+    });
+    if (response.ok) {
+      const token = await response.text();
+      return token.trim();
+    }
+  } catch (e: any) {
+    console.warn("[Identity] Service-to-service ID Token acquisition failed/skipped:", e?.message || e);
+  }
+  return null;
+}
+
+async function smartFetch(
+  originalUrl: string,
+  options: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+  } = {},
+  incomingCookie?: string
+): Promise<{ response: Response; text: string }> {
+  const urlsToTry: string[] = [];
+
+  // 1. First try the input URL exactly as configured
+  urlsToTry.push(originalUrl);
+
+  // 2. Add alternate environment URL if applicable
+  if (originalUrl.includes("ais-dev-")) {
+    urlsToTry.push(originalUrl.replace("ais-dev-", "ais-pre-"));
+  } else if (originalUrl.includes("ais-pre-")) {
+    urlsToTry.push(originalUrl.replace("ais-pre-", "ais-dev-"));
+  }
+
+  let finalResponse: Response | null = null;
+  let finalBodyText = "";
+
+  for (const url of urlsToTry) {
+    try {
+      console.log(`[SmartFetch] Attempting connection to: ${url}`);
+
+      const headers = { ...(options.headers || {}) };
+
+      // Set cookies and/or OIDC Token for authentication if we are calling a dev endpoint
+      if (url.includes("ais-dev-")) {
+        if (incomingCookie) {
+          headers["Cookie"] = incomingCookie;
+        }
+
+        const idx = url.indexOf(".run.app");
+        if (idx !== -1) {
+          const audience = url.substring(0, idx + 8);
+          const idToken = await getCloudRunIdToken(audience);
+          if (idToken) {
+            headers["Authorization"] = `Bearer ${idToken}`;
+            console.log(`[SmartFetch] Attached service-to-service Cloud Run IAM token.`);
+          }
+        }
+      }
+
+      const res = await fetch(url, {
+        method: options.method || "GET",
+        headers,
+        body: options.body
+      });
+
+      const text = await res.text();
+      console.log(`[SmartFetch] URL: ${url}. Status: ${res.status}. Length: ${text.length}`);
+
+      const isHtml = text.trim().startsWith("<") || 
+                     text.toLowerCase().includes("<!doctype html") || 
+                     text.toLowerCase().includes("<html") ||
+                     text.toLowerCase().includes("cookie check");
+
+      const isFailedOrGated = isHtml || res.status === 404 || res.status === 401 || res.status === 403;
+
+      if (!isFailedOrGated) {
+        return { response: res, text };
+      }
+
+      // Save for fallback reporting
+      finalResponse = res;
+      finalBodyText = text;
+      console.log(`[SmartFetch] Attempt to ${url} returned HTML or server-redirect/404/Auth. Trying next or fallback...`);
+    } catch (e: any) {
+      console.warn(`[SmartFetch] Attempt to ${url} threw error:`, e.message || e);
+      if (urlsToTry.indexOf(url) === urlsToTry.length - 1) {
+        throw e;
+      }
+    }
+  }
+
+  return { response: finalResponse || new Response(), text: finalBodyText };
+}
+
 // Proxy requests to the Google Drive Build endpoint to bypass browser CORS
 app.post("/api/proxy-google-drive", async (req, res) => {
   try {
@@ -53,16 +151,16 @@ app.post("/api/proxy-google-drive", async (req, res) => {
       finalHeaders["X-BOSS-Google-Drive-Integration-Key"] = integrationKey;
     }
 
-    const response = await fetch(trimmedUrl, {
+    const incomingCookie = req.headers["cookie"] || "";
+    const { response, text } = await smartFetch(trimmedUrl, {
       method: "POST",
       headers: finalHeaders,
       body: JSON.stringify(payload),
-    });
+    }, incomingCookie);
 
     const status = response.status;
     const contentType = response.headers.get("content-type") || "";
 
-    const text = await response.text();
     console.log(`[Proxy] Resposta recebida da API externa. Status: ${status}, Content-Type: ${contentType}`);
 
     const isHtmlResponse = contentType.includes("html") || 
@@ -143,9 +241,20 @@ app.post("/api/proxy-google-docs", async (req, res) => {
       console.log("[Proxy Docs] Payload recebido:", JSON.stringify(payload));
     }
 
+    // Log and inspect headers for Cookie diagnostic
+    const incomingHeaders = req.headers;
+    const cookieHeader = req.headers["cookie"] || "";
+    console.log(`[Proxy Docs Debug] Incoming cookies: ${cookieHeader.substring(0, 100)}...`);
+    console.log(`[Proxy Docs Debug] All incoming header keys: ${Object.keys(incomingHeaders).join(", ")}`);
+
     let finalHeaders: Record<string, string> = {
       "Content-Type": "application/json",
     };
+
+    // Forward incoming Cookie header if present to authenticate with the other dev container
+    if (cookieHeader) {
+      finalHeaders["Cookie"] = cookieHeader;
+    }
 
     if (integrationKey) {
       const maskKey = (key: string) => {
@@ -159,16 +268,15 @@ app.post("/api/proxy-google-docs", async (req, res) => {
       console.log("[Proxy Docs] Chave de integração Google Docs ausente!");
     }
 
-    const response = await fetch(trimmedUrl, {
+    const { response, text } = await smartFetch(trimmedUrl, {
       method: "POST",
       headers: finalHeaders,
       body: JSON.stringify(payload),
-    });
+    }, cookieHeader);
 
     const status = response.status;
     const contentType = response.headers.get("content-type") || "";
 
-    const text = await response.text();
     console.log(`[Proxy Docs] Resposta recebida da API externa GDI. Status: ${status}, Content-Type: ${contentType}`);
 
     const isHtmlResponse = contentType.includes("html") || 
@@ -177,9 +285,10 @@ app.post("/api/proxy-google-docs", async (req, res) => {
                            text.toLowerCase().includes("<html");
 
     if (isHtmlResponse) {
-      console.error(`[Proxy Docs] Detetada resposta HTML da rota de API.`);
+      const textSample = text.substring(0, 400).trim();
+      console.error(`[Proxy Docs] Detetada resposta HTML da rota de API. Amostra: ${textSample}`);
       return res.status(400).json({
-        error: "A URL do GDI configurada em Configurações > Integrações não é uma API válida (retornou HTML). Por favor, use a URL pública real do webhook do GDI."
+        error: `A URL do GDI configurada em Configurações > Integrações não é uma API válida (retornou HTML). Amostra da resposta recebida: "${textSample}". Por favor, use a URL pública real do webhook do GDI.`
       });
     }
 
@@ -315,19 +424,19 @@ app.post("/api/test-google-docs", async (req, res) => {
     const start = Date.now();
 
     // Call external GDI
-    const response = await fetch(targetEndpoint, {
+    const incomingCookie = req.headers["cookie"] || "";
+    const { response, text } = await smartFetch(targetEndpoint, {
       method: method,
       headers: {
         "Content-Type": "application/json",
         "X-BOSS-Google-Docs-Integration-Key": integrationKey.trim()
       },
       body: bodyPayload ? JSON.stringify(bodyPayload) : undefined
-    });
+    }, incomingCookie);
 
     const duration = Date.now() - start;
     const status = response.status;
     const contentType = response.headers.get("content-type") || "";
-    const text = await response.text();
 
     console.log(`[GDI Test] Resposta obtida. Status: ${status}, Content-Type: ${contentType}, Tempo: ${duration}ms`);
 
@@ -416,19 +525,19 @@ app.post("/api/validate-build-url", async (req, res) => {
     let lastError = "";
     let isHtmlResponse = false;
 
+    const incomingCookie = req.headers["cookie"] || "";
     for (const endpoint of endpointsToTry) {
       try {
         console.log(`[Validation] Probing endpoint: ${endpoint.url} with ${endpoint.method}`);
-        const response = await fetch(endpoint.url, {
+        const { response, text } = await smartFetch(endpoint.url, {
           method: endpoint.method,
           headers: {
             "Content-Type": "application/json",
           },
           body: endpoint.method === "POST" ? JSON.stringify({}) : undefined,
-        });
+        }, incomingCookie);
 
         const contentType = response.headers.get("content-type") || "";
-        const text = await response.text();
 
         console.log(`[Validation] Response Content-Type: ${contentType}. Status: ${response.status}`);
 
@@ -468,9 +577,8 @@ app.post("/api/validate-build-url", async (req, res) => {
 
     try {
       console.log(`[Validation] Probing base URL as fallback: ${trimmedUrl}`);
-      const response = await fetch(trimmedUrl, { method: "GET" });
+      const { response, text } = await smartFetch(trimmedUrl, { method: "GET" }, incomingCookie);
       const contentType = response.headers.get("content-type") || "";
-      const text = await response.text();
       
       if (contentType.includes("html") || text.trim().startsWith("<") || text.toLowerCase().includes("<!doctype html") || text.toLowerCase().includes("<html")) {
         return res.status(200).json({
