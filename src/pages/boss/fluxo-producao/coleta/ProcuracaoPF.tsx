@@ -63,7 +63,12 @@ export default function ProcuracaoPF() {
   const [gdiConfigured, setGdiConfigured] = React.useState<boolean | null>(null);
   const [loadedGdiUrl, setLoadedGdiUrl] = React.useState<string>('');
 
-  // Verificação em tempo real da configuração de GDI no banco Firestore
+  // 1. Estados cruciais da Seção 5 para a tentativa ativa fática
+  const [currentAttemptJobId, setCurrentAttemptJobId] = React.useState<string | null>(null);
+  const [attemptStartedAt, setAttemptStartedAt] = React.useState<string | null>(null);
+  const [showGenerationError, setShowGenerationError] = React.useState<boolean>(false);
+
+  // Verificação em tempo real da configuração de GDI no banco Firestore (sem qualquer fallback ou mutação indesejada)
   React.useEffect(() => {
     async function checkGDI() {
       try {
@@ -72,41 +77,23 @@ export default function ProcuracaoPF() {
           const data = connectorsSnap.data();
           let gUrl = '';
           if (data.googleDocs) {
-            gUrl = data.googleDocs.buildUrl || data.googleDocs.endpointUrl || '';
+            gUrl = data.googleDocs.endpointUrl || '';
           }
-          if (!gUrl && data.googleDrive) {
-            gUrl = data.googleDrive.buildUrl || '';
-          }
-          
+
           const lowerUrl = gUrl.toLowerCase();
-          const HOMOLOGATED_GDI_BASE_URL = "https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app";
           const isInvalid = lowerUrl.includes('aistudio.google.com') || 
-                             lowerUrl.includes('showpreview') || 
-                             lowerUrl.includes('showassistant') || 
-                             lowerUrl.includes('accounts.google.com') ||
-                             lowerUrl.includes('localhost') ||
-                             lowerUrl.includes('127.0.0.1') ||
-                             lowerUrl.includes('/__/auth/handler') ||
-                             !gUrl.trim();
+                            lowerUrl.includes('showpreview') || 
+                            lowerUrl.includes('showassistant') || 
+                            lowerUrl.includes('accounts.google.com') ||
+                            lowerUrl.includes('localhost') ||
+                            lowerUrl.includes('127.0.0.1') ||
+                            lowerUrl.includes('/__/auth/handler') ||
+                            !gUrl.trim();
 
           if (isInvalid) {
-            gUrl = HOMOLOGATED_GDI_BASE_URL;
-            try {
-              const updatedGDocs = {
-                ...(data.googleDocs || {}),
-                buildUrl: HOMOLOGATED_GDI_BASE_URL,
-                endpointUrl: HOMOLOGATED_GDI_BASE_URL,
-                status: 'ativo',
-                updatedAt: new Date().toISOString()
-              };
-              await setDoc(doc(db, 'settings', 'connectors'), {
-                ...data,
-                googleDocs: updatedGDocs
-              });
-              console.log("[GDI Repair] Dynamic Firestore correction executed successfully inside checkGDI logic in ProcuracaoPF.tsx");
-            } catch (dbErr) {
-              console.error("[GDI Repair] Failed to update Firestore connectors settings in checkGDI:", dbErr);
-            }
+            setLoadedGdiUrl('');
+            setGdiConfigured(false);
+            return;
           }
 
           // Clean up any query string if present
@@ -115,13 +102,10 @@ export default function ProcuracaoPF() {
           }
           
           setLoadedGdiUrl(gUrl);
-
-          if (gUrl.trim()) {
-            setGdiConfigured(true);
-            return;
-          }
+          setGdiConfigured(true);
+        } else {
+          setGdiConfigured(false);
         }
-        setGdiConfigured(false);
       } catch (err) {
         console.error("Erro ao verificar conectores GDI:", err);
         setGdiConfigured(false);
@@ -368,33 +352,46 @@ export default function ProcuracaoPF() {
 
     if (!targetCaseId) {
       setError("Erro de validação: caseId do caso está ausente.");
+      setShowGenerationError(true);
       return;
     }
     if (!targetClientId) {
       setError("Erro de validação: clientId do caso está ausente.");
+      setShowGenerationError(true);
       return;
     }
     // 2. Se não houver destinationFolderId: bloquear envio e mostrar mensagem específica
     if (!destinationFolderId) {
       setError("Não é possível gerar a Procuração porque a pasta Google Drive do cliente ainda não foi vinculada.");
+      setShowGenerationError(true);
       return;
     }
     if (!destinationFolderUrl) {
       setError("Não é possível gerar a Procuração porque a URL da pasta Google Drive está ausente.");
+      setShowGenerationError(true);
       return;
     }
     if (!nomeCompleto) {
       setError("Não é possível gerar a Procuração porque o Nome Completo do cliente está ausente no cadastro.");
+      setShowGenerationError(true);
       return;
     }
     if (!cpf) {
       setError("Não é possível gerar a Procuração porque o CPF do cliente está ausente no cadastro.");
+      setShowGenerationError(true);
       return;
     }
 
+    const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const caseDocRef = doc(db, 'cases', targetCaseId);
+
+    // Configuração fática de rastreio de tentativa única segundo a Seção 5
     setSaving(true);
     setError(null);
     setSuccess(null);
+    setShowGenerationError(false);
+    setCurrentAttemptJobId(jobId);
+    setAttemptStartedAt(new Date().toISOString());
 
     const timestampDataLoaded = new Date().toISOString();
     const timestampFolderFound = new Date().toISOString();
@@ -413,13 +410,7 @@ export default function ProcuracaoPF() {
       }
     ];
 
-    const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const caseDocRef = doc(db, 'cases', targetCaseId);
-
     try {
-      // Clean up past errors
-      setError(null);
-
       // Fetch GDI connection settings from Firestore
       const connectorsSnap = await getDoc(doc(db, 'settings', 'connectors'));
       let gdiBaseUrl = '';
@@ -428,21 +419,16 @@ export default function ProcuracaoPF() {
       if (connectorsSnap.exists()) {
         const data = connectorsSnap.data();
         if (data.googleDocs) {
-          gdiBaseUrl = data.googleDocs.buildUrl || data.googleDocs.endpointUrl || '';
+          gdiBaseUrl = data.googleDocs.endpointUrl || '';
           gdiIntegrationKey = data.googleDocs.integrationKey || '';
-        }
-        // Fallback to googleDrive configuration if googleDocs configuration is empty
-        if (!gdiBaseUrl && data.googleDrive) {
-          gdiBaseUrl = data.googleDrive.buildUrl || '';
-        }
-        if (!gdiIntegrationKey && data.googleDrive) {
-          gdiIntegrationKey = data.googleDrive.integrationKey || '';
         }
       }
 
-      // Enforce clean HOMOLOGATED_GDI_BASE_URL fallback if URL is empty or points to AI Studio
-      const HOMOLOGATED_GDI_BASE_URL = "https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app";
-      let legacyUrlDetected = false;
+      // Validar conexão antes de enviar
+      if (!gdiBaseUrl) {
+         throw new Error("GDI API ainda não configurada. Por favor, acesse Configurações > Integrações e configure o barramento de integração Google Docs.");
+      }
+
       const lowerGdiBase = gdiBaseUrl.toLowerCase();
       if (
         lowerGdiBase.includes('aistudio.google.com') ||
@@ -451,53 +437,14 @@ export default function ProcuracaoPF() {
         lowerGdiBase.includes('accounts.google.com') ||
         lowerGdiBase.includes('localhost') ||
         lowerGdiBase.includes('127.0.0.1') ||
-        lowerGdiBase.includes('/__/auth/handler') ||
-        !gdiBaseUrl.trim()
+        lowerGdiBase.includes('/__/auth/handler')
       ) {
-        gdiBaseUrl = HOMOLOGATED_GDI_BASE_URL;
-        legacyUrlDetected = true;
-
-        // Perform actual write to database instead of memory-only fallback
-        try {
-          const connectorsData = connectorsSnap.exists() ? connectorsSnap.data() : {};
-          const updatedGDocs = {
-            ...(connectorsData.googleDocs || {}),
-            buildUrl: HOMOLOGATED_GDI_BASE_URL,
-            endpointUrl: HOMOLOGATED_GDI_BASE_URL,
-            status: 'ativo',
-            updatedAt: new Date().toISOString()
-          };
-          await setDoc(doc(db, 'settings', 'connectors'), {
-            ...connectorsData,
-            googleDocs: updatedGDocs
-          });
-          console.log("[GDI Repair] Dynamic Firestore correction executed successfully inside handleSendJob logic in ProcuracaoPF.tsx");
-        } catch (dbErr) {
-          console.error("[GDI Repair] Failed to update corrected GDI URL in Firestore inside handleSendJob:", dbErr);
-        }
+         throw new Error("A URL do GDI configurada em Configurações > Integrações não é uma API válida (retornou HTML). Por favor, use a URL pública real do webhook do GDI.");
       }
 
       // Enforce no query string
       if (gdiBaseUrl.includes("?")) {
         gdiBaseUrl = gdiBaseUrl.split("?")[0];
-      }
-
-      if (legacyUrlDetected) {
-        initialLogs.push({
-          action: "PORTAL_GDI_LEGACY_URL_REPLACED",
-          timestamp: new Date().toISOString(),
-          message: "URL antiga/inválida do AI Studio detectada de forma fática na Procuração PF. Substituição dinâmica efetuada para o canal homologado."
-        });
-      }
-
-      // Block submission if database URL or displayed URL still reflects the old AI Studio paths
-      if (gdiBaseUrl.toLowerCase().includes('aistudio.google.com') || loadedGdiUrl.toLowerCase().includes('aistudio.google.com')) {
-        throw new Error("Erro de persistência crítico: A URL do GDI inválida do AI Studio ainda é detectada na tela ou no carregamento. Envio bloqueado.");
-      }
-
-      // Validar conexão antes de enviar
-      if (!gdiBaseUrl) {
-        throw new Error("GDI API ainda não configurada. Informe a URL pública real da API do Google Docs Integrations.");
       }
 
       if (!gdiIntegrationKey) {
@@ -541,9 +488,10 @@ export default function ProcuracaoPF() {
         message: "Efetuando disparo HTTP real para o webhook do receptor GDI..."
       });
 
-      // 4. Enquanto envia: status = "enviando_para_gdi"
+      // 4. Enquanto envia: status = "enviando_para_gdi" e limpamos a falha anterior do documento do caso
       await updateDoc(caseDocRef, {
-        procuracaoStatus: "enviando_para_gdi"
+        procuracaoStatus: "enviando_para_gdi",
+        procuracaoLogFalha: ""
       });
 
       // Maintain internal job log document for tracking on interface
@@ -744,6 +692,9 @@ export default function ProcuracaoPF() {
       console.error("[GDI Execution Failed]", err);
       const errorMessage = err.message || "Erro desconhecido durante o processamento do GDI.";
 
+      // Habilitar a exibição do erro fático na tela para a tentativa em curso
+      setShowGenerationError(true);
+
       const failureLogs = [
         ...initialLogs,
         {
@@ -850,9 +801,9 @@ export default function ProcuracaoPF() {
           <div className="space-y-6">
             
             {/* NOTIFICATION TOASTS */}
-            {error && (
+            {showGenerationError && error && (
               <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-red-900 text-xs font-semibold flex gap-3 items-start select-all">
-                <AlertCircle size={16} className="text-red-600 shrink-0 mt-0.5" />
+                <AlertCircle size={16} className="text-red-00 shrink-0 mt-0.5" />
                 <div className="space-y-1">
                   <p className="font-extrabold text-[10px] uppercase text-red-950 tracking-wide font-mono">Erro de Processamento / Configuração</p>
                   <pre className="whitespace-pre-wrap font-mono text-[11px] text-red-905 leading-relaxed">{error}</pre>
@@ -1055,13 +1006,50 @@ export default function ProcuracaoPF() {
                               </button>
                             </div>
 
-                            {activeJob && activeJob.status === 'failed' && (
-                              <div className="p-3.5 bg-rose-50 border border-rose-150 rounded-xl flex items-start gap-2.5 text-xs">
-                                <AlertCircle size={15} className="text-rose-500 mt-0.5 shrink-0" />
+                            {showGenerationError && activeJob && activeJob.status === 'failed' && activeJob.id === currentAttemptJobId && (
+                              <div className="p-3.5 bg-rose-50 border border-rose-150 rounded-xl flex items-start gap-2.5 text-xs animate-in duration-200 fade-in zoom-in-95">
+                                <AlertCircle size={15} className="text-rose-500 mt-0.5 shrink-0 animate-bounce" />
                                 <div>
-                                  <p className="font-extrabold text-rose-950 uppercase tracking-widest text-[9px] font-mono">Erro de Geração</p>
-                                  <p className="text-rose-900 font-semibold mt-1">Ocorreu uma falha ao gerar a procuração. Por favor, verifique os dados cadastrais do cliente e tente novamente.</p>
+                                  <p className="font-extrabold text-rose-950 uppercase tracking-widest text-[9px] font-mono flex items-center gap-1.5 font-bold">
+                                    <span>Erro de Geração na Tentativa Atual</span>
+                                  </p>
+                                  <p className="text-rose-900 font-medium mt-1">
+                                    Ocorreu uma falha ao gerar a procuração. Por favor, verifique os dados cadastrais do cliente e tente novamente.
+                                  </p>
+                                  {activeJob.errorMessage && (
+                                    <pre className="mt-2 p-2 bg-slate-950 border border-slate-900 rounded-lg text-rose-450 font-mono text-[10px] overflow-auto max-h-32 whitespace-pre-wrap select-all">
+                                      {activeJob.errorMessage}
+                                    </pre>
+                                  )}
                                 </div>
+                              </div>
+                            )}
+
+                            {/* HISTÓRICO DE ERROS DA SESSÃO ANTERIOR (Exibição não-intrusiva sob demanda) */}
+                            {currentCase?.procuracaoStatus === 'falha' && currentCase?.procuracaoLogFalha && !showGenerationError && (
+                              <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-xl space-y-2 text-xs">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2 text-gray-750 font-black uppercase tracking-wider text-[9px] font-mono">
+                                    <AlertCircle size={12} className="text-gray-400" />
+                                    <span>Histórico: Falha na Geração Anterior</span>
+                                  </div>
+                                  <span className="text-[9px] text-gray-400 font-mono">
+                                    {currentCase.procuracaoGeneratedAt ? new Date(currentCase.procuracaoGeneratedAt).toLocaleString('pt-BR') : 'Sem data informada'}
+                                  </span>
+                                </div>
+                                <p className="text-gray-650 font-medium leading-relaxed">
+                                  Existe um registro histórico de falha de geração associado a este caso. Você pode tentar gerar novamente a qualquer momento com o botão acima.
+                                </p>
+                                <details className="group border border-gray-150 rounded-lg bg-white p-2">
+                                  <summary className="font-bold text-gray-500 text-[9px] uppercase tracking-wider flex items-center justify-between cursor-pointer select-none">
+                                    <span>Ver detalhes do log de erro</span>
+                                    <span className="text-indigo-600 font-black group-open:hidden">Exibir</span>
+                                    <span className="text-indigo-600 font-black hidden group-open:inline">Ocultar</span>
+                                  </summary>
+                                  <pre className="mt-2 p-2 bg-slate-950 border border-slate-900 rounded-lg text-rose-400 font-mono text-[9px] overflow-auto max-h-36 whitespace-pre-wrap leading-tight select-all">
+                                    {currentCase.procuracaoLogFalha}
+                                  </pre>
+                                </details>
                               </div>
                             )}
                           </div>

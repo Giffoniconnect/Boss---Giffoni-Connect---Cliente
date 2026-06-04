@@ -69,6 +69,102 @@ export default function GoogleDocsIntegration() {
   const [expandSentPayload, setExpandSentPayload] = useState(false);
   const [expandReceivedPayload, setExpandReceivedPayload] = useState(false);
   const [connectionTestLabel, setConnectionTestLabel] = useState<string>('');
+  
+  const [diagnosticState, setDiagnosticState] = useState<'sem_diagnostico' | 'invalida' | 'parcial' | 'operacional'>('sem_diagnostico');
+  const [diagnosticMessage, setDiagnosticMessage] = useState<string>('');
+
+  const handleDiagnosticarGDI = async () => {
+    setTesting(true);
+    setFeedback(null);
+    setDiagnosticState('sem_diagnostico');
+    setDiagnosticMessage('');
+
+    const targetUrl = (config.endpointUrl || '').trim();
+    const integrationKey = (config.integrationKey || '').trim();
+
+    if (!targetUrl) {
+      setDiagnosticState('invalida');
+      setDiagnosticMessage('Diagnóstico Falhou: URL do GDI não informada.');
+      setFeedback({ type: 'error', message: 'A URL do GDI é obrigatória para o diagnóstico.' });
+      setTesting(false);
+      return;
+    }
+
+    if (!targetUrl.toLowerCase().startsWith('https://')) {
+      setDiagnosticState('invalida');
+      setDiagnosticMessage('Diagnóstico Falhou: A URL deve começar obrigatoriamente com "https://"');
+      setTesting(false);
+      return;
+    }
+
+    const blockedTerms = [
+      "aistudio.google.com",
+      "showpreview",
+      "showassistant",
+      "accounts.google.com",
+      "firebaseapp login",
+      "firebaseapp",
+      "/__/auth/handler"
+    ];
+
+    const lower = targetUrl.toLowerCase();
+    for (const term of blockedTerms) {
+      if (lower.includes(term)) {
+        setDiagnosticState('invalida');
+        setDiagnosticMessage(`Diagnóstico Falhou: A URL contém o termo restrito "${term}".`);
+        setTesting(false);
+        return;
+      }
+    }
+
+    try {
+      const resp = await fetch("/api/proxy-google-docs/health-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetEndpoint: targetUrl,
+          integrationKey: integrationKey
+        })
+      });
+
+      const data = await resp.json();
+      
+      const timestamp = new Date().toLocaleTimeString();
+      if (data.success) {
+        setDiagnosticState('operacional');
+        setDiagnosticMessage(`Diagnóstico de Conexão Bem-Sucedido: O canal está 100% operacional no endpoint configurado! Código de resposta testada: HTTP ${data.status}`);
+        setFeedback({
+          type: 'success',
+          message: 'Excelente! O diagnóstico fático confirmou que a API e o barramento do GDI estão 🟢 Operacionais.'
+        });
+        setLogs(prev => [...prev, `[${timestamp}] Diagnóstico concluído com sucesso (STATUS: 🟢 Operacional).`]);
+      } else {
+        if (data.errorCode === 'GDI_ENDPOINT_RETURNS_HTML') {
+          setDiagnosticState('invalida');
+          setDiagnosticMessage(`Diagnóstico Negado (Critério 3): ${data.error}`);
+          setFeedback({
+            type: 'error',
+            message: `Erro Crítico de API: ${data.error}`
+          });
+          setLogs(prev => [...prev, `[${timestamp}] Diagnóstico falhou: URL retornou login/HTML (STATUS: 🔴 Inválida).`]);
+        } else {
+          setDiagnosticState('parcial');
+          setDiagnosticMessage(`Diagnóstico Parcial: ${data.error || 'Falha de comunicação ou autenticação.'}`);
+          setFeedback({
+            type: 'error',
+            message: `Atenção: A URL respondeu parcialmente, mas falhou na validação de contrato/JSON. Erro: ${data.error}`
+          });
+          setLogs(prev => [...prev, `[${timestamp}] Diagnóstico parcial: falha de JSON ou status restrito (STATUS: 🟡 Parcial).`]);
+        }
+      }
+    } catch (err: any) {
+      setDiagnosticState('parcial');
+      setDiagnosticMessage(`Diagnóstico Parcial: Erro ao efetuar probe fático de conexão. ${err.message || err}`);
+      setFeedback({ type: 'error', message: `Erro na ponte GDI: ${err.message || err}` });
+    } finally {
+      setTesting(false);
+    }
+  };
 
   const handleClearInvalidGDI = async () => {
     setSaving(true);
@@ -96,6 +192,9 @@ export default function GoogleDocsIntegration() {
         status: 'não_configurado',
         endpointUrl: '',
       }));
+
+      setDiagnosticState('sem_diagnostico');
+      setDiagnosticMessage('');
 
       setFeedback({
         type: 'success',
@@ -180,7 +279,7 @@ export default function GoogleDocsIntegration() {
             status: data.googleDocs.status || 'ativo',
             templatesStrategy: data.googleDocs.templatesStrategy || '',
             notes: data.googleDocs.notes || '',
-            endpointUrl: data.googleDocs.buildUrl || data.googleDocs.endpointUrl || '',
+            endpointUrl: data.googleDocs.endpointUrl || '',
             integrationKey: data.googleDocs.integrationKey || '',
             lastEndpoint: data.googleDocs.lastEndpoint || '',
             lastHttpStatus: data.googleDocs.lastHttpStatus || undefined,
@@ -208,7 +307,7 @@ export default function GoogleDocsIntegration() {
     setTesting(true);
     setFeedback(null);
     setConnectionTestLabel('Testando...');
-    const targetUrl = 'https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app';
+    const targetUrl = (config.endpointUrl || '').trim();
     try {
       let isSuccess = false;
       let isHtml = false;
@@ -275,7 +374,7 @@ export default function GoogleDocsIntegration() {
         setConnectionTestLabel('status = conectado');
         setFeedback({
           type: 'success',
-          message: 'O teste de conexão GDI com o Cloud Run homologado retornou código HTTP 200 e JSON válido! (status = conectado)'
+          message: 'O teste de conexão GDI com o Cloud Run retornou código HTTP 200 e JSON válido! (status = conectado)'
         });
         
         // Save test result silently in Firestore
@@ -289,7 +388,6 @@ export default function GoogleDocsIntegration() {
             googleDocs: {
               ...currentData.googleDocs,
               status: 'ativo',
-              buildUrl: targetUrl,
               endpointUrl: targetUrl,
               lastHttpStatus: 200,
               lastResponse: 'status = conectado',
@@ -358,54 +456,10 @@ export default function GoogleDocsIntegration() {
         if (docSnap.exists()) {
           const data = docSnap.data();
           if (data.googleDocs) {
-            let loadedBuildUrl = data.googleDocs.buildUrl || '';
-            let loadedEndpointUrl = data.googleDocs.endpointUrl || '';
-
-            const isBuildInvalid = loadedBuildUrl.toLowerCase().includes('aistudio.google.com') ||
-                                   loadedBuildUrl.toLowerCase().includes('showpreview') ||
-                                   loadedBuildUrl.toLowerCase().includes('showassistant') ||
-                                   loadedBuildUrl.toLowerCase().includes('accounts.google.com') ||
-                                   loadedBuildUrl.toLowerCase().includes('localhost') ||
-                                   loadedBuildUrl.toLowerCase().includes('127.0.0.1') ||
-                                   loadedBuildUrl.toLowerCase().includes('/__/auth/handler') ||
-                                   !loadedBuildUrl.trim();
-                                   
-            const isEndpointInvalid = loadedEndpointUrl.toLowerCase().includes('aistudio.google.com') ||
-                                      loadedEndpointUrl.toLowerCase().includes('showpreview') ||
-                                      loadedEndpointUrl.toLowerCase().includes('showassistant') ||
-                                      loadedEndpointUrl.toLowerCase().includes('accounts.google.com') ||
-                                      loadedEndpointUrl.toLowerCase().includes('localhost') ||
-                                      loadedEndpointUrl.toLowerCase().includes('127.0.0.1') ||
-                                      loadedEndpointUrl.toLowerCase().includes('/__/auth/handler') ||
-                                      !loadedEndpointUrl.trim();
-
-            let neededCorrection = isBuildInvalid || isEndpointInvalid;
-
-            if (neededCorrection) {
-              const realUrl = 'https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app';
-              loadedBuildUrl = realUrl;
-              loadedEndpointUrl = realUrl;
-
-              try {
-                const updatedGDocs = {
-                  ...data.googleDocs,
-                  buildUrl: realUrl,
-                  endpointUrl: realUrl,
-                  status: 'ativo',
-                  updatedAt: new Date().toISOString()
-                };
-                await setDoc(doc(db, 'settings', 'connectors'), {
-                  ...data,
-                  googleDocs: updatedGDocs
-                });
-                console.log("[GDI Repair] Silently auto-corrected invalid GDI URL inside GoogleDocsIntegration.tsx loading hook.");
-              } catch (dbErr) {
-                console.error("[GDI Repair] Failed to update corrected GDI URL in DB:", dbErr);
-              }
-            }
+            const loadedEndpointUrl = data.googleDocs.endpointUrl || '';
 
             setConfig({
-              status: neededCorrection ? 'ativo' : (data.googleDocs.status || 'não_configurado'),
+              status: data.googleDocs.status || 'não_configurado',
               templatesStrategy: data.googleDocs.templatesStrategy || '',
               notes: data.googleDocs.notes || '',
               endpointUrl: loadedEndpointUrl,
@@ -472,6 +526,18 @@ export default function GoogleDocsIntegration() {
     const gapiBaseUrl = (config.endpointUrl || '').trim();
     const integrationKey = (config.integrationKey || '').trim();
     const status = config.status || 'não_configurado';
+
+    // Regra de Negócio Crítica:
+    // Só permitir salvar o status da integração como “Automação Ativa” (status = 'ativo')
+    // se o diagnóstico estiver em estado 🟢 Operacional.
+    if (status === 'ativo' && diagnosticState !== 'operacional') {
+      setFeedback({
+        type: 'error',
+        message: 'Ativação Bloqueada: Para definir o status como Ativo (Automação Ativa), a integração do barramento externa deve antes obter o diagnóstico 🟢 Operacional. Clique no botão "Diagnosticar GDI" abaixo para testar seu canal de API real.'
+      });
+      setSaving(false);
+      return;
+    }
 
     // Se houver URL ou chave ou status diferente de não configurado, validamos a URL
     if (status !== 'não_configurado' || gapiBaseUrl || integrationKey) {
@@ -872,6 +938,18 @@ export default function GoogleDocsIntegration() {
                 </p>
                 
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* Button: Diagnosticar GDI */}
+                  <button
+                    type="button"
+                    onClick={handleDiagnosticarGDI}
+                    id="btn-diagnose-gdi"
+                    className="px-3.5 py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow"
+                    title="Realizar probe fático de conexão e verificação de login redirect, HTML e JSON"
+                  >
+                    <Activity size={12} className="shrink-0 text-white animate-spin" style={{ animationDuration: '4s' }} />
+                    <span>Diagnosticar GDI</span>
+                  </button>
+
                   {/* 6. Button: Limpar configuração inválida do GDI */}
                   <button
                     type="button"
@@ -1052,6 +1130,33 @@ export default function GoogleDocsIntegration() {
                   <span className="font-mono text-slate-200 text-[11px] bg-slate-950 p-1 px-2 rounded-lg border border-slate-850">
                     {config.lastHttpStatus ? `HTTP ${config.lastHttpStatus}` : 'N/A'}
                   </span>
+                </div>
+
+                <div className="space-y-1.5 border-t border-slate-800 pt-3 flex flex-col gap-1">
+                  <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider font-mono">Fato de Diagnóstico GDI (API):</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                      diagnosticState === 'operacional' ? 'bg-emerald-500 animate-pulse' :
+                      diagnosticState === 'parcial' ? 'bg-amber-500 animate-pulse' :
+                      diagnosticState === 'invalida' ? 'bg-rose-500 animate-pulse' :
+                      'bg-slate-500'
+                    }`} />
+                    <span className="font-mono text-[10px] font-black uppercase tracking-wider text-slate-100">
+                      {diagnosticState === 'operacional' ? '🟢 Operacional' :
+                       diagnosticState === 'parcial' ? '🟡 Parcial' :
+                       diagnosticState === 'invalida' ? '🔴 Inválida' :
+                       '⚪ Sem Diagnóstico'}
+                    </span>
+                  </div>
+                  {diagnosticMessage && (
+                    <p className={`p-2 rounded-lg text-[10px] leading-relaxed font-semibold font-mono ${
+                      diagnosticState === 'operacional' ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-900/40' :
+                      diagnosticState === 'parcial' ? 'bg-amber-950/40 text-amber-300 border border-amber-900/40' :
+                      'bg-rose-955/40 text-rose-300 border border-rose-900/40 animate-pulse'
+                    }`}>
+                      {diagnosticMessage}
+                    </p>
+                  )}
                 </div>
 
                 {/* 6. Último payload enviado */}

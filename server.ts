@@ -55,7 +55,7 @@ async function smartFetch(
       const headers = { ...(options.headers || {}) };
 
       // Set cookies and/or OIDC Token for authentication if we are calling a dev endpoint
-      if (url.includes("ais-dev-")) {
+      if (url.includes("ais-dev-") || url.includes("ais-pre-")) {
         if (incomingCookie) {
           headers["Cookie"] = incomingCookie;
         }
@@ -207,33 +207,18 @@ app.post("/api/proxy-google-docs", async (req, res) => {
     }
     
     let trimmedUrl = targetEndpointValue.trim();
-    
-    // Auto-correct AI Studio sandbox previews to the official homologated GDI API base
-    const lowerUrlForCorrection = trimmedUrl.toLowerCase();
-    if (lowerUrlForCorrection.includes("aistudio.google.com") || 
-        lowerUrlForCorrection.includes("showpreview") || 
-        lowerUrlForCorrection.includes("showassistant")) {
-      console.log(`[Proxy Docs] Detetada URL do AI Studio no endpoint (${trimmedUrl}). Corrigindo para a URL operacional homologada do GDI.`);
-      const gdiBaseReal = "https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app";
-      if (lowerUrlForCorrection.includes("/api/webhook/gdi-job")) {
-        trimmedUrl = `${gdiBaseReal}/api/webhook/gdi-job`;
-      } else if (lowerUrlForCorrection.includes("/api/config")) {
-        trimmedUrl = `${gdiBaseReal}/api/config`;
-      } else {
-        trimmedUrl = `${gdiBaseReal}/api/webhook/gdi-job`;
-      }
-    }
 
     console.log(`[Proxy Docs] Endpoint destino final: ${trimmedUrl}`);
 
-    if (trimmedUrl.includes("aistudio.google.com") || 
-        trimmedUrl.includes("showPreview") || 
-        trimmedUrl.includes("showAssistant") || 
-        trimmedUrl.includes("accounts.google.com") || 
-        trimmedUrl.toLowerCase().includes("firebaseapp login") || 
-        trimmedUrl.includes("/__/auth/handler")) {
+    const lowerTrimmed = trimmedUrl.toLowerCase();
+    if (lowerTrimmed.includes("aistudio.google.com") || 
+        lowerTrimmed.includes("showpreview") || 
+        lowerTrimmed.includes("showassistant") || 
+        lowerTrimmed.includes("accounts.google.com") || 
+        lowerTrimmed.includes("firebaseapp login") || 
+        lowerTrimmed.includes("/__/auth/handler")) {
       return res.status(400).json({
-        error: "A URL configurada não é uma API pública e protegida de produção. Ela contém termos restritos associados ao AI Studio, login do Google ou autenticação."
+        error: "A URL do GDI configurada em Configurações > Integrações não é uma API válida (retornou HTML). Por favor, use a URL pública real do webhook do GDI."
       });
     }
 
@@ -312,6 +297,160 @@ app.post("/api/proxy-google-docs", async (req, res) => {
   }
 });
 
+// Dedicated health-check endpoint for validating GDI integrations
+app.post("/api/proxy-google-docs/health-check", async (req, res) => {
+  try {
+    const { targetEndpoint, integrationKey } = req.body || {};
+    
+    if (!targetEndpoint || !targetEndpoint.trim()) {
+      return res.status(200).json({
+        success: false,
+        errorCode: "GDI_ENDPOINT_NOT_FOUND",
+        error: "O campo targetEndpoint é obrigatório."
+      });
+    }
+
+    let url = targetEndpoint.trim();
+
+    // Clean query params
+    if (url.includes("?")) {
+      url = url.split("?")[0];
+    }
+
+    // Must start with https://
+    if (!url.toLowerCase().startsWith("https://")) {
+      return res.status(200).json({
+        success: false,
+        errorCode: "GDI_PROXY_FAILED",
+        error: "A URL configurada deve começar obrigatoriamente com \"https://\""
+      });
+    }
+
+    const blockedTerms = [
+      "aistudio.google.com",
+      "showpreview",
+      "showassistant",
+      "accounts.google.com",
+      "firebaseapp login",
+      "firebaseapp",
+      "/__/auth/handler"
+    ];
+
+    const lowerUrl = url.toLowerCase();
+    for (const term of blockedTerms) {
+      if (lowerUrl.includes(term.toLowerCase())) {
+        return res.status(200).json({
+          success: false,
+          errorCode: "GDI_ENDPOINT_RETURNS_HTML",
+          error: `A URL do GDI configurada contém termos reservados inválidos ("${term}").`
+        });
+      }
+    }
+
+    // Ping check via POST to GDI webhook endpoint
+    let webhookUrl = url;
+    if (!webhookUrl.endsWith("/api/webhook/gdi-job")) {
+      if (webhookUrl.endsWith("/")) {
+        webhookUrl += "api/webhook/gdi-job";
+      } else {
+        webhookUrl += "/api/webhook/gdi-job";
+      }
+    }
+
+    const incomingCookie = req.headers["cookie"] || "";
+    console.log(`[HealthCheck] Probing real endpoint: ${webhookUrl}`);
+    
+    let response, text;
+    try {
+      const probeRes = await smartFetch(webhookUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-BOSS-Google-Docs-Integration-Key": (integrationKey || "").trim()
+        },
+        body: JSON.stringify({
+          source: "Portal BOSS Clientes",
+          target: "GDI",
+          documentType: "health_check",
+          action: "health_check"
+        })
+      }, incomingCookie);
+      response = probeRes.response;
+      text = probeRes.text;
+    } catch (e: any) {
+      return res.status(200).json({
+        success: false,
+        errorCode: "GDI_PROXY_FAILED",
+        error: `Não foi possível conectar à URL. Erro de conexão: ${e.message || e}`
+      });
+    }
+
+    const status = response.status;
+    const contentType = response.headers.get("content-type") || "";
+
+    const isHtmlResponse = contentType.includes("html") || 
+                           text.trim().startsWith("<") || 
+                           text.toLowerCase().includes("<!doctype html") || 
+                           text.toLowerCase().includes("<html");
+
+    if (isHtmlResponse) {
+      return res.status(200).json({
+        success: false,
+        errorCode: "GDI_ENDPOINT_RETURNS_HTML",
+        error: "A URL configurada para o GDI não é endpoint de API. Ela retornou HTML/404. Configure a URL pública real do webhook do GDI."
+      });
+    }
+
+    if (status === 404) {
+      return res.status(200).json({
+        success: false,
+        errorCode: "GDI_ENDPOINT_NOT_FOUND",
+        error: "A URL configurada retornou status de recurso Não Encontrado (404). Verifique se o caminho da rota está correto."
+      });
+    }
+
+    if (status === 401 || status === 403) {
+      return res.status(200).json({
+        success: false,
+        errorCode: "GDI_PERMISSION_DENIED",
+        error: "GDI negou autorização (401/403). Verifique se a Chave de Integração GDI está correta e compartilhada."
+      });
+    }
+
+    // Try parsing as JSON
+    let isJson = false;
+    try {
+      JSON.parse(text);
+      isJson = true;
+    } catch {
+      // not JSON
+    }
+
+    if (!isJson && !response.ok) {
+      return res.status(200).json({
+        success: false,
+        errorCode: "GDI_PAYLOAD_INVALID",
+        error: `A resposta obtida não pôde ser parseada como JSON. Resposta bruta: ${text.substring(0, 200)}...`
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      status,
+      contentType,
+      textSample: text.substring(0, 150)
+    });
+
+  } catch (err: any) {
+    console.error("[HealthCheck Error]", err);
+    return res.status(500).json({
+      success: false,
+      errorCode: "GDI_PROXY_FAILED",
+      error: `Falha interna no Proxy: ${err.message || err}`
+    });
+  }
+});
+
 app.post("/api/test-google-docs", async (req, res) => {
   const { gdiBaseUrl, integrationKey, isDiagnostic } = req.body || {};
   try {
@@ -327,15 +466,6 @@ app.post("/api/test-google-docs", async (req, res) => {
     }
 
     let url = gdiBaseUrl.trim();
-    
-    // Auto-correct AI Studio sandbox previews to the official homologated GDI API base
-    const lowerUrlForCorrection = url.toLowerCase();
-    if (lowerUrlForCorrection.includes("aistudio.google.com") || 
-        lowerUrlForCorrection.includes("showpreview") || 
-        lowerUrlForCorrection.includes("showassistant")) {
-      console.log(`[Test Docs] Detetada URL do AI Studio no gdiBaseUrl (${url}). Corrigindo para a URL operacional homologada do GDI.`);
-      url = "https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app";
-    }
 
     // Must start with https://
     if (!url.toLowerCase().startsWith("https://")) {
