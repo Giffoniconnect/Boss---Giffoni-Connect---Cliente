@@ -52,7 +52,6 @@ export interface DocumentTemplateConfig {
   id: string;
   name: string;
   objective: string;
-  templateId: string;
   order: number;
   required: boolean;
   visibleToClient: boolean;
@@ -64,7 +63,6 @@ export const LOCAL_FALLBACK_TEMPLATES: DocumentTemplateConfig[] = [
     id: 'procuracao',
     name: 'Procuração',
     objective: 'Documento necessário para representação judicial e administrativa do cliente.',
-    templateId: '',
     order: 1,
     required: true,
     visibleToClient: true,
@@ -74,7 +72,6 @@ export const LOCAL_FALLBACK_TEMPLATES: DocumentTemplateConfig[] = [
     id: 'declaracao_pobreza',
     name: 'Declaração de Pobreza',
     objective: 'Documento necessário para instruir pedido de justiça gratuita, quando aplicável.',
-    templateId: '',
     order: 2,
     required: true,
     visibleToClient: true,
@@ -84,7 +81,6 @@ export const LOCAL_FALLBACK_TEMPLATES: DocumentTemplateConfig[] = [
     id: 'contrato_honorarios',
     name: 'Contrato de Honorários',
     objective: 'Documento necessário para formalizar a contratação dos serviços jurídicos.',
-    templateId: '',
     order: 3,
     required: true,
     visibleToClient: true,
@@ -94,7 +90,6 @@ export const LOCAL_FALLBACK_TEMPLATES: DocumentTemplateConfig[] = [
     id: 'rg',
     name: 'RG',
     objective: 'Documento de identificação pessoal.',
-    templateId: '',
     order: 4,
     required: true,
     visibleToClient: true,
@@ -104,7 +99,6 @@ export const LOCAL_FALLBACK_TEMPLATES: DocumentTemplateConfig[] = [
     id: 'cpf',
     name: 'CPF',
     objective: 'Documento necessário para qualificação da parte.',
-    templateId: '',
     order: 5,
     required: true,
     visibleToClient: true,
@@ -114,7 +108,6 @@ export const LOCAL_FALLBACK_TEMPLATES: DocumentTemplateConfig[] = [
     id: 'cnh',
     name: 'CNH',
     objective: 'Documento de identificação pessoal alternativo.',
-    templateId: '',
     order: 6,
     required: false,
     visibleToClient: true,
@@ -124,7 +117,6 @@ export const LOCAL_FALLBACK_TEMPLATES: DocumentTemplateConfig[] = [
     id: 'carteira_trabalho',
     name: 'Carteira de Trabalho',
     objective: 'Documento necessário para comprovação de vínculo, profissão, histórico laboral ou dados previdenciários.',
-    templateId: '',
     order: 7,
     required: false,
     visibleToClient: true,
@@ -134,7 +126,6 @@ export const LOCAL_FALLBACK_TEMPLATES: DocumentTemplateConfig[] = [
     id: 'comprovante_residencia',
     name: 'Comprovante de residência',
     objective: 'Documento necessário para qualificação, competência territorial e atualização cadastral.',
-    templateId: '',
     order: 8,
     required: true,
     visibleToClient: true,
@@ -161,7 +152,6 @@ interface ConnectorConfig {
   tokenPlaceholder?: string;
   calendarStrategy?: string;
   calendarIdPlaceholder?: string;
-  templatesStrategy?: string;
   provider?: string;
   notes?: string;
   updatedAt?: string;
@@ -244,7 +234,6 @@ export default function Configuracoes() {
     },
     googleDocs: {
       status: 'não_configurado',
-      templatesStrategy: 'standard_procuracao',
       notes: ''
     },
     whatsapp: {
@@ -272,7 +261,6 @@ export default function Configuracoes() {
   // New Document Template Form states
   const [newDocName, setNewDocName] = useState('');
   const [newDocObjective, setNewDocObjective] = useState('');
-  const [newDocTemplateId, setNewDocTemplateId] = useState('');
   const [newDocOrder, setNewDocOrder] = useState(9);
   const [newDocRequired, setNewDocRequired] = useState(false);
   const [newDocVisible, setNewDocVisible] = useState(true);
@@ -405,6 +393,7 @@ export default function Configuracoes() {
             setDocumentTemplates(LOCAL_FALLBACK_TEMPLATES);
           }
         }
+        console.log("[PORTAL_TEMPLATE_PHYSICAL_CONFIG_REMOVED] Carregou as configurações do BOSS sem referências de templates físicos.");
       } catch (err) {
         console.error('Error loading settings:', err);
         // Resilient fallback
@@ -524,11 +513,11 @@ export default function Configuracoes() {
 
         await setDoc(doc(db, 'settings', 'connectors'), payload);
       } else if (activeSubTab === 'documentos') {
+        console.log("[PORTAL_TEMPLATE_PHYSICAL_CONFIG_REMOVED] Salvando as configurações de documentos do Portal BOSS livres de templates físicos ou IDs do Google Docs!");
         const cleanedTemplates = documentTemplates.map(t => ({
           ...t,
           name: (t.name || '').trim(),
           objective: (t.objective || '').trim(),
-          templateId: (t.templateId || '').trim(),
           order: Number(t.order) || 1,
           required: !!t.required,
           visibleToClient: !!t.visibleToClient,
@@ -583,13 +572,14 @@ export default function Configuracoes() {
     } else {
       // Prompt/Reset to default connectors
       if (window.confirm('Deseja reverter chaves e status de conectores para o padrão não configurado?')) {
+        console.log("[PORTAL_TEMPLATE_PHYSICAL_CONFIG_REMOVED] Reconfigurando conectores padrão para reverter estados físicos de templates.");
         setConnectors({
           stripe: { status: 'não_configurado', mode: 'test', publishableKey: '', secretKeyPlaceholder: '', webhookSecretPlaceholder: '', notes: '' },
           asaas: { status: 'não_configurado', mode: 'sandbox', publicInfo: '', apiKeyPlaceholder: '', webhookSecretPlaceholder: '', notes: '' },
           googleDrive: { status: 'não_configurado', folderStrategy: 'by_case', rootFolderIdPlaceholder: '', serviceAccountPlaceholder: '', buildUrl: '', integrationKey: '', notes: '' },
           todoist: { status: 'não_configurado', projectStrategy: 'single_workspace', tokenPlaceholder: '', notes: '' },
           googleCalendar: { status: 'não_configurado', calendarStrategy: 'shared', calendarIdPlaceholder: '', notes: '' },
-          googleDocs: { status: 'não_configurado', templatesStrategy: 'standard_procuracao', notes: '' },
+          googleDocs: { status: 'não_configurado', notes: '' },
           whatsapp: { status: 'não_configurado', provider: 'meta_api', notes: '' },
           gmail: { status: 'não_configurado', provider: 'smtp_sec', notes: '' }
         });
@@ -689,7 +679,6 @@ export default function Configuracoes() {
         if (!copy.googleDocs) {
           copy.googleDocs = {
             status: 'não_configurado',
-            templatesStrategy: 'standard_procuracao',
             notes: ''
           };
         }
@@ -2232,17 +2221,6 @@ export default function Configuracoes() {
                           </div>
 
                           <div className="space-y-1">
-                            <label className="text-[9px] font-bold uppercase text-gray-505">Estratégia de Modelos (Templates)</label>
-                            <input
-                              type="text"
-                              value={connectors.googleDocs?.templatesStrategy || ''}
-                              onChange={(e) => updateIndividualConnector('googleDocs', 'templatesStrategy', e.target.value)}
-                              placeholder="ex: id_modelo_contrato_standard"
-                              className="w-full px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono text-gray-700 outline-none"
-                            />
-                          </div>
-
-                          <div className="space-y-1">
                             <label className="text-[9px] font-bold uppercase text-gray-505">Status da conexão</label>
                             <select
                               value={connectors.googleDocs?.status || 'não_configurado'}
@@ -2788,7 +2766,6 @@ export default function Configuracoes() {
                               setEditingTemplateId(temp.id);
                               setNewDocName(temp.name);
                               setNewDocObjective(temp.objective);
-                              setNewDocTemplateId(temp.templateId || '');
                               setNewDocOrder(temp.order);
                               setNewDocRequired(temp.required);
                               setNewDocVisible(temp.visibleToClient);
@@ -2821,7 +2798,6 @@ export default function Configuracoes() {
                               {temp.objective || 'Nenhum objetivo fornecido.'}
                             </p>
                             <div className="mt-2 flex items-center justify-between text-[9px] text-gray-405 text-gray-400 font-mono">
-                              <span className="truncate max-w-[200px]">Template GDocs: <strong className="text-gray-600 font-bold">{temp.templateId || 'não cadastrado'}</strong></span>
                               <span>Portal: <strong className="text-gray-600 font-bold">{temp.visibleToClient ? 'Visível' : 'Oculto'}</strong></span>
                             </div>
                           </div>
@@ -2860,17 +2836,6 @@ export default function Configuracoes() {
                             onChange={(e) => setNewDocObjective(e.target.value)}
                             placeholder="Descreva a finalidade padrão do documento..."
                             className="w-full px-3 py-2 bg-white border border-gray-200 focus:ring-1 focus:ring-gray-905 rounded-xl text-xs font-semibold text-gray-800 outline-none resize-none"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold uppercase text-gray-500">Google Docs Template ID</label>
-                          <input 
-                            type="text" 
-                            value={newDocTemplateId} 
-                            onChange={(e) => setNewDocTemplateId(e.target.value)}
-                            placeholder="ID exclusivo do arquivo de template do Google Docs"
-                            className="w-full px-3 py-2 bg-white border border-gray-200 focus:ring-1 focus:ring-gray-905 rounded-xl text-xs font-semibold font-mono text-gray-800 outline-none"
                           />
                         </div>
 
@@ -2923,7 +2888,6 @@ export default function Configuracoes() {
                                   ...t,
                                   name: newDocName.trim(),
                                   objective: newDocObjective.trim(),
-                                  templateId: newDocTemplateId.trim(),
                                   order: newDocOrder,
                                   required: newDocRequired,
                                   visibleToClient: newDocVisible,
@@ -2939,7 +2903,6 @@ export default function Configuracoes() {
                                   id: newId,
                                   name: newDocName.trim(),
                                   objective: newDocObjective.trim(),
-                                  templateId: newDocTemplateId.trim(),
                                   order: newDocOrder,
                                   required: newDocRequired,
                                   visibleToClient: newDocVisible,
@@ -2952,7 +2915,6 @@ export default function Configuracoes() {
                               setEditingTemplateId(null);
                               setNewDocName('');
                               setNewDocObjective('');
-                              setNewDocTemplateId('');
                               setNewDocOrder(documentTemplates.length + 2);
                               setNewDocRequired(false);
                               setNewDocVisible(true);
@@ -2969,7 +2931,6 @@ export default function Configuracoes() {
                                 setEditingTemplateId(null);
                                 setNewDocName('');
                                 setNewDocObjective('');
-                                setNewDocTemplateId('');
                                 setNewDocOrder(documentTemplates.length + 1);
                                 setNewDocRequired(false);
                                 setNewDocVisible(true);

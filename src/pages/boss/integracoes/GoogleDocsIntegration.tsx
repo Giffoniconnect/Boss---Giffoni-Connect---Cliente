@@ -28,7 +28,6 @@ import {
 
 interface GoogleDocsConfig {
   status: 'não_configurado' | 'invalida' | 'parcial' | 'operacional' | 'erro';
-  templatesStrategy: string;
   notes: string;
   endpointUrl: string;
   integrationKey: string;
@@ -70,7 +69,6 @@ export default function GoogleDocsIntegration() {
   const [isEditing, setIsEditing] = useState(false);
   const [config, setConfig] = useState<GoogleDocsConfig>({
     status: 'não_configurado',
-    templatesStrategy: 'standard_procuracao',
     notes: '',
     endpointUrl: '',
     integrationKey: '',
@@ -282,6 +280,7 @@ export default function GoogleDocsIntegration() {
       const docSnap = await getDoc(docRef);
       const currentData = docSnap.exists() ? docSnap.data() : {};
       
+      console.log("[PORTAL_TEMPLATE_PHYSICAL_CONFIG_REMOVED] Registro de templates físicos removido limpando configurações antigas.");
       const updatedGDocs = {
         ...currentData.googleDocs,
         buildUrl: '',
@@ -289,7 +288,6 @@ export default function GoogleDocsIntegration() {
         integrationKey: '',
         status: 'não_configurado',
         notes: '',
-        templatesStrategy: 'standard_procuracao',
         lastEndpoint: '',
         lastHttpStatus: null,
         lastResponse: '',
@@ -317,7 +315,6 @@ export default function GoogleDocsIntegration() {
 
       setConfig({
         status: 'não_configurado',
-        templatesStrategy: 'standard_procuracao',
         notes: '',
         endpointUrl: '',
         integrationKey: '',
@@ -587,10 +584,10 @@ export default function GoogleDocsIntegration() {
 
             // Normalização de status unificada com utilitário único (TAREFA 3)
             const statusInfo = normalizeGdiStatus(configToUse);
+            console.log("[PORTAL_TEMPLATE_PHYSICAL_CONFIG_REMOVED] Carregou configurações de conectores sem nenhuma referência de templates físicos.");
 
             setConfig({
               status: statusInfo.normalizedStatus === 'operacional' ? 'operacional' : (configToUse.status || 'não_configurado'),
-              templatesStrategy: configToUse.templatesStrategy || 'standard_procuracao',
               notes: configToUse.notes || '',
               endpointUrl: configToUse.endpointUrl || '',
               integrationKey: configToUse.integrationKey || '',
@@ -709,10 +706,10 @@ export default function GoogleDocsIntegration() {
 
     try {
       const targetStatus = status;
+      console.log("[PORTAL_TEMPLATE_PHYSICAL_CONFIG_REMOVED] Salvando configurações do GDI livres de referências e strings de template físico.");
       await setDoc(doc(db, 'settings', 'connectors'), {
         googleDocs: {
           status: targetStatus,
-          templatesStrategy: config.templatesStrategy.trim(),
           notes: config.notes.trim(),
           buildUrl: gapiBaseUrl,
           endpointUrl: gapiBaseUrl,
@@ -865,10 +862,10 @@ export default function GoogleDocsIntegration() {
       setConfig(updated);
 
       // Save real-time settings on test success / status updates
+      console.log("[PORTAL_TEMPLATE_PHYSICAL_CONFIG_REMOVED] Sincronização diagnóstica de conectores limpa de templates físicos.");
       await setDoc(doc(db, 'settings', 'connectors'), {
         googleDocs: {
           status: updatedStatus,
-          templatesStrategy: config.templatesStrategy.trim(),
           notes: config.notes.trim(),
           buildUrl: gapiBaseUrl,
           endpointUrl: gapiBaseUrl,
@@ -916,13 +913,13 @@ export default function GoogleDocsIntegration() {
     setConfig(updated);
     
     try {
+      console.log("[PORTAL_TEMPLATE_PHYSICAL_CONFIG_REMOVED] Removendo referências físicas na desativação voluntária do conector GDI.");
       await setDoc(doc(db, 'settings', 'connectors'), {
         googleDocs: {
           status: 'não_configurado',
           buildUrl: (config.endpointUrl || '').trim(),
           endpointUrl: (config.endpointUrl || '').trim(),
           integrationKey: (config.integrationKey || '').trim(),
-          templatesStrategy: (config.templatesStrategy || '').trim(),
           notes: (config.notes || '').trim(),
           lastEndpoint: '',
           lastHttpStatus: null,
@@ -1086,18 +1083,6 @@ export default function GoogleDocsIntegration() {
                     value={config.integrationKey}
                     onChange={(e) => setConfig({ ...config, integrationKey: e.target.value })}
                     placeholder="boss_docs_live_xxxxxxxx"
-                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 disabled:opacity-75 disabled:cursor-not-allowed"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Estratégia de Modelos (folder templateKey ID)</label>
-                  <input
-                    type="text"
-                    disabled={!isEditing}
-                    value={config.templatesStrategy}
-                    onChange={(e) => setConfig({ ...config, templatesStrategy: e.target.value })}
-                    placeholder="id_do_modelo_padrao"
                     className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 disabled:opacity-75 disabled:cursor-not-allowed"
                   />
                 </div>
