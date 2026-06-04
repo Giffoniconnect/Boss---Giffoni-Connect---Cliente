@@ -49,6 +49,14 @@ interface GoogleDocsConfig {
   lastHealthCheckError?: string;
   lastValidatedWebhookUrl?: string;
   transportMode?: string;
+  // TAREFA 1 fields
+  environmentMode?: string;
+  integrationOperationalStatus?: string;
+  lastPreviewWarning?: string;
+  lastServerToServerTestAt?: string;
+  lastServerToServerResult?: string;
+  lastReceivedByGdiConfirmed?: string;
+  authProxyDetected?: boolean;
 }
 
 export default function GoogleDocsIntegration() {
@@ -81,7 +89,14 @@ export default function GoogleDocsIntegration() {
     lastHealthCheckStatus: '',
     lastHealthCheckError: '',
     lastValidatedWebhookUrl: '',
-    transportMode: 'http_webhook'
+    transportMode: 'http_webhook',
+    environmentMode: 'production_server_to_server',
+    integrationOperationalStatus: 'nao_configurado',
+    lastPreviewWarning: '',
+    lastServerToServerTestAt: '',
+    lastServerToServerResult: '',
+    lastReceivedByGdiConfirmed: 'não_confirmado',
+    authProxyDetected: false
   });
 
   // Logs
@@ -161,52 +176,49 @@ export default function GoogleDocsIntegration() {
       let errorMsgValue = '';
       let successMsgValue = '';
 
-      if (data.success && data.status === 'operacional') {
+      if (data.integrationOperationalStatus === 'operacional') {
         newStatus = 'operacional';
         diagMsg = 'Canal fático de API diagnosticado como 100% OP e homologado para emissão real.';
         successMsgValue = `Sucesso em ${timestamp}: Conexão homologada com sucesso no endpoint.`;
         setDiagnosticState('operacional');
-        setDiagnosticMessage(`Diagnóstico de Conexão Bem-Sucedido: O canal está 100% operacional no endpoint configurado! Código de resposta testada: HTTP ${data.statusCode}`);
+        setDiagnosticMessage(`Diagnóstico de Conexão Bem-Sucedido: O canal está 100% operacional no endpoint configurado!`);
         setFeedback({
           type: 'success',
           message: 'Excelente! O diagnóstico fático confirmou que a API e o barramento do GDI estão 🟢 Operacionais.'
         });
         setLogs(prev => [...prev, `[${timestamp}] Diagnóstico concluído com sucesso (STATUS: 🟢 Operacional).`]);
+      } else if (data.integrationOperationalStatus === 'preview_server_to_server_blocked') {
+        newStatus = 'erro';
+        diagMsg = 'O GDI pode estar acessível no navegador preview, mas o backend do Portal não conseguiu comunicação server-to-server com o runtime do GDI.';
+        errorMsgValue = `Erro de Conexão (OAuth/Iframe Block - preview_server_to_server_blocked) em ${timestamp}`;
+        setDiagnosticState('erro');
+        setDiagnosticMessage(`Diagnóstico Negado: O GDI pode estar acessível no navegador preview, mas o backend do Portal não conseguiu comunicação server-to-server com o runtime do GDI devido ao bloqueio de proxy do preview.`);
+        setFeedback({
+          type: 'error',
+          message: 'Bloqueio de Preview detectado: O backend do Portal recebeu resposta de redirecionamento ou login ao tentar falar com o GDI (Sessão não compartilhada server-to-server).'
+        });
+        setLogs(prev => [...prev, `[${timestamp}] Diagnóstico negado: autenticação do proxy de preview interceptou a requisição (STATUS: 🔴 Bloqueado em Preview).`]);
+      } else if (data.integrationOperationalStatus === 'endpoint_publico_ok') {
+        newStatus = 'parcial';
+        diagMsg = data.lastPreviewWarning || 'O barramento respondeu, mas sem o contrato completo do GDI.';
+        setDiagnosticState('parcial');
+        setDiagnosticMessage(`Diagnóstico Parcial: O barramento respondeu, mas o contrato JSON está incompleto.`);
+        setFeedback({
+          type: 'error',
+          message: 'Conexão Parcial: Endpoint respondeu, mas falhou na validação de contrato/JSON GDI.'
+        });
+        setLogs(prev => [...prev, `[${timestamp}] Conexão parcial: endpoints responderam mas contrato falhou.`]);
       } else {
-        if (data.errorCode === 'GDI_ENDPOINT_RETURNS_HTML') {
-          newStatus = 'invalida';
-          diagMsg = 'Critério de API Violado: O endpoint retornou HTML (Tela de Login, Web Preview ou Erro interno). O GDI exige uma API pública pura em JSON.';
-          errorMsgValue = `Atributo Inválido (GDI_ENDPOINT_RETURNS_HTML) em ${timestamp}: ${data.error || 'Retornou HTML/Login redirect'}`;
-          setDiagnosticState('invalida');
-          setDiagnosticMessage(`Diagnóstico Negado (Critério 3): ${data.error}`);
-          setFeedback({
-            type: 'error',
-            message: `Erro Crítico de API: ${data.error}`
-          });
-          setLogs(prev => [...prev, `[${timestamp}] Diagnóstico falhou: URL retornou login/HTML (STATUS: 🔴 Inválida).`]);
-        } else if (data.errorCode === 'GDI_ENDPOINT_NOT_FOUND') {
-          newStatus = 'invalida';
-          diagMsg = 'Recurso Não Encontrado (HTTP 404). As rotas /api/health ou /api/webhook/gdi-job retornaram 404.';
-          errorMsgValue = `Endpoint Inexistente (GDI_ENDPOINT_NOT_FOUND) em ${timestamp}: ${data.error || 'Retornou 404'}`;
-          setDiagnosticState('invalida');
-          setDiagnosticMessage(`Diagnóstico falhou: Endpoint Inexistente. ${data.error}`);
-          setFeedback({
-            type: 'error',
-            message: `Erro de Endpoint: ${data.error}`
-          });
-          setLogs(prev => [...prev, `[${timestamp}] Diagnóstico falhou: URL retornou Não Encontrado (404) (STATUS: 🔴 Inválida).`]);
-        } else {
-          newStatus = 'erro';
-          diagMsg = `Diagnóstico Parcial ou Falha: ${data.error || 'Falha de comunicação.'}`;
-          errorMsgValue = `Falha em ${timestamp}: ${data.error || 'Erro desconhecido'}`;
-          setDiagnosticState('erro');
-          setDiagnosticMessage(`Diagnóstico Parcial: ${data.error || 'Falha de comunicação ou autenticação.'}`);
-          setFeedback({
-            type: 'error',
-            message: `Atenção: A URL respondeu parcialmente, mas falhou na validação de contrato/JSON. Erro: ${data.error}`
-          });
-          setLogs(prev => [...prev, `[${timestamp}] Diagnóstico parcial: falha de JSON ou status restrito (STATUS: 🟡 Parcial).`]);
-        }
+        newStatus = 'erro';
+        diagMsg = data.lastPreviewWarning || 'Falha de conexão com os barramentos do GDI.';
+        errorMsgValue = `Erro de Conexão em ${timestamp}: ${data.lastServerToServerResult}`;
+        setDiagnosticState('erro');
+        setDiagnosticMessage(`Diagnóstico Falhou: ${data.lastServerToServerResult}`);
+        setFeedback({
+          type: 'error',
+          message: `O diagnóstico fático falhou: ${data.lastPreviewWarning || 'Impossível mapear GDI.'}`
+        });
+        setLogs(prev => [...prev, `[${timestamp}] Falha no diagnóstico de barramento fático: ${data.lastServerToServerResult}`]);
       }
 
       // Save updated configuration structure directly into Firestore as required by TAREFA 4
@@ -222,13 +234,20 @@ export default function GoogleDocsIntegration() {
         lastError: errorMsgValue || currentData.googleDocs?.lastError || '',
         lastSuccess: successMsgValue || currentData.googleDocs?.lastSuccess || '',
         lastEndpointTested: targetUrl,
-        lastContentTypeReceived: data.contentType || 'application/json',
-        lastHttpStatusReceived: data.statusCode || 200,
+        lastContentTypeReceived: (data.teste2 && data.teste2.contentType) || 'application/json',
+        lastHttpStatusReceived: (data.teste2 && data.teste2.httpStatus) || 200,
         lastHealthCheckAt: timestamp,
-        lastHealthCheckStatus: String(data.statusCode || ''),
+        lastHealthCheckStatus: String((data.teste2 && data.teste2.httpStatus) || ''),
         lastHealthCheckError: errorMsgValue || '',
         lastValidatedWebhookUrl: data.lastValidatedWebhookUrl || `${targetUrl}/api/webhook/gdi-job`,
         transportMode: 'http_webhook',
+        environmentMode: data.environmentMode || 'production_server_to_server',
+        integrationOperationalStatus: data.integrationOperationalStatus || 'erro',
+        lastPreviewWarning: data.lastPreviewWarning || '',
+        lastServerToServerTestAt: data.lastServerToServerTestAt || new Date().toISOString(),
+        lastServerToServerResult: data.lastServerToServerResult || '',
+        lastReceivedByGdiConfirmed: data.lastReceivedByGdiConfirmed || currentData.googleDocs?.lastReceivedByGdiConfirmed || 'não_confirmado',
+        authProxyDetected: data.authProxyDetected || false,
         updatedAt: new Date().toISOString()
       };
 
@@ -1234,7 +1253,7 @@ export default function GoogleDocsIntegration() {
                 <div className="space-y-1 flex items-center justify-between border-b border-slate-800 pb-2">
                   <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider font-mono">3. Status:</span>
                   <span className={`px-2 py-0.5 text-[9px] font-black rounded uppercase font-mono tracking-wider ${
-                    config.status === 'ativo' ? 'bg-emerald-950/80 text-emerald-400' :
+                    config.status === 'operacional' ? 'bg-emerald-950/80 text-emerald-400' :
                     config.status === 'erro' ? 'bg-rose-955/80 text-rose-400 animate-pulse' :
                     'bg-slate-950 text-slate-400'
                   }`}>
@@ -1243,14 +1262,41 @@ export default function GoogleDocsIntegration() {
                 </div>
 
                 <div className="space-y-1 flex items-center justify-between border-b border-slate-800 pb-2">
-                  <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider font-mono">4. Último teste:</span>
+                  <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider font-mono">Modo de Ambiente:</span>
+                  <span className="text-slate-250 text-[10px] font-mono leading-none font-bold">
+                    {config.environmentMode === "preview_server_to_server" ? "☁️ Preview Server-to-Server" :
+                     config.environmentMode === "preview_browser" ? "💻 Preview Browser-Only" :
+                     "🚀 Produção Server-to-Server"}
+                  </span>
+                </div>
+
+                <div className="space-y-1 flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider font-mono">Status Operacional:</span>
+                  <span className={`px-2 py-0.5 text-[9px] font-mono rounded font-black uppercase tracking-wider ${
+                    config.integrationOperationalStatus === 'operacional' ? 'bg-emerald-950 text-emerald-400 border border-emerald-900/60' :
+                    config.integrationOperationalStatus === 'preview_server_to_server_blocked' ? 'bg-rose-950 text-rose-400 border border-rose-900/60 animate-pulse' :
+                    config.integrationOperationalStatus === 'endpoint_publico_ok' ? 'bg-blue-950 text-blue-400 border border-blue-900/60' :
+                    'bg-slate-950 text-slate-400'
+                  }`}>
+                    {config.integrationOperationalStatus ? config.integrationOperationalStatus.replace(/_/g, ' ') : 'N/A'}
+                  </span>
+                </div>
+
+                {config.lastPreviewWarning && (
+                  <div className="p-2.5 bg-amber-955/30 border border-amber-900/50 rounded-xl text-[10px] leading-relaxed text-amber-300 font-semibold font-mono whitespace-pre-wrap">
+                    ⚠️ {config.lastPreviewWarning}
+                  </div>
+                )}
+
+                <div className="space-y-1 flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider font-mono">Último teste:</span>
                   <span className="text-slate-200 text-[11px] font-mono leading-none">
                     {config.lastTestAt || '(Nenhum realizado)'}
                   </span>
                 </div>
 
                 <div className="space-y-1 flex items-center justify-between border-b border-slate-800 pb-2">
-                  <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider font-mono">5. Última resposta:</span>
+                  <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider font-mono">Última resposta:</span>
                   <span className="font-mono text-slate-200 text-[11px] bg-slate-950 p-1 px-2 rounded-lg border border-slate-850">
                     {config.lastHttpStatus ? `HTTP ${config.lastHttpStatus}` : 'N/A'}
                   </span>
@@ -1262,7 +1308,7 @@ export default function GoogleDocsIntegration() {
                     <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
                       diagnosticState === 'operacional' ? 'bg-emerald-500 animate-pulse' :
                       diagnosticState === 'parcial' ? 'bg-amber-500 animate-pulse' :
-                      diagnosticState === 'invalida' ? 'bg-rose-500 animate-pulse' :
+                      diagnosticState === 'invalida' ? 'bg-rose-500' :
                       'bg-slate-500'
                     }`} />
                     <span className="font-mono text-[10px] font-black uppercase tracking-wider text-slate-100">

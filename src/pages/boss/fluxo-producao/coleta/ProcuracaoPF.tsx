@@ -970,6 +970,11 @@ export default function ProcuracaoPF() {
       const successLogs = [
         ...initialLogs,
         {
+          action: "PORTAL_GDI_PAYLOAD_DELIVERY_CONFIRMED",
+          timestamp: new Date().toISOString(),
+          message: "O GDI registrou o job de emissão de procuração fática com absoluto sucesso."
+        },
+        {
           action: "PORTAL_GDI_RESPONSE_SUCCESS",
           timestamp: new Date().toISOString(),
           message: `GDI retornou documento gerado com sucesso. ID: ${googleDocsId}`
@@ -981,6 +986,22 @@ export default function ProcuracaoPF() {
           message: "Caso atualizado no Portal com as referências físicas e URLs da Procuração PF."
         }
       ];
+
+      // Update connectors lastReceivedByGdiConfirmed to confirmed
+      try {
+        const connectorsDocRef = doc(db, 'settings', 'connectors');
+        const connectorsDocSnap = await getDoc(connectorsDocRef);
+        if (connectorsDocSnap.exists()) {
+          const currentConnectorsData = connectorsDocSnap.data();
+          await updateDoc(connectorsDocRef, {
+            "googleDocs.lastReceivedByGdiConfirmed": "confirmado",
+            "googleDocs.lastServerToServerResult": `Sucesso na geração da procuração do caso: ${targetCaseId}`,
+            "googleDocs.lastServerToServerTestAt": new Date().toISOString()
+          });
+        }
+      } catch (connErr) {
+        console.error("Erro ao atualizar lastReceivedByGdiConfirmed no conector:", connErr);
+      }
 
       // 5. Se o GDI retornar sucesso, salvar no caso
       await updateDoc(caseDocRef, {
@@ -1021,6 +1042,11 @@ export default function ProcuracaoPF() {
 
       const failureLogs = [
         ...initialLogs,
+        {
+          action: "PORTAL_GDI_PAYLOAD_DELIVERY_NOT_CONFIRMED",
+          timestamp: new Date().toISOString(),
+          message: `Falha na entrega de payload fático ao GDI. Erro: ${errorMessage}`
+        },
         {
           action: "PORTAL_GDI_RESPONSE_FAILED",
           timestamp: new Date().toISOString(),
@@ -1572,17 +1598,47 @@ export default function ProcuracaoPF() {
                         Integração & Estado Ativo
                       </p>
                       <div>
-                        <span className="text-gray-500">gdiEndpointUrl:</span>{" "}
-                        <code className="text-indigo-900 font-bold break-all">{loadedGdiUrl || "N/A"}</code>
+                        <span className="text-gray-500 text-[10px]">gdiEndpointUrl:</span>{" "}
+                        <code className="text-indigo-900 font-bold break-all block text-[11px] bg-indigo-50/50 p-1 rounded border border-indigo-100/50 my-1">{loadedGdiUrl || "N/A"}</code>
                       </div>
-                      <div>
-                        <span className="text-gray-500">gdiStatus:</span>{" "}
+                      <div className="flex flex-wrap items-center gap-1.5 justify-between py-1">
+                        <span className="text-gray-500">Modo Ambiente:</span>
+                        <span className="text-gray-800 font-bold text-[11px]">
+                          {googleDocsConfig?.environmentMode === "preview_server_to_server" ? "☁️ Preview Server-to-Server" :
+                           googleDocsConfig?.environmentMode === "preview_browser" ? "💻 Preview Browser-Only" :
+                           googleDocsConfig?.environmentMode ? "🚀 Produção Server-to-Server" : "N/A"}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 justify-between py-1">
+                        <span className="text-gray-500">Status Operacional GDI:</span>
                         <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${
-                          gdiStatus === "operacional" ? "bg-emerald-100 text-emerald-800" :
-                          gdiStatus === "ativo" ? "bg-amber-100 text-amber-800" : "bg-rose-100 text-rose-800"
-                        }`}>{gdiStatus}</span>
+                          googleDocsConfig?.integrationOperationalStatus === "operacional" ? "bg-emerald-100 text-emerald-800 border border-emerald-200" :
+                          googleDocsConfig?.integrationOperationalStatus === "preview_server_to_server_blocked" ? "bg-rose-100 text-rose-805 animate-pulse border border-rose-200" :
+                          googleDocsConfig?.integrationOperationalStatus === "endpoint_publico_ok" ? "bg-blue-100 text-blue-800" :
+                          "bg-rose-100 text-rose-800"
+                        }`}>{googleDocsConfig?.integrationOperationalStatus || gdiStatus}</span>
                       </div>
-                      <div>
+                      <div className="flex flex-wrap items-center gap-1.5 justify-between py-1 border-b border-dashed border-gray-150 pb-2">
+                        <span className="text-gray-500">Entrega Confirmada pelo GDI:</span>
+                        <span className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold ${
+                          googleDocsConfig?.lastReceivedByGdiConfirmed === "confirmado" ? "bg-emerald-500 text-white" :
+                          "bg-gray-205 text-gray-700 border border-gray-300"
+                        }`}>{googleDocsConfig?.lastReceivedByGdiConfirmed || "não_confirmado"}</span>
+                      </div>
+
+                      {googleDocsConfig?.lastPreviewWarning && (
+                        <div className="p-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-[10px] font-medium leading-relaxed">
+                          ⚠️ {googleDocsConfig.lastPreviewWarning}
+                        </div>
+                      )}
+
+                      {googleDocsConfig?.lastServerToServerResult && (
+                        <div className="p-2 bg-slate-900 border border-slate-950 text-slate-200 rounded-xl text-[10px] font-mono leading-relaxed max-h-20 overflow-auto">
+                          ℹ️ {googleDocsConfig.lastServerToServerResult}
+                        </div>
+                      )}
+
+                      <div className="pt-1.5">
                         <span className="text-gray-500">lastHealthCheckAt:</span>{" "}
                         <span className="text-gray-800 font-bold">{googleDocsConfig?.lastHealthCheckAt || googleDocsConfig?.updatedAt || "N/A"}</span>
                       </div>

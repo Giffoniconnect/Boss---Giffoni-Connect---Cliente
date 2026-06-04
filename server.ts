@@ -302,12 +302,17 @@ app.post("/api/proxy-google-docs/health-check", async (req, res) => {
   try {
     const { targetEndpoint, integrationKey } = req.body || {};
     
+    console.log("[Proxy Docs] PORTAL_GDI_SERVER_TO_SERVER_TEST_STARTED");
+
     if (!targetEndpoint || !targetEndpoint.trim()) {
       return res.status(200).json({
         success: false,
-        status: "invalida",
-        errorCode: "GDI_ENDPOINT_NOT_FOUND",
-        error: "O campo targetEndpoint é obrigatório."
+        environmentMode: "preview_browser",
+        integrationOperationalStatus: "nao_configurado",
+        lastPreviewWarning: "A URL do GDI configurada está vazia.",
+        lastServerToServerTestAt: new Date().toISOString(),
+        lastServerToServerResult: "Falha: URL ausente.",
+        lastReceivedByGdiConfirmed: "não_confirmado"
       });
     }
 
@@ -322,187 +327,190 @@ app.post("/api/proxy-google-docs/health-check", async (req, res) => {
     if (!url.toLowerCase().startsWith("https://")) {
       return res.status(200).json({
         success: false,
-        status: "invalida",
-        errorCode: "GDI_PAYLOAD_INVALID",
-        error: "A URL configurada deve começar obrigatoriamente com \"https://\""
+        environmentMode: "preview_browser",
+        integrationOperationalStatus: "invalida",
+        lastPreviewWarning: "A URL do GDI deve começar obrigatoriamente com \"https://\"",
+        lastServerToServerTestAt: new Date().toISOString(),
+        lastServerToServerResult: "Falha: URL não utiliza HTTPS seguro.",
+        lastReceivedByGdiConfirmed: "não_confirmado"
       });
     }
 
-    const blockedTerms = [
-      "aistudio.google.com",
-      "showpreview",
-      "showassistant",
-      "accounts.google.com",
-      "firebaseapp login",
-      "firebaseapp",
-      "localhost",
-      "127.0.0.1",
-      "/__/auth/handler"
-    ];
-
-    const lowerUrl = url.toLowerCase();
-    for (const term of blockedTerms) {
-      if (lowerUrl.includes(term.toLowerCase())) {
-        return res.status(200).json({
-          success: false,
-          status: "invalida",
-          errorCode: "GDI_ENDPOINT_RETURNS_HTML",
-          error: `A URL do GDI configurada contém termos reservados inválidos ("${term}").`
-        });
-      }
+    let isPreviewEnv = url.toLowerCase().includes("ais-dev-") || url.toLowerCase().includes("ais-pre-") || url.toLowerCase().includes("web-preview") || url.toLowerCase().includes("aistudio");
+    if (isPreviewEnv) {
+      console.log("[Proxy Docs] PORTAL_GDI_PREVIEW_MODE_DETECTED");
     }
+
+    let envMode = isPreviewEnv ? "preview_server_to_server" : "production_server_to_server";
 
     const incomingCookie = req.headers["cookie"] || "";
     const headers = {
       "X-BOSS-Google-Docs-Integration-Key": (integrationKey || "").trim()
     };
 
-    // 1. Probing GET /api/health
+    const isAuthProxyOrPreview = (status: number, contentType: string, text: string, finalUrl: string, requestedUrl: string): boolean => {
+      const cLower = (contentType || "").toLowerCase();
+      const tLower = (text || "").toLowerCase();
+      const fLower = (finalUrl || "").toLowerCase();
+      const rLower = (requestedUrl || "").toLowerCase();
+
+      // Redirected to auth/iframe domains or paths
+      const isRedirectedToAuth = (fLower !== rLower) && (
+        fLower.includes("accounts.google") ||
+        fLower.includes("aistudio.google") ||
+        fLower.includes("login") ||
+        fLower.includes("auth") ||
+        fLower.includes("unauthorized")
+      );
+
+      const containsAuthWords = 
+        tLower.includes("login") ||
+        tLower.includes("auth") ||
+        tLower.includes("accounts.google.com") ||
+        tLower.includes("aistudio.google.com") ||
+        tLower.includes("showpreview") ||
+        tLower.includes("showassistant") ||
+        tLower.includes("unauthorized preview") ||
+        tLower.includes("sign-in") ||
+        tLower.includes("signin") ||
+        tLower.includes("cookie check");
+
+      const isHtml = cLower.includes("html") || 
+                     text.trim().startsWith("<") || 
+                     tLower.includes("<!doctype html") || 
+                     tLower.includes("<html");
+
+      return isHtml || isRedirectedToAuth || containsAuthWords || status === 401 || status === 403;
+    };
+
+    // TEST 2 - PROBING GET /api/health
     const healthUrl = `${url}/api/health`;
-    console.log(`[HealthCheck] Probing api/health: ${healthUrl}`);
-    let healthRes, healthText;
+    console.log(`[Proxy Docs] Probing api/health: ${healthUrl}`);
+    let healthRes, healthText = "";
+    let httpStatusA = 0;
+    let contentTypeA = "";
+    let redirectedA = false;
+    let finalUrlA = healthUrl;
+    let authProxyDetectedA = false;
+    let errA = "";
+
     try {
-      const probeRes = await smartFetch(healthUrl, {
-        method: "GET",
-        headers
-      }, incomingCookie);
+      const probeRes = await smartFetch(healthUrl, { method: "GET", headers }, incomingCookie);
       healthRes = probeRes.response;
+      httpStatusA = healthRes.status;
+      contentTypeA = healthRes.headers.get("content-type") || "";
       healthText = probeRes.text;
+      redirectedA = healthRes.redirected || false;
+      finalUrlA = healthRes.url || healthUrl;
+      authProxyDetectedA = isAuthProxyOrPreview(httpStatusA, contentTypeA, healthText, finalUrlA, healthUrl);
     } catch (e: any) {
-      return res.status(200).json({
-        success: false,
-        status: "parcial",
-        errorCode: "GDI_PROXY_FAILED",
-        error: `Não foi possível conectar a /api/health. Erro: ${e.message || e}`
-      });
+      errA = e.message || String(e);
+      healthText = `Connection failed: ${errA}`;
     }
 
-    let statusA = healthRes.status;
-    let contentTypeA = healthRes.headers.get("content-type") || "";
+    // TEST 3 - PROBING GET /api/webhook/gdi-job
+    const webhookUrl = `${url}/api/webhook/gdi-job`;
+    console.log(`[Proxy Docs] Probing api/webhook/gdi-job: ${webhookUrl}`);
+    let webhookRes, webhookText = "";
+    let httpStatusB = 0;
+    let contentTypeB = "";
+    let redirectedB = false;
+    let finalUrlB = webhookUrl;
+    let authProxyDetectedB = false;
+    let errB = "";
 
-    const isHtmlA = contentTypeA.includes("html") || 
-                    healthText.trim().startsWith("<") || 
-                    healthText.toLowerCase().includes("<!doctype html") || 
-                    healthText.toLowerCase().includes("<html");
-
-    if (isHtmlA) {
-      return res.status(200).json({
-        success: false,
-        status: "invalida",
-        errorCode: "GDI_ENDPOINT_RETURNS_HTML",
-        error: "A rota /api/health retornou HTML/Login redirect em vez de JSON."
-      });
+    try {
+      const probeRes = await smartFetch(webhookUrl, { method: "GET", headers }, incomingCookie);
+      webhookRes = probeRes.response;
+      httpStatusB = webhookRes.status;
+      contentTypeB = webhookRes.headers.get("content-type") || "";
+      webhookText = probeRes.text;
+      redirectedB = webhookRes.redirected || false;
+      finalUrlB = webhookRes.url || webhookUrl;
+      authProxyDetectedB = isAuthProxyOrPreview(httpStatusB, contentTypeB, webhookText, finalUrlB, webhookUrl);
+    } catch (e: any) {
+      errB = e.message || String(e);
+      webhookText = `Connection failed: ${errB}`;
     }
 
-    if (statusA === 404) {
-      return res.status(200).json({
-        success: false,
-        status: "invalida",
-        errorCode: "GDI_ENDPOINT_NOT_FOUND",
-        error: "A rota /api/health retornou Não Encontrado (404)."
-      });
-    }
+    let authProxyDetected = authProxyDetectedA || authProxyDetectedB;
+    let integrationOperationalStatus = "erro";
+    let lastPreviewWarning = "";
+    let lastServerToServerResult = "";
+    let success = false;
 
     let healthJson: any = null;
-    try {
-      healthJson = JSON.parse(healthText);
-    } catch {
-      // ignore
-    }
-
-    // 2. Probing GET /api/webhook/gdi-job
-    const webhookUrl = `${url}/api/webhook/gdi-job`;
-    console.log(`[HealthCheck] Probing api/webhook/gdi-job: ${webhookUrl}`);
-    let webhookRes, webhookText;
-    try {
-      const probeRes = await smartFetch(webhookUrl, {
-        method: "GET",
-        headers
-      }, incomingCookie);
-      webhookRes = probeRes.response;
-      webhookText = probeRes.text;
-    } catch (e: any) {
-      return res.status(200).json({
-        success: false,
-        status: "parcial",
-        errorCode: "GDI_PROXY_FAILED",
-        error: `Não foi possível conectar a /api/webhook/gdi-job. Erro: ${e.message || e}`
-      });
-    }
-
-    let statusB = webhookRes.status;
-    let contentTypeB = webhookRes.headers.get("content-type") || "";
-
-    const isHtmlB = contentTypeB.includes("html") || 
-                    webhookText.trim().startsWith("<") || 
-                    webhookText.toLowerCase().includes("<!doctype html") || 
-                    webhookText.toLowerCase().includes("<html");
-
-    if (isHtmlB) {
-      return res.status(200).json({
-        success: false,
-        status: "invalida",
-        errorCode: "GDI_ENDPOINT_RETURNS_HTML",
-        error: "A rota /api/webhook/gdi-job retornou HTML/Login redirect em vez de JSON."
-      });
-    }
-
-    if (statusB === 404) {
-      return res.status(200).json({
-        success: false,
-        status: "invalida",
-        errorCode: "GDI_ENDPOINT_NOT_FOUND",
-        error: "A rota /api/webhook/gdi-job retornou Não Encontrado (404)."
-      });
-    }
-
     let webhookJson: any = null;
-    try {
-      webhookJson = JSON.parse(webhookText);
-    } catch {
-      // ignore
-    }
-
-    const targetJson = healthJson || webhookJson;
-    if (!targetJson) {
-      return res.status(200).json({
-        success: false,
-        status: "parcial",
-        errorCode: "GDI_RESPONSE_NOT_JSON",
-        error: "Ambos os endpoints retornaram corpos de resposta que não puderam ser parseados como JSON."
-      });
-    }
+    try { healthJson = JSON.parse(healthText); } catch { }
+    try { webhookJson = JSON.parse(webhookText); } catch { }
 
     const isHealthOk = healthJson && (healthJson.success === true || healthJson.status === "ok" || healthJson.status === "ready" || String(healthJson.service).toLowerCase() === "gdi");
     const isWebhookOk = webhookJson && (webhookJson.status === "ready" || webhookJson.success === true || webhookJson.status === "ok" || String(webhookJson.webhook).includes("/api/webhook/gdi-job"));
 
-    if (!isHealthOk || !isWebhookOk) {
-      const errorMsg = `Contrato fático inválido ou indisponível. Health: ${JSON.stringify(healthJson)}, Webhook: ${JSON.stringify(webhookJson)}`;
-      return res.status(200).json({
-        success: false,
-        status: "parcial",
-        errorCode: "GDI_CONTRACT_MISMATCH",
-        error: errorMsg,
-        details: { health: healthJson, webhook: webhookJson }
-      });
+    if (authProxyDetected) {
+      console.log("[Proxy Docs] PORTAL_GDI_AUTH_PROXY_DETECTED");
+      console.log("[Proxy Docs] PORTAL_GDI_SERVER_TO_SERVER_BLOCKED");
+      integrationOperationalStatus = "preview_server_to_server_blocked";
+      lastPreviewWarning = "O GDI pode estar acessível no navegador preview, mas o backend do Portal não conseguiu comunicação server-to-server com o runtime do GDI.";
+      lastServerToServerResult = `Falha: Redirecionamento Auth-Proxy ou HTML detectado. HealthStatus: ${httpStatusA}, WebhookStatus: ${httpStatusB}`;
+    } else if (errA || errB) {
+      integrationOperationalStatus = "erro";
+      lastPreviewWarning = `Falha de rede ao conectar com GDI. Erro A: ${errA || "nenhum"}, Erro B: ${errB || "nenhum"}`;
+      lastServerToServerResult = `Falha de conexão: ${lastPreviewWarning}`;
+    } else if (isHealthOk && isWebhookOk) {
+      console.log("[Proxy Docs] PORTAL_GDI_JSON_HEALTH_OK");
+      console.log("[Proxy Docs] PORTAL_GDI_WEBHOOK_READY_OK");
+      integrationOperationalStatus = "operacional";
+      lastServerToServerResult = "Sucesso: Ambos os endpoints (/api/health e /api/webhook/gdi-job) confirmaram integridade do contrato GDI.";
+      success = true;
+    } else {
+      integrationOperationalStatus = "endpoint_publico_ok";
+      lastPreviewWarning = "Comunicação básica estabelecida, mas o JSON do contrato não correspondeu inteiramente aos parâmetros esperados do GDI.";
+      lastServerToServerResult = `Parcial: api/health ok? ${!!isHealthOk} (${httpStatusA}), api/webhook ok? ${!!isWebhookOk} (${httpStatusB})`;
     }
 
     return res.status(200).json({
-      success: true,
-      status: "operacional",
-      statusCode: statusA,
-      contentType: contentTypeA,
-      textSample: webhookText.substring(0, 150),
-      lastValidatedWebhookUrl: webhookUrl
+      success,
+      environmentMode: envMode,
+      integrationOperationalStatus,
+      lastPreviewWarning,
+      lastServerToServerTestAt: new Date().toISOString(),
+      lastServerToServerResult,
+      lastReceivedByGdiConfirmed: "não_confirmado", // Will be confirmed on first real job generation
+      authProxyDetected,
+      teste1: {
+        endpointUrl: url,
+        isValidHttps: url.toLowerCase().startsWith("https://")
+      },
+      teste2: {
+        httpStatus: httpStatusA,
+        contentType: contentTypeA,
+        responseBody: healthText.substring(0, 500),
+        redirected: redirectedA,
+        finalUrl: finalUrlA,
+        authProxyDetected: authProxyDetectedA
+      },
+      teste3: {
+        httpStatus: httpStatusB,
+        contentType: contentTypeB,
+        responseBody: webhookText.substring(0, 500),
+        redirected: redirectedB,
+        finalUrl: finalUrlB,
+        authProxyDetected: authProxyDetectedB
+      }
     });
 
   } catch (err: any) {
     console.error("[HealthCheck Error]", err);
     return res.status(200).json({
       success: false,
-      status: "erro",
-      errorCode: "GDI_PROXY_FAILED",
-      error: `Falha interna no Proxy: ${err.message || err}`
+      environmentMode: "preview_browser",
+      integrationOperationalStatus: "erro",
+      lastPreviewWarning: `Erro crítico na ponte de diagnóstico: ${err.message || err}`,
+      lastServerToServerTestAt: new Date().toISOString(),
+      lastServerToServerResult: `Falha: ${err.message || err}`,
+      lastReceivedByGdiConfirmed: "não_confirmado",
+      authProxyDetected: false
     });
   }
 });
