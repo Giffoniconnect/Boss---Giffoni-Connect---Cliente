@@ -305,12 +305,13 @@ app.post("/api/proxy-google-docs/health-check", async (req, res) => {
     if (!targetEndpoint || !targetEndpoint.trim()) {
       return res.status(200).json({
         success: false,
+        status: "invalida",
         errorCode: "GDI_ENDPOINT_NOT_FOUND",
         error: "O campo targetEndpoint é obrigatório."
       });
     }
 
-    let url = targetEndpoint.trim();
+    let url = targetEndpoint.trim().replace(/\/$/, "");
 
     // Clean query params
     if (url.includes("?")) {
@@ -321,7 +322,8 @@ app.post("/api/proxy-google-docs/health-check", async (req, res) => {
     if (!url.toLowerCase().startsWith("https://")) {
       return res.status(200).json({
         success: false,
-        errorCode: "GDI_PROXY_FAILED",
+        status: "invalida",
+        errorCode: "GDI_PAYLOAD_INVALID",
         error: "A URL configurada deve começar obrigatoriamente com \"https://\""
       });
     }
@@ -333,6 +335,8 @@ app.post("/api/proxy-google-docs/health-check", async (req, res) => {
       "accounts.google.com",
       "firebaseapp login",
       "firebaseapp",
+      "localhost",
+      "127.0.0.1",
       "/__/auth/handler"
     ];
 
@@ -341,110 +345,162 @@ app.post("/api/proxy-google-docs/health-check", async (req, res) => {
       if (lowerUrl.includes(term.toLowerCase())) {
         return res.status(200).json({
           success: false,
+          status: "invalida",
           errorCode: "GDI_ENDPOINT_RETURNS_HTML",
           error: `A URL do GDI configurada contém termos reservados inválidos ("${term}").`
         });
       }
     }
 
-    // Ping check via POST to GDI webhook endpoint
-    let webhookUrl = url;
-    if (!webhookUrl.endsWith("/api/webhook/gdi-job")) {
-      if (webhookUrl.endsWith("/")) {
-        webhookUrl += "api/webhook/gdi-job";
-      } else {
-        webhookUrl += "/api/webhook/gdi-job";
-      }
-    }
-
     const incomingCookie = req.headers["cookie"] || "";
-    console.log(`[HealthCheck] Probing real endpoint: ${webhookUrl}`);
-    
-    let response, text;
+    const headers = {
+      "X-BOSS-Google-Docs-Integration-Key": (integrationKey || "").trim()
+    };
+
+    // 1. Probing GET /api/health
+    const healthUrl = `${url}/api/health`;
+    console.log(`[HealthCheck] Probing api/health: ${healthUrl}`);
+    let healthRes, healthText;
     try {
-      const probeRes = await smartFetch(webhookUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-BOSS-Google-Docs-Integration-Key": (integrationKey || "").trim()
-        },
-        body: JSON.stringify({
-          source: "Portal BOSS Clientes",
-          target: "GDI",
-          documentType: "health_check",
-          action: "health_check"
-        })
+      const probeRes = await smartFetch(healthUrl, {
+        method: "GET",
+        headers
       }, incomingCookie);
-      response = probeRes.response;
-      text = probeRes.text;
+      healthRes = probeRes.response;
+      healthText = probeRes.text;
     } catch (e: any) {
       return res.status(200).json({
         success: false,
+        status: "parcial",
         errorCode: "GDI_PROXY_FAILED",
-        error: `Não foi possível conectar à URL. Erro de conexão: ${e.message || e}`
+        error: `Não foi possível conectar a /api/health. Erro: ${e.message || e}`
       });
     }
 
-    const status = response.status;
-    const contentType = response.headers.get("content-type") || "";
+    let statusA = healthRes.status;
+    let contentTypeA = healthRes.headers.get("content-type") || "";
 
-    const isHtmlResponse = contentType.includes("html") || 
-                           text.trim().startsWith("<") || 
-                           text.toLowerCase().includes("<!doctype html") || 
-                           text.toLowerCase().includes("<html");
+    const isHtmlA = contentTypeA.includes("html") || 
+                    healthText.trim().startsWith("<") || 
+                    healthText.toLowerCase().includes("<!doctype html") || 
+                    healthText.toLowerCase().includes("<html");
 
-    if (isHtmlResponse) {
+    if (isHtmlA) {
       return res.status(200).json({
         success: false,
+        status: "invalida",
         errorCode: "GDI_ENDPOINT_RETURNS_HTML",
-        error: "A URL configurada para o GDI não é endpoint de API. Ela retornou HTML/404. Configure a URL pública real do webhook do GDI."
+        error: "A rota /api/health retornou HTML/Login redirect em vez de JSON."
       });
     }
 
-    if (status === 404) {
+    if (statusA === 404) {
       return res.status(200).json({
         success: false,
+        status: "invalida",
         errorCode: "GDI_ENDPOINT_NOT_FOUND",
-        error: "A URL configurada retornou status de recurso Não Encontrado (404). Verifique se o caminho da rota está correto."
+        error: "A rota /api/health retornou Não Encontrado (404)."
       });
     }
 
-    if (status === 401 || status === 403) {
-      return res.status(200).json({
-        success: false,
-        errorCode: "GDI_PERMISSION_DENIED",
-        error: "GDI negou autorização (401/403). Verifique se a Chave de Integração GDI está correta e compartilhada."
-      });
-    }
-
-    // Try parsing as JSON
-    let isJson = false;
+    let healthJson: any = null;
     try {
-      JSON.parse(text);
-      isJson = true;
+      healthJson = JSON.parse(healthText);
     } catch {
-      // not JSON
+      // ignore
     }
 
-    if (!isJson && !response.ok) {
+    // 2. Probing GET /api/webhook/gdi-job
+    const webhookUrl = `${url}/api/webhook/gdi-job`;
+    console.log(`[HealthCheck] Probing api/webhook/gdi-job: ${webhookUrl}`);
+    let webhookRes, webhookText;
+    try {
+      const probeRes = await smartFetch(webhookUrl, {
+        method: "GET",
+        headers
+      }, incomingCookie);
+      webhookRes = probeRes.response;
+      webhookText = probeRes.text;
+    } catch (e: any) {
       return res.status(200).json({
         success: false,
-        errorCode: "GDI_PAYLOAD_INVALID",
-        error: `A resposta obtida não pôde ser parseada como JSON. Resposta bruta: ${text.substring(0, 200)}...`
+        status: "parcial",
+        errorCode: "GDI_PROXY_FAILED",
+        error: `Não foi possível conectar a /api/webhook/gdi-job. Erro: ${e.message || e}`
+      });
+    }
+
+    let statusB = webhookRes.status;
+    let contentTypeB = webhookRes.headers.get("content-type") || "";
+
+    const isHtmlB = contentTypeB.includes("html") || 
+                    webhookText.trim().startsWith("<") || 
+                    webhookText.toLowerCase().includes("<!doctype html") || 
+                    webhookText.toLowerCase().includes("<html");
+
+    if (isHtmlB) {
+      return res.status(200).json({
+        success: false,
+        status: "invalida",
+        errorCode: "GDI_ENDPOINT_RETURNS_HTML",
+        error: "A rota /api/webhook/gdi-job retornou HTML/Login redirect em vez de JSON."
+      });
+    }
+
+    if (statusB === 404) {
+      return res.status(200).json({
+        success: false,
+        status: "invalida",
+        errorCode: "GDI_ENDPOINT_NOT_FOUND",
+        error: "A rota /api/webhook/gdi-job retornou Não Encontrado (404)."
+      });
+    }
+
+    let webhookJson: any = null;
+    try {
+      webhookJson = JSON.parse(webhookText);
+    } catch {
+      // ignore
+    }
+
+    const targetJson = healthJson || webhookJson;
+    if (!targetJson) {
+      return res.status(200).json({
+        success: false,
+        status: "parcial",
+        errorCode: "GDI_RESPONSE_NOT_JSON",
+        error: "Ambos os endpoints retornaram corpos de resposta que não puderam ser parseados como JSON."
+      });
+    }
+
+    const isHealthOk = healthJson && (healthJson.success === true || healthJson.status === "ok" || healthJson.status === "ready" || String(healthJson.service).toLowerCase() === "gdi");
+    const isWebhookOk = webhookJson && (webhookJson.status === "ready" || webhookJson.success === true || webhookJson.status === "ok" || String(webhookJson.webhook).includes("/api/webhook/gdi-job"));
+
+    if (!isHealthOk || !isWebhookOk) {
+      const errorMsg = `Contrato fático inválido ou indisponível. Health: ${JSON.stringify(healthJson)}, Webhook: ${JSON.stringify(webhookJson)}`;
+      return res.status(200).json({
+        success: false,
+        status: "parcial",
+        errorCode: "GDI_CONTRACT_MISMATCH",
+        error: errorMsg,
+        details: { health: healthJson, webhook: webhookJson }
       });
     }
 
     return res.status(200).json({
       success: true,
-      status,
-      contentType,
-      textSample: text.substring(0, 150)
+      status: "operacional",
+      statusCode: statusA,
+      contentType: contentTypeA,
+      textSample: webhookText.substring(0, 150),
+      lastValidatedWebhookUrl: webhookUrl
     });
 
   } catch (err: any) {
     console.error("[HealthCheck Error]", err);
-    return res.status(500).json({
+    return res.status(200).json({
       success: false,
+      status: "erro",
       errorCode: "GDI_PROXY_FAILED",
       error: `Falha interna no Proxy: ${err.message || err}`
     });

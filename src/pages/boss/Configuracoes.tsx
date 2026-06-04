@@ -144,7 +144,7 @@ export const LOCAL_FALLBACK_TEMPLATES: DocumentTemplateConfig[] = [
 
 // Connectors Schema Types
 interface ConnectorConfig {
-  status: 'não_configurado' | 'preparado' | 'em_teste' | 'ativo' | 'erro';
+  status: 'não_configurado' | 'preparado' | 'em_teste' | 'ativo' | 'operacional' | 'erro';
   mode?: string;
   publishableKey?: string;
   secretKeyPlaceholder?: string;
@@ -355,9 +355,9 @@ export default function Configuracoes() {
               loadedEndpointUrl = realUrl;
               loadedConns.googleDocs.buildUrl = realUrl;
               loadedConns.googleDocs.endpointUrl = realUrl;
-              loadedConns.googleDocs.status = 'ativo';
+              loadedConns.googleDocs.status = 'não_configurado';
 
-              // Correct silently in DB
+              // Suggest URL silently in DB but NEVER mark status as active/operacional automatically!
               try {
                 await setDoc(doc(db, 'settings', 'connectors'), {
                   ...loadedConns,
@@ -365,13 +365,13 @@ export default function Configuracoes() {
                     ...loadedConns.googleDocs,
                     buildUrl: realUrl,
                     endpointUrl: realUrl,
-                    status: 'ativo',
+                    status: 'não_configurado',
                     updatedAt: new Date().toISOString()
                   }
                 });
-                console.log("[GDI Repair] Silently auto-corrected GDI URL & status in Configuracoes.tsx");
+                console.log("[GDI Repair] Silently populated suggested GDI URL and marked status as não_configurado in Configuracoes.tsx");
               } catch (dbErr) {
-                console.error("[GDI Repair] Failed query auto-correction in Configuracoes.tsx:", dbErr);
+                console.error("[GDI Repair] Failed query suggestion write in Configuracoes.tsx:", dbErr);
               }
             }
           }
@@ -696,7 +696,7 @@ export default function Configuracoes() {
         copy.googleDocs.lastEndpoint = lastEndpoint;
         copy.googleDocs.lastHttpStatus = lastHttpStatus;
         copy.googleDocs.lastResponse = lastResponse;
-        copy.googleDocs.status = data.success ? 'ativo' : 'erro';
+        copy.googleDocs.status = data.success ? 'operacional' : 'erro';
         // Ensure both buildUrl and endpointUrl are synced
         copy.googleDocs.buildUrl = gapiBaseUrl;
         copy.googleDocs.endpointUrl = gapiBaseUrl;
@@ -766,7 +766,7 @@ export default function Configuracoes() {
         ...currentData.googleDocs,
         buildUrl: realGdiUrl,
         endpointUrl: realGdiUrl,
-        status: 'ativo',
+        status: 'não_configurado',
         updatedAt: new Date().toISOString()
       };
 
@@ -782,7 +782,7 @@ export default function Configuracoes() {
 
       setFeedback({
         type: 'success',
-        message: 'URL operacional homologada do GDI salva com absoluto sucesso! (status = ativo)'
+        message: 'URL operacional homologada do GDI salva como sugestão com absoluto sucesso! Execute o diagnóstico real para homologar.'
       });
     } catch (err: any) {
       setFeedback({ type: 'error', message: `Erro ao salvar URL real do GDI: ${err.message || err}` });
@@ -804,7 +804,7 @@ export default function Configuracoes() {
         ...currentData.googleDocs,
         buildUrl: realGdiUrl,
         endpointUrl: realGdiUrl,
-        status: 'ativo',
+        status: 'não_configurado',
         updatedAt: new Date().toISOString()
       };
 
@@ -827,7 +827,7 @@ export default function Configuracoes() {
 
       setFeedback({
         type: 'success',
-        message: 'GDI API Base URL corrigida e salva com absoluto sucesso! URL carregada: ' + realGdiUrl
+        message: 'GDI API Base URL corrigida e salva como sugestão com absoluto sucesso! URL carregada: ' + realGdiUrl
       });
     } catch (err: any) {
       setFeedback({ type: 'error', message: `Erro ao corrigir URL GDI: ${err.message || err}` });
@@ -1043,6 +1043,7 @@ export default function Configuracoes() {
   const getStatusStyle = (status: ConnectorConfig['status']) => {
     switch (status) {
       case 'ativo':
+      case 'operacional':
         return 'bg-emerald-50 text-emerald-800 border-emerald-200';
       case 'preparado':
         return 'bg-blue-50 text-blue-800 border-blue-200';
@@ -2252,6 +2253,7 @@ export default function Configuracoes() {
                               <option value="preparado">Preparado</option>
                               <option value="em_teste">Em Testes</option>
                               <option value="ativo">Ativo</option>
+                              <option value="operacional">Operacional</option>
                               <option value="erro">Erro</option>
                             </select>
                           </div>

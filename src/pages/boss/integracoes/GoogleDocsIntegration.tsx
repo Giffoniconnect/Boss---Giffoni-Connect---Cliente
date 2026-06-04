@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 
 interface GoogleDocsConfig {
-  status: 'não_configurado' | 'preparado' | 'em_teste' | 'ativo' | 'erro';
+  status: 'não_configurado' | 'invalida' | 'parcial' | 'operacional' | 'erro';
   templatesStrategy: string;
   notes: string;
   endpointUrl: string;
@@ -37,6 +37,18 @@ interface GoogleDocsConfig {
   lastTestAt?: string;
   lastSentPayload?: any;
   lastReceivedPayload?: any;
+  // TAREFA 2 & 4
+  lastDiagnostic?: string;
+  lastError?: string;
+  lastSuccess?: string;
+  lastEndpointTested?: string;
+  lastContentTypeReceived?: string;
+  lastHttpStatusReceived?: number | string;
+  lastHealthCheckAt?: string;
+  lastHealthCheckStatus?: string;
+  lastHealthCheckError?: string;
+  lastValidatedWebhookUrl?: string;
+  transportMode?: string;
 }
 
 export default function GoogleDocsIntegration() {
@@ -46,18 +58,30 @@ export default function GoogleDocsIntegration() {
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Connection fields
+  const [isEditing, setIsEditing] = useState(false);
   const [config, setConfig] = useState<GoogleDocsConfig>({
     status: 'não_configurado',
     templatesStrategy: 'standard_procuracao',
     notes: '',
-    endpointUrl: 'https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app',
+    endpointUrl: '',
     integrationKey: '',
     lastEndpoint: '',
     lastHttpStatus: undefined,
     lastResponse: '',
     lastTestAt: '',
     lastSentPayload: null,
-    lastReceivedPayload: null
+    lastReceivedPayload: null,
+    lastDiagnostic: '',
+    lastError: '',
+    lastSuccess: '',
+    lastEndpointTested: '',
+    lastContentTypeReceived: '',
+    lastHttpStatusReceived: undefined,
+    lastHealthCheckAt: '',
+    lastHealthCheckStatus: '',
+    lastHealthCheckError: '',
+    lastValidatedWebhookUrl: '',
+    transportMode: 'http_webhook'
   });
 
   // Logs
@@ -70,7 +94,7 @@ export default function GoogleDocsIntegration() {
   const [expandReceivedPayload, setExpandReceivedPayload] = useState(false);
   const [connectionTestLabel, setConnectionTestLabel] = useState<string>('');
   
-  const [diagnosticState, setDiagnosticState] = useState<'sem_diagnostico' | 'invalida' | 'parcial' | 'operacional'>('sem_diagnostico');
+  const [diagnosticState, setDiagnosticState] = useState<'sem_diagnostico' | 'invalida' | 'parcial' | 'operacional' | 'erro'>('sem_diagnostico');
   const [diagnosticMessage, setDiagnosticMessage] = useState<string>('');
 
   const handleDiagnosticarGDI = async () => {
@@ -104,6 +128,8 @@ export default function GoogleDocsIntegration() {
       "accounts.google.com",
       "firebaseapp login",
       "firebaseapp",
+      "localhost",
+      "127.0.0.1",
       "/__/auth/handler"
     ];
 
@@ -129,10 +155,18 @@ export default function GoogleDocsIntegration() {
 
       const data = await resp.json();
       
-      const timestamp = new Date().toLocaleTimeString();
-      if (data.success) {
+      const timestamp = new Date().toLocaleString('pt-BR');
+      let newStatus: 'erro' | 'invalida' | 'parcial' | 'operacional' | 'não_configurado' = 'parcial';
+      let diagMsg = '';
+      let errorMsgValue = '';
+      let successMsgValue = '';
+
+      if (data.success && data.status === 'operacional') {
+        newStatus = 'operacional';
+        diagMsg = 'Canal fático de API diagnosticado como 100% OP e homologado para emissão real.';
+        successMsgValue = `Sucesso em ${timestamp}: Conexão homologada com sucesso no endpoint.`;
         setDiagnosticState('operacional');
-        setDiagnosticMessage(`Diagnóstico de Conexão Bem-Sucedido: O canal está 100% operacional no endpoint configurado! Código de resposta testada: HTTP ${data.status}`);
+        setDiagnosticMessage(`Diagnóstico de Conexão Bem-Sucedido: O canal está 100% operacional no endpoint configurado! Código de resposta testada: HTTP ${data.statusCode}`);
         setFeedback({
           type: 'success',
           message: 'Excelente! O diagnóstico fático confirmou que a API e o barramento do GDI estão 🟢 Operacionais.'
@@ -140,6 +174,9 @@ export default function GoogleDocsIntegration() {
         setLogs(prev => [...prev, `[${timestamp}] Diagnóstico concluído com sucesso (STATUS: 🟢 Operacional).`]);
       } else {
         if (data.errorCode === 'GDI_ENDPOINT_RETURNS_HTML') {
+          newStatus = 'invalida';
+          diagMsg = 'Critério de API Violado: O endpoint retornou HTML (Tela de Login, Web Preview ou Erro interno). O GDI exige uma API pública pura em JSON.';
+          errorMsgValue = `Atributo Inválido (GDI_ENDPOINT_RETURNS_HTML) em ${timestamp}: ${data.error || 'Retornou HTML/Login redirect'}`;
           setDiagnosticState('invalida');
           setDiagnosticMessage(`Diagnóstico Negado (Critério 3): ${data.error}`);
           setFeedback({
@@ -147,8 +184,22 @@ export default function GoogleDocsIntegration() {
             message: `Erro Crítico de API: ${data.error}`
           });
           setLogs(prev => [...prev, `[${timestamp}] Diagnóstico falhou: URL retornou login/HTML (STATUS: 🔴 Inválida).`]);
+        } else if (data.errorCode === 'GDI_ENDPOINT_NOT_FOUND') {
+          newStatus = 'invalida';
+          diagMsg = 'Recurso Não Encontrado (HTTP 404). As rotas /api/health ou /api/webhook/gdi-job retornaram 404.';
+          errorMsgValue = `Endpoint Inexistente (GDI_ENDPOINT_NOT_FOUND) em ${timestamp}: ${data.error || 'Retornou 404'}`;
+          setDiagnosticState('invalida');
+          setDiagnosticMessage(`Diagnóstico falhou: Endpoint Inexistente. ${data.error}`);
+          setFeedback({
+            type: 'error',
+            message: `Erro de Endpoint: ${data.error}`
+          });
+          setLogs(prev => [...prev, `[${timestamp}] Diagnóstico falhou: URL retornou Não Encontrado (404) (STATUS: 🔴 Inválida).`]);
         } else {
-          setDiagnosticState('parcial');
+          newStatus = 'erro';
+          diagMsg = `Diagnóstico Parcial ou Falha: ${data.error || 'Falha de comunicação.'}`;
+          errorMsgValue = `Falha em ${timestamp}: ${data.error || 'Erro desconhecido'}`;
+          setDiagnosticState('erro');
           setDiagnosticMessage(`Diagnóstico Parcial: ${data.error || 'Falha de comunicação ou autenticação.'}`);
           setFeedback({
             type: 'error',
@@ -157,6 +208,40 @@ export default function GoogleDocsIntegration() {
           setLogs(prev => [...prev, `[${timestamp}] Diagnóstico parcial: falha de JSON ou status restrito (STATUS: 🟡 Parcial).`]);
         }
       }
+
+      // Save updated configuration structure directly into Firestore as required by TAREFA 4
+      const docRef = doc(db, 'settings', 'connectors');
+      const docSnap = await getDoc(docRef);
+      const currentData = docSnap.exists() ? docSnap.data() : {};
+      const updatedGDocs = {
+        ...currentData.googleDocs,
+        endpointUrl: targetUrl,
+        integrationKey: integrationKey,
+        status: newStatus,
+        lastDiagnostic: diagMsg,
+        lastError: errorMsgValue || currentData.googleDocs?.lastError || '',
+        lastSuccess: successMsgValue || currentData.googleDocs?.lastSuccess || '',
+        lastEndpointTested: targetUrl,
+        lastContentTypeReceived: data.contentType || 'application/json',
+        lastHttpStatusReceived: data.statusCode || 200,
+        lastHealthCheckAt: timestamp,
+        lastHealthCheckStatus: String(data.statusCode || ''),
+        lastHealthCheckError: errorMsgValue || '',
+        lastValidatedWebhookUrl: data.lastValidatedWebhookUrl || `${targetUrl}/api/webhook/gdi-job`,
+        transportMode: 'http_webhook',
+        updatedAt: new Date().toISOString()
+      };
+
+      await setDoc(docRef, {
+        ...currentData,
+        googleDocs: updatedGDocs
+      });
+
+      setConfig(prev => ({
+        ...prev,
+        ...updatedGDocs
+      }));
+
     } catch (err: any) {
       setDiagnosticState('parcial');
       setDiagnosticMessage(`Diagnóstico Parcial: Erro ao efetuar probe fático de conexão. ${err.message || err}`);
@@ -178,7 +263,27 @@ export default function GoogleDocsIntegration() {
         ...currentData.googleDocs,
         buildUrl: '',
         endpointUrl: '',
+        integrationKey: '',
         status: 'não_configurado',
+        notes: '',
+        templatesStrategy: 'standard_procuracao',
+        lastEndpoint: '',
+        lastHttpStatus: null,
+        lastResponse: '',
+        lastTestAt: '',
+        lastSentPayload: null,
+        lastReceivedPayload: null,
+        lastDiagnostic: '',
+        lastError: '',
+        lastSuccess: '',
+        lastEndpointTested: '',
+        lastContentTypeReceived: '',
+        lastHttpStatusReceived: null,
+        lastHealthCheckAt: '',
+        lastHealthCheckStatus: '',
+        lastHealthCheckError: '',
+        lastValidatedWebhookUrl: '',
+        transportMode: 'http_webhook',
         updatedAt: new Date().toISOString()
       };
       
@@ -187,117 +292,40 @@ export default function GoogleDocsIntegration() {
         googleDocs: updatedGDocs
       });
 
-      setConfig(prev => ({
-        ...prev,
+      setConfig({
         status: 'não_configurado',
+        templatesStrategy: 'standard_procuracao',
+        notes: '',
         endpointUrl: '',
-      }));
+        integrationKey: '',
+        lastEndpoint: '',
+        lastResponse: '',
+        lastTestAt: '',
+        lastSentPayload: null,
+        lastReceivedPayload: null,
+        lastDiagnostic: '',
+        lastError: '',
+        lastSuccess: '',
+        lastEndpointTested: '',
+        lastContentTypeReceived: '',
+        lastHttpStatusReceived: undefined,
+        lastHealthCheckAt: '',
+        lastHealthCheckStatus: '',
+        lastHealthCheckError: '',
+        lastValidatedWebhookUrl: '',
+        transportMode: 'http_webhook'
+      });
 
       setDiagnosticState('sem_diagnostico');
       setDiagnosticMessage('');
 
       setFeedback({
         type: 'success',
-        message: 'Configurações inválidas do GDI apagadas do Firestore com sucesso! O barramento foi resetado para não configurado.'
+        message: 'Todas as configurações do GDI foram removidas e limpas do Firestore.'
       });
-      setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Configuração GDI invadida limpa no Firestore.`]);
+      setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Configuração GDI limpa no Firestore.`]);
     } catch (err: any) {
       setFeedback({ type: 'error', message: `Erro ao limpar Firestore: ${err.message || err}` });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSaveRealGDI = async () => {
-    setSaving(true);
-    setFeedback(null);
-    try {
-      const realGdiUrl = 'https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app';
-      const docRef = doc(db, 'settings', 'connectors');
-      const docSnap = await getDoc(docRef);
-      const currentData = docSnap.exists() ? docSnap.data() : {};
-
-      const updatedGDocs = {
-        ...currentData.googleDocs,
-        buildUrl: realGdiUrl,
-        endpointUrl: realGdiUrl,
-        status: 'ativo',
-        updatedAt: new Date().toISOString()
-      };
-
-      await setDoc(docRef, {
-        ...currentData,
-        googleDocs: updatedGDocs
-      });
-
-      setConfig(prev => ({
-        ...prev,
-        endpointUrl: realGdiUrl,
-        status: 'ativo'
-      }));
-
-      setFeedback({
-        type: 'success',
-        message: 'A URL operacional homologada do GDI foi salva com total sucesso! (status = ativo)'
-      });
-      setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Salvamento fático da URL real efetuado.`]);
-    } catch (err: any) {
-      setFeedback({ type: 'error', message: `Erro ao salvar URL real do GDI: ${err.message || err}` });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCorrectGdiNow = async () => {
-    setSaving(true);
-    setFeedback(null);
-    try {
-      const realGdiUrl = 'https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app';
-      const docRef = doc(db, 'settings', 'connectors');
-      const docSnap = await getDoc(docRef);
-      const currentData = docSnap.exists() ? docSnap.data() : {};
-
-      const updatedGDocs = {
-        ...currentData.googleDocs,
-        buildUrl: realGdiUrl,
-        endpointUrl: realGdiUrl,
-        status: 'ativo',
-        updatedAt: new Date().toISOString()
-      };
-
-      await setDoc(docRef, {
-        ...currentData,
-        googleDocs: updatedGDocs
-      });
-
-      // Reload config from database
-      const freshSnap = await getDoc(docRef);
-      if (freshSnap.exists()) {
-        const data = freshSnap.data();
-        if (data.googleDocs) {
-          setConfig({
-            status: data.googleDocs.status || 'ativo',
-            templatesStrategy: data.googleDocs.templatesStrategy || '',
-            notes: data.googleDocs.notes || '',
-            endpointUrl: data.googleDocs.endpointUrl || '',
-            integrationKey: data.googleDocs.integrationKey || '',
-            lastEndpoint: data.googleDocs.lastEndpoint || '',
-            lastHttpStatus: data.googleDocs.lastHttpStatus || undefined,
-            lastResponse: data.googleDocs.lastResponse || '',
-            lastTestAt: data.googleDocs.lastTestAt || '',
-            lastSentPayload: data.googleDocs.lastSentPayload || null,
-            lastReceivedPayload: data.googleDocs.lastReceivedPayload || null
-          });
-        }
-      }
-
-      setFeedback({
-        type: 'success',
-        message: 'GDI API Base URL corrigida e salva com absoluto sucesso! URL carregada: ' + realGdiUrl
-      });
-      setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Botão Corrigir URL GDI agora acionado faticamente.`]);
-    } catch (err: any) {
-      setFeedback({ type: 'error', message: `Erro ao corrigir URL: ${err.message || err}` });
     } finally {
       setSaving(false);
     }
@@ -448,6 +476,31 @@ export default function GoogleDocsIntegration() {
     }
   };
 
+  const handleCopyDiagnostic = () => {
+    const diagnosticPayload = {
+      diagnosticState,
+      diagnosticMessage,
+      endpointUrl: config.endpointUrl,
+      status: config.status,
+      lastDiagnostic: config.lastDiagnostic || '',
+      lastError: config.lastError || '',
+      lastSuccess: config.lastSuccess || '',
+      lastEndpointTested: config.lastEndpointTested || '',
+      lastContentTypeReceived: config.lastContentTypeReceived || '',
+      lastHttpStatusReceived: config.lastHttpStatusReceived || '',
+      lastHealthCheckAt: config.lastHealthCheckAt || '',
+      lastHealthCheckStatus: config.lastHealthCheckStatus || '',
+      lastHealthCheckError: config.lastHealthCheckError || '',
+      lastValidatedWebhookUrl: config.lastValidatedWebhookUrl || '',
+      transportMode: 'http_webhook'
+    };
+    navigator.clipboard.writeText(JSON.stringify(diagnosticPayload, null, 2));
+    setFeedback({
+      type: 'success',
+      message: 'Diagnóstico copiado para a área de transferência com sucesso!'
+    });
+  };
+
   useEffect(() => {
     async function loadConfig() {
       try {
@@ -457,9 +510,13 @@ export default function GoogleDocsIntegration() {
           const data = docSnap.data();
           if (data.googleDocs) {
             const loadedEndpointUrl = data.googleDocs.endpointUrl || '';
+            let statusVal = data.googleDocs.status || 'não_configurado';
+            if (statusVal === 'ativo') {
+              statusVal = 'operacional';
+            }
 
             setConfig({
-              status: data.googleDocs.status || 'não_configurado',
+              status: statusVal,
               templatesStrategy: data.googleDocs.templatesStrategy || '',
               notes: data.googleDocs.notes || '',
               endpointUrl: loadedEndpointUrl,
@@ -469,8 +526,35 @@ export default function GoogleDocsIntegration() {
               lastResponse: data.googleDocs.lastResponse || '',
               lastTestAt: data.googleDocs.lastTestAt || '',
               lastSentPayload: data.googleDocs.lastSentPayload || null,
-              lastReceivedPayload: data.googleDocs.lastReceivedPayload || null
+              lastReceivedPayload: data.googleDocs.lastReceivedPayload || null,
+              lastDiagnostic: data.googleDocs.lastDiagnostic || '',
+              lastError: data.googleDocs.lastError || '',
+              lastSuccess: data.googleDocs.lastSuccess || '',
+              lastEndpointTested: data.googleDocs.lastEndpointTested || '',
+              lastContentTypeReceived: data.googleDocs.lastContentTypeReceived || '',
+              lastHttpStatusReceived: data.googleDocs.lastHttpStatusReceived || undefined,
+              lastHealthCheckAt: data.googleDocs.lastHealthCheckAt || '',
+              lastHealthCheckStatus: data.googleDocs.lastHealthCheckStatus || '',
+              lastHealthCheckError: data.googleDocs.lastHealthCheckError || '',
+              lastValidatedWebhookUrl: data.googleDocs.lastValidatedWebhookUrl || '',
+              transportMode: data.googleDocs.transportMode || 'http_webhook'
             });
+
+            if (statusVal === 'ativo' || statusVal === 'operacional') {
+              setDiagnosticState('operacional');
+              setDiagnosticMessage('Diagnóstico fático carregado como OK e operacional: Homologado.');
+            } else if (statusVal === 'invalida') {
+              setDiagnosticState('invalida');
+              setDiagnosticMessage('Diagnóstico fático carregado como Inválido.');
+            } else if (statusVal === 'parcial') {
+              setDiagnosticState('parcial');
+              setDiagnosticMessage('Diagnóstico fático carregado como Parcial.');
+            } else if (statusVal === 'erro') {
+              setDiagnosticState('erro');
+              setDiagnosticMessage('Diagnóstico fático carregado como em Erro.');
+            } else {
+              setDiagnosticState('sem_diagnostico');
+            }
           }
         }
       } catch (err) {
@@ -528,12 +612,12 @@ export default function GoogleDocsIntegration() {
     const status = config.status || 'não_configurado';
 
     // Regra de Negócio Crítica:
-    // Só permitir salvar o status da integração como “Automação Ativa” (status = 'ativo')
+    // Só permitir salvar o status da integração como “Operacional” (status = 'operacional')
     // se o diagnóstico estiver em estado 🟢 Operacional.
-    if (status === 'ativo' && diagnosticState !== 'operacional') {
+    if (status === 'operacional' && diagnosticState !== 'operacional') {
       setFeedback({
         type: 'error',
-        message: 'Ativação Bloqueada: Para definir o status como Ativo (Automação Ativa), a integração do barramento externa deve antes obter o diagnóstico 🟢 Operacional. Clique no botão "Diagnosticar GDI" abaixo para testar seu canal de API real.'
+        message: 'Ativação Bloqueada: Para definir o status como Operacional, a integração do barramento externa deve antes obter o diagnóstico 🟢 Operacional. Clique no botão "Diagnosticar GDI" abaixo para testar seu canal de API real.'
       });
       setSaving(false);
       return;
@@ -556,9 +640,10 @@ export default function GoogleDocsIntegration() {
     }
 
     try {
+      const targetStatus = status;
       await setDoc(doc(db, 'settings', 'connectors'), {
         googleDocs: {
-          status: config.status,
+          status: targetStatus,
           templatesStrategy: config.templatesStrategy.trim(),
           notes: config.notes.trim(),
           buildUrl: gapiBaseUrl,
@@ -569,12 +654,24 @@ export default function GoogleDocsIntegration() {
           lastResponse: config.lastResponse || '',
           lastTestAt: config.lastTestAt || '',
           lastSentPayload: config.lastSentPayload || null,
-          lastReceivedPayload: config.lastReceivedPayload || null
+          lastReceivedPayload: config.lastReceivedPayload || null,
+          lastDiagnostic: config.lastDiagnostic || '',
+          lastError: config.lastError || '',
+          lastSuccess: config.lastSuccess || '',
+          lastEndpointTested: config.lastEndpointTested || '',
+          lastContentTypeReceived: config.lastContentTypeReceived || '',
+          lastHttpStatusReceived: config.lastHttpStatusReceived || null,
+          lastHealthCheckAt: config.lastHealthCheckAt || '',
+          lastHealthCheckStatus: config.lastHealthCheckStatus || '',
+          lastHealthCheckError: config.lastHealthCheckError || '',
+          lastValidatedWebhookUrl: config.lastValidatedWebhookUrl || '',
+          transportMode: config.transportMode || 'http_webhook'
         },
         updatedAt: new Date().toISOString()
       }, { merge: true });
 
       setFeedback({ type: 'success', message: 'Configurações de integração com Google Docs salvas com absoluto sucesso!' });
+      setIsEditing(false);
       
       const timestamp = new Date().toLocaleTimeString();
       setLogs(prev => [
@@ -685,7 +782,7 @@ export default function GoogleDocsIntegration() {
       setLogs(prev => [...prev, ...newLogs]);
 
       const isSucceeded = data.success === true;
-      const updatedStatus = isSucceeded ? ('ativo' as const) : ('erro' as const);
+      const updatedStatus = isSucceeded ? ('operacional' as const) : ('erro' as const);
 
       const updated = {
         ...config,
@@ -859,7 +956,29 @@ export default function GoogleDocsIntegration() {
           <div className="lg:col-span-2 space-y-6">
             {/* MAIN CONFIGURATION FORM */}
             <form onSubmit={handleSave} className="bg-white border border-gray-150 rounded-3xl p-6 md:p-8 space-y-6 shadow-sm animate-fadeIn">
-              <h3 className="text-xs font-black uppercase tracking-wider text-gray-800 border-b border-gray-100 pb-3">Parâmetros de Barramento GDI</h3>
+              <h3 className="text-xs font-black uppercase tracking-wider text-gray-800 border-b border-gray-100 pb-3 flex justify-between items-center">
+                <span>Parâmetros de Barramento GDI</span>
+                {!isEditing ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(true)}
+                    className="px-3.5 py-1.5 bg-indigo-650 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-sm hover:shadow"
+                  >
+                    Editar Configuração
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[9px] font-black uppercase text-indigo-650 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-200 animate-pulse">Modo Edição Ativado</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditing(false)}
+                      className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                )}
+              </h3>
               
               <div className="space-y-5">
                 
@@ -869,11 +988,24 @@ export default function GoogleDocsIntegration() {
                   <input
                     type="text"
                     required
+                    disabled={!isEditing}
                     value={config.endpointUrl}
                     onChange={(e) => setConfig({ ...config, endpointUrl: e.target.value })}
                     placeholder="https://gdi-api.exemplo.run.app"
-                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100"
+                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 disabled:opacity-75 disabled:cursor-not-allowed"
                   />
+                  {isEditing && !config.endpointUrl.trim() && (
+                    <div className="pt-1 select-none">
+                      <button
+                        type="button"
+                        id="suggest-gdi-url-btn"
+                        onClick={() => setConfig({ ...config, endpointUrl: 'https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app' })}
+                        className="text-[10px] text-indigo-600 font-bold hover:underline cursor-pointer flex items-center gap-1.5"
+                      >
+                        💡 Sugerir URL Homologada de Produção (requer diagnóstico real para salvar como operacional)
+                      </button>
+                    </div>
+                  )}
                   <p className="text-[10px] text-indigo-600 font-mono font-medium">Receptor Webhook: {config.endpointUrl.trim() ? `${config.endpointUrl.trim().replace(/\/$/, "")}/api/webhook/gdi-job` : ''}</p>
                 </div>
 
@@ -882,10 +1014,11 @@ export default function GoogleDocsIntegration() {
                   <p className="text-[11px] text-gray-500 font-medium">Token secreto fornecido no header X-BOSS-Google-Docs-Integration-Key.</p>
                   <input
                     type="password"
+                    disabled={!isEditing}
                     value={config.integrationKey}
                     onChange={(e) => setConfig({ ...config, integrationKey: e.target.value })}
                     placeholder="boss_docs_live_xxxxxxxx"
-                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100"
+                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 disabled:opacity-75 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -893,24 +1026,26 @@ export default function GoogleDocsIntegration() {
                   <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Estratégia de Modelos (folder templateKey ID)</label>
                   <input
                     type="text"
+                    disabled={!isEditing}
                     value={config.templatesStrategy}
                     onChange={(e) => setConfig({ ...config, templatesStrategy: e.target.value })}
                     placeholder="id_do_modelo_padrao"
-                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100"
+                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 disabled:opacity-75 disabled:cursor-not-allowed"
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Status da Conexão *</label>
                   <select
+                    disabled={!isEditing}
                     value={config.status}
                     onChange={(e) => setConfig({ ...config, status: e.target.value as any })}
-                    className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer"
+                    className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
                   >
                     <option value="não_configurado">Não Configurado</option>
-                    <option value="preparado">Preparado</option>
-                    <option value="em_teste">Em Testes</option>
-                    <option value="ativo">Ativo</option>
+                    <option value="invalida">Inválida</option>
+                    <option value="parcial">Parcial</option>
+                    <option value="operacional">Operacional</option>
                     <option value="erro">Erro</option>
                   </select>
                 </div>
@@ -918,11 +1053,12 @@ export default function GoogleDocsIntegration() {
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Notas Técnicas de Implantação</label>
                   <textarea
+                    disabled={!isEditing}
                     value={config.notes}
                     onChange={(e) => setConfig({ ...config, notes: e.target.value })}
                     rows={2}
                     placeholder="Documente notas de roteamento ou segredos vinculados a este nó fático..."
-                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100"
+                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 disabled:opacity-75 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -934,11 +1070,11 @@ export default function GoogleDocsIntegration() {
                   <span>Controles de Autocorreção e Diagnóstico GDI (Ajuste Imediato)</span>
                 </p>
                 <p className="text-[11px] text-gray-650 leading-normal">
-                  Utilize as ações rápidas abaixo para forçar a limpeza de URLs inválidas/AI Studio ou sincronizar imediatamente a URL de homologação real do GDI.
+                  Utilize as ações rápidas abaixo para forçar o diagnóstico, revalidar endpoints, limpar registros ou copiar informações para fins de suporte técnico avançado.
                 </p>
                 
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* Button: Diagnosticar GDI */}
+                  {/* Button: Diagnosticar GDI / Revalidar Endpoint */}
                   <button
                     type="button"
                     onClick={handleDiagnosticarGDI}
@@ -947,43 +1083,31 @@ export default function GoogleDocsIntegration() {
                     title="Realizar probe fático de conexão e verificação de login redirect, HTML e JSON"
                   >
                     <Activity size={12} className="shrink-0 text-white animate-spin" style={{ animationDuration: '4s' }} />
-                    <span>Diagnosticar GDI</span>
+                    <span>Diagnosticar GDI / Revalidar Endpoint</span>
                   </button>
 
-                  {/* 6. Button: Limpar configuração inválida do GDI */}
+                  {/* Button: Copiar Diagnóstico Completo */}
+                  <button
+                    type="button"
+                    onClick={handleCopyDiagnostic}
+                    id="btn-copy-diagnostic-gdi"
+                    className="px-3.5 py-1.5 bg-cyan-700 hover:bg-cyan-800 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow"
+                    title="Copiar dados fáticos completos do último diagnóstico para depuração"
+                  >
+                    <Check size={11} className="shrink-0 text-white" />
+                    <span>Copiar Diagnóstico</span>
+                  </button>
+
+                  {/* 6. Button: Limpar / Excluir configuração do GDI */}
                   <button
                     type="button"
                     onClick={handleClearInvalidGDI}
                     id="btn-clear-invalid-gdi"
                     className="px-3.5 py-1.5 bg-rose-55 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
-                    title="Limpar URL do AI Studio e redefinir barramento no Firestore"
+                    title="Remover Chaves, URL e zerar status do conector no Firestore"
                   >
                     <X size={11} className="shrink-0" />
-                    <span>Limpar configuração inválida do GDI</span>
-                  </button>
-
-                  {/* 7. Button: Salvar URL real do GDI */}
-                  <button
-                    type="button"
-                    onClick={handleSaveRealGDI}
-                    id="btn-save-real-gdi"
-                    className="px-3.5 py-1.5 bg-emerald-55 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
-                    title="Salvar URL homologada real no Firestore"
-                  >
-                    <Check size={11} className="shrink-0" />
-                    <span>Salvar URL real do GDI</span>
-                  </button>
-
-                  {/* Button: Corrigir URL GDI agora */}
-                  <button
-                    type="button"
-                    onClick={handleCorrectGdiNow}
-                    id="btn-correct-gdi-now"
-                    className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow"
-                    title="Corrigir URL GDI agora para a URL homologada real no Firestore"
-                  >
-                    <Check size={11} className="shrink-0 text-white" />
-                    <span>Corrigir URL GDI agora</span>
+                    <span>Excluir / Limpar Configuração</span>
                   </button>
 
                   {/* 8. Button: Testar Conexão GDI */}
@@ -991,11 +1115,11 @@ export default function GoogleDocsIntegration() {
                     type="button"
                     onClick={handleManualTestGDI}
                     id="btn-test-connection-gdi"
-                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
+                    className="px-3.5 py-1.5 bg-gray-600 hover:bg-gray-750 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
                     title="Invocar GET /api/config e verificar se retorna JSON fático"
                   >
                     <Play size={11} className="shrink-0 text-white" />
-                    <span>Testar Conexão GDI</span>
+                    <span>Testar Conexão</span>
                   </button>
 
                   {connectionTestLabel && (
@@ -1071,8 +1195,8 @@ export default function GoogleDocsIntegration() {
 
                   <button
                     type="submit"
-                    disabled={saving}
-                    className="px-5 py-2 px-6 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-sm disabled:opacity-50 cursor-pointer transition-all"
+                    disabled={saving || !isEditing}
+                    className="px-5 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 shadow-sm cursor-pointer transition-all disabled:cursor-not-allowed"
                   >
                     <Save size={14} className="shrink-0" />
                     <span>{saving ? 'Gravando...' : 'Salvar Alterações'}</span>
