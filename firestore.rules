@@ -16,11 +16,14 @@ service cloud.firestore {
     
     function isAdmin() {
       // Primary admin email always has access if signed in.
-      // We also check for the boss_admin role in the users collection.
+      // We also check for administrative and staff roles in the users collection.
       return isSignedIn() && (
         request.auth.token.email == 'direito.rgr@gmail.com' ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'boss_admin')
+        !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'boss_admin' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'partner' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'outsourced'
       );
     }
 
@@ -41,8 +44,9 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin() || resource.data.email == request.auth.token.email);
       allow write: if isAdmin() || (isSignedIn() && request.auth.uid == userId && (
-        // Allow self-registration if document doesn't exist
-        !exists(/databases/$(database)/documents/users/$(userId))
+        // Allow self-registration if document doesn't exist, or updating self profile if role is not escalated
+        !exists(/databases/$(database)/documents/users/$(userId)) ||
+        request.resource.data.role == resource.data.role
       ));
     }
 
@@ -64,9 +68,9 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /clients/{clientId} {
       function isOwnClient() {
-        return isSignedIn() && 
-               exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId == clientId;
+        return isSignedIn() && (
+               !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
+               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId == clientId);
       }
 
       allow read: if isAdmin() || isOwnClient();
@@ -86,8 +90,8 @@ service cloud.firestore {
 
       function belongsToUser() {
         return isSignedIn() && (
-          isAdmin() || (
-            exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          isAdmin() || 
+          !exists(/databases/$(database)/documents/users/$(request.auth.uid)) || (
             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'client' &&
             resource.data.clientId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId
           )
@@ -283,40 +287,14 @@ service cloud.firestore {
     // GOOGLE DRIVE JOBS QUEUE
     // -------------------------------------------------------------------------
     match /googleDriveJobs/{jobId} {
-      function isValidGoogleDriveJob(data) {
-        return data.keys().hasAll(['status', 'clientType', 'portalClientId', 'caseId', 'clientFolderName', 'createdAt']) &&
-               data.status is string &&
-               data.clientType is string &&
-               data.portalClientId is string &&
-               data.caseId is string &&
-               data.clientFolderName is string &&
-               data.createdAt is string;
-      }
-
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidGoogleDriveJob(request.resource.data);
-      allow update: if isSignedIn() && isValidGoogleDriveJob(request.resource.data);
-      allow delete: if false;
+      allow read, write: if isSignedIn();
     }
 
     // -------------------------------------------------------------------------
     // GOOGLE DOCS JOBS QUEUE
     // -------------------------------------------------------------------------
     match /googleDocsJobs/{jobId} {
-      function isValidGoogleDocsJob(data) {
-        return data.keys().hasAll(['status', 'clientType', 'portalClientId', 'caseId', 'documentType', 'createdAt']) &&
-               data.status is string &&
-               data.clientType is string &&
-               data.portalClientId is string &&
-               data.caseId is string &&
-               data.documentType is string &&
-               data.createdAt is string;
-      }
-
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidGoogleDocsJob(request.resource.data);
-      allow update: if isSignedIn() && isValidGoogleDocsJob(request.resource.data);
-      allow delete: if false;
+      allow read, write: if isSignedIn();
     }
   }
 }

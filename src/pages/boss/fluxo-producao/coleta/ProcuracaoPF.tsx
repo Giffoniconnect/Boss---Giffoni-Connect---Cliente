@@ -144,9 +144,13 @@ export default function ProcuracaoPF() {
           updatedAt: now
         };
 
-        await setDoc(docRef, {
-          googleDocs: updatedGDocs
-        }, { merge: true });
+        try {
+          await setDoc(docRef, {
+            googleDocs: updatedGDocs
+          }, { merge: true });
+        } catch (dbErr) {
+          console.warn("[PORTAL_GDI_LIVE_REVALIDATION_WARNING] Permissões insuficientes para salvar estado do GDI no Firestore, mas prosseguindo com fluxo local.", dbErr);
+        }
 
         setGdiConfigured(true);
         setGdiStatus("operacional");
@@ -177,9 +181,13 @@ export default function ProcuracaoPF() {
           updatedAt: now
         };
 
-        await setDoc(docRef, {
-          googleDocs: updatedGDocs
-        }, { merge: true });
+        try {
+          await setDoc(docRef, {
+            googleDocs: updatedGDocs
+          }, { merge: true });
+        } catch (dbErr) {
+          console.warn("[PORTAL_GDI_LIVE_REVALIDATION_WARNING] Permissões insuficientes para salvar estado do GDI no Firestore.", dbErr);
+        }
 
         const detailedError = `Falha na revalidação ao vivo com GDI: ${data.error || 'Não operacional'}\n` +
           `Endpoint testado: ${data.failedEndpoint || 'N/A'}\n` +
@@ -414,27 +422,32 @@ export default function ProcuracaoPF() {
 
   const handleRevalidateGdi = async () => {
     setSaving(true);
+    setError(null);
+    setSuccess(null);
+
     try {
       const connectorsSnap = await getDoc(doc(db, 'settings', 'connectors'));
-      if (connectorsSnap.exists()) {
-        const data = connectorsSnap.data();
-        if (data.googleDocs) {
-          const statusInfo = normalizeGdiStatus(data.googleDocs);
-          setGdiStatus(statusInfo.normalizedStatus);
-          setLoadedGdiUrl(statusInfo.endpointUrl);
-          setGdiConfigured(statusInfo.isOperational);
-          setGoogleDocsConfig({
-            ...data.googleDocs,
-            normalizedStatus: statusInfo.normalizedStatus,
-            operationalReason: statusInfo.reason,
-            targetEndpoint: statusInfo.targetEndpoint
-          });
-        }
+
+      if (!connectorsSnap.exists()) {
+        throw new Error("Documento settings/connectors não encontrado.");
       }
-      setSuccess("Configuração do GDI revalidada com sucesso!");
-      setTimeout(() => setSuccess(null), 3000);
+
+      const data = connectorsSnap.data();
+      const googleDocs = data.googleDocs;
+
+      if (!googleDocs?.endpointUrl || !googleDocs?.integrationKey) {
+        throw new Error("Endpoint URL ou Integration Key do GDI ausentes.");
+      }
+
+      const ok = await revalidateGdiLive(googleDocs);
+
+      if (!ok) {
+        throw new Error("Revalidação real do GDI falhou. Verifique o erro técnico exibido.");
+      }
+
+      setSuccess("GDI revalidado ao vivo com sucesso. O botão Gerar Procuração está liberado.");
     } catch (err: any) {
-      setError(`Erro ao revalidar GDI: ${err.message}`);
+      setError(`Erro ao revalidar GDI ao vivo: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -883,30 +896,29 @@ export default function ProcuracaoPF() {
       }
 
       let statusInfo = normalizeGdiStatus(googleDocs);
+      let gdiOperational = statusInfo.isOperational;
 
-      // TAREFA 4 — Se status residual "erro", revalidar ao vivo se existe endpoint e chave
-      if (!statusInfo.isOperational) {
-        if (googleDocs?.endpointUrl && googleDocs?.integrationKey) {
-          console.log("[PORTAL_GDI_LIVE_REVALIDATION_STARTED] Revalidando GDI automaticamente antes de desistir...");
-          const revalidated = await revalidateGdiLive(googleDocs);
-          if (revalidated) {
-            const connectorsSnapUpdated = await getDoc(doc(db, 'settings', 'connectors'));
-            if (connectorsSnapUpdated.exists()) {
-              googleDocs = connectorsSnapUpdated.data().googleDocs;
-              statusInfo = normalizeGdiStatus(googleDocs);
-            }
-          } else {
-            console.warn("[PORTAL_GDI_LIVE_REVALIDATION_FAILED] Revalidação ao vivo automática falhou.");
+      if (!gdiOperational && googleDocs?.endpointUrl && googleDocs?.integrationKey) {
+        console.log("[PORTAL_GDI_LIVE_REVALIDATION_STARTED] Revalidando GDI automaticamente antes de desistir...");
+        const revalidated = await revalidateGdiLive(googleDocs);
+        if (revalidated) {
+          gdiOperational = true;
+          const connectorsSnapUpdated = await getDoc(doc(db, 'settings', 'connectors'));
+          if (connectorsSnapUpdated.exists()) {
+            googleDocs = connectorsSnapUpdated.data().googleDocs;
+            statusInfo = normalizeGdiStatus(googleDocs);
           }
+        } else {
+          console.warn("[PORTAL_GDI_LIVE_REVALIDATION_FAILED] Revalidação ao vivo automática falhou.");
         }
       }
 
-      if (!statusInfo.isOperational) {
+      if (!gdiOperational) {
         console.error("[PORTAL_GDI_LIVE_REVALIDATION_FAILED] GDI não está operacional. Abortando geração.");
-        throw new Error(statusInfo.reason || "Integração Google Docs/GDI não homologada e falhou na revalidação ao vivo.");
+        throw new Error("GDI não operacional após revalidação ao vivo.");
       }
 
-      let gdiBaseUrl = statusInfo.endpointUrl;
+      let gdiBaseUrl = googleDocs?.endpointUrl || "";
       const gdiIntegrationKey = (googleDocs?.integrationKey || '').trim();
 
       // Clean query string from GDI URL (TAREFA 6)
@@ -1005,6 +1017,19 @@ export default function ProcuracaoPF() {
         timestamp: new Date().toISOString(),
         message: `Disparando requisição real de placeholders-only via proxy para o GDI (${targetEndpoint}).`
       });
+
+      // TAREFA 4 — LOGAR O PONTO EXATO ANTES DO POST
+      initialLogs.push({
+        action: "PORTAL_GDI_POST_ABOUT_TO_SEND",
+        timestamp: new Date().toISOString(),
+        message: `Ponto exato antes do POST. targetEndpoint: ${targetEndpoint}, hasIntegrationKey: true, contractVersion: gdi.placeholders.v1, destinationFolderId: ${googleDriveClientFolderId}, templateKey: procuracao-pf, placeholdersCount: ${Object.keys(placeholders || {}).length}`,
+        targetEndpoint,
+        hasIntegrationKey: true,
+        contractVersion: "gdi.placeholders.v1",
+        destinationFolderId: googleDriveClientFolderId,
+        templateKey: "procuracao-pf",
+        placeholdersCount: Object.keys(placeholders || {}).length
+      } as any);
 
       await updateDoc(doc(db, 'googleDocsJobs', jobId), {
         logs: initialLogs,

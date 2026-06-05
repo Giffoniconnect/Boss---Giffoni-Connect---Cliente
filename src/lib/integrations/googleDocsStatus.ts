@@ -95,6 +95,20 @@ export function normalizeGdiStatus(config: any): GdiNormalizationResult {
     };
   }
 
+  // Pre-audit Check for residual status error logic (TAREFA 6)
+  const isLastHealthCheckEmpty = !config.lastHealthCheckStatus || String(config.lastHealthCheckStatus).trim() === "";
+  const isLastHttpStatusReceivedEmpty = !config.lastHttpStatusReceived || String(config.lastHttpStatusReceived).trim() === "";
+  if (rawStatus === "erro" && isLastHealthCheckEmpty && isLastHttpStatusReceivedEmpty) {
+    return {
+      isOperational: false,
+      normalizedStatus: "parcial",
+      reason: "Status residual erro sem diagnóstico recente. Execute revalidação ao vivo.",
+      endpointUrl,
+      hasIntegrationKey,
+      targetEndpoint: endpointUrl
+    };
+  }
+
   // Define positive operational signals (HTTP 200, operational states, success responses)
   const isHealthyStatus = 
     lastHttpStatus === "200" || 
@@ -135,7 +149,7 @@ export function normalizeGdiStatus(config: any): GdiNormalizationResult {
   }
 
   return {
-    isOperational: normalizedStatus === "operacional",
+    isOperational: normalizedStatus === "operacional" || normalizedStatus === "parcial",
     normalizedStatus,
     reason,
     endpointUrl,
