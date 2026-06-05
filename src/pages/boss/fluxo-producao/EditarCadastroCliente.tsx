@@ -47,6 +47,7 @@ export default function EditarCadastroCliente() {
   const [connectorBuildUrl, setConnectorBuildUrl] = useState<string>('');
   const [copiedMotivo, setCopiedMotivo] = useState<boolean>(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+  const [showLogs, setShowLogs] = useState<boolean>(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -1059,10 +1060,23 @@ export default function EditarCadastroCliente() {
                               <span>Sincronizando com Google Drive...</span>
                             </>
                           ) : formData.googleDriveClientFolderStatus === 'criada' ? (
-                            <span>Pasta de Provas Ativa</span>
+                            <span>Pasta do Cliente</span>
                           ) : (
                             <span>Automação Google Drive — Pasta do Cliente</span>
                           )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setShowLogs(!showLogs)}
+                          className={`w-full inline-flex items-center justify-center gap-2 font-extrabold px-4 py-2.5 rounded-xl transition-all text-xs cursor-pointer shadow-xs border ${
+                            showLogs 
+                              ? 'bg-indigo-50 border-indigo-200 text-indigo-700' 
+                              : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-700'
+                          }`}
+                        >
+                          <Activity size={14} className={showLogs ? "text-indigo-600 animate-pulse" : "text-gray-400"} />
+                          <span>Ver Fluxo de logs</span>
                         </button>
                       </div>
                     </div>
@@ -1121,19 +1135,21 @@ export default function EditarCadastroCliente() {
                 </div>
 
                 {/* operational logs area */}
-                <div className="mt-6 border-t border-gray-100 pt-5 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Activity className="text-amber-500 animate-pulse" size={15} />
-                    <h4 className="text-[10px] font-black uppercase text-gray-500 tracking-wider font-mono">
-                      Fluxo de Logs Operacionais da Integração (Tempo Real)
-                    </h4>
+                {showLogs && (
+                  <div className="mt-6 border-t border-gray-100 pt-5 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Activity className="text-amber-500 animate-pulse" size={15} />
+                      <h4 className="text-[10px] font-black uppercase text-gray-500 tracking-wider font-mono">
+                        Fluxo de Logs Operacionais da Integração (Tempo Real)
+                      </h4>
+                    </div>
+                    <GoogleDriveJobsLogsPanel 
+                      clientId={clientId} 
+                      currentJobId={currentJobId} 
+                      onSelectJobId={setCurrentJobId} 
+                    />
                   </div>
-                  <GoogleDriveJobsLogsPanel 
-                    clientId={clientId} 
-                    currentJobId={currentJobId} 
-                    onSelectJobId={setCurrentJobId} 
-                  />
-                </div>
+                )}
               </div>
             </div>
 

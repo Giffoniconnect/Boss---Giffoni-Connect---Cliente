@@ -896,10 +896,108 @@ export default function ProcuracaoPF() {
         googleDocs = data.googleDocs;
       }
 
+      // TAREFA 3 — BOTÃO GERAR PROCURAÇÃO — Ler settings/connectors.googleDocs.integrationKey
+      const gdiIntegrationKey = (googleDocs?.integrationKey || '').trim();
+
+      if (!gdiIntegrationKey) {
+        const keyMissingErrorText = "Não foi possível enviar o payload ao GDI porque a chave X-BOSS-Google-Docs-Integration-Key não está configurada no Portal BOSS.";
+        
+        // Logar em googleDocsJobs: action: "PORTAL_GDI_INTEGRATION_KEY_MISSING"
+        try {
+          await setDoc(doc(db, 'googleDocsJobs', jobId), {
+            id: jobId,
+            contractVersion: "gdi.placeholders.v1",
+            source: "Portal BOSS Clientes",
+            target: "GDI",
+            documentType: "procuracao_pf",
+            templateKey: "procuracao-pf",
+            status: "failed",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            caseId: targetCaseId,
+            portalClientId: targetClientId,
+            clientType: "PF",
+            destinationFolderId,
+            destinationFolderUrl,
+            outputFileName: `Procuração PF - ${nomeCompleto} - ${targetCaseId}`,
+            placeholders,
+            result: {
+              googleDocsId: null,
+              googleDocsUrl: null,
+              fileName: null
+            },
+            errorCode: "PORTAL_GDI_INTEGRATION_KEY_MISSING",
+            errorMessage: keyMissingErrorText,
+            logs: [
+              ...initialLogs,
+              {
+                action: "PORTAL_GDI_INTEGRATION_KEY_MISSING",
+                timestamp: new Date().toISOString(),
+                message: "O Portal BOSS bloqueou o envio porque settings/connectors.googleDocs.integrationKey está ausente."
+              }
+            ]
+          });
+        } catch (dbErr) {
+          console.error("Erro ao registrar job com chave ausente:", dbErr);
+        }
+
+        throw new Error(keyMissingErrorText);
+      }
+
+      if (
+        gdiIntegrationKey.startsWith("http://") || 
+        gdiIntegrationKey.startsWith("https://") || 
+        gdiIntegrationKey.includes(".run.app") || 
+        gdiIntegrationKey.includes("/api/webhook/gdi-job") ||
+        gdiIntegrationKey.includes("aistudio.google.com")
+      ) {
+        const keyIsUrlErrorText = "O valor configurado como chave X-BOSS-Google-Docs-Integration-Key no Portal BOSS é uma URL em vez de uma chave secreta. Corrija o valor em Configurações > Integrações.";
+        
+        try {
+          await setDoc(doc(db, 'googleDocsJobs', jobId), {
+            id: jobId,
+            contractVersion: "gdi.placeholders.v1",
+            source: "Portal BOSS Clientes",
+            target: "GDI",
+            documentType: "procuracao_pf",
+            templateKey: "procuracao-pf",
+            status: "failed",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            caseId: targetCaseId,
+            portalClientId: targetClientId,
+            clientType: "PF",
+            destinationFolderId,
+            destinationFolderUrl,
+            outputFileName: `Procuração PF - ${nomeCompleto} - ${targetCaseId}`,
+            placeholders,
+            result: {
+              googleDocsId: null,
+              googleDocsUrl: null,
+              fileName: null
+            },
+            errorCode: "PORTAL_GDI_INTEGRATION_KEY_IS_URL",
+            errorMessage: keyIsUrlErrorText,
+            logs: [
+              ...initialLogs,
+              {
+                action: "PORTAL_GDI_INTEGRATION_KEY_IS_URL",
+                timestamp: new Date().toISOString(),
+                message: "O Portal BOSS bloqueou o envio porque settings/connectors.googleDocs.integrationKey aparenta ser uma URL."
+              }
+            ]
+          });
+        } catch (dbErr) {
+          console.error("Erro ao registrar job com chave inválida:", dbErr);
+        }
+
+        throw new Error(keyIsUrlErrorText);
+      }
+
       let statusInfo = normalizeGdiStatus(googleDocs);
       let gdiOperational = statusInfo.isOperational;
 
-      if (!gdiOperational && googleDocs?.endpointUrl && googleDocs?.integrationKey) {
+      if (!gdiOperational && googleDocs?.endpointUrl) {
         console.log("[PORTAL_GDI_LIVE_REVALIDATION_STARTED] Revalidando GDI automaticamente antes de desistir...");
         const revalidated = await revalidateGdiLive(googleDocs);
         if (revalidated) {
@@ -920,11 +1018,21 @@ export default function ProcuracaoPF() {
       }
 
       let gdiBaseUrl = googleDocs?.endpointUrl || "";
-      const gdiIntegrationKey = (googleDocs?.integrationKey || '').trim();
 
       // Clean query string from GDI URL (TAREFA 6)
       if (gdiBaseUrl.includes("?")) {
         gdiBaseUrl = gdiBaseUrl.split("?")[0];
+      }
+      gdiBaseUrl = gdiBaseUrl.trim();
+      while (gdiBaseUrl.endsWith("/")) {
+        gdiBaseUrl = gdiBaseUrl.slice(0, -1);
+      }
+      const suffixToRemove = "/api/webhook/gdi-job";
+      if (gdiBaseUrl.endsWith(suffixToRemove)) {
+        gdiBaseUrl = gdiBaseUrl.slice(0, -suffixToRemove.length);
+      }
+      while (gdiBaseUrl.endsWith("/")) {
+        gdiBaseUrl = gdiBaseUrl.slice(0, -1);
       }
 
       // Safeguards for restricted domains (TAREFA 6)
@@ -987,17 +1095,10 @@ export default function ProcuracaoPF() {
 
       await setDoc(doc(db, 'googleDocsJobs', jobId), initialJob);
 
-      // TAREFA 6 — GARANTIR TARGET ENDPOINT
-      targetEndpoint = gdiBaseUrl.trim();
-      if (!targetEndpoint.endsWith("/api/webhook/gdi-job")) {
-        if (targetEndpoint.endsWith("/")) {
-          targetEndpoint += "api/webhook/gdi-job";
-        } else {
-          targetEndpoint += "/api/webhook/gdi-job";
-        }
-      }
+      // TAREFA 5 — ENDPOINT CORRETO — Montar targetEndpoint final garantido a partir da URL base normalizada
+      targetEndpoint = `${gdiBaseUrl}/api/webhook/gdi-job`;
 
-      // TAREFA 2 — ALTERAR PAYLOAD ENVIADO AO GDI
+      // TAREFA 2 — ALTERAR PAYLOAD ENVIADO AO GDI (TAREFA 4 / Contract placeholders-only)
       const externalPayload = {
         contractVersion: "gdi.placeholders.v1",
         templateKey: "procuracao-pf",
@@ -1086,9 +1187,9 @@ export default function ProcuracaoPF() {
       const outputFolderUrl = responseData.destinationFolderUrl || destinationFolderUrl;
       const gdiResponseLogs = responseData.logs || [];
 
-      // TAREFA 4 — GARANTIR QUE HOML NÃO SALVE SUCESSO SEM googleDocsUrl REAL
-      if (!googleDocsUrl || !googleDocsUrl.startsWith("https://docs.google.com/document/d/")) {
-        const errorDetail = responseData.errorMessage || responseData.error || "O GDI não retornou uma URL real de Google Docs.";
+      // TAREFA 4 — GARANTIR QUE HOML NÃO SALVE SUCESSO SEM googleDocsUrl REAL E ID VALIDO
+      if (!googleDocsId || !googleDocsUrl || !googleDocsUrl.startsWith("https://docs.google.com/document/d/")) {
+        const errorDetail = responseData.errorMessage || responseData.error || "O GDI não retornou uma URL real de Google Docs ou um ID de documento válido.";
         const errorInstance = new Error(errorDetail) as any;
         errorInstance.httpStatus = proxyResponse.status;
         errorInstance.errorCode = responseData.errorCode || "GDI_INVALID_URL_FORMAT";

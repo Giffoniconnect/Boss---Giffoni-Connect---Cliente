@@ -23,7 +23,12 @@ import {
   Archive,
   ChevronDown,
   ChevronUp,
-  Activity
+  Activity,
+  Eye,
+  EyeOff,
+  Copy,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 
 interface GoogleDocsConfig {
@@ -107,6 +112,17 @@ export default function GoogleDocsIntegration() {
   const [expandSentPayload, setExpandSentPayload] = useState(false);
   const [expandReceivedPayload, setExpandReceivedPayload] = useState(false);
   const [connectionTestLabel, setConnectionTestLabel] = useState<string>('');
+  const [copiedHeader, setCopiedHeader] = useState(false);
+  const [showKey, setShowKey] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(false);
+  
+  // Custom input states for toggles, copys and controls
+  const [showUrl, setShowUrl] = useState(true);
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [showStatus, setShowStatus] = useState(true);
+  const [copiedStatus, setCopiedStatus] = useState(false);
+  const [showNotes, setShowNotes] = useState(true);
+  const [copiedNotes, setCopiedNotes] = useState(false);
   
   const [diagnosticState, setDiagnosticState] = useState<'sem_diagnostico' | 'invalida' | 'parcial' | 'operacional' | 'erro'>('sem_diagnostico');
   const [diagnosticMessage, setDiagnosticMessage] = useState<string>('');
@@ -672,11 +688,72 @@ export default function GoogleDocsIntegration() {
     setSaving(true);
     setFeedback(null);
 
-    const gapiBaseUrl = (config.endpointUrl || '').trim();
+    // Normalizar endpointUrl (TAREFA 3)
+    let gapiBaseUrl = (config.endpointUrl || '').trim();
+    if (gapiBaseUrl.includes("?")) {
+      gapiBaseUrl = gapiBaseUrl.split("?")[0];
+    }
+    gapiBaseUrl = gapiBaseUrl.trim();
+    while (gapiBaseUrl.endsWith("/")) {
+      gapiBaseUrl = gapiBaseUrl.slice(0, -1);
+    }
+    // se terminar com /api/webhook/gdi-job, remover esse sufixo
+    const suffixToRemoveOnSave = "/api/webhook/gdi-job";
+    if (gapiBaseUrl.toLowerCase().endsWith(suffixToRemoveOnSave)) {
+      gapiBaseUrl = gapiBaseUrl.slice(0, -suffixToRemoveOnSave.length);
+    }
+    while (gapiBaseUrl.endsWith("/")) {
+      gapiBaseUrl = gapiBaseUrl.slice(0, -1);
+    }
+
     const integrationKey = (config.integrationKey || '').trim();
     const status = config.status || 'não_configurado';
 
-    // Regra de Negócio Crítica:
+    // BLOQUEAR CONFUSÃO ENTRE URL E CHAVE (TAREFA 2)
+    if (
+      integrationKey.startsWith("http://") || 
+      integrationKey.startsWith("https://") || 
+      integrationKey.includes(".run.app") || 
+      integrationKey.includes("/api/webhook/gdi-job") ||
+      integrationKey.includes("aistudio.google.com")
+    ) {
+      setFeedback({
+        type: 'error',
+        message: 'Você colou uma URL no campo da chave. Este campo deve receber apenas o valor secreto do header X-BOSS-Google-Docs-Integration-Key. A URL deve ser informada no campo “URL Base do GDI”.'
+      });
+      setSaving(false);
+      return;
+    }
+
+    // Atualizar estado com valor normalizado para sincronização visual inmediata
+    setConfig(prev => ({
+      ...prev,
+      endpointUrl: gapiBaseUrl,
+      integrationKey: integrationKey
+    }));
+
+    // Regras de Negócio Críticas (TAREFA 1):
+    // 1. Não permitir status operacional se endpointUrl estiver vazio
+    // 2. Não permitir status operacional se integrationKey estiver vazio
+    if (status === 'operacional') {
+      if (!gapiBaseUrl) {
+        setFeedback({
+          type: 'error',
+          message: 'Ativação Bloqueada: Não é possível definir o status como operacional se a URL do GDI estiver vazia.'
+        });
+        setSaving(false);
+        return;
+      }
+      if (!integrationKey) {
+        setFeedback({
+          type: 'error',
+          message: 'Ativação Bloqueada: Não é possível definir o status como operacional se a Chave de Integração GDI estiver vazia.'
+        });
+        setSaving(false);
+        return;
+      }
+    }
+
     // Só permitir salvar o status da integração como “Operacional” (status = 'operacional')
     // se o diagnóstico estiver em estado 🟢 Operacional.
     if (status === 'operacional' && diagnosticState !== 'operacional') {
@@ -706,6 +783,8 @@ export default function GoogleDocsIntegration() {
 
     try {
       const targetStatus = status;
+      const calculatedOperationalStatus = targetStatus === 'operacional' ? 'operacional' : (config.integrationOperationalStatus || 'não_configurado');
+      
       console.log("[PORTAL_TEMPLATE_PHYSICAL_CONFIG_REMOVED] Salvando configurações do GDI livres de referências e strings de template físico.");
       await setDoc(doc(db, 'settings', 'connectors'), {
         googleDocs: {
@@ -714,6 +793,7 @@ export default function GoogleDocsIntegration() {
           buildUrl: gapiBaseUrl,
           endpointUrl: gapiBaseUrl,
           integrationKey: integrationKey,
+          integrationOperationalStatus: calculatedOperationalStatus,
           lastEndpoint: config.lastEndpoint || '',
           lastHttpStatus: config.lastHttpStatus || null,
           lastResponse: config.lastResponse || '',
@@ -730,7 +810,8 @@ export default function GoogleDocsIntegration() {
           lastHealthCheckStatus: config.lastHealthCheckStatus || '',
           lastHealthCheckError: config.lastHealthCheckError || '',
           lastValidatedWebhookUrl: config.lastValidatedWebhookUrl || '',
-          transportMode: config.transportMode || 'http_webhook'
+          transportMode: config.transportMode || 'http_webhook',
+          updatedAt: new Date().toISOString()
         },
         updatedAt: new Date().toISOString()
       }, { merge: true });
@@ -1046,19 +1127,94 @@ export default function GoogleDocsIntegration() {
               </h3>
               
               <div className="space-y-5">
-                
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">GDI API Base URL *</label>
-                  <p className="text-[11px] text-gray-500 font-medium">URL pública de produção do seu runtime Cloud Run para acesso à API do GDI.</p>
-                  <input
-                    type="text"
-                    required
-                    disabled={!isEditing}
-                    value={config.endpointUrl}
-                    onChange={(e) => setConfig({ ...config, endpointUrl: e.target.value })}
-                    placeholder="https://gdi-api.exemplo.run.app"
-                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 disabled:opacity-75 disabled:cursor-not-allowed"
-                  />
+                <div id="gdi-coletas-warning-alert" className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-4 text-amber-900 select-none">
+                  <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1.5 flex-1 text-xs">
+                    <h5 className="font-black uppercase tracking-wider text-amber-805 font-mono text-left">Atenção: Diferencie a URL da Chave Secreta</h5>
+                    <p className="font-semibold leading-normal text-amber-900 text-left">
+                      A URL do GDI e a chave do header são informações completamente diferentes. Nunca cole a URL no campo da chave.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-amber-200 font-mono text-amber-805">
+                      <div className="space-y-1 text-left">
+                        <p className="font-bold uppercase text-[9px] text-amber-700 tracking-wider">URL Base:</p>
+                        <p className="break-all font-semibold bg-white/60 p-1.5 rounded border border-amber-100 select-all">https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app</p>
+                        <p className="font-bold uppercase text-[9px] text-amber-700 tracking-wider mt-1.5">Endpoint final:</p>
+                        <p className="break-all font-semibold bg-white/60 p-1.5 rounded border border-amber-100 select-all">POST /api/webhook/gdi-job</p>
+                      </div>
+                      <div className="space-y-1 text-left font-sans">
+                        <p className="font-bold uppercase text-[9px] text-amber-700 tracking-wider">Header:</p>
+                        <p className="break-all font-semibold bg-white/60 p-1.5 rounded border border-amber-100 select-all text-[11px]">X-BOSS-Google-Docs-Integration-Key</p>
+                        <p className="font-bold uppercase text-[9px] text-amber-700 tracking-wider mt-1.5">Valor do Header:</p>
+                        <p className="break-all font-semibold bg-white/60 p-1.5 rounded border border-amber-105 select-all text-[11px]">a chave secreta salva em settings.connectors.googleDocs.integrationKey</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* BLOCO 1 — URL BASE DO GDI */}
+                <div id="gdi-block-url-base" className="p-5 bg-white border border-gray-150 rounded-2xl space-y-3 shadow-sm text-left">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center font-bold text-xs shrink-0">1</div>
+                    <label className="text-[11px] font-black uppercase text-gray-700 tracking-wider">URL Base do GDI</label>
+                  </div>
+                  
+                  <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
+                    Informe apenas a URL base do runtime do GDI. Não cole aqui o sufixo <code className="font-mono bg-gray-100 px-1 py-0.5 rounded text-gray-700">/api/webhook/gdi-job</code>.
+                  </p>
+
+                  <div className="relative">
+                    <input
+                      type={showUrl ? "text" : "password"}
+                      required
+                      disabled={!isEditing}
+                      value={config.endpointUrl}
+                      onChange={(e) => setConfig({ ...config, endpointUrl: e.target.value })}
+                      placeholder="https://gdi-api.exemplo.run.app"
+                      className="w-full pl-3 pr-32 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 disabled:opacity-75 disabled:cursor-not-allowed select-all"
+                    />
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 select-none">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditing(!isEditing)}
+                        className={`p-1.5 rounded-lg transition-colors cursor-pointer flex items-center justify-center ${isEditing ? 'bg-indigo-50 text-indigo-650 hover:bg-indigo-100' : 'hover:bg-gray-200 text-gray-450'}`}
+                        title={isEditing ? "Modo de edição ativo (clique para alternar)" : "Ativar edição"}
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowUrl(!showUrl)}
+                        className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-400 transition-colors cursor-pointer flex items-center justify-center"
+                        title={showUrl ? "Ocular URL" : "Visualizar URL"}
+                      >
+                        {showUrl ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (config.endpointUrl) {
+                            navigator.clipboard.writeText(config.endpointUrl);
+                            setCopiedUrl(true);
+                            setTimeout(() => setCopiedUrl(false), 2000);
+                          }
+                        }}
+                        className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-400 transition-colors cursor-pointer flex items-center justify-center"
+                        title="Copiar URL"
+                      >
+                        {copiedUrl ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!isEditing}
+                        onClick={() => setConfig({ ...config, endpointUrl: '' })}
+                        className="p-1.5 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-gray-450 transition-colors cursor-pointer flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Limpar campo"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+
                   {isEditing && !config.endpointUrl.trim() && (
                     <div className="pt-1 select-none">
                       <button
@@ -1071,48 +1227,269 @@ export default function GoogleDocsIntegration() {
                       </button>
                     </div>
                   )}
-                  <p className="text-[10px] text-indigo-600 font-mono font-medium">Receptor Webhook: {config.endpointUrl.trim() ? `${config.endpointUrl.trim().replace(/\/$/, "")}/api/webhook/gdi-job` : ''}</p>
+                  
+                  <div className="text-[11px] text-slate-400 font-mono flex items-center gap-1.5">
+                    <span className="font-bold text-gray-400 shrink-0">Campo salvo em:</span>
+                    <span className="text-gray-600 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-150 font-mono break-all text-[10px]">settings/connectors.googleDocs.endpointUrl</span>
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Chave de Integração GDI (settings.connectors.googleDocs.integrationKey) *</label>
-                  <p className="text-[11px] text-gray-500 font-medium">Token secreto fornecido no header X-BOSS-Google-Docs-Integration-Key.</p>
-                  <input
-                    type="password"
-                    disabled={!isEditing}
-                    value={config.integrationKey}
-                    onChange={(e) => setConfig({ ...config, integrationKey: e.target.value })}
-                    placeholder="boss_docs_live_xxxxxxxx"
-                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 disabled:opacity-75 disabled:cursor-not-allowed"
-                  />
+                {/* BLOCO 2 — ENDPOINT FINAL CALCULADO */}
+                <div id="gdi-block-endpoint-calculado" className="p-5 bg-slate-50 border border-gray-150 rounded-2xl space-y-3 shadow-sm select-none text-left">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 bg-slate-200 text-slate-700 rounded-lg flex items-center justify-center font-bold text-xs shrink-0">2</div>
+                    <label className="text-[11px] font-black uppercase text-gray-700 tracking-wider">Endpoint final que será chamado pelo Portal BOSS</label>
+                  </div>
+
+                  <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
+                    Este endpoint é calculated automaticamente a partir da URL base. Não é o valor da chave secreta.
+                  </p>
+
+                  <div className="p-3 bg-slate-900 border border-slate-950 rounded-xl text-xs font-mono text-emerald-400 select-all overflow-x-auto flex items-center gap-2">
+                    <span className="font-bold text-indigo-400 shrink-0">POST</span>
+                    <span>
+                      {config.endpointUrl.trim() 
+                        ? `${config.endpointUrl.trim().replace(/\/$/, "").replace(/\/api\/webhook\/gdi-job$/, "")}/api/webhook/gdi-job` 
+                        : 'https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app/api/webhook/gdi-job'
+                      }
+                    </span>
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
+                {/* BLOCO 3 — HEADER OBRIGATÓRIO */}
+                <div id="gdi-block-header-key" className="p-5 bg-gradient-to-b from-slate-900 to-slate-950 text-slate-100 rounded-3xl border border-slate-950 space-y-4 shadow-md text-left">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-6 h-6 bg-indigo-500 text-white rounded-lg flex items-center justify-center font-bold text-xs shrink-0">3</div>
+                    <label className="text-[11px] font-black uppercase text-indigo-300 tracking-wider">Header obrigatório enviado ao GDI</label>
+                  </div>
+
+                  {/* Header Name Section */}
+                  <div className="bg-slate-850 p-3.5 rounded-xl border border-slate-800 flex items-start justify-between gap-3 shadow-sm">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold uppercase text-slate-400 font-mono tracking-wider block">Nome de cabeçalho (Header Name)</span>
+                      <h4 className="text-xs font-bold font-mono tracking-tight text-white selection:bg-indigo-500 selection:text-white">
+                        X-BOSS-Google-Docs-Integration-Key
+                      </h4>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText("X-BOSS-Google-Docs-Integration-Key");
+                        setCopiedHeader(true);
+                        setTimeout(() => setCopiedHeader(false), 2000);
+                      }}
+                      className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-[9px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
+                    >
+                      {copiedHeader ? 'Copiado!' : 'Copiar nome do header'}
+                    </button>
+                  </div>
+
+                  <p className="text-[11px] text-slate-350 leading-relaxed font-semibold">
+                    Este é o nome do cabeçalho HTTP. O valor dele será a chave secreta salva no campo abaixo.
+                  </p>
+
+                  <div className="pt-3 border-t border-slate-800/80 space-y-3">
+                    <div className="space-y-1.5 text-left">
+                      <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Chave secreta do header X-BOSS-Google-Docs-Integration-Key *</label>
+                      <div className="relative text-gray-805">
+                        <input
+                          type={showKey ? "text" : "password"}
+                          disabled={!isEditing}
+                          value={config.integrationKey}
+                          onChange={(e) => setConfig({ ...config, integrationKey: e.target.value })}
+                          placeholder="boss_docs_live_xxxxxxxxx"
+                          className="w-full pl-3 pr-32 py-2.5 bg-slate-800 text-slate-100 border border-slate-700 rounded-xl text-xs font-mono outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-75 disabled:cursor-not-allowed select-all placeholder-slate-500"
+                        />
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 select-none text-slate-300">
+                          <button
+                            type="button"
+                            onClick={() => setIsEditing(!isEditing)}
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer flex items-center justify-center ${isEditing ? 'bg-indigo-550/20 text-indigo-400 hover:bg-indigo-550/30' : 'hover:bg-slate-750 text-slate-450'}`}
+                            title={isEditing ? "Modo de edição ativo (clique para alternar)" : "Ativar edição"}
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowKey(!showKey)}
+                            className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-405 transition-colors cursor-pointer flex items-center justify-center bg-transparent"
+                            title={showKey ? "Ocultar chave" : "Visualizar chave"}
+                          >
+                            {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (config.integrationKey) {
+                                navigator.clipboard.writeText(config.integrationKey);
+                                setCopiedKey(true);
+                                setTimeout(() => setCopiedKey(false), 2000);
+                              }
+                            }}
+                            className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-405 transition-colors cursor-pointer flex items-center justify-center bg-transparent"
+                            title="Copiar chave"
+                          >
+                            {copiedKey ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!isEditing}
+                            onClick={() => setConfig({ ...config, integrationKey: '' })}
+                            className="p-1.5 hover:bg-red-950/40 hover:text-red-400 rounded-lg text-slate-500 transition-colors cursor-pointer flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed bg-transparent"
+                            title="Limpar campo"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-[10.5px] text-slate-400 leading-normal font-medium">
+                        Cole aqui a chave secreta do GDI. Não cole a URL do endpoint neste campo.
+                      </p>
+                    </div>
+                  </div>
+
+                  {!config.integrationKey || !config.integrationKey.trim() ? (
+                    <div className="p-4 bg-rose-950/40 border border-rose-900/60 rounded-2xl flex items-start gap-3 select-none text-rose-200">
+                      <AlertCircle size={16} className="text-rose-400 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <h5 className="text-[11px] font-black uppercase tracking-wider text-rose-200 font-mono font-bold">Chave Ausente!</h5>
+                        <p className="text-[11px] font-medium text-rose-300 leading-normal">
+                          O Portal BOSS não conseguirá enviar o payload real ao GDI sem esta chave.
+                        </p>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="pt-2 border-t border-slate-800/80 text-[11px] text-slate-400 font-mono">
+                    <p className="flex items-center gap-2">
+                      <span className="text-slate-500 font-bold uppercase shrink-0">Campo salvo em:</span>
+                      <span className="text-indigo-350 break-all select-all">settings/connectors.googleDocs.integrationKey</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 text-left">
                   <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Status da Conexão *</label>
-                  <select
-                    disabled={!isEditing}
-                    value={config.status}
-                    onChange={(e) => setConfig({ ...config, status: e.target.value as any })}
-                    className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
-                  >
-                    <option value="não_configurado">Não Configurado</option>
-                    <option value="invalida">Inválida</option>
-                    <option value="parcial">Parcial</option>
-                    <option value="operacional">Operacional</option>
-                    <option value="erro">Erro</option>
-                  </select>
+                  <div className="relative">
+                    {showStatus ? (
+                      <select
+                        disabled={!isEditing}
+                        value={config.status}
+                        onChange={(e) => setConfig({ ...config, status: e.target.value as any })}
+                        className="w-full pl-3 pr-32 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed select-none"
+                      >
+                        <option value="não_configurado">Não Configurado</option>
+                        <option value="invalida">Inválida</option>
+                        <option value="parcial">Parcial</option>
+                        <option value="operacional">Operacional</option>
+                        <option value="erro">Erro</option>
+                      </select>
+                    ) : (
+                      <input
+                        type="password"
+                        disabled={true}
+                        value={config.status}
+                        className="w-full pl-3 pr-32 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-800 outline-none disabled:opacity-75 disabled:cursor-not-allowed select-all font-bold"
+                      />
+                    )}
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 select-none">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditing(!isEditing)}
+                        className={`p-1.5 rounded-lg transition-colors cursor-pointer flex items-center justify-center ${isEditing ? 'bg-indigo-50 text-indigo-650 hover:bg-indigo-100' : 'hover:bg-gray-200 text-gray-450'}`}
+                        title={isEditing ? "Modo de edição ativo (clique para alternar)" : "Ativar edição"}
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowStatus(!showStatus)}
+                        className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-400 transition-colors cursor-pointer flex items-center justify-center"
+                        title={showStatus ? "Ocular status" : "Visualizar status"}
+                      >
+                        {showStatus ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (config.status) {
+                            navigator.clipboard.writeText(config.status);
+                            setCopiedStatus(true);
+                            setTimeout(() => setCopiedStatus(false), 2000);
+                          }
+                        }}
+                        className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-400 transition-colors cursor-pointer flex items-center justify-center"
+                        title="Copiar Status"
+                      >
+                        {copiedStatus ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!isEditing}
+                        onClick={() => setConfig({ ...config, status: 'não_configurado' })}
+                        className="p-1.5 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-gray-450 transition-colors cursor-pointer flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Resetar status"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 text-left">
                   <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Notas Técnicas de Implantação</label>
-                  <textarea
-                    disabled={!isEditing}
-                    value={config.notes}
-                    onChange={(e) => setConfig({ ...config, notes: e.target.value })}
-                    rows={2}
-                    placeholder="Documente notas de roteamento ou segredos vinculados a este nó fático..."
-                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 disabled:opacity-75 disabled:cursor-not-allowed"
-                  />
+                  <div className="relative">
+                    <textarea
+                      disabled={!isEditing}
+                      value={config.notes || ''}
+                      onChange={(e) => setConfig({ ...config, notes: e.target.value })}
+                      rows={2}
+                      placeholder="Documente notas de roteamento ou segredos vinculados a este nó fático..."
+                      style={{ WebkitTextSecurity: showNotes ? 'none' : 'disc' } as React.CSSProperties}
+                      className="w-full pl-3 pr-32 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 disabled:opacity-75 disabled:cursor-not-allowed"
+                    />
+                    <div className="absolute right-2 top-4 flex items-center gap-1 select-none">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditing(!isEditing)}
+                        className={`p-1.5 rounded-lg transition-colors cursor-pointer flex items-center justify-center ${isEditing ? 'bg-indigo-50 text-indigo-650 hover:bg-indigo-100' : 'hover:bg-gray-200 text-gray-450'}`}
+                        title={isEditing ? "Modo de edição ativo (clique para alternar)" : "Ativar edição"}
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowNotes(!showNotes)}
+                        className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-400 transition-colors cursor-pointer flex items-center justify-center"
+                        title={showNotes ? "Ocultar notas" : "Visualizar notas"}
+                      >
+                        {showNotes ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (config.notes) {
+                            navigator.clipboard.writeText(config.notes);
+                            setCopiedNotes(true);
+                            setTimeout(() => setCopiedNotes(false), 2000);
+                          }
+                        }}
+                        className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-400 transition-colors cursor-pointer flex items-center justify-center"
+                        title="Copiar Notas"
+                      >
+                        {copiedNotes ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!isEditing}
+                        onClick={() => setConfig({ ...config, notes: '' })}
+                        className="p-1.5 hover:bg-rose-50 hover:text-rose-600 rounded-lg text-gray-450 transition-colors cursor-pointer flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Limpar notas"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 

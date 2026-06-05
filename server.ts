@@ -222,6 +222,31 @@ app.post("/api/proxy-google-docs", async (req, res) => {
       });
     }
 
+    const trimmedKey = (integrationKey || "").trim();
+    if (!trimmedKey) {
+      return res.status(400).json({
+        success: false,
+        status: "failed",
+        errorCode: "GDI_INTEGRATION_KEY_MISSING",
+        errorMessage: "A chave secreta do header X-BOSS-Google-Docs-Integration-Key está ausente."
+      });
+    }
+
+    if (
+      trimmedKey.startsWith("http://") || 
+      trimmedKey.startsWith("https://") || 
+      trimmedKey.includes(".run.app") || 
+      trimmedKey.includes("/api/webhook/gdi-job") ||
+      trimmedKey.includes("aistudio.google.com")
+    ) {
+      return res.status(400).json({
+        success: false,
+        status: "failed",
+        errorCode: "GDI_INTEGRATION_KEY_IS_URL",
+        errorMessage: "O valor informado como chave do header é uma URL. Informe a chave secreta correta do GDI."
+      });
+    }
+
     if (payload) {
       console.log("[Proxy Docs] Payload recebido:", JSON.stringify(payload));
     }
@@ -234,6 +259,8 @@ app.post("/api/proxy-google-docs", async (req, res) => {
 
     let finalHeaders: Record<string, string> = {
       "Content-Type": "application/json",
+      "Accept": "application/json",
+      "X-BOSS-Google-Docs-Integration-Key": trimmedKey
     };
 
     // Forward incoming Cookie header if present to authenticate with the other dev container
@@ -241,17 +268,12 @@ app.post("/api/proxy-google-docs", async (req, res) => {
       finalHeaders["Cookie"] = cookieHeader;
     }
 
-    if (integrationKey) {
-      const maskKey = (key: string) => {
-        if (!key) return "";
-        if (key.length <= 8) return "********";
-        return key.substring(0, Math.min(15, key.length - 4)) + "********" + key.substring(key.length - 4);
-      };
-      console.log(`[Proxy Docs] Chave de integração Google Docs recebida: ${maskKey(integrationKey)}`);
-      finalHeaders["X-BOSS-Google-Docs-Integration-Key"] = integrationKey;
-    } else {
-      console.log("[Proxy Docs] Chave de integração Google Docs ausente!");
-    }
+    const maskKey = (key: string) => {
+      if (!key) return "";
+      if (key.length <= 8) return "********";
+      return key.substring(0, Math.min(15, key.length - 4)) + "********" + key.substring(key.length - 4);
+    };
+    console.log(`[Proxy Docs] Chave de integração Google Docs recebida e anexada a finalHeaders: ${maskKey(trimmedKey)}`);
 
     const { response, text } = await smartFetch(trimmedUrl, {
       method: "POST",
