@@ -885,6 +885,7 @@ export default function ProcuracaoPF() {
       }
     ];
 
+    let targetEndpoint = "";
     try {
       // Fetch GDI connection settings from Firestore
       const connectorsSnap = await getDoc(doc(db, 'settings', 'connectors'));
@@ -987,7 +988,7 @@ export default function ProcuracaoPF() {
       await setDoc(doc(db, 'googleDocsJobs', jobId), initialJob);
 
       // TAREFA 6 — GARANTIR TARGET ENDPOINT
-      let targetEndpoint = gdiBaseUrl.trim();
+      targetEndpoint = gdiBaseUrl.trim();
       if (!targetEndpoint.endsWith("/api/webhook/gdi-job")) {
         if (targetEndpoint.endsWith("/")) {
           targetEndpoint += "api/webhook/gdi-job";
@@ -1070,9 +1071,12 @@ export default function ProcuracaoPF() {
       }
 
       if (!proxyResponse.ok) {
-        // Detailed error description for proxy integration diagnostics
         const errorDetail = responseData.error || responseData.errorMessage || responseText || "Erro não mapeado";
-        throw new Error(errorDetail);
+        const errorInstance = new Error(errorDetail) as any;
+        errorInstance.httpStatus = proxyResponse.status;
+        errorInstance.errorCode = responseData.errorCode || "GDI_HTTP_ERROR";
+        errorInstance.rawResponse = responseText;
+        throw errorInstance;
       }
 
       // TAREFA 7 — VALIDAR RETORNO DO GDI
@@ -1082,15 +1086,24 @@ export default function ProcuracaoPF() {
       const outputFolderUrl = responseData.destinationFolderUrl || destinationFolderUrl;
       const gdiResponseLogs = responseData.logs || [];
 
-      if (!googleDocsUrl) {
-        // Se não retornar googleDocsUrl, mostrar o erro bruto.
-        const bruteErrorText = responseData.error || responseData.errorMessage || responseText || "O GDI não retornou a URL do documento (googleDocsUrl).";
-        throw new Error(bruteErrorText);
+      // TAREFA 4 — GARANTIR QUE HOML NÃO SALVE SUCESSO SEM googleDocsUrl REAL
+      if (!googleDocsUrl || !googleDocsUrl.startsWith("https://docs.google.com/document/d/")) {
+        const errorDetail = responseData.errorMessage || responseData.error || "O GDI não retornou uma URL real de Google Docs.";
+        const errorInstance = new Error(errorDetail) as any;
+        errorInstance.httpStatus = proxyResponse.status;
+        errorInstance.errorCode = responseData.errorCode || "GDI_INVALID_URL_FORMAT";
+        errorInstance.rawResponse = responseText;
+        throw errorInstance;
       }
 
-      // Combine logs
+      // Combine logs (TAREFA 5 - Logar sucesso se googleDocsUrl real existir)
       const successLogs = [
         ...initialLogs,
+        {
+          action: "PORTAL_GDI_REAL_POST_SUCCESS",
+          timestamp: new Date().toISOString(),
+          message: `O GDI retornou uma URL real de Google Docs e o processo foi concluído com sucesso. ID do documento: ${googleDocsId}`
+        },
         {
           action: "PORTAL_GDI_PAYLOAD_DELIVERY_CONFIRMED",
           timestamp: new Date().toISOString(),
@@ -1162,8 +1175,27 @@ export default function ProcuracaoPF() {
       // Habilitar a exibição do erro fático na tela para a tentativa em curso
       setShowGenerationError(true);
 
+      const httpStatus = err.httpStatus || 500;
+      const errorCode = err.errorCode || "PORTAL_GDI_EXCEPTION";
+      const rawResponse = err.rawResponse || "";
+      const placeholdersCount = Object.keys(placeholders || {}).length;
+
+      // TAREFA 5 - Logar falha detalhada com PORTAL_GDI_REAL_POST_FAILED
       const failureLogs = [
         ...initialLogs,
+        {
+          action: "PORTAL_GDI_REAL_POST_FAILED",
+          timestamp: new Date().toISOString(),
+          message: `Falha real no POST ao GDI durante processamento. Endpoint: ${targetEndpoint}. Código de erro: ${errorCode}. Mensagem: ${errorMessage}`,
+          targetEndpoint,
+          httpStatus,
+          errorCode,
+          errorMessage,
+          responseSample: rawResponse.substring(0, 500),
+          rawResponse: rawResponse.substring(0, 1000),
+          payloadContractVersion: "gdi.placeholders.v1",
+          placeholdersCount
+        },
         {
           action: "PORTAL_GDI_PAYLOAD_DELIVERY_NOT_CONFIRMED",
           timestamp: new Date().toISOString(),

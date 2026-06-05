@@ -269,22 +269,36 @@ app.post("/api/proxy-google-docs", async (req, res) => {
                            text.toLowerCase().includes("<!doctype html") || 
                            text.toLowerCase().includes("<html");
 
-    if (isHtmlResponse || !response.ok) {
-      console.warn(`[Proxy Docs Fallback] GDI externo retornou HTML ou erro (${status}). Ativando simulação de preenchimento autônomo.`);
-      const mockDocId = "1g9p1s-MockGdiDocumentID-BypassActive_" + Date.now().toString().slice(-4);
-      return res.status(200).json({
-        success: true,
-        googleDocsId: mockDocId,
-        googleDocsUrl: `https://docs.google.com/document/d/${mockDocId}/edit`,
-        destinationFolderId: payload?.destinationFolderId || "mock_folder_id",
-        destinationFolderUrl: payload?.destinationFolderUrl || "https://drive.google.com/drive/folders/mock_folder_id",
-        logs: [
-          {
-            action: "PORTAL_GDI_SIMULATION_FALLBACK",
-            timestamp: new Date().toISOString(),
-            message: `Aviso: O GDI fático em ${trimmedUrl} retornou status ${status} ou HTML. Modo de compatibilidade fática autônoma gerou a minuta com ID: ${mockDocId}`
-          }
-        ]
+    if (isHtmlResponse) {
+      const textSample = text.substring(0, 500).trim();
+
+      return res.status(502).json({
+        success: false,
+        status: "failed",
+        errorCode: "GDI_ENDPOINT_RETURNED_HTML",
+        errorMessage: "O endpoint configurado para o GDI retornou HTML em vez de JSON. O payload pode não ter chegado ao receptor real.",
+        targetEndpoint: trimmedUrl,
+        httpStatus: status,
+        contentType,
+        responseSample: textSample
+      });
+    }
+
+    if (!response.ok) {
+      let parsedError = null;
+      try {
+        parsedError = JSON.parse(text);
+      } catch {}
+
+      return res.status(status || 502).json({
+        success: false,
+        status: "failed",
+        errorCode: parsedError?.errorCode || "GDI_HTTP_ERROR",
+        errorMessage: parsedError?.errorMessage || parsedError?.error || text || `GDI retornou HTTP ${status}`,
+        targetEndpoint: trimmedUrl,
+        httpStatus: status,
+        contentType,
+        rawResponse: text.substring(0, 1000)
       });
     }
 
@@ -299,20 +313,13 @@ app.post("/api/proxy-google-docs", async (req, res) => {
     return res.status(200).json(data);
   } catch (err: any) {
     console.error("[Proxy Docs] Exception:", err);
-    const mockDocId = "1g9p1s-MockGdiDocumentID-BypassActive_" + Date.now().toString().slice(-4);
-    return res.status(200).json({
-      success: true,
-      googleDocsId: mockDocId,
-      googleDocsUrl: `https://docs.google.com/document/d/${mockDocId}/edit`,
-      destinationFolderId: req.body?.payload?.destinationFolderId || "mock_folder_id",
-      destinationFolderUrl: req.body?.payload?.destinationFolderUrl || "https://drive.google.com/drive/folders/mock_folder_id",
-      logs: [
-        {
-          action: "PORTAL_GDI_SIMULATION_EXCEPTION_FALLBACK",
-          timestamp: new Date().toISOString(),
-          message: `Aviso: Ocorreu uma exceção de rede na ponte do proxy (${err.message}). Foi ativado o adaptador de compatibilidade autônoma.`
-        }
-      ]
+    return res.status(502).json({
+      success: false,
+      status: "failed",
+      errorCode: "PORTAL_GDI_PROXY_NETWORK_EXCEPTION",
+      errorMessage: `Falha real na ponte do servidor para o GDI: ${err.message || err}`,
+      targetEndpoint: req.body?.targetEndpoint || "",
+      hint: "Nenhum documento foi gerado. Nenhum mock foi criado."
     });
   }
 });
