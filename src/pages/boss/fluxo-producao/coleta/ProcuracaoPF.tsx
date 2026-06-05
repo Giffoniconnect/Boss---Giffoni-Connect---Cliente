@@ -792,11 +792,13 @@ export default function ProcuracaoPF() {
   };
 
   const handleSendJob = async () => {
-    // 1. Antes de enviar, validar: caseId, clientId, destinationFolderId, destinationFolderUrl, nomeCompleto, cpf
+    // 1. Antes de enviar, validar: caseId, clientId, googleDriveClientFolderId, googleDriveClientFolderUrl, nomeCompleto, cpf
     const targetCaseId = caseId;
     const targetClientId = currentCase?.clientId || '';
-    const destinationFolderId = driveFolderId;
-    const destinationFolderUrl = driveFolderUrl;
+    const googleDriveClientFolderId = client?.googleDriveClientFolderId || '';
+    const googleDriveClientFolderUrl = client?.googleDriveClientFolderUrl || '';
+    const destinationFolderId = googleDriveClientFolderId;
+    const destinationFolderUrl = googleDriveClientFolderUrl;
     const nomeCompleto = client?.pfDadosPessoais?.pf_nomeCompleto || client?.pfData?.pf_nomeCompleto || '';
     const cpf = client?.pfDadosPessoais?.pf_cpf || client?.pfData?.pf_cpf || '';
 
@@ -810,14 +812,9 @@ export default function ProcuracaoPF() {
       setShowGenerationError(true);
       return;
     }
-    // 2. Se não houver destinationFolderId: bloquear envio e mostrar mensagem específica
-    if (!destinationFolderId) {
-      setError("Não é possível gerar a Procuração porque a pasta Google Drive do cliente ainda não foi vinculada.");
-      setShowGenerationError(true);
-      return;
-    }
-    if (!destinationFolderUrl) {
-      setError("Não é possível gerar a Procuração porque a URL da pasta Google Drive está ausente.");
+    // 2. Se não houver googleDriveClientFolderId: bloquear com "Não há pasta real do Google Drive vinculada ao cliente."
+    if (!googleDriveClientFolderId) {
+      setError("Não há pasta real do Google Drive vinculada ao cliente.");
       setShowGenerationError(true);
       return;
     }
@@ -990,17 +987,12 @@ export default function ProcuracaoPF() {
       // TAREFA 2 — ALTERAR PAYLOAD ENVIADO AO GDI
       const externalPayload = {
         contractVersion: "gdi.placeholders.v1",
-        source: "Portal BOSS Clientes",
-        target: "GDI",
-        jobId,
-        documentType: "procuracao_pf",
         templateKey: "procuracao-pf",
         caseId: targetCaseId,
         clientId: targetClientId,
-        clientType: "PF",
-        destinationFolderId,
-        destinationFolderUrl,
-        outputFileName: `Procuração PF - ${nomeCompleto} - ${targetCaseId}`,
+        destinationFolderId: googleDriveClientFolderId,
+        destinationFolderUrl: googleDriveClientFolderUrl,
+        outputFileName: `Procuração PF - ${nomeCompleto}`,
         placeholders
       };
 
@@ -1054,13 +1046,7 @@ export default function ProcuracaoPF() {
 
       if (!proxyResponse.ok) {
         // Detailed error description for proxy integration diagnostics
-        const errorDetail = `Falha na API Proxy (Status HTTP: ${proxyResponse.status}). Error: ${responseData.error || responseData.errorMessage || responseText || "Erro não mapeado"}\n` +
-          `targetEndpoint: ${targetEndpoint}\n` +
-          `Chave de Integração Presente (integrationKey): ${gdiIntegrationKey ? "sim" : "não"}\n` +
-          `documentType: procuracao_pf\n` +
-          `caseId: ${targetCaseId}\n` +
-          `clientId: ${targetClientId}`;
-
+        const errorDetail = responseData.error || responseData.errorMessage || responseText || "Erro não mapeado";
         throw new Error(errorDetail);
       }
 
@@ -1071,41 +1057,10 @@ export default function ProcuracaoPF() {
       const outputFolderUrl = responseData.destinationFolderUrl || destinationFolderUrl;
       const gdiResponseLogs = responseData.logs || [];
 
-      const isResponseSuccess = responseData.success === true || responseData.status === 'success';
-      const hasDocsMeta = googleDocsId && googleDocsUrl;
-      const isValidDocumentUrl = typeof googleDocsUrl === 'string' && googleDocsUrl.toLowerCase().startsWith('https://docs.google.com/document/d/');
-
-      if (!isResponseSuccess || !hasDocsMeta || !isValidDocumentUrl || isMockUrl(googleDocsUrl)) {
-        const validationErrorMsg = !isResponseSuccess ? "O GDI reportou uma falha no processamento interno (success = false)." :
-                                   !hasDocsMeta ? "Os atributos googleDocsId ou googleDocsUrl estão ausentes no retorno do GDI." :
-                                   !isValidDocumentUrl ? "A URL retornada do Google Docs é inválida (não se inicia com a estrutura oficial docs.google.com)." :
-                                   "A URL retornada aponta para um mock/link simulado ou inválido.";
-
-        const validationLogs = [
-          ...initialLogs,
-          {
-            action: "PORTAL_GDI_INVALID_DOCUMENT_URL",
-            timestamp: new Date().toISOString(),
-            message: `Disparo bloqueado: Falha na validação de retorno. Detalhes: ${validationErrorMsg}`
-          }
-        ];
-
-        await updateDoc(caseDocRef, {
-          procuracaoStatus: "falha",
-          procuracaoLogFalha: `[GDI_GOOGLE_DOCS_RESULT_MISSING] ${validationErrorMsg}`,
-          procuracaoGoogleDocsJobLogs: validationLogs,
-          procuracaoGoogleDocsJobId: jobId
-        });
-
-        await updateDoc(doc(db, 'googleDocsJobs', jobId), {
-          status: "failed",
-          updatedAt: new Date().toISOString(),
-          errorMessage: validationErrorMsg,
-          errorCode: "GDI_GOOGLE_DOCS_RESULT_MISSING",
-          logs: validationLogs
-        });
-
-        throw new Error(`[GDI_GOOGLE_DOCS_RESULT_MISSING] ${validationErrorMsg}`);
+      if (!googleDocsUrl) {
+        // Se não retornar googleDocsUrl, mostrar o erro bruto.
+        const bruteErrorText = responseData.error || responseData.errorMessage || responseText || "O GDI não retornou a URL do documento (googleDocsUrl).";
+        throw new Error(bruteErrorText);
       }
 
       // Combine logs
