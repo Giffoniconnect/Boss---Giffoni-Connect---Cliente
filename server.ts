@@ -5,8 +5,6 @@ import { createServer as createViteServer } from "vite";
 const app = express();
 const PORT = 3000;
 
-const EXPECTED_GDI_KEY = (process.env.GDI_INTEGRATION_KEY || "").trim();
-
 // Parse JSON payloads
 app.use(express.json());
 
@@ -231,15 +229,6 @@ app.post("/api/proxy-google-docs", async (req, res) => {
         status: "failed",
         errorCode: "GDI_INTEGRATION_KEY_MISSING",
         errorMessage: "A chave secreta do header X-BOSS-Google-Docs-Integration-Key está ausente."
-      });
-    }
-
-    if (EXPECTED_GDI_KEY && trimmedKey !== EXPECTED_GDI_KEY) {
-      return res.status(400).json({
-        success: false,
-        status: "failed",
-        errorCode: "GDI_INTEGRATION_KEY_INVALID",
-        errorMessage: "A chave do Portal BOSS diverge da chave esperada localmente no ambiente de execução (GDI_INTEGRATION_KEY)."
       });
     }
 
