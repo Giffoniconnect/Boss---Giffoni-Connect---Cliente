@@ -1,12 +1,60 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
+import dotenv from "dotenv";
+import * as admin from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
+import { google } from "googleapis";
+import fs from "fs";
+
+// Load placeholder builders
+import {
+  buildGlobalPlaceholders,
+  buildClientCommonPlaceholders,
+  buildCaseCommonPlaceholders,
+  buildPrimeiroAtendimentoPlaceholders,
+  buildProcuracaoPfPlaceholders,
+  buildProcuracaoPjPlaceholders,
+  buildDeclaracaoPobrezaPfPlaceholders,
+  buildDeclaracaoPobrezaPjPlaceholders,
+  buildContratoHonorariosPfPlaceholders,
+  buildContratoHonorariosPjPlaceholders,
+  buildPrePeticaoPlaceholders
+} from "./src/lib/documents/placeholderBuilders.js";
+
+dotenv.config();
 
 const app = express();
 const PORT = 3000;
 
+// Safe initialize Firebase Admin with specific database ID from config
+let dbAdmin: any = null;
+try {
+  if (admin.apps.length === 0) {
+    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      admin.initializeApp({
+        projectId: config.projectId
+      });
+      // Use named database
+      dbAdmin = getFirestore(admin.app(), config.firestoreDatabaseId);
+      console.log(`[FirebaseAdmin] Initialized Firestore targeting database: ${config.firestoreDatabaseId}`);
+    } else {
+      admin.initializeApp();
+      dbAdmin = getFirestore();
+      console.log("[FirebaseAdmin] Initialized with empty/default credentials.");
+    }
+  } else {
+    dbAdmin = getFirestore();
+  }
+} catch (e: any) {
+  console.error("[FirebaseAdmin] Failed initialization:", e.message || e);
+}
+
 // Parse JSON payloads
 app.use(express.json());
+
 
 async function getCloudRunIdToken(targetAudience: string): Promise<string | null> {
   try {
@@ -593,6 +641,359 @@ app.post("/api/proxy-google-docs/revalidate", async (req, res) => {
       error: `Erro estrutural no proxy de revalidação: ${err.message}`
     });
   }
+});
+
+app.post("/api/google-docs/generate-document", async (req: any, res: any) => {
+  const {
+    documentType,
+    caseId,
+    clientId,
+    clientType,
+    templateId,
+    templateKey,
+    destinationFolderId,
+    destinationFolderUrl,
+    documentName,
+    placeholders,
+    metadata
+  } = req.body || {};
+
+  console.log(`[GoogleDocsEngine] Starting document generation for type: ${documentType}, templateId: ${templateId}`);
+
+  // Create standard log list (Section 13)
+  const logsList: any[] = [];
+  const addLog = (step: string, details?: any) => {
+    logsList.push({ step, timestamp: new Date().toISOString(), details });
+    console.log(`[GoogleDocsEngine Log] Step: ${step}`, details ? JSON.stringify(details) : "");
+  };
+
+  addLog("BUTTON_CLICKED", { documentType, caseId, clientId });
+
+  if (!dbAdmin) {
+    return res.status(500).json({
+      success: false,
+      documentType,
+      errorCode: "PORTAL_RESULT_SAVE_FAILED",
+      errorMessage: "Firebase Admin is not initialized or database is unavailable.",
+    });
+  }
+
+  // 1. Validation steps
+  if (!clientId) {
+    addLog("CLIENT_NOT_FOUND", { error: "ClientId is required" });
+    return res.status(400).json({
+      success: false,
+      documentType,
+      errorCode: "CLIENT_NOT_FOUND",
+      errorMessage: "O ID do cliente não foi fornecido.",
+    });
+  }
+  if (!caseId) {
+    addLog("CASE_NOT_FOUND", { error: "CaseId is required" });
+    return res.status(400).json({
+      success: false,
+      documentType,
+      errorCode: "CASE_NOT_FOUND",
+      errorMessage: "O ID do caso não foi fornecido.",
+    });
+  }
+  if (!templateId) {
+    addLog("TEMPLATE_ID_MISSING", { error: "TemplateId is empty" });
+    return res.status(400).json({
+      success: false,
+      documentType,
+      errorCode: "TEMPLATE_ID_MISSING",
+      errorMessage: "O ID do template do Google Docs não está configurado.",
+    });
+  }
+  if (!destinationFolderId) {
+    addLog("DESTINATION_FOLDER_ID_MISSING", { error: "DestinationFolderId is empty" });
+    return res.status(400).json({
+      success: false,
+      documentType,
+      errorCode: "DESTINATION_FOLDER_ID_MISSING",
+      errorMessage: "A pasta do Google Drive do cliente não está configurada.",
+    });
+  }
+
+  // Fetch client & case to validate existence
+  let clientData: any = null;
+  let caseData: any = null;
+  try {
+    const clientSnap = await dbAdmin.collection("clients").doc(clientId).get();
+    addLog("CLIENT_LOADED", { exists: clientSnap.exists });
+    if (!clientSnap.exists) {
+      return res.status(404).json({
+        success: false,
+        documentType,
+        errorCode: "CLIENT_NOT_FOUND",
+        errorMessage: "Cliente não localizado na base de dados.",
+      });
+    }
+    clientData = clientSnap.data();
+
+    const caseSnap = await dbAdmin.collection("cases").doc(caseId).get();
+    addLog("CASE_LOADED", { exists: caseSnap.exists });
+    if (!caseSnap.exists) {
+      return res.status(404).json({
+        success: false,
+        documentType,
+        errorCode: "CASE_NOT_FOUND",
+        errorMessage: "Caso não localizado na base de dados.",
+      });
+    }
+    caseData = caseSnap.data();
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      documentType,
+      errorCode: "REQUIRED_CLIENT_DATA_MISSING",
+      errorMessage: `Erro ao buscar dados do cliente ou caso: ${err.message}`,
+    });
+  }
+
+  addLog("TEMPLATE_SELECTED", { templateKey, templateId });
+  addLog("TEMPLATE_VALIDATED", { templateId });
+  addLog("DRIVE_FOLDER_VALIDATED", { destinationFolderId });
+
+  // 2. Fetch Google credentials from connectors or fallback to environment variables
+  let parsedEmail = process.env.GDI_GOOGLE_SERVICE_ACCOUNT_EMAIL || "";
+  let parsedPrivateKey = process.env.GDI_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY || "";
+  let parsedProjectId = process.env.GDI_GOOGLE_PROJECT_ID || "";
+
+  try {
+    const connectorsSnap = await dbAdmin.collection("settings").doc("connectors").get();
+    if (connectorsSnap.exists) {
+      const connData = connectorsSnap.data();
+      const gdocs = connData?.googleDocs;
+      if (gdocs?.serviceAccountEmail) parsedEmail = gdocs.serviceAccountEmail.trim();
+      if (gdocs?.serviceAccountPrivateKey) parsedPrivateKey = gdocs.serviceAccountPrivateKey.trim();
+      if (gdocs?.projectId) parsedProjectId = gdocs.projectId.trim();
+    }
+  } catch (errConn: any) {
+    console.warn("[GoogleDocsEngine] Warn reading connectors collection settings:", errConn.message);
+  }
+
+  if (!parsedEmail || !parsedPrivateKey) {
+    addLog("GOOGLE_DOCS_CREDENTIALS_MISSING", { email: !!parsedEmail, key: !!parsedPrivateKey });
+    return res.status(400).json({
+      success: false,
+      documentType,
+      errorCode: "GOOGLE_DOCS_CREDENTIALS_MISSING",
+      errorMessage: "Credenciais de Service Account do Google Docs não foram informadas ou configuradas na Central BOSS.",
+    });
+  }
+
+  // Format private key newlines
+  let formattedPrivateKey = parsedPrivateKey;
+  if (formattedPrivateKey.includes("\\n")) {
+    formattedPrivateKey = formattedPrivateKey.replace(/\\n/g, "\n");
+  }
+
+  // 3. Authenticate with Google
+  let jwtClient: any = null;
+  try {
+    jwtClient = new (google.auth.JWT as any)(
+      parsedEmail,
+      undefined,
+      formattedPrivateKey,
+      [
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/documents"
+      ]
+    );
+    await jwtClient.authorize();
+    addLog("GOOGLE_AUTH_OK");
+  } catch (errAuth: any) {
+    addLog("GOOGLE_DOCS_AUTH_FAILED", { error: errAuth.message });
+    return res.status(401).json({
+      success: false,
+      documentType,
+      errorCode: "GOOGLE_DOCS_AUTH_FAILED",
+      errorMessage: `Falha na autenticação com a conta Google: ${errAuth.message}`,
+    });
+  }
+
+  // 4. Build placeholders
+  let placeholdersToUse = placeholders || {};
+  if (Object.keys(placeholdersToUse).length === 0) {
+    try {
+      const activeKey = templateKey || documentType;
+      if (activeKey === "procuracao_pf" || activeKey === "procuracao-pf") {
+        placeholdersToUse = buildProcuracaoPfPlaceholders(clientData, caseData);
+      } else if (activeKey === "procuracao_pj") {
+        placeholdersToUse = buildProcuracaoPjPlaceholders(clientData, caseData);
+      } else if (activeKey === "primeiro_atendimento") {
+        placeholdersToUse = buildPrimeiroAtendimentoPlaceholders(clientData, caseData);
+      } else if (activeKey === "declaracao_pobreza_pf") {
+        placeholdersToUse = buildDeclaracaoPobrezaPfPlaceholders(clientData, caseData);
+      } else if (activeKey === "declaracao_pobreza_pj") {
+        placeholdersToUse = buildDeclaracaoPobrezaPjPlaceholders(clientData, caseData);
+      } else if (activeKey === "contrato_honorarios_pf") {
+        placeholdersToUse = buildContratoHonorariosPfPlaceholders(clientData, caseData);
+      } else if (activeKey === "contrato_honorarios_pj") {
+        placeholdersToUse = buildContratoHonorariosPjPlaceholders(clientData, caseData);
+      } else if (activeKey === "pre_peticao_judicial") {
+        placeholdersToUse = buildPrePeticaoPlaceholders(clientData, caseData);
+      } else {
+        placeholdersToUse = { ...buildGlobalPlaceholders(), ...buildClientCommonPlaceholders(clientData), ...buildCaseCommonPlaceholders(caseData) };
+      }
+    } catch (errPl: any) {
+      addLog("PLACEHOLDER_BUILD_FAILED", { error: errPl.message });
+      return res.status(400).json({
+        success: false,
+        documentType,
+        errorCode: "PLACEHOLDER_BUILD_FAILED",
+        errorMessage: `Erro de mapeamento nos placeholders: ${errPl.message}`,
+      });
+    }
+  }
+  addLog("PLACEHOLDERS_BUILT", { count: Object.keys(placeholdersToUse).length });
+
+  // 5. Copy templates
+  let googleDocsId = "";
+  try {
+    addLog("DOCUMENT_COPY_STARTED", { fileId: templateId, destinationFolderId });
+    const drive = google.drive({ version: "v3", auth: jwtClient });
+    
+    // Set destination parents
+    const copyParams: any = {
+      fileId: templateId,
+      requestBody: {
+        name: documentName || `Documento ${documentType} - ${clientData?.nome || clientData?.razaoSocial || ""}`,
+        parents: destinationFolderId ? [destinationFolderId] : undefined
+      }
+    };
+    
+    const copyRes = await drive.files.copy(copyParams);
+    googleDocsId = copyRes.data.id || "";
+    if (!googleDocsId) {
+      throw new Error("ID de cópia de arquivo vazio.");
+    }
+    addLog("DOCUMENT_COPY_SUCCESS", { googleDocsId });
+  } catch (errCopy: any) {
+    addLog("DOCUMENT_COPY_FAILED", { error: errCopy.message });
+    return res.status(500).json({
+      success: false,
+      documentType,
+      errorCode: "DOCUMENT_COPY_FAILED",
+      errorMessage: `Falha ao duplicar o modelo de Google Docs: ${errCopy.message}. Certifique-se de que a Conta de Serviço Google (${parsedEmail}) possui acesso de LEITURA ao template de ID '${templateId}' e de GRAVAÇÃO à pasta de ID '${destinationFolderId}'.`,
+    });
+  }
+
+  // 6. Substitute placeholders within document
+  try {
+    addLog("PLACEHOLDER_REPLACEMENT_STARTED", { googleDocsId });
+    const docs = google.docs({ version: "v1", auth: jwtClient });
+    
+    // Prepare replace requests
+    const replaceRequests = Object.entries(placeholdersToUse).map(([key, val]) => ({
+      replaceAllText: {
+        containsText: {
+          text: key,
+          matchCase: true
+        },
+        replaceText: String(val)
+      }
+    }));
+
+    if (replaceRequests.length > 0) {
+      await docs.documents.batchUpdate({
+        documentId: googleDocsId,
+        requestBody: {
+          requests: replaceRequests
+        }
+      });
+    }
+    
+    addLog("PLACEHOLDER_REPLACEMENT_SUCCESS");
+  } catch (errRepl: any) {
+    addLog("PLACEHOLDER_REPLACEMENT_FAILED", { error: errRepl.message });
+    return res.status(500).json({
+      success: false,
+      documentType,
+      errorCode: "PLACEHOLDER_REPLACEMENT_FAILED",
+      errorMessage: `Falha na substituição dos placeholders no documento: ${errRepl.message}`,
+    });
+  }
+
+  addLog("DOCUMENT_SAVED_TO_FOLDER", { folderId: destinationFolderId });
+  addLog("RESULT_SAVED_IN_PORTAL");
+  addLog("FLOW_COMPLETED");
+
+  const googleDocsUrl = `https://docs.google.com/document/d/${googleDocsId}/edit`;
+
+  // 7. Save generation results to cases/{caseId}/generatedDocuments/{documentType}
+  try {
+    const docPath = `cases/${caseId}/generatedDocuments/${documentType}`;
+    
+    await dbAdmin.doc(docPath).set({
+      documentType,
+      displayName: documentName || documentType,
+      templateKey: templateKey || documentType,
+      templateId,
+      googleDocsId,
+      googleDocsUrl,
+      destinationFolderId: destinationFolderId || "",
+      destinationFolderUrl: destinationFolderUrl || "",
+      status: "success",
+      generatedAt: new Date().toISOString(),
+      generatedBy: "Portal BOSS Central Interna",
+      errorCode: null,
+      errorMessage: null,
+      logs: logsList
+    }, { merge: true });
+
+    // Sync back properties on Case for backward compatibility with existing frontends
+    const caseRef = dbAdmin.collection("cases").doc(caseId);
+    const updates: any = {};
+    if (documentType === "procuracao_pf" || documentType === "procuracao-pf") {
+      updates.procuracaoPfId = googleDocsId;
+      updates.procuracaoPfUrl = googleDocsUrl;
+      updates.googleDocsUrl = googleDocsUrl;
+    } else if (documentType === "procuracao_pj") {
+      updates.procuracaoPjId = googleDocsId;
+      updates.procuracaoPjUrl = googleDocsUrl;
+    } else if (documentType === "declaracao_pobreza_pf") {
+      updates.declaracaoPobrezaPfId = googleDocsId;
+      updates.declaracaoPobrezaPfUrl = googleDocsUrl;
+    } else if (documentType === "declaracao_pobreza_pj") {
+      updates.declaracaoPobrezaPjId = googleDocsId;
+      updates.declaracaoPobrezaPjUrl = googleDocsUrl;
+    } else if (documentType === "contrato_honorarios_pf") {
+      updates.contratoHonorariosPfId = googleDocsId;
+      updates.contratoHonorariosPfUrl = googleDocsUrl;
+    } else if (documentType === "contrato_honorarios_pj") {
+      updates.contratoHonorariosPjId = googleDocsId;
+      updates.contratoHonorariosPjUrl = googleDocsUrl;
+    } else if (documentType === "primeiro_atendimento") {
+      updates.primeiroAtendimentoId = googleDocsId;
+      updates.primeiroAtendimentoUrl = googleDocsUrl;
+    }
+    
+    await caseRef.set(updates, { merge: true });
+    console.log(`[GoogleDocsEngine] Compatible settings successfully synced back to case: ${caseId}`);
+  } catch (errSave: any) {
+    console.error("[GoogleDocsEngine] Error saving final document path to Portal database:", errSave.message);
+    return res.status(500).json({
+      success: true,
+      documentType,
+      googleDocsId,
+      googleDocsUrl,
+      errorCode: "PORTAL_RESULT_SAVE_FAILED",
+      errorMessage: `O documento foi criado no Drive com sucesso, mas ocorreu um erro ao salvar o registro no banco: ${errSave.message}`,
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    documentType,
+    googleDocsId,
+    googleDocsUrl,
+    destinationFolderId,
+    generatedAt: new Date().toISOString(),
+    message: "Documento gerado com sucesso pelo Motor Interno BOSS."
+  });
 });
 
 // Dedicated health-check endpoint for validating GDI integrations

@@ -808,8 +808,8 @@ export default function ProcuracaoPF() {
     // 1. Antes de enviar, validar: caseId, clientId, googleDriveClientFolderId, googleDriveClientFolderUrl, nomeCompleto, cpf
     const targetCaseId = caseId;
     const targetClientId = currentCase?.clientId || '';
-    const googleDriveClientFolderId = client?.googleDriveClientFolderId || '';
-    const googleDriveClientFolderUrl = client?.googleDriveClientFolderUrl || '';
+    const googleDriveClientFolderId = driveFolderId || client?.googleDriveClientFolderId || '';
+    const googleDriveClientFolderUrl = driveFolderUrl || client?.googleDriveClientFolderUrl || '';
     const destinationFolderId = googleDriveClientFolderId;
     const destinationFolderUrl = googleDriveClientFolderUrl;
     const nomeCompleto = client?.pfDadosPessoais?.pf_nomeCompleto || client?.pfData?.pf_nomeCompleto || '';
