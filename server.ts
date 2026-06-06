@@ -5,6 +5,8 @@ import { createServer as createViteServer } from "vite";
 const app = express();
 const PORT = 3000;
 
+const EXPECTED_GDI_KEY = (process.env.GDI_INTEGRATION_KEY || "").trim();
+
 // Parse JSON payloads
 app.use(express.json());
 
@@ -232,12 +234,12 @@ app.post("/api/proxy-google-docs", async (req, res) => {
       });
     }
 
-    if (trimmedKey !== "gdi_integration_key_2026_portal_boss_docs_9XvR42LmQp77") {
+    if (EXPECTED_GDI_KEY && trimmedKey !== EXPECTED_GDI_KEY) {
       return res.status(400).json({
         success: false,
         status: "failed",
         errorCode: "GDI_INTEGRATION_KEY_INVALID",
-        errorMessage: "Valor inválido no campo da chave. Você colou uma rota, URL, segredo legado ou de placeholder no lugar da Chave de Auditoria GDI."
+        errorMessage: "A chave do Portal BOSS diverge da chave esperada localmente no ambiente de execução (GDI_INTEGRATION_KEY)."
       });
     }
 
@@ -296,7 +298,8 @@ app.post("/api/proxy-google-docs", async (req, res) => {
         targetEndpoint: trimmedUrl,
         httpStatus: status,
         contentType,
-        responseSample: textSample
+        responseSample: textSample,
+        hint: "O GDI provavelmente ainda está atrás do login do AI Studio. Publique o GDI em um endpoint público (Cloud Run, URL terminando em .run.app) e salve essa URL em Configurações > Integrações > Google Docs."
       });
     }
 
