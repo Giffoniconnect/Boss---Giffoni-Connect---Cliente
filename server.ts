@@ -232,16 +232,7 @@ app.post("/api/proxy-google-docs", async (req, res) => {
       });
     }
 
-    if (
-      trimmedKey.startsWith("http://") || 
-      trimmedKey.startsWith("https://") || 
-      trimmedKey.includes(".run.app") || 
-      trimmedKey.includes("/api/webhook/gdi-job") ||
-      trimmedKey.includes("aistudio.google.com") ||
-      trimmedKey.startsWith("/boss-giffoni-clientes") ||
-      trimmedKey === "boss_docs_live_standard" ||
-      trimmedKey === "boss_gdi_secure_audit_key_123"
-    ) {
+    if (trimmedKey !== "gdi_integration_key_2026_portal_boss_docs_9XvR42LmQp77") {
       return res.status(400).json({
         success: false,
         status: "failed",

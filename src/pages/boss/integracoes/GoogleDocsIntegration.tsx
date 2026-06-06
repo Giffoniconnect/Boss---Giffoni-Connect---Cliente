@@ -311,22 +311,37 @@ export default function GoogleDocsIntegration() {
     }));
   };
 
-  const getDisplayValue = (fieldKey: keyof GoogleDocsConfig, value: string) => {
-    if (!value) return '(vazio)';
+  const getDisplayValue = (fieldKey: keyof GoogleDocsConfig, value: any) => {
+    if (value === undefined || value === null || value === '') return '(vazio)';
+    let valStr = '';
+    if (typeof value === 'object') {
+      try {
+        valStr = JSON.stringify(value, null, 2);
+      } catch {
+        valStr = String(value);
+      }
+    } else {
+      valStr = String(value);
+    }
+
+    if (valStr.trim() === "[object Object]") {
+      return '(vazio)';
+    }
+
     const isSensitive = ['gdiKey', 'integrationKey', 'callbackSecret', 'templateId', 'serviceAccountEmail'].includes(fieldKey);
     if (!config.isProduction) {
       if (visibleFields[fieldKey] === false) {
         return '••••••••••••••••';
       }
-      return value;
+      return valStr;
     }
     if (isSensitive) {
       if (!visibleFields[fieldKey]) {
         return '•••••••••••••••• (Mascarado)';
       }
-      return value;
+      return valStr;
     }
-    return value;
+    return valStr;
   };
 
   // Diagnostic collapsible states
@@ -788,26 +803,34 @@ export default function GoogleDocsIntegration() {
           if (data.googleDocs) {
             let configToUse = { ...data.googleDocs };
 
-            // TAREFA 4 - Saneamento Automático do Firestore se detectar chave inválida/legada ou rota incorreta
+            // TAREFA 4 - Saneamento Automático do Firestore se detectar chave inválida/legada ou rota incorreta ou lastResponse inválida ou endpoint não canônico
             const currentIntegrationKey = (configToUse.integrationKey || "").trim();
             const currentGdiKey = (configToUse.gdiKey || "").trim();
             const currentEndpointUrl = (configToUse.endpointUrl || "").trim();
 
             const isKeyInvalid = isInvalidGdiIntegrationKey(currentIntegrationKey);
             const isGdiKeyEmptyOrLegacy = !currentGdiKey || currentGdiKey === "boss_gdi_secure_audit_key_123" || currentGdiKey === "boss_docs_live_standard";
-            
-            if (isKeyInvalid || isGdiKeyEmptyOrLegacy) {
-              const cleanedUrl = normalizeGdiBaseUrl(currentEndpointUrl) || CANONICAL_GDI_BASE_URL;
+            const isLastResponseInvalid = typeof configToUse.lastResponse === 'string' && (
+              configToUse.lastResponse.trim() === "status = inválido" || 
+              configToUse.lastResponse.trim() === "status=inválido" || 
+              configToUse.lastResponse.toLowerCase().includes("status = inválido")
+            );
+            const isEndpointNotCanonical = !currentEndpointUrl || currentEndpointUrl !== CANONICAL_GDI_BASE_URL;
+
+            if (isKeyInvalid || isGdiKeyEmptyOrLegacy || isLastResponseInvalid || isEndpointNotCanonical) {
               const saneFields = {
-                endpointUrl: cleanedUrl,
-                buildUrl: cleanedUrl,
+                endpointUrl: CANONICAL_GDI_BASE_URL,
+                buildUrl: CANONICAL_GDI_BASE_URL,
                 status: "operacional",
                 integrationOperationalStatus: "operacional",
                 integrationKey: CANONICAL_GDI_AUDIT_KEY,
                 gdiKey: CANONICAL_GDI_AUDIT_KEY,
                 lastError: "",
-                lastSuccess: "Chave GDI corrigida automaticamente e sincronizada com a Chave de Auditoria GDI.",
-                lastServerToServerResult: "Chave X-BOSS-Google-Docs-Integration-Key saneada e sincronizada automaticamente-v2.",
+                lastSuccess: "Chave GDI sincronizada. Aguardando teste operacional real da procuração.",
+                lastResponse: null,
+                lastSentPayload: null,
+                lastReceivedPayload: null,
+                lastServerToServerResult: "Chave X-BOSS-Google-Docs-Integration-Key e Endpoint canonizados e sincronizados automaticamente.",
                 updatedAt: new Date().toISOString()
               };
 
@@ -827,7 +850,7 @@ export default function GoogleDocsIntegration() {
 
                 setLogs(prev => [
                   ...prev,
-                  `[${new Date().toLocaleTimeString()}] GDI integrationKey saneada: rota interna removida e chave real do GDI aplicada.`
+                  `[${new Date().toLocaleTimeString()}] Saneamento concluído: Removidas respostas herdadas ("status = inválido"), endpoints incorretos e chaves antigas do GDI.`
                 ]);
               } catch (saneErr) {
                 console.error("Erro no saneamento de chaves GDI:", saneErr);
@@ -1320,7 +1343,7 @@ export default function GoogleDocsIntegration() {
     const val = config[fieldKey];
     const isEditingThis = editingField === fieldKey;
     const isSensitive = ['gdiKey', 'integrationKey', 'callbackSecret', 'templateId'].includes(fieldKey);
-    const calculatedValue = getDisplayValue(fieldKey, String(val || ''));
+    const calculatedValue = getDisplayValue(fieldKey, val);
     const isSuccess = successFields[fieldKey];
 
     return (
@@ -1699,15 +1722,19 @@ export default function GoogleDocsIntegration() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-amber-200 font-mono text-amber-805">
                       <div className="space-y-1 text-left">
                         <p className="font-bold uppercase text-[9px] text-amber-700 tracking-wider">URL Base:</p>
-                        <p className="break-all font-semibold bg-white/60 p-1.5 rounded border border-amber-100 select-all">https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app</p>
+                        <p className="break-all font-semibold bg-white/60 p-1.5 rounded border border-amber-100 select-all">{config.endpointUrl || '(vazio)'}</p>
                         <p className="font-bold uppercase text-[9px] text-amber-700 tracking-wider mt-1.5">Endpoint final:</p>
-                        <p className="break-all font-semibold bg-white/60 p-1.5 rounded border border-amber-100 select-all">POST /api/webhook/gdi-job</p>
+                        <p className="break-all font-semibold bg-white/60 p-1.5 rounded border border-amber-100 select-all">
+                          {config.endpointUrl ? `${config.endpointUrl.trim().replace(/\/$/, "")}/api/webhook/gdi-job` : 'POST /api/webhook/gdi-job'}
+                        </p>
                       </div>
                       <div className="space-y-1 text-left font-sans">
                         <p className="font-bold uppercase text-[9px] text-amber-700 tracking-wider">Header:</p>
                         <p className="break-all font-semibold bg-white/60 p-1.5 rounded border border-amber-100 select-all text-[11px]">X-BOSS-Google-Docs-Integration-Key</p>
                         <p className="font-bold uppercase text-[9px] text-amber-700 tracking-wider mt-1.5">Valor do Header:</p>
-                        <p className="break-all font-semibold bg-white/60 p-1.5 rounded border border-amber-105 select-all text-[11px]">a chave secreta salva em settings.connectors.googleDocs.integrationKey</p>
+                        <p className="break-all font-semibold bg-white/60 p-1.5 rounded border border-amber-105 select-all text-[11px] font-mono">
+                          {config.integrationKey ? (showKey ? config.integrationKey : '••••••••••••••••') : '(vazio)'}
+                        </p>
                       </div>
                     </div>
                   </div>
