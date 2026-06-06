@@ -4,6 +4,48 @@
  * and strict security-oriented checks.
  */
 
+export const CANONICAL_GDI_BASE_URL = "https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app";
+export const CANONICAL_GDI_WEBHOOK_URL = "https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app/api/webhook/gdi-job";
+export const CANONICAL_GDI_HEADER_NAME = "X-BOSS-Google-Docs-Integration-Key";
+export const CANONICAL_GDI_AUDIT_KEY = "gdi_integration_key_2026_portal_boss_docs_9XvR42LmQp77";
+
+export function normalizeGdiBaseUrl(value: string): string {
+  let url = (value || "").trim();
+  if (url.includes("?")) {
+    url = url.split("?")[0];
+  }
+  if (url.endsWith("/")) {
+    url = url.slice(0, -1);
+  }
+  const suffix = "/api/webhook/gdi-job";
+  if (url.endsWith(suffix)) {
+    url = url.slice(0, -suffix.length);
+  }
+  if (url.endsWith("/")) {
+    url = url.slice(0, -1);
+  }
+  return url;
+}
+
+export function isInvalidGdiIntegrationKey(value: string): boolean {
+  const val = (value || "").trim();
+  if (!val) return true;
+  if (val.includes("/boss-giffoni-clientes")) return true;
+  if (val.includes("/configuracoes")) return true;
+  if (val.includes("/integracoes-google-docs")) return true;
+  if (val.startsWith("http://")) return true;
+  if (val.startsWith("https://")) return true;
+  if (val.includes(".run.app")) return true;
+  if (val.includes("/api/webhook/gdi-job")) return true;
+  if (val.includes("aistudio.google.com")) return true;
+  if (val.includes("accounts.google.com")) return true;
+  if (val === "boss_gdi_secure_audit_key_123") return true;
+  if (val === "boss_docs_live_standard") return true;
+  if (val === "boss_gdi_secure_audit_key_xxxxxxxxx") return true;
+  if (val === "gdi_integration_key_2026_portal_boss_docs_xxxxxxxxx") return true;
+  return false;
+}
+
 export interface GdiNormalizationResult {
   isOperational: boolean;
   normalizedStatus: "operacional" | "nao_configurado" | "invalida" | "parcial" | "erro" | "preview_bloqueado";
@@ -25,8 +67,9 @@ export function normalizeGdiStatus(config: any): GdiNormalizationResult {
     };
   }
 
-  const endpointUrl = (config.endpointUrl || "").trim();
+  const endpointUrl = normalizeGdiBaseUrl(config.endpointUrl || "");
   const integrationKey = (config.integrationKey || "").trim();
+  const gdiKey = (config.gdiKey || "").trim();
   const rawStatus = (config.status || "").trim().toLowerCase();
   const integrationOperationalStatus = (config.integrationOperationalStatus || "").trim().toLowerCase();
   
@@ -84,11 +127,22 @@ export function normalizeGdiStatus(config: any): GdiNormalizationResult {
     }
   }
 
-  if (!hasIntegrationKey) {
+  if (isInvalidGdiIntegrationKey(integrationKey)) {
     return {
       isOperational: false,
       normalizedStatus: "invalida",
-      reason: "Chave de integração (Integration Key) ausente ou inválida.",
+      reason: "Configuração GDI incompleta ou divergente. Corrija a chave antes de gerar documentos.",
+      endpointUrl,
+      hasIntegrationKey: false,
+      targetEndpoint: endpointUrl
+    };
+  }
+
+  if (!gdiKey || integrationKey !== gdiKey) {
+    return {
+      isOperational: false,
+      normalizedStatus: "invalida",
+      reason: "Configuração GDI incompleta ou divergente. Corrija a chave antes de gerar documentos.",
       endpointUrl,
       hasIntegrationKey,
       targetEndpoint: endpointUrl
@@ -128,7 +182,6 @@ export function normalizeGdiStatus(config: any): GdiNormalizationResult {
   let reason = "";
 
   if (isOperationalLogically) {
-    // Double check we have a real operational validation
     normalizedStatus = "operacional";
     reason = "A integração GDI e os barramentos de comunicação fáticos estão 100% operacionais.";
   } else if (rawStatus === "ativo") {

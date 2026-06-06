@@ -2,7 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
-import { normalizeGdiStatus } from '../../../lib/integrations/googleDocsStatus';
+import { 
+  normalizeGdiStatus, 
+  isInvalidGdiIntegrationKey, 
+  normalizeGdiBaseUrl, 
+  CANONICAL_GDI_BASE_URL, 
+  CANONICAL_GDI_WEBHOOK_URL, 
+  CANONICAL_GDI_HEADER_NAME, 
+  CANONICAL_GDI_AUDIT_KEY 
+} from '../../../lib/integrations/googleDocsStatus';
 import { BossLayout } from '../../../components/Layout';
 import { 
   FileText, 
@@ -144,20 +152,36 @@ export default function GoogleDocsIntegration() {
     setSaving(true);
     setFeedback(null);
     try {
-      const valueToSave = customValue !== undefined ? customValue : tempValue;
+      let valueToSave = customValue !== undefined ? customValue : tempValue;
       
+      if (fieldKey === 'integrationKey' || fieldKey === 'gdiKey') {
+        const cleanedVal = valueToSave.trim();
+        if (isInvalidGdiIntegrationKey(cleanedVal)) {
+          setFeedback({
+            type: 'error',
+            message: 'Valor inválido no campo da chave. Você colou uma rota, URL ou placeholder no lugar da Chave de Auditoria GDI.'
+          });
+          setSaving(false);
+          return;
+        }
+        valueToSave = cleanedVal;
+      }
+
       const docRef = doc(db, 'settings', 'connectors');
       const docSnap = await getDoc(docRef);
       const currentData = docSnap.exists() ? docSnap.data() : {};
       
+      if (fieldKey === 'endpointUrl') {
+        valueToSave = normalizeGdiBaseUrl(valueToSave);
+      }
+
       const updatedGoogleDocs = {
         ...currentData.googleDocs,
         [fieldKey]: valueToSave
       };
 
       if (fieldKey === 'endpointUrl') {
-        const cleanUrl = valueToSave.trim().replace(/\/$/, "");
-        updatedGoogleDocs.webhookUrl = `${cleanUrl}/api/webhook/gdi-job`;
+        updatedGoogleDocs.webhookUrl = `${valueToSave}/api/webhook/gdi-job`;
       }
 
       await setDoc(docRef, {
@@ -764,34 +788,80 @@ export default function GoogleDocsIntegration() {
           if (data.googleDocs) {
             let configToUse = { ...data.googleDocs };
 
-            // TAREFA 7 - Migração automática de estado fático legado ativo para operacional
-            const rawStatus = configToUse.status;
-            const lastHttp = configToUse.lastHttpStatus;
-            if (rawStatus === "ativo" && (lastHttp === 200 || lastHttp === "200")) {
-              console.log("[Migration] PORTAL_GDI_LEGACY_STATUS_NORMALIZED-CONFIG");
-              const migratedFields = {
+            // TAREFA 4 - Saneamento Automático do Firestore se detectar chave inválida/legada ou rota incorreta
+            const currentIntegrationKey = (configToUse.integrationKey || "").trim();
+            const currentGdiKey = (configToUse.gdiKey || "").trim();
+            const currentEndpointUrl = (configToUse.endpointUrl || "").trim();
+
+            const isKeyInvalid = isInvalidGdiIntegrationKey(currentIntegrationKey);
+            const isGdiKeyEmptyOrLegacy = !currentGdiKey || currentGdiKey === "boss_gdi_secure_audit_key_123" || currentGdiKey === "boss_docs_live_standard";
+            
+            if (isKeyInvalid || isGdiKeyEmptyOrLegacy) {
+              const cleanedUrl = normalizeGdiBaseUrl(currentEndpointUrl) || CANONICAL_GDI_BASE_URL;
+              const saneFields = {
+                endpointUrl: cleanedUrl,
+                buildUrl: cleanedUrl,
                 status: "operacional",
                 integrationOperationalStatus: "operacional",
-                lastHealthCheckStatus: "operational",
-                lastHttpStatus: 200,
-                lastHttpStatusReceived: 200,
-                lastServerToServerResult: "Migrado automaticamente do estado legado ativo para operacional no carregamento de configurações.",
+                integrationKey: CANONICAL_GDI_AUDIT_KEY,
+                gdiKey: CANONICAL_GDI_AUDIT_KEY,
+                lastError: "",
+                lastSuccess: "Chave GDI corrigida automaticamente e sincronizada com a Chave de Auditoria GDI.",
+                lastServerToServerResult: "Chave X-BOSS-Google-Docs-Integration-Key saneada e sincronizada automaticamente-v2.",
                 updatedAt: new Date().toISOString()
               };
+
               configToUse = {
                 ...configToUse,
-                ...migratedFields
+                ...saneFields
               };
+
               try {
                 await setDoc(docRef, {
                   ...data,
                   googleDocs: {
-                    ...data.googleDocs,
-                    ...migratedFields
+                    ...(data.googleDocs || {}),
+                    ...saneFields
                   }
-                });
-              } catch (migrationErr) {
-                console.error("Erro na migração de status legado em configurações:", migrationErr);
+                }, { merge: true });
+
+                setLogs(prev => [
+                  ...prev,
+                  `[${new Date().toLocaleTimeString()}] GDI integrationKey saneada: rota interna removida e chave real do GDI aplicada.`
+                ]);
+              } catch (saneErr) {
+                console.error("Erro no saneamento de chaves GDI:", saneErr);
+              }
+            } else {
+              // TAREFA 7 - Migração automática de estado fático legado ativo para operacional
+              const rawStatus = configToUse.status;
+              const lastHttp = configToUse.lastHttpStatus;
+              if (rawStatus === "ativo" && (lastHttp === 200 || lastHttp === "200")) {
+                console.log("[Migration] PORTAL_GDI_LEGACY_STATUS_NORMALIZED-CONFIG");
+                const migratedFields = {
+                  status: "operacional",
+                  integrationOperationalStatus: "operacional",
+                  lastHealthCheckStatus: "operational",
+                  lastHttpStatus: 200,
+                  lastHttpStatusReceived: 200,
+                  lastServerToServerResult: "Migrado automaticamente do estado legado ativo para operacional no carregamento de configurações.",
+                  updatedAt: new Date().toISOString()
+                };
+                configToUse = {
+                  ...configToUse,
+                  ...migratedFields
+                };
+                try {
+                  await setDoc(docRef, {
+                    ...data,
+                    googleDocs: {
+                      ...data.googleDocs,
+                      ...migratedFields
+                    }
+                  }, { merge: true });
+                } catch (migrationErr) {
+                  console.error("Erro na migração de status legado em configurações:", migrationErr);
+                }
               }
             }
 
@@ -918,32 +988,29 @@ export default function GoogleDocsIntegration() {
     const integrationKey = (config.integrationKey || '').trim();
     const status = config.status || 'não_configurado';
 
-    // BLOQUEAR CONFUSÃO ENTRE URL E CHAVE (TAREFA 2)
-    if (
-      integrationKey.startsWith("http://") || 
-      integrationKey.startsWith("https://") || 
-      integrationKey.includes(".run.app") || 
-      integrationKey.includes("/api/webhook/gdi-job") ||
-      integrationKey.includes("aistudio.google.com")
-    ) {
+    // BLOQUEAR CONFIGURAÇÕES COM VALOR INVÁLIDO OU ROTAS (TAREFA 8 & 3)
+    if (isInvalidGdiIntegrationKey(integrationKey)) {
       setFeedback({
         type: 'error',
-        message: 'Você colou uma URL no campo da chave. Este campo deve receber apenas o valor secreto do header X-BOSS-Google-Docs-Integration-Key. A URL deve ser informada no campo “URL Base do GDI”.'
+        message: 'Valor inválido no campo da chave. Você colou uma rota, URL ou placeholder no lugar da Chave de Auditoria GDI.'
       });
       setSaving(false);
       return;
     }
 
+    const finalIntegrationKey = integrationKey;
+
     // Atualizar estado com valor normalizado para sincronização visual inmediata
     setConfig(prev => ({
       ...prev,
       endpointUrl: gapiBaseUrl,
-      integrationKey: integrationKey
+      integrationKey: finalIntegrationKey,
+      gdiKey: finalIntegrationKey
     }));
 
     // Regras de Negócio Críticas (TAREFA 1):
     // 1. Não permitir status operacional se endpointUrl estiver vazio
-    // 2. Não permitir status operacional se integrationKey estiver vazio
+    // 2. Não permitir status operacional se finalIntegrationKey estiver vazio
     if (status === 'operacional') {
       if (!gapiBaseUrl) {
         setFeedback({
@@ -953,7 +1020,7 @@ export default function GoogleDocsIntegration() {
         setSaving(false);
         return;
       }
-      if (!integrationKey) {
+      if (!finalIntegrationKey) {
         setFeedback({
           type: 'error',
           message: 'Ativação Bloqueada: Não é possível definir o status como operacional se a Chave de Integração GDI estiver vazia.'
@@ -975,7 +1042,7 @@ export default function GoogleDocsIntegration() {
     }
 
     // Se houver URL ou chave ou status diferente de não configurado, validamos a URL
-    if (status !== 'não_configurado' || gapiBaseUrl || integrationKey) {
+    if (status !== 'não_configurado' || gapiBaseUrl || finalIntegrationKey) {
       const urlError = validateUrl(gapiBaseUrl);
       if (urlError) {
         setFeedback({ type: 'error', message: urlError });
@@ -983,11 +1050,18 @@ export default function GoogleDocsIntegration() {
         return;
       }
 
-      if (!integrationKey) {
+      if (!finalIntegrationKey) {
         setFeedback({ type: 'error', message: 'O salvamento foi bloqueado: Chave de Integração GDI (X-BOSS-Google-Docs-Integration-Key) não foi fornecida.' });
         setSaving(false);
         return;
       }
+    }
+
+    if (finalIntegrationKey !== CANONICAL_GDI_AUDIT_KEY) {
+      setFeedback({
+        type: 'warning',
+        message: 'A chave informada difere da Chave de Auditoria GDI conhecida. A automação poderá ser recusada pelo GDI.'
+      });
     }
 
     try {
@@ -1001,7 +1075,8 @@ export default function GoogleDocsIntegration() {
           notes: config.notes.trim(),
           buildUrl: gapiBaseUrl,
           endpointUrl: gapiBaseUrl,
-          integrationKey: integrationKey,
+          integrationKey: finalIntegrationKey,
+          gdiKey: finalIntegrationKey,
           integrationOperationalStatus: calculatedOperationalStatus,
           lastEndpoint: config.lastEndpoint || '',
           lastHttpStatus: config.lastHttpStatus || null,

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { doc, getDoc, setDoc, updateDoc, query, collection, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
-import { normalizeGdiStatus } from '../../../../lib/integrations/googleDocsStatus';
+import { normalizeGdiStatus, isInvalidGdiIntegrationKey } from '../../../../lib/integrations/googleDocsStatus';
 
 export default function ProcuracaoPF() {
   const {
@@ -944,14 +944,8 @@ export default function ProcuracaoPF() {
         throw new Error(keyMissingErrorText);
       }
 
-      if (
-        gdiIntegrationKey.startsWith("http://") || 
-        gdiIntegrationKey.startsWith("https://") || 
-        gdiIntegrationKey.includes(".run.app") || 
-        gdiIntegrationKey.includes("/api/webhook/gdi-job") ||
-        gdiIntegrationKey.includes("aistudio.google.com")
-      ) {
-        const keyIsUrlErrorText = "O valor configurado como chave X-BOSS-Google-Docs-Integration-Key no Portal BOSS é uma URL em vez de uma chave secreta. Corrija o valor em Configurações > Integrações.";
+      if (isInvalidGdiIntegrationKey(gdiIntegrationKey)) {
+        const keyIsUrlErrorText = "Valor inválido no campo da chave. Você colou uma rota, URL ou placeholder no lugar da Chave de Auditoria GDI.";
         
         try {
           await setDoc(doc(db, 'googleDocsJobs', jobId), {
@@ -976,14 +970,14 @@ export default function ProcuracaoPF() {
               googleDocsUrl: null,
               fileName: null
             },
-            errorCode: "PORTAL_GDI_INTEGRATION_KEY_IS_URL",
+            errorCode: "PORTAL_GDI_INTEGRATION_KEY_INVALID",
             errorMessage: keyIsUrlErrorText,
             logs: [
               ...initialLogs,
               {
-                action: "PORTAL_GDI_INTEGRATION_KEY_IS_URL",
+                action: "PORTAL_GDI_INTEGRATION_KEY_INVALID",
                 timestamp: new Date().toISOString(),
-                message: "O Portal BOSS bloqueou o envio porque settings/connectors.googleDocs.integrationKey aparenta ser uma URL."
+                message: "O Portal BOSS bloqueou o envio porque settings/connectors.googleDocs.integrationKey é inválida ou de rota / placeholder."
               }
             ]
           });

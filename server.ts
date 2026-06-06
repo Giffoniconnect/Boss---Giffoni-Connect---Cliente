@@ -237,13 +237,16 @@ app.post("/api/proxy-google-docs", async (req, res) => {
       trimmedKey.startsWith("https://") || 
       trimmedKey.includes(".run.app") || 
       trimmedKey.includes("/api/webhook/gdi-job") ||
-      trimmedKey.includes("aistudio.google.com")
+      trimmedKey.includes("aistudio.google.com") ||
+      trimmedKey.startsWith("/boss-giffoni-clientes") ||
+      trimmedKey === "boss_docs_live_standard" ||
+      trimmedKey === "boss_gdi_secure_audit_key_123"
     ) {
       return res.status(400).json({
         success: false,
         status: "failed",
-        errorCode: "GDI_INTEGRATION_KEY_IS_URL",
-        errorMessage: "O valor informado como chave do header é uma URL. Informe a chave secreta correta do GDI."
+        errorCode: "GDI_INTEGRATION_KEY_INVALID",
+        errorMessage: "Valor inválido no campo da chave. Você colou uma rota, URL, segredo legado ou de placeholder no lugar da Chave de Auditoria GDI."
       });
     }
 
@@ -354,6 +357,27 @@ app.post("/api/proxy-google-docs/revalidate", async (req, res) => {
       return res.status(400).json({
         success: false,
         error: "URL e chave de integração são obrigatórias para revalidação."
+      });
+    }
+
+    const trimmedKey = (integrationKey || "").trim();
+    if (
+      trimmedKey.startsWith("http://") || 
+      trimmedKey.startsWith("https://") || 
+      trimmedKey.includes(".run.app") || 
+      trimmedKey.includes("/api/webhook/gdi-job") ||
+      trimmedKey.includes("aistudio.google.com") ||
+      trimmedKey.startsWith("/boss-giffoni-clientes") ||
+      trimmedKey === "boss_docs_live_standard" ||
+      trimmedKey === "boss_gdi_secure_audit_key_123"
+    ) {
+      return res.status(200).json({
+        success: false,
+        error: "Valor inválido no campo da chave. Você colou uma rota, URL, segredo legado ou de placeholder no lugar da Chave de Auditoria GDI.",
+        failedEndpoint: endpointUrl,
+        failedStatus: 400,
+        failedContentType: "text/plain",
+        failedResponseText: "Valor inválido no campo da chave. Você colou uma rota, URL, segredo legado ou de placeholder no lugar da Chave de Auditoria GDI."
       });
     }
 

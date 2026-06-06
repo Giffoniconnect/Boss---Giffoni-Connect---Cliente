@@ -830,7 +830,7 @@ export default function Configuracoes() {
     setFeedback(null);
     setGdiTestLabel('Testando...');
     const targetUrl = 'https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app';
-    const currentKey = connectors.googleDocs?.integrationKey || 'boss_docs_live_standard';
+    const currentKey = connectors.googleDocs?.integrationKey || 'gdi_integration_key_2026_portal_boss_docs_9XvR42LmQp77';
     try {
       let isSuccess = false;
       let isHtml = false;

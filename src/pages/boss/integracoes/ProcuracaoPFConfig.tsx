@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
+import { isInvalidGdiIntegrationKey, normalizeGdiBaseUrl } from '../../../lib/integrations/googleDocsStatus';
 import { BossLayout } from '../../../components/Layout';
 import { 
   FileText, 
@@ -61,8 +62,8 @@ export default function ProcuracaoPFConfig() {
     templateKey: 'procuracao-pf',
     destinationFolderId: '1Yt-a7B9cd_ef1h2j3k4l5m6n7op_xxxx',
     destinationFolderUrl: 'https://drive.google.com/drive/folders/1Yt-a7B9cd_xxxx',
-    gdiKey: 'boss_gdi_secure_audit_key_123',
-    integrationKey: 'boss_gdi_secure_audit_key_123',
+    gdiKey: 'gdi_integration_key_2026_portal_boss_docs_9XvR42LmQp77',
+    integrationKey: 'gdi_integration_key_2026_portal_boss_docs_9XvR42LmQp77',
     serviceAccountEmail: 'gdi-service@boss-agency.iam.gserviceaccount.com',
     projectId: 'boss-agency-gdocs',
     callbackSecret: 'whsec_boss_callback_private_token_xyz',
@@ -132,12 +133,29 @@ export default function ProcuracaoPFConfig() {
     setSaving(fieldKey);
     setFeedback(null);
     try {
-      const valueToSave = customValue !== undefined ? customValue : tempValue;
+      let valueToSave = customValue !== undefined ? customValue : tempValue;
       
+      if (fieldKey === 'integrationKey' || fieldKey === 'gdiKey') {
+        const cleanedVal = valueToSave.trim();
+        if (isInvalidGdiIntegrationKey(cleanedVal)) {
+          setFeedback({
+            type: 'error',
+            message: 'Valor inválido no campo da chave. Você colou uma rota, URL ou placeholder no lugar da Chave de Auditoria GDI.'
+          });
+          setSaving(null);
+          return;
+        }
+        valueToSave = cleanedVal;
+      }
+
       const docRef = doc(db, 'settings', 'connectors');
       const docSnap = await getDoc(docRef);
       const currentData = docSnap.exists() ? docSnap.data() : {};
       
+      if (fieldKey === 'endpointUrl') {
+        valueToSave = normalizeGdiBaseUrl(valueToSave);
+      }
+
       const updatedGoogleDocs = {
         ...currentData.googleDocs,
         [fieldKey]: valueToSave
@@ -145,8 +163,7 @@ export default function ProcuracaoPFConfig() {
 
       // Ensure that if we modify the base endpointUrl, we update webhookUrl too
       if (fieldKey === 'endpointUrl') {
-        const cleanUrl = valueToSave.trim().replace(/\/$/, "");
-        updatedGoogleDocs.webhookUrl = `${cleanUrl}/api/webhook/gdi-job`;
+        updatedGoogleDocs.webhookUrl = `${valueToSave}/api/webhook/gdi-job`;
       }
 
       // Sync correlation keys
