@@ -19,6 +19,7 @@ import GoogleDriveIntegration from './pages/boss/integracoes/GoogleDriveIntegrat
 import TodoistIntegration from './pages/boss/integracoes/TodoistIntegration';
 import GoogleCalendarIntegration from './pages/boss/integracoes/GoogleCalendarIntegration';
 import GoogleDocsIntegration from './pages/boss/integracoes/GoogleDocsIntegration';
+import ProcuracaoPFConfig from './pages/boss/integracoes/ProcuracaoPFConfig';
 import WhatsappIntegration from './pages/boss/integracoes/WhatsappIntegration';
 import GmailIntegration from './pages/boss/integracoes/GmailIntegration';
 
@@ -153,6 +154,14 @@ const router = createBrowserRouter(
         element={
           <ProtectedRoute role="boss_admin">
             <GoogleDocsIntegration />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/automacao-procuracao-pf/configuracao-da-procuracao-pf" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <ProcuracaoPFConfig />
           </ProtectedRoute>
         } 
       />

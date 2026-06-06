@@ -198,6 +198,9 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
 
     if (stepId === 'solicitacoes-informacoes') {
       if (!caseObj) return 'uninitiated';
+      if (caseObj.solicitarInfoComp === false) {
+        return 'complete';
+      }
       return (caseObj.infoStatus === 'concluido' || caseObj.infoCompleted) ? 'complete' : 'uninitiated';
     }
 

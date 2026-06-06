@@ -28,7 +28,9 @@ import {
   EyeOff,
   Copy,
   Pencil,
-  Trash2
+  Trash2,
+  Lock,
+  Unlock
 } from 'lucide-react';
 
 interface GoogleDocsConfig {
@@ -62,6 +64,18 @@ interface GoogleDocsConfig {
   lastServerToServerResult?: string;
   lastReceivedByGdiConfirmed?: string;
   authProxyDetected?: boolean;
+
+  // New Technical Fields from TAREFA 1 & 6
+  webhookUrl?: string;
+  templateId?: string;
+  templateKey?: string;
+  destinationFolderId?: string;
+  destinationFolderUrl?: string;
+  gdiKey?: string;
+  serviceAccountEmail?: string;
+  projectId?: string;
+  callbackSecret?: string;
+  isProduction?: boolean;
 }
 
 export default function GoogleDocsIntegration() {
@@ -100,13 +114,196 @@ export default function GoogleDocsIntegration() {
     lastServerToServerTestAt: '',
     lastServerToServerResult: '',
     lastReceivedByGdiConfirmed: 'não_confirmado',
-    authProxyDetected: false
+    authProxyDetected: false,
+
+    // Prefills for new technical parameters
+    webhookUrl: 'https://ais-dev-rhz6adgbzyburidkotjy46-599536317399.us-east1.run.app/api/webhook/gdi-job',
+    templateId: '1ux-XoO_D_N6iK7Z9xNExPlW78p3bDoY4M5K_xxxxxxx',
+    templateKey: 'procuracao-pf',
+    destinationFolderId: '1Yt-a7B9cd_ef1h2j3k4l5m6n7op_xxxx',
+    destinationFolderUrl: 'https://drive.google.com/drive/folders/1Yt-a7B9cd_xxxx',
+    gdiKey: 'boss_gdi_secure_audit_key_123',
+    serviceAccountEmail: 'gdi-service@boss-agency.iam.gserviceaccount.com',
+    projectId: 'boss-agency-gdocs',
+    callbackSecret: 'whsec_boss_callback_private_token_xyz',
+    isProduction: false
   });
 
   // Logs
   const [logs, setLogs] = useState<string[]>([]);
   const [showLogs, setShowLogs] = useState(false);
   const [testing, setTesting] = useState(false);
+
+  // Field-level states for Tarefa 1
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [tempValue, setTempValue] = useState<string>('');
+  const [visibleFields, setVisibleFields] = useState<Record<string, boolean>>({});
+  const [successFields, setSuccessFields] = useState<Record<string, boolean>>({});
+
+  const handleFieldSave = async (fieldKey: keyof GoogleDocsConfig, customValue?: string) => {
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const valueToSave = customValue !== undefined ? customValue : tempValue;
+      
+      const docRef = doc(db, 'settings', 'connectors');
+      const docSnap = await getDoc(docRef);
+      const currentData = docSnap.exists() ? docSnap.data() : {};
+      
+      const updatedGoogleDocs = {
+        ...currentData.googleDocs,
+        [fieldKey]: valueToSave
+      };
+
+      if (fieldKey === 'endpointUrl') {
+        const cleanUrl = valueToSave.trim().replace(/\/$/, "");
+        updatedGoogleDocs.webhookUrl = `${cleanUrl}/api/webhook/gdi-job`;
+      }
+
+      await setDoc(docRef, {
+        ...currentData,
+        googleDocs: updatedGoogleDocs
+      });
+
+      setConfig(prev => {
+        const nextState = { ...prev, [fieldKey]: valueToSave };
+        if (fieldKey === 'endpointUrl') {
+          const cleanUrl = valueToSave.trim().replace(/\/$/, "");
+          nextState.webhookUrl = `${cleanUrl}/api/webhook/gdi-job`;
+        }
+        return nextState;
+      });
+
+      setSuccessFields(prev => ({ ...prev, [fieldKey]: true }));
+      setTimeout(() => {
+        setSuccessFields(prev => ({ ...prev, [fieldKey]: false }));
+      }, 2000);
+
+      setEditingField(null);
+      setFeedback({
+        type: 'success',
+        message: `Campo "${fieldKey}" salvo com sucesso no banco de dados!`
+      });
+    } catch (err: any) {
+      console.error(err);
+      setFeedback({
+        type: 'error',
+        message: `Erro ao salvar o campo: ${err.message || err}`
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleFieldDelete = async (fieldKey: keyof GoogleDocsConfig) => {
+    const confirmDelete = window.confirm(`Deseja realmente limpar/excluir o valor de "${fieldKey}"?`);
+    if (!confirmDelete) return;
+
+    setSaving(true);
+    try {
+      const docRef = doc(db, 'settings', 'connectors');
+      const docSnap = await getDoc(docRef);
+      const currentData = docSnap.exists() ? docSnap.data() : {};
+      
+      const updatedGoogleDocs = {
+        ...currentData.googleDocs,
+        [fieldKey]: ''
+      };
+
+      await setDoc(docRef, {
+        ...currentData,
+        googleDocs: updatedGoogleDocs
+      });
+
+      setConfig(prev => ({ ...prev, [fieldKey]: '' }));
+
+      setFeedback({
+        type: 'success',
+        message: `Valor do campo "${fieldKey}" excluído com sucesso!`
+      });
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        message: `Erro ao excluir campo: ${err.message || err}`
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleEnvironment = async (toProd: boolean) => {
+    try {
+      const docRef = doc(db, 'settings', 'connectors');
+      const docSnap = await getDoc(docRef);
+      const currentData = docSnap.exists() ? docSnap.data() : {};
+      
+      const updatedGoogleDocs = {
+        ...currentData.googleDocs,
+        isProduction: toProd
+      };
+
+      await setDoc(docRef, {
+        ...currentData,
+        googleDocs: updatedGoogleDocs
+      });
+
+      setConfig(prev => ({ ...prev, isProduction: toProd }));
+      setFeedback({
+        type: 'success',
+        message: `Ambiente alterado com sucesso para ${toProd ? 'Modo Deploy Blindado 🚀' : 'Modo Preview Aberto ☁️'}`
+      });
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        message: `Erro ao alterar modo: ${err.message || err}`
+      });
+    }
+  };
+
+  const handleCopyToClipboard = (fieldKey: keyof GoogleDocsConfig, val: string) => {
+    let isSensitive = ['gdiKey', 'integrationKey', 'callbackSecret', 'templateId'].includes(fieldKey);
+    if (config.isProduction && isSensitive) {
+      const confirmCopy = window.confirm("Você está no Modo Deploy Blindado. Deseja revelar e copiar esta credencial sensível?");
+      if (!confirmCopy) return;
+    }
+
+    navigator.clipboard.writeText(val);
+    setFeedback({
+      type: 'success',
+      message: `Copiado: "${fieldKey}" foi copiado com sucesso para a área de transferência!`
+    });
+  };
+
+  const handleToggleVisibility = (fieldKey: string) => {
+    let isSensitive = ['gdiKey', 'integrationKey', 'callbackSecret', 'templateId'].includes(fieldKey);
+    if (config.isProduction && isSensitive && !visibleFields[fieldKey]) {
+      const confirmReveal = window.confirm("Você está no Modo Deploy Blindado. Deseja realmente visualizar esta credencial sensível em tela pública?");
+      if (!confirmReveal) return;
+    }
+
+    setVisibleFields(prev => ({
+      ...prev,
+      [fieldKey]: !prev[fieldKey]
+    }));
+  };
+
+  const getDisplayValue = (fieldKey: keyof GoogleDocsConfig, value: string) => {
+    if (!value) return '(vazio)';
+    const isSensitive = ['gdiKey', 'integrationKey', 'callbackSecret', 'templateId', 'serviceAccountEmail'].includes(fieldKey);
+    if (!config.isProduction) {
+      if (visibleFields[fieldKey] === false) {
+        return '••••••••••••••••';
+      }
+      return value;
+    }
+    if (isSensitive) {
+      if (!visibleFields[fieldKey]) {
+        return '•••••••••••••••• (Mascarado)';
+      }
+      return value;
+    }
+    return value;
+  };
 
   // Diagnostic collapsible states
   const [expandSentPayload, setExpandSentPayload] = useState(false);
@@ -630,7 +827,19 @@ export default function GoogleDocsIntegration() {
               lastServerToServerResult: configToUse.lastServerToServerResult || '',
               lastServerToServerTestAt: configToUse.lastServerToServerTestAt || '',
               lastReceivedByGdiConfirmed: configToUse.lastReceivedByGdiConfirmed || 'não_confirmado',
-              authProxyDetected: configToUse.authProxyDetected || false
+              authProxyDetected: configToUse.authProxyDetected || false,
+
+              // Extra database fields for Task 1 & 6
+              webhookUrl: configToUse.webhookUrl || '',
+              templateId: configToUse.templateId || '',
+              templateKey: configToUse.templateKey || '',
+              destinationFolderId: configToUse.destinationFolderId || '',
+              destinationFolderUrl: configToUse.destinationFolderUrl || '',
+              gdiKey: configToUse.gdiKey || '',
+              serviceAccountEmail: configToUse.serviceAccountEmail || '',
+              projectId: configToUse.projectId || '',
+              callbackSecret: configToUse.callbackSecret || '',
+              isProduction: configToUse.isProduction !== undefined ? configToUse.isProduction : false
             });
 
             // Set visual diagnosticState and diagnosticMessage according to normalized status (TAREFA 3)
@@ -1032,6 +1241,154 @@ export default function GoogleDocsIntegration() {
     { name: "Outros Modelos", desc: "Integração dinâmica para fluxos adicionais futuramente.", icon: Archive, color: "text-slate-600 bg-slate-50" }
   ];
 
+  const renderFieldRow = (label: string, fieldKey: keyof GoogleDocsConfig, isTextArea: boolean = false) => {
+    const val = config[fieldKey];
+    const isEditingThis = editingField === fieldKey;
+    const isSensitive = ['gdiKey', 'integrationKey', 'callbackSecret', 'templateId'].includes(fieldKey);
+    const calculatedValue = getDisplayValue(fieldKey, String(val || ''));
+    const isSuccess = successFields[fieldKey];
+
+    return (
+      <div key={fieldKey} className="border-b border-gray-100 last:border-b-0 py-4 pb-4.5 flex flex-col md:flex-row md:items-center justify-between gap-4 text-left font-sans">
+        <div className="space-y-1 md:max-w-xs xl:max-w-sm flex-1">
+          <label className="text-xs font-black uppercase text-gray-800 tracking-tight block">{label}</label>
+          <span className="text-[9px] font-bold text-gray-400 font-mono break-all leading-none bg-gray-50 px-1.5 py-0.5 rounded border border-gray-150">
+            {fieldKey}
+          </span>
+        </div>
+
+        <div className="flex-1 space-y-2">
+          {isEditingThis ? (
+            <div className="flex gap-2">
+              {isTextArea ? (
+                <textarea
+                  className="w-full p-2.5 bg-gray-50 border border-gray-350 rounded-xl text-xs font-mono outline-none focus:ring-2 focus:ring-indigo-150 text-gray-805 font-semibold"
+                  rows={4}
+                  value={tempValue}
+                  onChange={(e) => setTempValue(e.target.value)}
+                />
+              ) : (
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-350 rounded-xl text-xs font-mono outline-none focus:ring-2 focus:ring-indigo-150 text-gray-805 font-semibold"
+                  value={tempValue}
+                  onChange={(e) => setTempValue(e.target.value)}
+                />
+              )}
+            </div>
+          ) : (
+            <div className={`p-3 rounded-xl border font-mono select-all text-xs break-all leading-relaxed whitespace-pre-wrap ${
+              isSensitive 
+                ? 'bg-slate-900 border-slate-950 text-emerald-400 font-bold' 
+                : 'bg-gray-50 border-gray-150 text-gray-700 font-semibold'
+            }`}>
+              {calculatedValue}
+            </div>
+          )}
+
+          {/* Action buttons (Editar, Excluir, Visualizar, Copiar, Salvar, Voltar) */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {isEditingThis ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleFieldSave(fieldKey)}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <Save size={11} />
+                  <span>Salvar</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingField(null)}
+                  className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  <span>Voltar</span>
+                </button>
+              </>
+            ) : (
+              <>
+                {/* 1. EDITAR */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingField(fieldKey);
+                    setTempValue(String(val || ''));
+                  }}
+                  className="px-2.5 py-1 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer hover:border-gray-300"
+                >
+                  <Pencil size={11} className="text-gray-400" />
+                  <span>Editar</span>
+                </button>
+
+                {/* 2. SALVAR */}
+                <button
+                  type="button"
+                  onClick={() => handleFieldSave(fieldKey, String(val || ''))}
+                  className={`px-2.5 py-1 bg-white hover:bg-gray-50 border text-gray-700 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer ${
+                    isSuccess ? 'border-emerald-300 text-emerald-700 bg-emerald-50' : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <Save size={11} className={isSuccess ? 'text-emerald-600' : 'text-gray-400'} />
+                  <span>{isSuccess ? 'Salvo ✓' : 'Salvar'}</span>
+                </button>
+
+                {/* 3. EXCLUIR */}
+                <button
+                  type="button"
+                  onClick={() => handleFieldDelete(fieldKey)}
+                  className="px-2.5 py-1 bg-white hover:bg-rose-50 border border-gray-200 hover:border-rose-150 text-gray-700 hover:text-rose-600 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <Trash2 size={11} className="text-gray-400" />
+                  <span>Excluir</span>
+                </button>
+
+                {/* 4. VISUALIZAR */}
+                <button
+                  type="button"
+                  onClick={() => handleToggleVisibility(String(fieldKey))}
+                  className="px-2.5 py-1 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer hover:border-gray-300"
+                >
+                  {visibleFields[fieldKey] === false || (config.isProduction && !visibleFields[fieldKey]) ? (
+                    <>
+                      <Eye size={11} className="text-gray-400" />
+                      <span>Visualizar</span>
+                    </>
+                  ) : (
+                    <>
+                      <EyeOff size={11} className="text-indigo-600" />
+                      <span>Ocultar</span>
+                    </>
+                  )}
+                </button>
+
+                {/* 5. COPIAR */}
+                <button
+                  type="button"
+                  onClick={() => handleCopyToClipboard(fieldKey, String(val || ''))}
+                  className="px-2.5 py-1 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer hover:border-gray-300"
+                >
+                  <Copy size={11} className="text-gray-400" />
+                  <span>Copiar</span>
+                </button>
+
+                {/* 6. VOLTAR */}
+                <button
+                  type="button"
+                  onClick={() => navigate('/boss-giffoni-clientes/configuracoes')}
+                  className="px-2.5 py-1 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer hover:border-gray-300"
+                >
+                  <ArrowLeft size={11} className="text-gray-400" />
+                  <span>Voltar</span>
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <BossLayout>
@@ -1096,6 +1453,136 @@ export default function GoogleDocsIntegration() {
             </p>
           </div>
         </div>
+
+        {/* Environment Selection Toggle (Tarefa 2 & 3) */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-gray-50 border border-gray-200 p-4 rounded-3xl text-left">
+          <div className="space-y-1">
+            <h4 className="text-xs font-black uppercase text-gray-800 tracking-tight block">Tolerância & Segurança do Ambiente (Tarefa 2 & 3)</h4>
+            <p className="text-[11px] text-gray-500 font-semibold leading-none">Selecione o nível de visibilidade das chaves e logs de homologação.</p>
+          </div>
+          <div className="bg-gray-200/60 p-1 rounded-xl border border-gray-150 flex items-center gap-1 shrink-0 select-none">
+            <button
+              type="button"
+              onClick={() => handleToggleEnvironment(false)}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                !config.isProduction 
+                  ? 'bg-white text-indigo-705 shadow-xs border border-gray-100' 
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              <Unlock size={11} />
+              <span>Simular Preview</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleToggleEnvironment(true)}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                config.isProduction 
+                  ? 'bg-slate-900 text-emerald-400 shadow-xs' 
+                  : 'text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              <Lock size={11} />
+              <span>Simular Deploy Blindado</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Visual State Indicators (Tarefa 2 & 3) */}
+        {config.isProduction ? (
+          <div className="p-5 bg-gradient-to-r from-slate-900 to-slate-950 border border-slate-950 rounded-3xl text-left shadow-md flex items-start gap-4 text-white animate-fadeIn">
+            <div className="w-10 h-10 bg-emerald-950/80 text-emerald-400 border border-emerald-900/40 rounded-2xl flex items-center justify-center font-bold shrink-0 shadow-inner">
+              <Lock size={20} className="stroke-[2.5px]" />
+            </div>
+            <div className="space-y-1.5">
+              <h4 className="text-xs font-black uppercase tracking-wider text-emerald-400 font-mono">
+                MODO DEPLOY BLINDADO (🚀 PRODUÇÃO)
+              </h4>
+              <p className="text-xs text-slate-300 leading-relaxed font-semibold">
+                Credenciais sensíveis protegidas. Chaves, tokens e segredos estão mascarados por padrão em produção e requerem confirmação de segurança explícita para visualização ou cópia em tela pública.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="p-5 bg-gradient-to-r from-indigo-50 to-indigo-100/50 border border-indigo-200 rounded-3xl text-left shadow-xs flex items-start gap-4 text-indigo-950 animate-fadeIn">
+            <div className="w-10 h-10 bg-white border border-indigo-200 text-indigo-700 rounded-2xl flex items-center justify-center font-bold shrink-0 shadow-xs">
+              <Unlock size={20} className="stroke-[2.5px]" />
+            </div>
+            <div className="space-y-1.5">
+              <h4 className="text-xs font-black uppercase tracking-wider text-indigo-805 font-mono">
+                MODO PREVIEW ABERTO
+              </h4>
+              <p className="text-xs text-indigo-900 leading-relaxed font-medium">
+                Diagnóstico liberado. Valores técnicos estão inteiramente visíveis para facilitar depuração imediata e correções físicas antes do deploy real.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Comparison Visual Roadmatch Card (Tarefa 6 & 5 Validation) */}
+        {(() => {
+          const bossKey = (config.integrationKey || '').trim();
+          const gKey = (config.gdiKey || 'boss_gdi_secure_audit_key_123').trim();
+          const isMatched = (bossKey && gKey && bossKey === gKey);
+
+          return (
+            <div className={`p-6 border rounded-3xl text-left shadow-sm space-y-4 transition-all duration-300 ${
+              isMatched 
+                ? 'bg-emerald-50/70 border-emerald-200' 
+                : 'bg-rose-50/70 border-rose-200'
+            }`}>
+              <div className="flex items-center justify-between border-b border-gray-150/40 pb-3">
+                <div className="flex items-center gap-2">
+                  <Activity className={isMatched ? 'text-emerald-600 animate-pulse' : 'text-rose-500'} size={18} />
+                  <span className="text-xs font-black uppercase tracking-wider text-gray-800">
+                    Comparador de Chaves entre Portais (Tarefa 6)
+                  </span>
+                </div>
+                <span className={`px-2.5 py-1 text-[9px] font-black uppercase font-mono tracking-wider rounded-lg ${
+                  isMatched ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-rose-100 text-rose-800 border border-rose-200'
+                }`}>
+                  {isMatched ? 'Chaves Sincronizadas' : 'Chaves Divergentes'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold">
+                <div className="bg-white p-3 rounded-2xl border border-gray-200 space-y-1.5 shadow-xs">
+                  <span className="text-[9px] font-black uppercase text-indigo-600 tracking-wider font-mono block">Portal BOSS enviará:</span>
+                  <div className="space-y-1 text-gray-750">
+                    <div><strong className="text-gray-500 font-mono text-[10px]">Endpoint:</strong> POST {config.endpointUrl || '(vazio)'}/api/webhook/gdi-job</div>
+                    <div><strong className="text-gray-500 font-mono text-[10px]">Header:</strong> X-BOSS-Google-Docs-Integration-Key</div>
+                    <div className="break-all"><strong className="text-gray-500 font-mono text-[10px]">Valor do header:</strong> <code className="font-mono bg-gray-50 p-1 rounded font-bold text-gray-900 border border-gray-100">{getDisplayValue('integrationKey', config.integrationKey)}</code></div>
+                  </div>
+                </div>
+
+                <div className="bg-white p-3 rounded-2xl border border-gray-200 space-y-1.5 shadow-xs">
+                  <span className="text-[9px] font-black uppercase text-indigo-600 tracking-wider font-mono block">GDI espera:</span>
+                  <div className="space-y-1 text-gray-750">
+                    <div><strong className="text-gray-500 font-mono text-[10px]">Endpoint:</strong> POST /api/webhook/gdi-job</div>
+                    <div><strong className="text-gray-500 font-mono text-[10px]">Header:</strong> X-BOSS-Google-Docs-Integration-Key</div>
+                    <div className="break-all"><strong className="text-gray-500 font-mono text-[10px]">Valor esperado (GDI):</strong> <code className="font-mono bg-gray-50 p-1 rounded font-bold text-gray-900 border border-gray-100">{getDisplayValue('gdiKey', gKey)}</code></div>
+                  </div>
+                </div>
+              </div>
+
+              {isMatched ? (
+                <div className="p-3 bg-emerald-100/40 text-emerald-900 rounded-xl text-xs flex items-center gap-2">
+                  <Check size={16} className="text-emerald-600 shrink-0" />
+                  <p className="font-bold">
+                    Chaves sincronizadas. O Portal BOSS está apto a enviar payload real ao GDI.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-rose-100/40 text-rose-900 rounded-xl text-xs flex items-center gap-2">
+                  <X size={16} className="text-rose-600 shrink-0" />
+                  <p className="font-bold">
+                    Chaves divergentes. A chave do Portal BOSS deve ser exatamente idêntica à Chave de Auditoria GDI. Copie a chave de auditoria em /automacao-procuracao-pf/configuracao-da-procuracao-pf e salve nesta página.
+                  </p>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
@@ -1812,6 +2299,38 @@ export default function GoogleDocsIntegration() {
             </div>
           </div>
         )}
+
+        {/* PARÂMETROS OPERACIONAIS COMPREENSIVOS (TAREFA 1) */}
+        <div className="bg-white border border-gray-150 rounded-3xl p-6 md:p-8 space-y-6 shadow-sm text-left font-sans">
+          <div className="border-b border-gray-100 pb-4">
+            <h3 className="text-sm font-black text-gray-900 uppercase tracking-tight flex items-center gap-2">
+              <Activity className="text-indigo-600" size={18} />
+              <span>Lista de Parâmetros Técnicos Operacionais da Integração (Tarefa 1 & 6)</span>
+            </h3>
+            <p className="text-xs text-gray-500 font-medium mt-1">
+              Gerencie cada um dos campos técnicos de integração do ecossistema GDI e Portal BOSS com controles individuais e segurança de visibilidade.
+            </p>
+          </div>
+
+          <div className="divide-y divide-gray-100 space-y-2">
+            {renderFieldRow("URL de Endpoint Central (Portal)", "endpointUrl")}
+            {renderFieldRow("Webhook URL de Resposta", "webhookUrl")}
+            {renderFieldRow("ID de Template de Prova Autônoma", "templateId")}
+            {renderFieldRow("Chave Identificadora de Template", "templateKey")}
+            {renderFieldRow("ID da Pasta de Destino GDrive", "destinationFolderId")}
+            {renderFieldRow("link URL de Acesso da Pasta GDrive", "destinationFolderUrl")}
+            {renderFieldRow("X-BOSS-Google-Docs-Integration-Key (Header Portal)", "integrationKey")}
+            {renderFieldRow("Chave de Auditoria GDI (Esperada no GDI)", "gdiKey")}
+            {renderFieldRow("E-mail da Service Account Google", "serviceAccountEmail")}
+            {renderFieldRow("Identificador do Projeto Cloud (Project ID)", "projectId")}
+            {renderFieldRow("Callback Secret do Barramento", "callbackSecret")}
+            {renderFieldRow("Último Payload Recebido", "lastReceivedPayload", true)}
+            {renderFieldRow("Último Payload Enviado", "lastSentPayload", true)}
+            {renderFieldRow("Última Resposta Bruta", "lastResponse", true)}
+            {renderFieldRow("Mensagem de Último Erro Operacional", "lastError", true)}
+            {renderFieldRow("Mensagem de Último Sucesso", "lastSuccess", true)}
+          </div>
+        </div>
 
         {/* SHORTCUTS */}
         <div className="space-y-4 pt-4 border-t border-gray-100">

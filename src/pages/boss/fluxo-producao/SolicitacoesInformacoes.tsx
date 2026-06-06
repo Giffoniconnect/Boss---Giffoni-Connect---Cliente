@@ -64,6 +64,7 @@ export default function SolicitacoesInformacoes() {
   const [client, setClient] = useState<any>(null);
   const [requests, setRequests] = useState<InfoRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
+  const [solicitarInfoComp, setSolicitarInfoComp] = useState<boolean>(true);
 
   // Form states
   const [editingId, setEditingId] = useState<string | null>(null); // null means "New request"
@@ -108,6 +109,11 @@ export default function SolicitacoesInformacoes() {
         }
         const cData = caseSnap.data();
         setCaseObj(cData);
+        if (cData.solicitarInfoComp !== undefined) {
+          setSolicitarInfoComp(cData.solicitarInfoComp);
+        } else {
+          setSolicitarInfoComp(true);
+        }
 
         // 2. Fetch Client if available
         if (cData.clientId) {
@@ -146,6 +152,45 @@ export default function SolicitacoesInformacoes() {
 
     loadResources();
   }, [caseId, refreshToggle]);
+  
+  const handleToggleSolicitarInfoComp = async (value: boolean) => {
+    setSolicitarInfoComp(value);
+    setError(null);
+    setSuccess(null);
+    try {
+      const nowISO = new Date().toISOString();
+      const updateData: any = {
+        solicitarInfoComp: value,
+        updatedAt: nowISO
+      };
+
+      if (!value) {
+        updateData.infoStatus = 'concluido';
+        updateData.infoCompleted = true;
+      } else {
+        const hasPending = requests.some(r => r.status === 'pendente' || r.status === 'complemento_solicitado');
+        if (requests.length > 0 && !hasPending) {
+          updateData.infoStatus = 'concluido';
+          updateData.infoCompleted = true;
+        } else {
+          updateData.infoStatus = 'pendente';
+          updateData.infoCompleted = false;
+        }
+      }
+
+      await updateDoc(doc(db, 'cases', caseId!), updateData);
+      
+      setCaseObj((prev: any) => ({
+        ...prev,
+        ...updateData
+      }));
+
+      setSuccess(`Preferência salva: ${value ? '"Sim"' : '"Não"'}.`);
+    } catch (err: any) {
+      console.error(err);
+      setError(`Erro ao salvar preferência: ${err.message || err}`);
+    }
+  };
 
   // Handle Form Submission: Create or Update Request
   const handleSubmitForm = async (e: React.FormEvent) => {
@@ -278,6 +323,8 @@ export default function SolicitacoesInformacoes() {
     try {
       await updateDoc(doc(db, 'cases', caseId!), {
         productionStage: "financeiro",
+        infoStatus: "concluido",
+        infoCompleted: true,
         updatedAt: nowISO
       });
       navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId!}/financeiro`);
@@ -337,11 +384,11 @@ export default function SolicitacoesInformacoes() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
               <div className="space-y-1">
                 <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">Cliente Titular</span>
-                <h4 className="text-xs font-bold text-gray-950 truncate max-w-[180px]">{clientName || 'Carregando...'}</h4>
+                <h4 className="text-xs font-bold text-gray-950 break-words">{clientName || 'Carregando...'}</h4>
               </div>
               <div className="space-y-1 sm:pl-4">
                 <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">Modalidade</span>
-                <h4 className="text-xs font-bold text-gray-900 truncate uppercase tracking-tight">{caseObj.registrationType}</h4>
+                <h4 className="text-xs font-bold text-gray-900 uppercase tracking-tight break-words">{caseObj.registrationType}</h4>
                 <span className="inline-block text-[8px] font-bold px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded-md font-mono mt-0.5">
                   {caseObj.registrationTypeKey || 'peticao_inicial'}
                 </span>
@@ -350,15 +397,63 @@ export default function SolicitacoesInformacoes() {
                 <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">Controle Operacional</span>
                 <div className="text-[10px] text-gray-600 space-y-0.5">
                   <div>Interno: <span className="font-bold text-gray-700">{caseObj.statusInterno || 'Em produção'}</span></div>
-                  <div className="truncate max-w-[150px]">Público: <span className="font-bold text-indigo-700">{caseObj.statusPublicoCliente || 'Aguardando...'}</span></div>
+                  <div className="break-words">Público: <span className="font-bold text-indigo-700">{caseObj.statusPublicoCliente || 'Aguardando...'}</span></div>
                 </div>
               </div>
             </div>
           </div>
         )}
 
+        {/* BOOLEAN SELECTOR CARD */}
+        {!fetching && caseObj && (
+          <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-xs text-left space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="space-y-1">
+                <h4 className="text-sm font-black uppercase text-gray-800 tracking-tight">
+                  Você deseja solicitar informações complementares?
+                </h4>
+                <p className="text-xs text-gray-500 leading-normal">
+                  Defina se esse caso necessita de informações e esclarecimentos fáticos adicionais do cliente.
+                </p>
+              </div>
+
+              {/* SEGMENTED TOGGLERS */}
+              <div className="flex gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleToggleSolicitarInfoComp(true)}
+                  className={`px-5 py-2.5 rounded-xl font-bold text-xs cursor-pointer transition-all border ${
+                    solicitarInfoComp === true
+                      ? 'bg-gray-950 border-gray-950 text-white shadow-xs'
+                      : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    {solicitarInfoComp === true && <Check size={13} className="stroke-[3px]" />}
+                    <span>Sim</span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleSolicitarInfoComp(false)}
+                  className={`px-5 py-2.5 rounded-xl font-bold text-xs cursor-pointer transition-all border ${
+                    solicitarInfoComp === false
+                      ? 'bg-gray-950 border-gray-950 text-white shadow-xs'
+                      : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    {solicitarInfoComp === false && <Check size={13} className="stroke-[3px]" />}
+                    <span>Não</span>
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ALERTS SECTION IN COMPLIANCE WITH REGRA 11 */}
-        {!fetching && requests.length === 0 && (
+        {!fetching && solicitarInfoComp && requests.length === 0 && (
           <div className="p-4 bg-amber-50 border border-amber-205 rounded-2xl text-amber-900 text-xs space-y-1 animate-fadeIn">
             <div className="flex gap-2 items-center">
               <AlertTriangle size={16} className="text-amber-600" />
@@ -370,12 +465,29 @@ export default function SolicitacoesInformacoes() {
           </div>
         )}
 
+        {/* DISPLAY WHEN SOLICITAR IS NO */}
+        {!fetching && !solicitarInfoComp && (
+          <div className="p-10 bg-emerald-50/45 border border-emerald-100 rounded-3xl text-center space-y-3.5 animate-fadeIn">
+            <div className="w-12 h-12 bg-emerald-100/75 rounded-full flex items-center justify-center text-emerald-700 mx-auto">
+              <CheckSquare size={24} className="stroke-[2.5px]" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-sm font-black uppercase tracking-tight text-emerald-950">
+                Informações complementares dispensadas
+              </h4>
+              <p className="text-xs text-emerald-800 max-w-md mx-auto leading-relaxed">
+                Você selecionou que não deseja solicitar informações complementares para este caso. O passo foi marcado como concluído com sucesso. Clique em <strong>Salvar e Avançar</strong> para prosseguir para a próxima etapa.
+              </p>
+            </div>
+          </div>
+        )}
+
         {fetching ? (
           <div className="p-16 text-center text-gray-400 flex flex-col items-center justify-center gap-3">
             <Loader2 className="animate-spin text-gray-500" size={28} />
             <span className="text-xs font-bold font-mono uppercase tracking-widest text-gray-500">Buscando solicitações...</span>
           </div>
-        ) : (
+        ) : solicitarInfoComp ? (
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
             
             {/* LEFT AREA: REQUESTS LIST (8 COLUMNS) */}
@@ -680,7 +792,7 @@ export default function SolicitacoesInformacoes() {
             </form>
 
           </div>
-        )}
+        ) : null}
 
         {/* BOTTOM STEP CONTROLS BAR */}
         <div className="flex flex-col sm:flex-row sm:justify-between items-center gap-4 pt-6 border-t border-gray-150">
