@@ -114,7 +114,7 @@ export default function FluxoHome() {
                 </span>
               </div>
               <p className="text-xs text-gray-500 mt-1 max-w-3xl leading-relaxed">
-                Central de diretrizes judiciais, faturamentos, análises de integridade e auditoria estrutural do escritório Priscilla Giffoni.
+                Central de diretrizes judiciais, faturamentos, análises de integridade e auditoria estrutural do escritório ⚖️Giffoni Advogados Associados ⚖️.
               </p>
             </div>
           </div>

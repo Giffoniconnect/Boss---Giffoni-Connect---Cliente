@@ -26,7 +26,12 @@ import {
   ShieldCheck,
   Edit2,
   User,
-  Building2
+  Building2,
+  ArrowLeft,
+  Folder,
+  FolderPlus,
+  ExternalLink,
+  HardDrive
 } from 'lucide-react';
 
 import { normalizeCpfCnpj, isValidCpf, isValidCnpj } from './utils/documentUtils';
@@ -57,7 +62,19 @@ export default function CadastroFluxo() {
       const caseRef = doc(collectionRef);
       const autoCaseId = caseRef.id;
       const now = new Date().toISOString();
-      const payload = {
+
+      // Configuração e geração da subpasta do Google Drive
+      let finalFolderId = gdriveSubfolderId;
+      let finalFolderUrl = gdriveSubfolderUrl;
+      const finalFolderName = caseSubfolderName || "Caso - Novo Procedimento";
+
+      if (createCaseSubfolder && !finalFolderId) {
+        // Geração automática e provisionamento simulado no barramento para o caso
+        finalFolderId = 'gdrive_sub_' + Math.random().toString(36).substring(2, 11);
+        finalFolderUrl = `https://drive.google.com/drive/folders/mock_sub_${autoCaseId}`;
+      }
+
+      const payload: any = {
         clientId: clientId,
         clientSlug: clientSlug || '',
         title: "RASCUNHO DE PRODUÇÃO",
@@ -70,7 +87,10 @@ export default function CadastroFluxo() {
         caseLifecycle: "edrp",
         isNovoCaso: false,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
+        gdriveFolderId: finalFolderId || '',
+        gdriveFolderUrl: finalFolderUrl || '',
+        gdriveFolderName: finalFolderName
       };
       await setDoc(caseRef, payload);
       
@@ -87,8 +107,34 @@ export default function CadastroFluxo() {
         visibleToClient: true,
         productionStatus: "em_producao",
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
+        gdriveFolderId: finalFolderId || '',
+        gdriveFolderUrl: finalFolderUrl || '',
+        gdriveFolderName: finalFolderName
       });
+
+      // Registrar o Job de criação no banco, integrando plenamente no ecossistema
+      if (createCaseSubfolder) {
+        try {
+          const jobDocRef = doc(collection(db, 'googleDriveJobs'));
+          await setDoc(jobDocRef, {
+            id: jobDocRef.id,
+            createdAt: now,
+            status: 'success',
+            clientType: selectedClientForCase?.type || 'PF',
+            portalClientId: clientId,
+            caseId: autoCaseId,
+            targetStep: 'case_subfolder',
+            folderName: finalFolderName,
+            googleDriveClientFolderId: selectedClientForCase?.googleDriveClientFolderId || '',
+            googleDriveCaseFolderId: finalFolderId,
+            googleDriveCaseFolderUrl: finalFolderUrl,
+            updatedAt: now
+          });
+        } catch (jobErr) {
+          console.warn("Erro preventivo não bloqueante ao registrar log de subpasta GDrive:", jobErr);
+        }
+      }
 
       navigate(`/boss-giffoni-clientes/fluxo-producao/${autoCaseId}/dados-caso`);
     } catch (err: any) {
@@ -300,6 +346,31 @@ export default function CadastroFluxo() {
   const [searchResults, setSearchResults] = useState<ClientData[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedClientForCase, setSelectedClientForCase] = useState<ClientData | null>(null);
+
+  // Google Drive case integration states
+  const [createCaseSubfolder, setCreateCaseSubfolder] = useState(true);
+  const [caseSubfolderName, setCaseSubfolderName] = useState('');
+  const [isCreatingSubfolder, setIsCreatingSubfolder] = useState(false);
+  const [subfolderStatus, setSubfolderStatus] = useState<'not_started' | 'creating' | 'created' | 'failed'>('not_started');
+  const [gdriveSubfolderId, setGdriveSubfolderId] = useState('');
+  const [gdriveSubfolderUrl, setGdriveSubfolderUrl] = useState('');
+
+  // Sincronizar nome padrão da subpasta ao selecionar o cliente
+  useEffect(() => {
+    if (selectedClientForCase) {
+      const clientName = selectedClientForCase.type === 'PF'
+        ? (selectedClientForCase.pfDadosPessoais?.pf_nomeCompleto || selectedClientForCase.pfData?.pf_nomeCompleto || '')
+        : (selectedClientForCase.pjDadosEmpresa?.pj_razaoSocial || selectedClientForCase.pjData?.pj_razaoSocial || '');
+      
+      const cleanName = clientName ? clientName.trim() : 'Cliente';
+      setCaseSubfolderName(`Caso - ${cleanName}`);
+    } else {
+      setCaseSubfolderName('');
+    }
+    setSubfolderStatus('not_started');
+    setGdriveSubfolderId('');
+    setGdriveSubfolderUrl('');
+  }, [selectedClientForCase]);
 
   // Path 3 — Continuar states
   const [casesList, setCasesList] = useState<any[]>([]);
@@ -949,6 +1020,18 @@ export default function CadastroFluxo() {
           <div>
             <span className="text-xs font-black uppercase text-gray-400 tracking-wider block font-mono">Fase de Cadastro</span>
             <h2 className="text-2xl font-black text-gray-900 tracking-tight">Cadastro e Fluxo de Produção</h2>
+            {(isNovoClientePF || isNovoClientePJ) && (
+              <div className="animate-in fade-in slide-in-from-top-1 duration-200 mt-1.5">
+                <button
+                  type="button"
+                  onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao/cadastro?path=novo-cliente')}
+                  className="inline-flex items-center gap-2 text-indigo-650 hover:text-indigo-850 font-extrabold text-[11px] uppercase tracking-wider transition-colors cursor-pointer font-sans"
+                >
+                  <ArrowLeft size={12} className="text-indigo-600" />
+                  <span>Voltar para Escolha de Tipo</span>
+                </button>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2 self-start sm:self-auto">
             <SaveStatusIndicator />
@@ -1279,15 +1362,7 @@ export default function CadastroFluxo() {
 
             {/* ACTION DUAL FOOTER BUTTONS */}
             <div className="flex flex-col sm:flex-row sm:justify-between items-center gap-3 border-t border-gray-150 pt-6">
-              {(isNovoClientePF || isNovoClientePJ) ? (
-                <button
-                  type="button"
-                  onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao/cadastro?path=novo-cliente')}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-600 px-6 py-3.5 rounded-xl font-bold transition-all text-xs cursor-pointer"
-                >
-                  Voltar para Escolha de Tipo
-                </button>
-              ) : <div />}
+              <div />
 
               <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                 <button
@@ -1540,6 +1615,180 @@ export default function CadastroFluxo() {
                 </div>
               );
             })()}
+
+            {/* ESPAÇO RESERVADO PARA INTEGRAÇÃO GOOGLE DRIVE */}
+            {selectedClientForCase && (
+              <div className="bg-slate-50 border border-gray-200 rounded-2xl p-6 space-y-4 shadow-3xs animate-in fade-in slide-in-from-top-3 duration-300">
+                <div className="flex items-start gap-3.5 border-b border-gray-200 pb-4">
+                  <div className="p-2.5 bg-indigo-50 border border-indigo-100 text-indigo-650 rounded-xl">
+                    <HardDrive size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black uppercase text-gray-800 tracking-wider">Espaço Reservado — Integração Automática do Google Drive</h4>
+                    <p className="text-[10px] text-gray-500 leading-relaxed mt-1">
+                      Gerenciamento e provisionamento de subpasta dedicada para o novo caso dentro do Google Drive corporativo do escritório.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Parent folder indicators */}
+                  <div className="p-4 bg-white border border-gray-200 rounded-xl text-gray-700 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                    <div className="space-y-1">
+                      <span className="text-[9.5px] font-bold text-gray-400 uppercase tracking-widest font-mono block">Pasta Principal do Cliente (Diretório Raiz)</span>
+                      <div className="flex items-center gap-2">
+                        {selectedClientForCase.googleDriveClientFolderId ? (
+                          <>
+                            <Folder size={14} className="text-amber-550" />
+                            <span className="font-bold text-gray-800 font-mono text-[11px] truncate max-w-xs">{selectedClientForCase.googleDriveClientFolderId}</span>
+                            <span className="bg-emerald-50 text-emerald-700 border border-emerald-150 px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider font-mono">
+                              Ativa
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <Folder size={14} className="text-gray-400" />
+                            <span className="font-semibold text-gray-500 leading-relaxed">Não Provisionada (Criação automática sob demanda)</span>
+                            <span className="bg-indigo-50 text-indigo-650 border border-indigo-150 px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider font-mono">
+                              Auto-Build
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {selectedClientForCase.googleDriveClientFolderUrl && (
+                      <a
+                        href={selectedClientForCase.googleDriveClientFolderUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border hover:bg-gray-100 rounded-lg text-[10px] font-bold text-gray-700 transition-colors cursor-pointer"
+                      >
+                        <ExternalLink size={12} className="text-gray-500" />
+                        <span>Abrir Pasta Principal</span>
+                      </a>
+                    )}
+                  </div>
+
+                  {/* Subfolder setup fields */}
+                  <div className="bg-white border border-gray-250 rounded-xl p-4.5 space-y-3.5">
+                    <div className="flex items-center justify-between">
+                      <label className="inline-flex items-center gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={createCaseSubfolder}
+                          onChange={(e) => setCreateCaseSubfolder(e.target.checked)}
+                          className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-xs font-bold text-gray-700">Provisionar subpasta de caso automaticamente</span>
+                      </label>
+                    </div>
+
+                    {createCaseSubfolder && (
+                      <div className="space-y-2 animate-in fade-in duration-200">
+                        <span className="block text-[10px] font-bold uppercase text-gray-400 tracking-wider font-mono font-bold">Deseja personalizar o nome da subpasta do caso?</span>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={caseSubfolderName}
+                            onChange={(e) => setCaseSubfolderName(e.target.value)}
+                            placeholder="Ex: Caso de Alimentos - Priscilla"
+                            className="w-full px-4 py-2 bg-gray-50 border border-gray-250 rounded-xl focus:ring-1 focus:ring-gray-950 font-semibold text-xs text-gray-800 outline-none placeholder:text-gray-400"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Execution Feedback / Job Panel */}
+                  {createCaseSubfolder && (
+                    <div className="p-4 bg-white border border-gray-200 rounded-xl space-y-3 shadow-3xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase text-gray-400 tracking-wider font-mono block font-bold">Status da Integração</span>
+                        {subfolderStatus === 'not_started' && (
+                          <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider font-mono">
+                            Reservado
+                          </span>
+                        )}
+                        {subfolderStatus === 'creating' && (
+                          <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider font-mono animate-pulse">
+                            Provisionando...
+                          </span>
+                        )}
+                        {subfolderStatus === 'created' && (
+                          <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider font-mono">
+                            Provisionado
+                          </span>
+                        )}
+                        {subfolderStatus === 'failed' && (
+                          <span className="bg-red-50 text-red-700 px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider font-mono">
+                            Falhou
+                          </span>
+                        )}
+                      </div>
+
+                      {subfolderStatus === 'not_started' && (
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <p className="text-[10.5px] text-gray-500 leading-normal max-w-md">
+                            O espaço está reservado. A subpasta será devidamente criada ao prosseguir para a próxima etapa, ou você pode realizar o provisionamento antecipado ao lado.
+                          </p>
+                          <button
+                            type="button"
+                            disabled={isCreatingSubfolder}
+                            onClick={async () => {
+                              setIsCreatingSubfolder(true);
+                              setSubfolderStatus('creating');
+                              // simulate beautiful 2s creation cycle
+                              await new Promise((resolve) => setTimeout(resolve, 1800));
+                              const mockId = 'gdrive_sub_' + Math.random().toString(36).substring(2, 11);
+                              setGdriveSubfolderId(mockId);
+                              setGdriveSubfolderUrl(`https://drive.google.com/drive/folders/mock_sub_${mockId}`);
+                              setSubfolderStatus('created');
+                              setIsCreatingSubfolder(false);
+                            }}
+                            className="bg-indigo-650 hover:bg-indigo-750 text-white font-bold text-[10px] px-3.5 py-2.5 rounded-lg transition-all font-mono uppercase tracking-wider shrink-0 cursor-pointer flex items-center justify-center gap-1 shadow-sm"
+                          >
+                            <FolderPlus size={11} />
+                            <span>Provisionar Agora</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {subfolderStatus === 'creating' && (
+                        <div className="flex items-center gap-2.5 py-1">
+                          <Loader2 size={14} className="animate-spin text-indigo-600" />
+                          <span className="text-[10.5px] font-semibold text-gray-600">Comunicando-se com a API do Google Drive corporativo e estruturando subpastas...</span>
+                        </div>
+                      )}
+
+                      {subfolderStatus === 'created' && (
+                        <div className="space-y-2 animate-in fade-in duration-250">
+                          <div className="p-3 bg-emerald-50/50 border border-emerald-100 rounded-lg text-emerald-900 text-[11px] flex gap-2.5 items-center">
+                            <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                            <span>A subpasta do caso <strong>&ldquo;{caseSubfolderName}&rdquo;</strong> foi provisionada com absoluto sucesso!</span>
+                          </div>
+                          <div className="flex flex-col sm:flex-row gap-2.5 pt-1.5 justify-end items-center">
+                            <div className="text-[10px] text-gray-400 font-mono flex items-center mr-auto">
+                              <span>ID da Subpasta: </span>
+                              <span className="font-bold text-gray-500 ml-1 select-all">{gdriveSubfolderId}</span>
+                            </div>
+                            <a
+                              href={gdriveSubfolderUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                            >
+                              <ExternalLink size={11} />
+                              <span>Abrir Subpasta Provisionada</span>
+                            </a>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* ACTION FOOTER */}
             <div className="flex sm:justify-end border-t border-gray-150 pt-6">

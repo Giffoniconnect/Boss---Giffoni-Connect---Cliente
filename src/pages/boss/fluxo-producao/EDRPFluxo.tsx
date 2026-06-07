@@ -29,6 +29,25 @@ import { flowRoutes } from './utils/flowRoutes';
 interface EDRPData {
   structuring: {
     competence: string;
+    comarca?: string;
+    defendant?: {
+      type: 'PF' | 'PJ';
+      pf_nomeCompleto?: string;
+      pf_cpf?: string;
+      pf_rg?: string;
+      pf_estadoCivil?: string;
+      pf_profissao?: string;
+      pf_email?: string;
+      pf_telefone?: string;
+      pf_endereco?: string;
+      pj_razaoSocial?: string;
+      pj_cnpj?: string;
+      pj_inscricaoEstadual?: string;
+      pj_socioAdministrador?: string;
+      pj_email?: string;
+      pj_telefone?: string;
+      pj_endereco?: string;
+    };
     parties: string;
     relevantFacts: string;
     legalGrounds: string;
@@ -96,6 +115,25 @@ interface EDRPData {
 const DEFAULT_EDRP: EDRPData = {
   structuring: {
     competence: '',
+    comarca: '',
+    defendant: {
+      type: 'PF',
+      pf_nomeCompleto: '',
+      pf_cpf: '',
+      pf_rg: '',
+      pf_estadoCivil: '',
+      pf_profissao: '',
+      pf_email: '',
+      pf_telefone: '',
+      pf_endereco: '',
+      pj_razaoSocial: '',
+      pj_cnpj: '',
+      pj_inscricaoEstadual: '',
+      pj_socioAdministrador: '',
+      pj_email: '',
+      pj_telefone: '',
+      pj_endereco: '',
+    },
     parties: '',
     relevantFacts: '',
     legalGrounds: '',
@@ -585,110 +623,497 @@ export default function EDRPFluxo() {
         </div>
 
         {/* 2. ESTRUTURAÇÃO - Regra 3 */}
-        <div className="border border-gray-200 rounded-[1.5rem] p-6 space-y-6">
-          <div className="flex items-start gap-3">
+        <div className="border border-gray-200 rounded-[1.5rem] p-6 space-y-6 bg-gray-50/20">
+          <div className="flex items-start gap-3 border-b border-gray-150 pb-4">
             <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
               <Layers size={16} />
             </div>
             <div>
-              <h3 className="text-sm font-black text-gray-950 tracking-tight uppercase">1. Estruturação Jurídica e Fática do Caso</h3>
-              <p className="text-[10.5px] text-gray-400 mt-0.5">Mapeamento de ritos fáticos, teses primárias e matriz de contingência fática.</p>
+              <h3 className="text-sm font-black text-gray-950 tracking-tight uppercase">Etapa 07: Estruturação Jurídica e Fática do Caso (11 Cards Virtuais)</h3>
+              <p className="text-[10.5px] text-gray-400 mt-0.5">Preencha cada um dos cards listados abaixo de forma sequencial ou paralela.</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="block text-[10px] font-sans font-extrabold uppercase tracking-wide text-gray-400">Competência / Juízo Competente</label>
+          <div className="space-y-6">
+            {/* Card 1 - Competência */}
+            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-3 shadow-3xs hover:border-gray-300 transition-all">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                  Card 1
+                </span>
+                <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
+                  Competência / Juízo Competente
+                </span>
+              </div>
               <textarea
                 value={edrp.structuring.competence}
                 onChange={(e) => handleFieldChange('structuring', 'competence', e.target.value)}
-                placeholder="Ex: Vara Cível da Comarca da Capital - RJ"
-                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2.5 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[85px]"
+                placeholder="Ex: Vara Cível da Comarca da Capital - TJ/RJ..."
+                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[50px] outline-none"
               />
             </div>
 
-            <div className="space-y-1.5">
-              <label className="block text-[10px] font-sans font-extrabold uppercase tracking-wide text-gray-400">Partes (Qualificação detalhada)</label>
-              <textarea
-                value={edrp.structuring.parties}
-                onChange={(e) => handleFieldChange('structuring', 'parties', e.target.value)}
-                placeholder="Exemplo resumido de Requerente, Requerido e interessados..."
-                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2.5 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[85px]"
+            {/* Card 2 - Comarca */}
+            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-3 shadow-3xs hover:border-gray-300 transition-all">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                  Card 2
+                </span>
+                <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
+                  Comarca
+                </span>
+              </div>
+              <input
+                type="text"
+                value={edrp.structuring.comarca || ''}
+                onChange={(e) => handleFieldChange('structuring', 'comarca', e.target.value)}
+                placeholder="Ex: Rio de Janeiro - RJ"
+                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 outline-none"
               />
             </div>
 
-            <div className="space-y-1.5">
-              <label className="block text-[10px] font-sans font-extrabold uppercase tracking-wide text-gray-400">Fatos Relevantes Relevados</label>
+            {/* Card 3 - Parte(s) autora */}
+            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-4 shadow-3xs hover:border-gray-300 transition-all">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                  Card 3
+                </span>
+                <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
+                  Parte(s) autora
+                </span>
+              </div>
+
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1">
+                <div className="flex gap-2 items-center text-amber-900 text-[10px] font-black uppercase tracking-wide">
+                  <AlertTriangle size={13} className="text-amber-600 shrink-0" />
+                  <span>Dados extraídos automaticamente</span>
+                </div>
+                <p className="text-[10px] text-amber-800 leading-normal font-semibold">
+                  Estes dados estão sendo puxados automaticamente da etapa 1 do cadastro.
+                </p>
+              </div>
+
+              {client ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50/50 p-3.5 rounded-xl border border-gray-100 text-[11px] leading-tight">
+                  <div>
+                    <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Cliente</span>
+                    <span className="font-extrabold text-gray-800">
+                      {client.type === 'PF' 
+                        ? (client.pfDadosPessoais?.pf_nomeCompleto || client.pfData?.pf_nomeCompleto || client.name || 'Nome Completo Ausente')
+                        : (client.pjDadosEmpresa?.pj_razaoSocial || client.pjData?.pj_razaoSocial || client.name || 'Razão Social Ausente')}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Tipo / Documento</span>
+                    <span className="font-bold text-gray-750 font-mono">
+                      {client.type || 'PF'} - {client.type === 'PF' 
+                        ? (client.pfDadosPessoais?.pf_cpf || client.pfData?.pf_cpf || '—') 
+                        : (client.pjDadosEmpresa?.pj_cnpj || client.pjData?.pj_cnpj || '—')}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">E-mail</span>
+                    <span className="font-semibold text-gray-700">{client.email || '—'}</span>
+                  </div>
+                  {client.type === 'PF' ? (
+                    <div>
+                      <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Profissão / Telefone</span>
+                      <span className="font-semibold text-gray-700">
+                        {client.pfDadosPessoais?.pf_profissao || '—'} | {client.pfDadosPessoais?.pf_telefone || client.phone || '—'}
+                      </span>
+                    </div>
+                  ) : (
+                    <div>
+                      <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Sócio Adm.</span>
+                      <span className="font-semibold text-gray-700">{client.pjDadosEmpresa?.pj_socioAdministrador || '—'}</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-3 text-center text-gray-400 text-[11px] font-medium italic">
+                  Aguardando faturamento de dados do cliente...
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="block text-[9.5px] font-bold text-gray-400 uppercase">Qualificação Detalhada Autora</label>
+                <textarea
+                  value={edrp.structuring.parties}
+                  onChange={(e) => handleFieldChange('structuring', 'parties', e.target.value)}
+                  placeholder="Incorpore co-autores, herdeiros ou especificações acessórias..."
+                  className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[50px] outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Card 4 - Adicionar Réu */}
+            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-4 shadow-3xs hover:border-gray-300 transition-all">
+              <div className="flex flex-wrap gap-3 items-center justify-between border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                    Card 4
+                  </span>
+                  <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
+                    Adicionar Réu (Coletas Originais)
+                  </span>
+                </div>
+                <div className="flex bg-gray-100 p-0.5 rounded-lg shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentDef = edrp.structuring.defendant || { type: 'PF' };
+                      handleFieldChange('structuring', 'defendant', { ...currentDef, type: 'PF' });
+                    }}
+                    className={`px-2.5 py-1 text-[9px] font-black uppercase rounded-md transition cursor-pointer ${
+                      (edrp.structuring.defendant?.type || 'PF') === 'PF'
+                        ? 'bg-white text-gray-900 shadow-3xs'
+                        : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                  >
+                    Réu PF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentDef = edrp.structuring.defendant || { type: 'PF' };
+                      handleFieldChange('structuring', 'defendant', { ...currentDef, type: 'PJ' });
+                    }}
+                    className={`px-2.5 py-1 text-[9px] font-black uppercase rounded-md transition cursor-pointer ${
+                      (edrp.structuring.defendant?.type || 'PF') === 'PJ'
+                        ? 'bg-white text-gray-900 shadow-3xs'
+                        : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                  >
+                    Réu PJ
+                  </button>
+                </div>
+              </div>
+
+              {(edrp.structuring.defendant?.type || 'PF') === 'PF' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-gray-50/50 p-4 rounded-xl border border-gray-100 text-xs">
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Nome Completo do Réu</label>
+                    <input
+                      type="text"
+                      value={edrp.structuring.defendant?.pf_nomeCompleto || ''}
+                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pf_nomeCompleto: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 font-semibold outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">CPF</label>
+                    <input
+                      type="text"
+                      value={edrp.structuring.defendant?.pf_cpf || ''}
+                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pf_cpf: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 font-mono outline-none"
+                      placeholder="000.000.000-00"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">RG</label>
+                    <input
+                      type="text"
+                      value={edrp.structuring.defendant?.pf_rg || ''}
+                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pf_rg: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 font-mono outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Estado Civil</label>
+                    <input
+                      type="text"
+                      value={edrp.structuring.defendant?.pf_estadoCivil || ''}
+                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pf_estadoCivil: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Profissão</label>
+                    <input
+                      type="text"
+                      value={edrp.structuring.defendant?.pf_profissao || ''}
+                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pf_profissao: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">E-mail</label>
+                    <input
+                      type="email"
+                      value={edrp.structuring.defendant?.pf_email || ''}
+                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pf_email: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Telefone</label>
+                    <input
+                      type="text"
+                      value={edrp.structuring.defendant?.pf_telefone || ''}
+                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pf_telefone: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-855 outline-none"
+                      placeholder="(21) 99999-9999"
+                    />
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Endereço do Réu</label>
+                    <input
+                      type="text"
+                      value={edrp.structuring.defendant?.pf_endereco || ''}
+                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pf_endereco: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-gray-50/50 p-4 rounded-xl border border-gray-100 text-xs">
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Razão Social / Fantasia do Réu</label>
+                    <input
+                      type="text"
+                      value={edrp.structuring.defendant?.pj_razaoSocial || ''}
+                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pj_razaoSocial: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 font-semibold outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1 font-mono">
+                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider font-sans">CNPJ</label>
+                    <input
+                      type="text"
+                      value={edrp.structuring.defendant?.pj_cnpj || ''}
+                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pj_cnpj: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
+                      placeholder="00.000.000/0001-00"
+                    />
+                  </div>
+                  <div className="space-y-1 font-mono">
+                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider font-sans">Inscrição Estadual</label>
+                    <input
+                      type="text"
+                      value={edrp.structuring.defendant?.pj_inscricaoEstadual || ''}
+                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pj_inscricaoEstadual: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Sócio Administrador</label>
+                    <input
+                      type="text"
+                      value={edrp.structuring.defendant?.pj_socioAdministrador || ''}
+                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pj_socioAdministrador: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">E-mail corporativo</label>
+                    <input
+                      type="email"
+                      value={edrp.structuring.defendant?.pj_email || ''}
+                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pj_email: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Telefone Comercial</label>
+                    <input
+                      type="text"
+                      value={edrp.structuring.defendant?.pj_telefone || ''}
+                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pj_telefone: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Endereço da Sede</label>
+                    <input
+                      type="text"
+                      value={edrp.structuring.defendant?.pj_endereco || ''}
+                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pj_endereco: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Card 5 - Fatos relevantes */}
+            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-3 shadow-3xs hover:border-gray-300 transition-all">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                  Card 5
+                </span>
+                <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
+                  Fatos relevantes
+                </span>
+              </div>
               <textarea
                 value={edrp.structuring.relevantFacts}
                 onChange={(e) => handleFieldChange('structuring', 'relevantFacts', e.target.value)}
-                placeholder="Resumo cronológico dos acontecimentos do direito..."
-                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2.5 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[85px]"
+                placeholder="Narrativa cronológica dos fatos determinantes..."
+                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[60px] outline-none"
               />
             </div>
 
-            <div className="space-y-1.5">
-              <label className="block text-[10px] font-sans font-extrabold uppercase tracking-wide text-gray-400">Fundamentos Jurídicos / Teses</label>
+            {/* Card 6 - Principais fundamentos */}
+            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-4 shadow-3xs hover:border-gray-300 transition-all">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                  Card 6
+                </span>
+                <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
+                  Principais fundamentos
+                </span>
+              </div>
+
+              {/* Checkbox inteligente para selecionar fundamentos comuns */}
+              <div className="space-y-2">
+                <span className="text-[10px] font-black uppercase text-gray-500 tracking-wider font-mono block">⚖️ Fundamentos Mais Comuns (Clique para inserir)</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-gray-150">
+                  {[
+                    { title: 'Dano Moral por Falha na Prestação de Serviço', text: 'Tese sob escopo do Art. 14 do CDC: responsabilidade objetiva da fornecedora por vícios fáticos.' },
+                    { title: 'Inadimplemento Contratual com Perdas e Danos', text: 'Tese pelo Art. 389 do Código Civil: descumprimento de obrigações gerando dever indenizatório.' },
+                    { title: 'Enriquecimento Sem Causa do Credor', text: 'Tese pelo Art. 884 do Código Civil: vedação ao proveito econômico injustificado à custa alheia.' },
+                    { title: 'Responsabilidade Civil por Abuso de Direito', text: 'Tese pelo Art. 187 do Código Civil: ato ilícito por exceder limites impostos pelo fim socioeconômico.' }
+                  ].map((fund) => {
+                    const active = edrp.structuring.legalGrounds?.includes(fund.title);
+                    return (
+                      <button
+                        key={fund.title}
+                        type="button"
+                        onClick={() => {
+                          let current = edrp.structuring.legalGrounds || '';
+                          if (active) {
+                            current = current.replace(`${fund.title}: ${fund.text}\n\n`, '');
+                          } else {
+                            current += `${fund.title}: ${fund.text}\n\n`;
+                          }
+                          handleFieldChange('structuring', 'legalGrounds', current);
+                        }}
+                        className={`text-left p-2.5 rounded-lg border text-[11px] leading-tight transition cursor-pointer ${
+                          active 
+                            ? 'bg-indigo-50 border-indigo-400 text-indigo-950 font-bold' 
+                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 font-semibold'
+                        }`}
+                      >
+                        <div>{fund.title}</div>
+                        <span className="text-[9px] text-gray-400 font-normal block mt-0.5">{fund.text}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <textarea
                 value={edrp.structuring.legalGrounds}
                 onChange={(e) => handleFieldChange('structuring', 'legalGrounds', e.target.value)}
-                placeholder="Doutrina, jurisprudência e dispositivos legais fundamentais..."
-                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2.5 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[85px]"
+                placeholder="Doutrina, Legislação, Jurisprudência consolidada..."
+                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[80px] outline-none"
               />
             </div>
 
-            <div className="space-y-1.5">
-              <label className="block text-[10px] font-sans font-extrabold uppercase tracking-wide text-gray-400">Pedidos Formulados (Claims)</label>
+            {/* Card 7 - pedidos correlacionados */}
+            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-4 shadow-3xs hover:border-gray-300 transition-all">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                  Card 7
+                </span>
+                <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
+                  Pedidos correlacionados
+                </span>
+              </div>
+
+              {/* Dynamic prompt indicators based on selected foundations */}
+              <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 text-[10.5px] leading-relaxed text-indigo-900 font-semibold">
+                <span className="font-extrabold uppercase text-[9px] tracking-wide block text-indigo-705">Pedidos recomendados para este caso:</span>
+                {edrp.structuring.legalGrounds?.includes('Dano Moral') && <div className="mt-1">✅ Condenação em danos morais quantificados.</div>}
+                {edrp.structuring.legalGrounds?.includes('Inadimplemento') && <div className="mt-1">✅ Rescisão contratual + Multas acumuladas de mora.</div>}
+                {edrp.structuring.legalGrounds?.includes('Enriquecimento') && <div className="mt-1">✅ Repetição do indébito e cobrança em dobro.</div>}
+                {edrp.structuring.legalGrounds?.includes('Abuso') && <div className="mt-1">✅ Cessação imediata das cobranças sob tutela.</div>}
+                {(!edrp.structuring.legalGrounds) && <div>Nenhum fundamento pré-selecionado. Digite livremente abaixo.</div>}
+              </div>
+
               <textarea
                 value={edrp.structuring.claims}
                 onChange={(e) => handleFieldChange('structuring', 'claims', e.target.value)}
-                placeholder="Pretenso dano moral, obrigações de fazer, restituições de valores..."
-                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2.5 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[85px]"
+                placeholder="Pedidos liminares de urgência e indenizações finais meritológicas..."
+                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[60px] outline-none"
               />
             </div>
 
-            <div className="space-y-1.5">
-              <label className="block text-[10px] font-sans font-extrabold uppercase tracking-wide text-gray-400">Resumo das Provas Analisadas</label>
+            {/* Card 8 - Resumo das provas */}
+            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-3 shadow-3xs hover:border-gray-300 transition-all">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                  Card 8
+                </span>
+                <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
+                  Resumo das provas
+                </span>
+              </div>
               <textarea
                 value={edrp.structuring.evidenceSummary}
                 onChange={(e) => handleFieldChange('structuring', 'evidenceSummary', e.target.value)}
-                placeholder="Indicação de documentos, testemunhas, áudios, contratos associados..."
-                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2.5 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[85px]"
+                placeholder="Documentação anexada, testemunhas chaves, prints, áudios..."
+                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[60px] outline-none"
               />
             </div>
 
-            <div className="space-y-1.5">
-              <label className="block text-[10px] font-sans font-extrabold uppercase tracking-wide text-gray-400">Riscos e Sensibilidade Processual</label>
+            {/* Card 9 - Análise de riscos */}
+            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-3 shadow-3xs hover:border-gray-300 transition-all">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                  Card 9
+                </span>
+                <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
+                  Análise de riscos
+                </span>
+              </div>
               <textarea
                 value={edrp.structuring.risks}
                 onChange={(e) => handleFieldChange('structuring', 'risks', e.target.value)}
-                placeholder="Custas, honorários de sucumbência, prescrição ou decadência..."
-                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2.5 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[85px]"
+                placeholder="Riscos de sucumbência, revelia, custos recursais..."
+                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[60px] outline-none"
               />
             </div>
 
-            <div className="space-y-1.5">
-              <label className="block text-[10px] font-sans font-extrabold uppercase tracking-wide text-gray-400">Estratégia Processual Definida</label>
+            {/* Card 10 - Estratégia definida */}
+            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-3 shadow-3xs hover:border-gray-300 transition-all">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                  Card 10
+                </span>
+                <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
+                  Estratégia definida
+                </span>
+              </div>
               <textarea
                 value={edrp.structuring.strategy}
                 onChange={(e) => handleFieldChange('structuring', 'strategy', e.target.value)}
-                placeholder="Plano tático de ação jurídica interna..."
-                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2.5 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[85px]"
+                placeholder="Plano tático de distribuição processual, ritos e andamentos preliminares..."
+                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[60px] outline-none"
+              />
+            </div>
+
+            {/* Card 11 - Observações Estruturantes gerais */}
+            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-3 shadow-3xs hover:border-gray-300 transition-all">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                  Card 11
+                </span>
+                <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
+                  Observações Estruturantes gerais
+                </span>
+              </div>
+              <textarea
+                value={edrp.structuring.notes}
+                onChange={(e) => handleFieldChange('structuring', 'notes', e.target.value)}
+                placeholder="Especificações secundárias livres ou links de pesquisa de andamentos BOSS..."
+                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[60px] outline-none"
               />
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="block text-[10px] font-sans font-extrabold uppercase tracking-wide text-gray-400">Observações Estruturantes Gerais</label>
-            <textarea
-              value={edrp.structuring.notes}
-              onChange={(e) => handleFieldChange('structuring', 'notes', e.target.value)}
-              placeholder="Escreva anotações internas adicionais livres aqui..."
-              className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2.5 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[75px]"
-            />
-          </div>
-
-          <div className="pt-2">
+          <div className="pt-2 border-t border-gray-150">
             <label className="inline-flex items-center gap-2.5 cursor-pointer text-xs font-bold text-gray-700">
               <input
                 type="checkbox"
@@ -698,9 +1123,9 @@ export default function EDRPFluxo() {
                   handleFieldChange('structuring', 'completed', checkVal);
                   handleFieldChange('structuring', 'completedAt', checkVal ? new Date().toISOString() : '');
                 }}
-                className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
               />
-              <span>Marcar Estruturação Técnica como Concluída</span>
+              <span>Marcar Estruturação Técnica (Etapa 07) como Concluída</span>
             </label>
           </div>
         </div>

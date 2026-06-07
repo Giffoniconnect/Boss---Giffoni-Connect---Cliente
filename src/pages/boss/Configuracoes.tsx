@@ -1237,9 +1237,21 @@ export default function Configuracoes() {
                               </div>
 
                               <div className="space-y-1">
-                                <label className="block text-xs font-extrabold text-gray-700 uppercase tracking-wider">
-                                  URL do App Externo (Portal de Clientes)
-                                </label>
+                                <div className="flex justify-between items-center gap-2">
+                                  <label className="block text-xs font-extrabold text-gray-700 uppercase tracking-wider">
+                                    URL do App Externo (Portal de Clientes)
+                                  </label>
+                                  <a
+                                    href="https://aistudio.google.com/apps/c5287b54-c626-4a60-b42a-8d7bcb150ecf?showPreview=true&showAssistant=true"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[10px] font-black text-indigo-650 hover:text-indigo-800 uppercase tracking-wider flex items-center gap-1 transition-colors hover:underline"
+                                    title="Clique para ser redirecionado ao Build do Portal do cliente"
+                                  >
+                                    <span>Ir para o Build</span>
+                                    <ExternalLink size={10} />
+                                  </a>
+                                </div>
                                 <input
                                   type="url"
                                   value={portalLink}
@@ -1248,7 +1260,16 @@ export default function Configuracoes() {
                                   className="w-full px-4 py-3 bg-white border border-gray-150 rounded-2xl focus:ring-2 focus:ring-indigo-100 placeholder:text-gray-400 transition-all font-semibold text-xs text-gray-800"
                                 />
                                 <span className="text-[10px] text-gray-400 leading-normal block font-medium">
-                                  Cole o link ou aplicação externa que servirá de contêiner de exibição.
+                                  Cole o link ou aplicação externa que servirá de contêiner de exibição. Você também pode{' '}
+                                  <a
+                                    href="https://aistudio.google.com/apps/c5287b54-c626-4a60-b42a-8d7bcb150ecf?showPreview=true&showAssistant=true"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-indigo-650 hover:underline font-bold"
+                                  >
+                                    clicar aqui para ser redirecionado ao Build do Portal do cliente
+                                  </a>
+                                  .
                                 </span>
                               </div>
 
