@@ -29,28 +29,178 @@ const PORT = 3000;
 
 // Safe initialize Firebase Admin with specific database ID from config
 let dbAdmin: any = null;
-try {
-  if (admin.apps.length === 0) {
-    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-    if (fs.existsSync(configPath)) {
-      const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-      admin.initializeApp({
-        projectId: config.projectId
-      });
-      // Use named database
-      dbAdmin = getFirestore(admin.app(), config.firestoreDatabaseId);
-      console.log(`[FirebaseAdmin] Initialized Firestore targeting database: ${config.firestoreDatabaseId}`);
-    } else {
-      admin.initializeApp();
-      dbAdmin = getFirestore();
-      console.log("[FirebaseAdmin] Initialized with empty/default credentials.");
+let firebaseAdminStatus = {
+  initialized: false,
+  projectId: "",
+  firestoreDatabaseId: "",
+  credentialSource: "",
+  errorCode: null as string | null,
+  errorMessage: null as string | null,
+  lastCheckedAt: new Date().toISOString()
+};
+
+function normalizeServiceAccountJson(raw: string): any {
+  if (!raw) return null;
+  try {
+    const serviceAccount = JSON.parse(raw);
+    if (serviceAccount.private_key && typeof serviceAccount.private_key === "string") {
+      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
     }
-  } else {
-    dbAdmin = getFirestore();
+    const fields = ["type", "project_id", "private_key", "client_email"];
+    const missing = fields.filter(f => !serviceAccount[f]);
+    if (missing.length > 0) {
+      console.warn(`[FirebaseAdmin] Service Account JSON has missing fields: ${missing.join(", ")}`);
+      return { _invalid: true, errorCode: "FIREBASE_ADMIN_SERVICE_ACCOUNT_INVALID", missing };
+    }
+    if (!serviceAccount.private_key.includes("BEGIN PRIVATE KEY")) {
+      console.warn("[FirebaseAdmin] Service Account private_key lacks 'BEGIN PRIVATE KEY'");
+      return { _invalid: true, errorCode: "FIREBASE_ADMIN_SERVICE_ACCOUNT_INVALID", missing: ["private_key_format"] };
+    }
+    return serviceAccount;
+  } catch (e: any) {
+    console.error("[FirebaseAdmin] Failed to parse Service Account JSON:", e.message);
+    return { _invalid: true, errorCode: "FIREBASE_ADMIN_SERVICE_ACCOUNT_INVALID", error: e.message };
   }
-} catch (e: any) {
-  console.error("[FirebaseAdmin] Failed initialization:", e.message || e);
 }
+
+async function initializeFirebaseAdmin() {
+  try {
+    firebaseAdminStatus.lastCheckedAt = new Date().toISOString();
+    
+    let firestoreDatabaseId = process.env.FIRESTORE_DATABASE_ID || "";
+    let configProjectId = process.env.FIREBASE_PROJECT_ID || "";
+    
+    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+    let config: any = {};
+    if (fs.existsSync(configPath)) {
+      try {
+        config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+        if (!firestoreDatabaseId) {
+          firestoreDatabaseId = config.firestoreDatabaseId || "";
+        }
+        if (!configProjectId) {
+          configProjectId = config.projectId || "";
+        }
+      } catch (e) {
+        console.error("[FirebaseAdmin] Failed to read firebase-applet-config.json:", e);
+      }
+    }
+    
+    if (!firestoreDatabaseId) {
+      firestoreDatabaseId = "ai-studio-ffebafe8-f1b5-4749-87a5-7b28a5c05e6c";
+    }
+    
+    firebaseAdminStatus.firestoreDatabaseId = firestoreDatabaseId;
+    firebaseAdminStatus.projectId = configProjectId;
+    
+    let serviceAccount: any = null;
+    let credentialSource = "";
+    
+    if (process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON) {
+      const parsed = normalizeServiceAccountJson(process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON);
+      if (parsed && !parsed._invalid) {
+        serviceAccount = parsed;
+        credentialSource = "FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON";
+      }
+    }
+    
+    if (!serviceAccount && process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+      const parsed = normalizeServiceAccountJson(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+      if (parsed && !parsed._invalid) {
+        serviceAccount = parsed;
+        credentialSource = "FIREBASE_SERVICE_ACCOUNT_JSON";
+      }
+    }
+    
+    if (!serviceAccount && process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+      const parsed = normalizeServiceAccountJson(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
+      if (parsed && !parsed._invalid) {
+        serviceAccount = parsed;
+        credentialSource = "GOOGLE_APPLICATION_CREDENTIALS_JSON";
+      }
+    }
+    
+    const localSaPath = path.join(process.cwd(), "firebase-admin-service-account.json");
+    if (!serviceAccount && fs.existsSync(localSaPath)) {
+      try {
+        const rawJson = fs.readFileSync(localSaPath, "utf-8");
+        const parsed = normalizeServiceAccountJson(rawJson);
+        if (parsed && !parsed._invalid) {
+          serviceAccount = parsed;
+          credentialSource = "firebase-admin-service-account.json";
+        }
+      } catch (err: any) {
+        console.error("[FirebaseAdmin] Failed to read local file:", err.message);
+      }
+    }
+    
+    if (admin.apps.length > 0) {
+      try {
+        await Promise.all(admin.apps.map(app => app ? app.delete() : Promise.resolve()));
+      } catch (err) {
+        // Ignored
+      }
+    }
+    
+    if (serviceAccount) {
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        projectId: serviceAccount.project_id || configProjectId
+      });
+      dbAdmin = getFirestore(admin.app(), firestoreDatabaseId === "(default)" ? undefined : firestoreDatabaseId);
+      
+      firebaseAdminStatus.initialized = true;
+      firebaseAdminStatus.projectId = serviceAccount.project_id || configProjectId;
+      firebaseAdminStatus.credentialSource = credentialSource;
+      firebaseAdminStatus.errorCode = null;
+      firebaseAdminStatus.errorMessage = null;
+      console.log(`[FirebaseAdmin] Success on initialisation through service account ${credentialSource}, db: ${firestoreDatabaseId}`);
+    } else {
+      try {
+        admin.initializeApp({
+          projectId: configProjectId || undefined
+        });
+        dbAdmin = getFirestore(admin.app(), firestoreDatabaseId === "(default)" ? undefined : firestoreDatabaseId);
+        
+        firebaseAdminStatus.initialized = true;
+        firebaseAdminStatus.projectId = configProjectId || admin.app().options.projectId || "";
+        firebaseAdminStatus.credentialSource = "ADC";
+        firebaseAdminStatus.errorCode = null;
+        firebaseAdminStatus.errorMessage = null;
+        console.log(`[FirebaseAdmin] Success on initialisation using ADC, db: ${firestoreDatabaseId}`);
+      } catch (adcErr: any) {
+        if (configProjectId) {
+          try {
+            admin.initializeApp({
+              projectId: configProjectId
+            });
+            dbAdmin = getFirestore(admin.app(), firestoreDatabaseId === "(default)" ? undefined : firestoreDatabaseId);
+            
+            firebaseAdminStatus.initialized = true;
+            firebaseAdminStatus.projectId = configProjectId;
+            firebaseAdminStatus.credentialSource = "config_only_fallback";
+            firebaseAdminStatus.errorCode = "FIREBASE_ADMIN_LIMITED_MODE";
+            firebaseAdminStatus.errorMessage = `Iniciado em modo limitado sem credencial de serviço. ADC erro: ${adcErr.message}`;
+            console.log(`[FirebaseAdmin] Initialized (mode limited), db: ${firestoreDatabaseId}`);
+          } catch (fallbackErr: any) {
+            throw new Error(`Fallback failure: ${fallbackErr.message}. ADC Error: ${adcErr.message}`);
+          }
+        } else {
+          throw adcErr;
+        }
+      }
+    }
+  } catch (err: any) {
+    dbAdmin = null;
+    firebaseAdminStatus.initialized = false;
+    firebaseAdminStatus.errorCode = err.errorCode || "FIREBASE_ADMIN_INIT_FAILED";
+    firebaseAdminStatus.errorMessage = err.message || "Unknown error";
+    console.error(`[FirebaseAdmin] Safely initialisation failed: ${err.message || err}`);
+  }
+}
+
+// Perform initial boot trigger
+initializeFirebaseAdmin();
 
 // Parse JSON payloads
 app.use(express.json());
@@ -643,8 +793,312 @@ app.post("/api/proxy-google-docs/revalidate", async (req, res) => {
   }
 });
 
+// Google Docs Helpers (Layer Zero)
+function normalizeGoogleServiceAccount(rawJson: string): any {
+  if (!rawJson || typeof rawJson !== "string") {
+    const err = new Error("Sem conteúdo JSON ou input inválido") as any;
+    err.errorCode = "GOOGLE_SERVICE_ACCOUNT_JSON_INVALID";
+    throw err;
+  }
+  let parsed: any;
+  try {
+    parsed = JSON.parse(rawJson);
+  } catch (e: any) {
+    const err = new Error("Formato JSON inválido: " + e.message) as any;
+    err.errorCode = "GOOGLE_SERVICE_ACCOUNT_JSON_INVALID";
+    throw err;
+  }
+
+  const fields = ["type", "project_id", "private_key", "client_email", "token_uri"];
+  const missing = fields.filter(f => !parsed[f]);
+  if (missing.length > 0) {
+    const err = new Error(`Campos obrigatórios ausentes no JSON da Service Account: ${missing.join(", ")}`) as any;
+    err.errorCode = "GOOGLE_SERVICE_ACCOUNT_JSON_INVALID";
+    throw err;
+  }
+
+  let pKey = parsed.private_key;
+  if (typeof pKey === "string") {
+    pKey = pKey.replace(/\\n/g, "\n");
+    parsed.private_key = pKey;
+  }
+
+  if (!pKey || !pKey.includes("-----BEGIN PRIVATE KEY-----") || !pKey.includes("-----END PRIVATE KEY-----")) {
+    const err = new Error("Chave privada Google em formato PEM inválido. Chave deve conter marcadores BEGIN/END PRIVATE KEY.") as any;
+    err.errorCode = "GOOGLE_PRIVATE_KEY_INVALID_FORMAT";
+    throw err;
+  }
+
+  return parsed;
+}
+
+async function getGoogleDocsCredentials(req?: any) {
+  let parsedEmail = "";
+  let parsedPrivateKey = "";
+  let parsedProjectId = "";
+  let credentialSource = "";
+
+  const isStateless = req?.body?.mode === "stateless";
+
+  // 1. Try GOOGLE_DOCS_SERVICE_ACCOUNT_JSON
+  const googleDocsJson = process.env.GOOGLE_DOCS_SERVICE_ACCOUNT_JSON;
+  if (googleDocsJson) {
+    try {
+      const parsed = normalizeGoogleServiceAccount(googleDocsJson);
+      parsedEmail = parsed.client_email;
+      parsedPrivateKey = parsed.private_key;
+      parsedProjectId = parsed.project_id;
+      credentialSource = "env_json";
+    } catch (e: any) {
+      console.warn("[GoogleDocsEngine] Error parsing GOOGLE_DOCS_SERVICE_ACCOUNT_JSON:", e.message);
+    }
+  }
+
+  // 2. Try GOOGLE_DOCS_SERVICE_ACCOUNT_EMAIL / etc
+  if (!parsedEmail || !parsedPrivateKey) {
+    if (process.env.GOOGLE_DOCS_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_DOCS_SERVICE_ACCOUNT_PRIVATE_KEY) {
+      parsedEmail = process.env.GOOGLE_DOCS_SERVICE_ACCOUNT_EMAIL.trim();
+      parsedPrivateKey = process.env.GOOGLE_DOCS_SERVICE_ACCOUNT_PRIVATE_KEY.trim();
+      parsedProjectId = (process.env.GOOGLE_DOCS_PROJECT_ID || "").trim();
+      credentialSource = "env_granular";
+    }
+  }
+
+  // 3. Try req?.body?.credentialOverride
+  if (!parsedEmail || !parsedPrivateKey) {
+    let override = req?.body?.credentialOverride;
+    
+    // If it's a string, normalize it into the expected object format
+    if (typeof override === "string" && override.trim()) {
+      try {
+        const parsedJson = JSON.parse(override);
+        if (parsedJson && (parsedJson.client_email || parsedJson.private_key)) {
+          override = {
+            allowPreviewCredentialOverride: true,
+            serviceAccountJson: override
+          };
+        }
+      } catch (e) {
+        // Not a JSON string or parse error, ignore
+      }
+    }
+
+    const host = (req && typeof req.get === "function") ? req.get("host") : "";
+    const isAiStudioPreview = (host && (host.includes("ais-dev") || host.includes("ais-pre") || host.includes("localhost") || host.includes("127.0.0.1"))) || process.env.DISABLE_HMR === "true";
+    const isProduction = process.env.NODE_ENV === "production" && !isAiStudioPreview;
+
+    if (override && override.allowPreviewCredentialOverride === true && override.serviceAccountJson) {
+      if (isProduction) {
+        const err = new Error("Credential override só é permitido em preview/homologação. Em produção, configure a credencial como secret do ambiente.") as any;
+        err.errorCode = "CREDENTIAL_OVERRIDE_DISABLED_IN_PRODUCTION";
+        throw err;
+      }
+      try {
+        const parsed = normalizeGoogleServiceAccount(override.serviceAccountJson);
+        parsedEmail = parsed.client_email;
+        parsedPrivateKey = parsed.private_key;
+        parsedProjectId = parsed.project_id;
+        credentialSource = "preview_override";
+      } catch (e: any) {
+        throw e;
+      }
+    }
+  }
+
+  // 4. Fallback to active system service account JSONs (only if GOOGLE_DOCS_SERVICE_ACCOUNT_JSON is not set)
+  if (!parsedEmail || !parsedPrivateKey) {
+    const fallbackJson = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON || 
+                         process.env.FIREBASE_SERVICE_ACCOUNT_JSON || 
+                         process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
+    if (fallbackJson) {
+      try {
+        const parsed = JSON.parse(fallbackJson);
+        parsedEmail = parsed.client_email || parsed.serviceAccountEmail || "";
+        parsedPrivateKey = parsed.private_key || parsed.serviceAccountPrivateKey || "";
+        parsedProjectId = parsed.project_id || parsed.projectId || "";
+        credentialSource = "env_json_fallback_system";
+      } catch (e: any) {
+        console.warn("[GoogleDocsEngine] Error parsing fallback system JSON:", e.message);
+      }
+    }
+  }
+
+  // 5. Fallback Firestore (If dbAdmin is available)
+  if ((!parsedEmail || !parsedPrivateKey) && dbAdmin) {
+    try {
+      const connectorsSnap = await dbAdmin.collection("settings").doc("connectors").get();
+      if (connectorsSnap.exists) {
+        const connData = connectorsSnap.data();
+        const gdocs = connData?.googleDocs;
+        if (gdocs?.serviceAccountEmail) {
+          parsedEmail = gdocs.serviceAccountEmail.trim();
+          credentialSource = "firestore_settings";
+        }
+        if (gdocs?.serviceAccountPrivateKey) {
+          parsedPrivateKey = gdocs.serviceAccountPrivateKey.trim();
+          credentialSource = "firestore_settings";
+        }
+        if (gdocs?.projectId) {
+          parsedProjectId = gdocs.projectId.trim();
+        }
+      }
+    } catch (errConn: any) {
+      console.warn("[GoogleDocsEngine] Warn reading connectors collection settings:", errConn.message);
+    }
+  }
+
+  // 6. Fallback local file "firebase-admin-service-account.json"
+  if ((!parsedEmail || !parsedPrivateKey)) {
+    const localSaPath = path.join(process.cwd(), "firebase-admin-service-account.json");
+    if (fs.existsSync(localSaPath)) {
+      try {
+        const rawJson = fs.readFileSync(localSaPath, "utf-8");
+        const parsed = JSON.parse(rawJson);
+        parsedEmail = parsed.client_email || parsed.serviceAccountEmail || "";
+        parsedPrivateKey = parsed.private_key || parsed.serviceAccountPrivateKey || "";
+        parsedProjectId = parsed.project_id || parsed.projectId || "";
+        credentialSource = "local_sa_file";
+      } catch (err: any) {
+        console.warn("[GoogleDocsEngine] Error reading local credential file:", err.message);
+      }
+    }
+  }
+
+  // 7. Fallback legacy GDI_GOOGLE_* environment variables (LEGADO GDI)
+  if (!parsedEmail || !parsedPrivateKey) {
+    if (process.env.GDI_GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GDI_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY) {
+      parsedEmail = process.env.GDI_GOOGLE_SERVICE_ACCOUNT_EMAIL.trim();
+      parsedPrivateKey = process.env.GDI_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY.trim();
+      parsedProjectId = (process.env.GDI_GOOGLE_PROJECT_ID || "").trim();
+      credentialSource = "env_legacy_fallback";
+    }
+  }
+
+  return {
+    serviceAccountEmail: parsedEmail,
+    serviceAccountPrivateKey: parsedPrivateKey,
+    projectId: parsedProjectId,
+    credentialSource
+  };
+}
+
+async function createGoogleDocsJwtClient(req: any) {
+  const googleAccessToken = req?.body?.googleAccessToken || req?.headers?.["x-google-access-token"] || req?.body?.credentialOverride?.googleAccessToken;
+  
+  if (googleAccessToken) {
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({ access_token: googleAccessToken });
+    return {
+      jwtClient: oauth2Client,
+      serviceAccountEmail: "user-connected-via-oauth",
+      projectId: "oauth-user-project",
+      credentialSource: "user_oauth"
+    };
+  }
+
+  const credentials = await getGoogleDocsCredentials(req);
+  const { serviceAccountEmail, serviceAccountPrivateKey, projectId, credentialSource } = credentials;
+
+  if (!serviceAccountEmail || !serviceAccountPrivateKey) {
+    const host = (req && typeof req.get === "function") ? req.get("host") : "";
+    const isAiStudioPreview = (host && (host.includes("ais-dev") || host.includes("ais-pre") || host.includes("localhost") || host.includes("127.0.0.1"))) || process.env.DISABLE_HMR === "true" || process.env.NODE_ENV !== "production";
+
+    if (isAiStudioPreview) {
+      const err = new Error("Sua sessão do Google Docs não possui autorização fática ativa ou suas credenciais de Service Account estão ausentes. Para corrigir: \n1. Clique em 'Sair / trocar conta' e faça logon novamente usando 'Entrar com Google' para autorizar a integração e criar seu token ativo (Google OAuth);\nOU\n2. Cole as chaves JSON PEM de sua Conta de Serviço (Service Account) própria do seu projeto Google Cloud na Central de Integrações do BOSS.") as any;
+      err.errorCode = "GOOGLE_DOCS_CREDENTIALS_MISSING";
+      throw err;
+    }
+
+    try {
+      console.log("[GoogleDocsEngine] Google Service Account keys not configured. Attempting fallback to Application Default Credentials (ADC)...");
+      const adcAuth = new google.auth.GoogleAuth({
+        scopes: [
+          'https://www.googleapis.com/auth/drive',
+          'https://www.googleapis.com/auth/documents'
+        ]
+      });
+      const jwtClient = await adcAuth.getClient();
+      return {
+        jwtClient,
+        serviceAccountEmail: "application-default-credentials",
+        projectId: process.env.FIREBASE_PROJECT_ID || "adc-project",
+        credentialSource: "gcp_adc"
+      };
+    } catch (adcError: any) {
+      console.warn("[GoogleDocsEngine] Fallback to GCP ADC failed:", adcError.message);
+      const err = new Error("Nenhuma credencial Google Docs/Drive foi encontrada. Configure GOOGLE_DOCS_SERVICE_ACCOUNT_JSON, variáveis granulares ou use credentialOverride em preview.") as any;
+      err.errorCode = "GOOGLE_DOCS_CREDENTIALS_MISSING";
+      throw err;
+    }
+  }
+
+  let formattedPrivateKey = serviceAccountPrivateKey;
+  if (formattedPrivateKey.includes("\\n")) {
+    formattedPrivateKey = formattedPrivateKey.replace(/\\n/g, "\n");
+  }
+
+  if (!formattedPrivateKey.includes("-----BEGIN PRIVATE KEY-----") || !formattedPrivateKey.includes("-----END PRIVATE KEY-----")) {
+    const err = new Error("Chave privada Google em formato PEM inválido. Chave deve conter marcadores BEGIN/END PRIVATE KEY.") as any;
+    err.errorCode = "GOOGLE_PRIVATE_KEY_INVALID_FORMAT";
+    throw err;
+  }
+
+  const jwtClient = new (google.auth.JWT as any)(
+    serviceAccountEmail,
+    undefined,
+    formattedPrivateKey,
+    [
+      "https://www.googleapis.com/auth/drive",
+      "https://www.googleapis.com/auth/documents"
+    ]
+  );
+
+  await jwtClient.authorize();
+  return {
+    jwtClient,
+    serviceAccountEmail,
+    projectId,
+    credentialSource
+  };
+}
+
+// Kept for backward compatibility if any legacy code calls it
+async function createGoogleJwtClient(credentials: { serviceAccountEmail: string; serviceAccountPrivateKey: string; projectId: string }) {
+  const { serviceAccountEmail, serviceAccountPrivateKey } = credentials;
+  if (!serviceAccountEmail || !serviceAccountPrivateKey) {
+    const err = new Error("Credenciais de Service Account estão ausentes.") as any;
+    err.errorCode = "GOOGLE_DOCS_CREDENTIALS_MISSING";
+    throw err;
+  }
+
+  let formattedPrivateKey = serviceAccountPrivateKey;
+  if (formattedPrivateKey.includes("\\n")) {
+    formattedPrivateKey = formattedPrivateKey.replace(/\\n/g, "\n");
+  }
+
+  if (!formattedPrivateKey.includes("-----BEGIN PRIVATE KEY-----") || !formattedPrivateKey.includes("-----END PRIVATE KEY-----")) {
+    const err = new Error("Chave privada Google em formato PEM inválido. Chave deve conter marcadores BEGIN/END PRIVATE KEY.") as any;
+    err.errorCode = "GOOGLE_PRIVATE_KEY_INVALID_FORMAT";
+    throw err;
+  }
+
+  const jwtClient = new (google.auth.JWT as any)(
+    serviceAccountEmail,
+    undefined,
+    formattedPrivateKey,
+    [
+      "https://www.googleapis.com/auth/drive",
+      "https://www.googleapis.com/auth/documents"
+    ]
+  );
+
+  await jwtClient.authorize();
+  return jwtClient;
+}
+
 app.post("/api/google-docs/generate-document", async (req: any, res: any) => {
   const {
+    mode,
     documentType,
     caseId,
     clientId,
@@ -658,7 +1112,9 @@ app.post("/api/google-docs/generate-document", async (req: any, res: any) => {
     metadata
   } = req.body || {};
 
-  console.log(`[GoogleDocsEngine] Starting document generation for type: ${documentType}, templateId: ${templateId}`);
+  const isStateless = mode === "stateless";
+
+  console.log(`[GoogleDocsEngine] Starting document generation (mode: ${mode || "standard"}) for type: ${documentType}, templateId: ${templateId}`);
 
   // Create standard log list (Section 13)
   const logsList: any[] = [];
@@ -667,19 +1123,20 @@ app.post("/api/google-docs/generate-document", async (req: any, res: any) => {
     console.log(`[GoogleDocsEngine Log] Step: ${step}`, details ? JSON.stringify(details) : "");
   };
 
-  addLog("BUTTON_CLICKED", { documentType, caseId, clientId });
+  addLog("BUTTON_CLICKED", { documentType, caseId, clientId, mode });
 
-  if (!dbAdmin) {
+  if (!isStateless && !dbAdmin) {
     return res.status(500).json({
       success: false,
       documentType,
-      errorCode: "PORTAL_RESULT_SAVE_FAILED",
-      errorMessage: "Firebase Admin is not initialized or database is unavailable.",
+      errorCode: "FIREBASE_ADMIN_NOT_INITIALIZED",
+      errorMessage: "O Firebase Admin não foi inicializado. Configure a chave FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON e valide o Firestore antes de gerar documentos.",
+      firebaseAdminStatus
     });
   }
 
   // 1. Validation steps
-  if (!clientId) {
+  if (!isStateless && !clientId) {
     addLog("CLIENT_NOT_FOUND", { error: "ClientId is required" });
     return res.status(400).json({
       success: false,
@@ -688,7 +1145,7 @@ app.post("/api/google-docs/generate-document", async (req: any, res: any) => {
       errorMessage: "O ID do cliente não foi fornecido.",
     });
   }
-  if (!caseId) {
+  if (!isStateless && !caseId) {
     addLog("CASE_NOT_FOUND", { error: "CaseId is required" });
     return res.status(400).json({
       success: false,
@@ -716,107 +1173,90 @@ app.post("/api/google-docs/generate-document", async (req: any, res: any) => {
     });
   }
 
-  // Fetch client & case to validate existence
+  // Fetch client & case to validate existence (only if not stateless)
   let clientData: any = null;
   let caseData: any = null;
-  try {
-    const clientSnap = await dbAdmin.collection("clients").doc(clientId).get();
-    addLog("CLIENT_LOADED", { exists: clientSnap.exists });
-    if (!clientSnap.exists) {
-      return res.status(404).json({
-        success: false,
-        documentType,
-        errorCode: "CLIENT_NOT_FOUND",
-        errorMessage: "Cliente não localizado na base de dados.",
-      });
-    }
-    clientData = clientSnap.data();
+  if (!isStateless) {
+    try {
+      const clientSnap = await dbAdmin.collection("clients").doc(clientId).get();
+      addLog("CLIENT_LOADED", { exists: clientSnap.exists });
+      if (!clientSnap.exists) {
+        return res.status(404).json({
+          success: false,
+          documentType,
+          errorCode: "CLIENT_NOT_FOUND",
+          errorMessage: "Cliente não localizado na base de dados.",
+        });
+      }
+      clientData = clientSnap.data();
 
-    const caseSnap = await dbAdmin.collection("cases").doc(caseId).get();
-    addLog("CASE_LOADED", { exists: caseSnap.exists });
-    if (!caseSnap.exists) {
-      return res.status(404).json({
+      const caseSnap = await dbAdmin.collection("cases").doc(caseId).get();
+      addLog("CASE_LOADED", { exists: caseSnap.exists });
+      if (!caseSnap.exists) {
+        return res.status(404).json({
+          success: false,
+          documentType,
+          errorCode: "CASE_NOT_FOUND",
+          errorMessage: "Caso não localizado na base de dados.",
+        });
+      }
+      caseData = caseSnap.data();
+    } catch (err: any) {
+      return res.status(500).json({
         success: false,
         documentType,
-        errorCode: "CASE_NOT_FOUND",
-        errorMessage: "Caso não localizado na base de dados.",
+        errorCode: "REQUIRED_CLIENT_DATA_MISSING",
+        errorMessage: `Erro ao buscar dados do cliente ou caso: ${err.message}`,
       });
     }
-    caseData = caseSnap.data();
-  } catch (err: any) {
-    return res.status(500).json({
-      success: false,
-      documentType,
-      errorCode: "REQUIRED_CLIENT_DATA_MISSING",
-      errorMessage: `Erro ao buscar dados do cliente ou caso: ${err.message}`,
-    });
+  } else {
+    console.log("[GoogleDocsEngine] FIREBASE_ADMIN_SKIPPED_IN_STATELESS_MODE: Stateless generation mode active. Bypassing Admin existence checks.");
   }
 
   addLog("TEMPLATE_SELECTED", { templateKey, templateId });
   addLog("TEMPLATE_VALIDATED", { templateId });
   addLog("DRIVE_FOLDER_VALIDATED", { destinationFolderId });
 
-  // 2. Fetch Google credentials from connectors or fallback to environment variables
-  let parsedEmail = process.env.GDI_GOOGLE_SERVICE_ACCOUNT_EMAIL || "";
-  let parsedPrivateKey = process.env.GDI_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY || "";
-  let parsedProjectId = process.env.GDI_GOOGLE_PROJECT_ID || "";
-
-  try {
-    const connectorsSnap = await dbAdmin.collection("settings").doc("connectors").get();
-    if (connectorsSnap.exists) {
-      const connData = connectorsSnap.data();
-      const gdocs = connData?.googleDocs;
-      if (gdocs?.serviceAccountEmail) parsedEmail = gdocs.serviceAccountEmail.trim();
-      if (gdocs?.serviceAccountPrivateKey) parsedPrivateKey = gdocs.serviceAccountPrivateKey.trim();
-      if (gdocs?.projectId) parsedProjectId = gdocs.projectId.trim();
-    }
-  } catch (errConn: any) {
-    console.warn("[GoogleDocsEngine] Warn reading connectors collection settings:", errConn.message);
-  }
-
-  if (!parsedEmail || !parsedPrivateKey) {
-    addLog("GOOGLE_DOCS_CREDENTIALS_MISSING", { email: !!parsedEmail, key: !!parsedPrivateKey });
-    return res.status(400).json({
-      success: false,
-      documentType,
-      errorCode: "GOOGLE_DOCS_CREDENTIALS_MISSING",
-      errorMessage: "Credenciais de Service Account do Google Docs não foram informadas ou configuradas na Central BOSS.",
-    });
-  }
-
-  // Format private key newlines
-  let formattedPrivateKey = parsedPrivateKey;
-  if (formattedPrivateKey.includes("\\n")) {
-    formattedPrivateKey = formattedPrivateKey.replace(/\\n/g, "\n");
-  }
-
-  // 3. Authenticate with Google
+  // 2 & 3. Fetch Google credentials and Authenticate via Unified Helper
   let jwtClient: any = null;
+  let credentialSource = "";
+  let serviceAccountEmail = "";
   try {
-    jwtClient = new (google.auth.JWT as any)(
-      parsedEmail,
-      undefined,
-      formattedPrivateKey,
-      [
-        "https://www.googleapis.com/auth/drive",
-        "https://www.googleapis.com/auth/documents"
-      ]
-    );
-    await jwtClient.authorize();
-    addLog("GOOGLE_AUTH_OK");
+    const authResult = await createGoogleDocsJwtClient(req);
+    jwtClient = authResult.jwtClient;
+    credentialSource = authResult.credentialSource;
+    serviceAccountEmail = authResult.serviceAccountEmail || "";
+    addLog("GOOGLE_AUTH_OK", { credentialSource });
   } catch (errAuth: any) {
-    addLog("GOOGLE_DOCS_AUTH_FAILED", { error: errAuth.message });
-    return res.status(401).json({
+    const code = errAuth.errorCode || "GOOGLE_DOCS_AUTH_FAILED";
+    addLog(code, { error: errAuth.message });
+    
+    if (code === "GOOGLE_DOCS_CREDENTIALS_MISSING") {
+      return res.status(400).json({
+        success: false,
+        documentType,
+        errorCode: "GOOGLE_DOCS_CREDENTIALS_MISSING",
+        errorMessage: errAuth.message || "Nenhuma credencial Google Docs/Drive foi encontrada. Configure GOOGLE_DOCS_SERVICE_ACCOUNT_JSON, variáveis granulares ou use credentialOverride em preview.",
+        acceptedSources: [
+          "GOOGLE_DOCS_SERVICE_ACCOUNT_JSON",
+          "GOOGLE_DOCS_SERVICE_ACCOUNT_EMAIL/PRIVATE_KEY/PROJECT_ID",
+          "credentialOverride.preview",
+          "GDI_GOOGLE_* legado"
+        ]
+      });
+    }
+
+    return res.status(code === "CREDENTIAL_OVERRIDE_DISABLED_IN_PRODUCTION" ? 403 : 401).json({
       success: false,
       documentType,
-      errorCode: "GOOGLE_DOCS_AUTH_FAILED",
-      errorMessage: `Falha na autenticação com a conta Google: ${errAuth.message}`,
+      errorCode: code,
+      errorMessage: errAuth.message,
     });
   }
 
   // 4. Build placeholders
   let placeholdersToUse = placeholders || {};
-  if (Object.keys(placeholdersToUse).length === 0) {
+  if (!isStateless && Object.keys(placeholdersToUse).length === 0) {
     try {
       const activeKey = templateKey || documentType;
       if (activeKey === "procuracao_pf" || activeKey === "procuracao-pf") {
@@ -848,6 +1288,17 @@ app.post("/api/google-docs/generate-document", async (req: any, res: any) => {
       });
     }
   }
+
+  if (Object.keys(placeholdersToUse).length === 0) {
+    addLog("PLACEHOLDER_BUILD_FAILED", { error: "Sem placeholders gerados" });
+    return res.status(400).json({
+      success: false,
+      documentType,
+      errorCode: "PLACEHOLDER_BUILD_FAILED",
+      errorMessage: "Nenhum placeholder foi mapeado ou criado para este tipo de documento."
+    });
+  }
+
   addLog("PLACEHOLDERS_BUILT", { count: Object.keys(placeholdersToUse).length });
 
   // 5. Copy templates
@@ -873,11 +1324,18 @@ app.post("/api/google-docs/generate-document", async (req: any, res: any) => {
     addLog("DOCUMENT_COPY_SUCCESS", { googleDocsId });
   } catch (errCopy: any) {
     addLog("DOCUMENT_COPY_FAILED", { error: errCopy.message });
+    let originalErrorMsg = errCopy.message || "";
+    let finalErrorDetail = originalErrorMsg;
+    
+    if (originalErrorMsg.includes("599536317399") || originalErrorMsg.includes("Google Drive API has not been used in project") || originalErrorMsg.includes("disabled")) {
+      finalErrorDetail = "A Google Drive API está desativada ou não autorizada no sandbox oficial do AI Studio (projeto 599536317399). Para corrigir: \n1. Clique em 'Sair / trocar conta' no Portal BOSS, e faça login novamente usando 'Entrar com Google' para criar um token de acesso fático (Google OAuth) do seu próprio usuário;\nOU\n2. Acesse a guia 'Integrações' -> 'Central Google Docs' e configure novas chaves de uma Conta de Serviço (Service Account) criada no seu console Google Cloud.";
+    }
+
     return res.status(500).json({
       success: false,
       documentType,
       errorCode: "DOCUMENT_COPY_FAILED",
-      errorMessage: `Falha ao duplicar o modelo de Google Docs: ${errCopy.message}. Certifique-se de que a Conta de Serviço Google (${parsedEmail}) possui acesso de LEITURA ao template de ID '${templateId}' e de GRAVAÇÃO à pasta de ID '${destinationFolderId}'.`,
+      errorMessage: `Falha ao duplicar o modelo de Google Docs: ${finalErrorDetail}. Certifique-se de que a Conta de Serviço Google (${serviceAccountEmail}) possui acesso de LEITURA ao template de ID '${templateId}' e de GRAVAÇÃO à pasta de ID '${destinationFolderId}'.`,
     });
   }
 
@@ -923,6 +1381,18 @@ app.post("/api/google-docs/generate-document", async (req: any, res: any) => {
 
   const googleDocsUrl = `https://docs.google.com/document/d/${googleDocsId}/edit`;
 
+  if (isStateless) {
+    return res.status(200).json({
+      success: true,
+      mode: "stateless",
+      documentType: documentType || "procuracao_pf",
+      googleDocsId,
+      googleDocsUrl,
+      destinationFolderId,
+      message: "Documento gerado com sucesso pelo modo stateless."
+    });
+  }
+
   // 7. Save generation results to cases/{caseId}/generatedDocuments/{documentType}
   try {
     const docPath = `cases/${caseId}/generatedDocuments/${documentType}`;
@@ -951,6 +1421,10 @@ app.post("/api/google-docs/generate-document", async (req: any, res: any) => {
       updates.procuracaoPfId = googleDocsId;
       updates.procuracaoPfUrl = googleDocsUrl;
       updates.googleDocsUrl = googleDocsUrl;
+      updates.procuracaoGoogleDocsId = googleDocsId;
+      updates.procuracaoGoogleDocsUrl = googleDocsUrl;
+      updates.procuracaoStatus = "criada";
+      updates.procuracaoGeneratedAt = new Date().toISOString();
     } else if (documentType === "procuracao_pj") {
       updates.procuracaoPjId = googleDocsId;
       updates.procuracaoPjUrl = googleDocsUrl;
@@ -994,6 +1468,752 @@ app.post("/api/google-docs/generate-document", async (req: any, res: any) => {
     generatedAt: new Date().toISOString(),
     message: "Documento gerado com sucesso pelo Motor Interno BOSS."
   });
+});
+
+// Layer Zero Check Endpoints
+app.get("/api/system/firestore-health", async (req: any, res: any) => {
+  if (!dbAdmin || !firebaseAdminStatus.initialized) {
+    await initializeFirebaseAdmin();
+  }
+  try {
+    if (!dbAdmin) {
+      return res.status(500).json({
+        success: false,
+        service: "firestore",
+        status: "error",
+        errorCode: "FIREBASE_ADMIN_NOT_INITIALIZED",
+        errorMessage: "O Firebase Admin não foi inicializado. Configure FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON e FIRESTORE_DATABASE_ID antes de gerar documentos.",
+        firebaseAdminStatus
+      });
+    }
+
+    // Attempt standard document read to confirm Firestore connection
+    const docRef = dbAdmin.collection("settings").doc("connectors");
+    await docRef.get();
+
+    // Controlled write/read in: systemHealth/firestoreAdmin with merge true
+    const healthRef = dbAdmin.collection("systemHealth").doc("firestoreAdmin");
+    const testData = {
+      lastCheckedAt: new Date().toISOString(),
+      testedBy: "Portal BOSS Layer Zero Checks",
+      status: "operational"
+    };
+    await healthRef.set(testData, { merge: true });
+
+    const snap = await healthRef.get();
+    if (!snap.exists) {
+      throw new Error("Não foi possível ler o documento gravado em systemHealth/firestoreAdmin.");
+    }
+
+    return res.status(200).json({
+      success: true,
+      service: "firestore",
+      status: "operational",
+      projectId: firebaseAdminStatus.projectId,
+      firestoreDatabaseId: firebaseAdminStatus.firestoreDatabaseId,
+      credentialSource: firebaseAdminStatus.credentialSource,
+      message: "Firebase Admin e Firestore operacional."
+    });
+  } catch (err: any) {
+    let errorCode = "FIRESTORE_DATABASE_UNAVAILABLE";
+    if (err.message && (err.message.includes("permission") || err.message.includes("Permission") || err.message.includes("denied"))) {
+      errorCode = "FIRESTORE_PERMISSION_DENIED";
+    }
+    return res.status(500).json({
+      success: false,
+      service: "firestore",
+      status: "error",
+      errorCode,
+      errorMessage: `Falha na conexão ou operação no Firestore: ${err.message}`,
+      firebaseAdminStatus
+    });
+  }
+});
+
+app.post("/api/system/save-firebase-admin", async (req: any, res: any) => {
+  const { serviceAccountJsonString, firestoreDatabaseId } = req.body || {};
+  
+  if (!serviceAccountJsonString) {
+    return res.status(400).json({
+      success: false,
+      errorCode: "SERVICE_ACCOUNT_JSON_REQUIRED",
+      errorMessage: "O JSON da Service Account é obrigatório para salvar."
+    });
+  }
+
+  // 1. Validate structure of JSON
+  let serviceAccount: any = null;
+  try {
+    serviceAccount = JSON.parse(serviceAccountJsonString);
+    if (!serviceAccount.private_key || !serviceAccount.client_email || !serviceAccount.project_id) {
+      return res.status(400).json({
+        success: false,
+        errorCode: "INVALID_SERVICE_ACCOUNT_FIELDS",
+        errorMessage: "O JSON deve conter os campos obrigatórios 'project_id', 'private_key' e 'client_email'."
+      });
+    }
+  } catch (errJson: any) {
+    return res.status(400).json({
+      success: false,
+      errorCode: "INVALID_JSON_FORMAT",
+      errorMessage: `O texto colado não representa um JSON válido: ${errJson.message}`
+    });
+  }
+
+  try {
+    // 2. Save the Service Account JSON to local path
+    const localSaPath = path.join(process.cwd(), "firebase-admin-service-account.json");
+    fs.writeFileSync(localSaPath, JSON.stringify(serviceAccount, null, 2), "utf-8");
+
+    // 3. Save the database ID and project ID to firebase-applet-config.json
+    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+    let currentConfig: any = {};
+    if (fs.existsSync(configPath)) {
+      try {
+        currentConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+      } catch (errConf) {
+        console.error("[FirebaseAdmin] Error reading config file on save phase:", errConf);
+      }
+    }
+    
+    currentConfig.projectId = serviceAccount.project_id;
+    if (firestoreDatabaseId) {
+      currentConfig.firestoreDatabaseId = firestoreDatabaseId.trim();
+    }
+    
+    fs.writeFileSync(configPath, JSON.stringify(currentConfig, null, 2), "utf-8");
+
+    // 4. Force re-initialization of Firebase Admin
+    await initializeFirebaseAdmin();
+
+    if (!dbAdmin) {
+      return res.status(500).json({
+        success: false,
+        errorCode: "FIREBASE_REINIT_FAILED",
+        errorMessage: "Erro ao reinstanciar o Firestore Admin com as novas credenciais.",
+        firebaseAdminStatus
+      });
+    }
+
+    // 5. Hard verification of Firestore write / read
+    const healthRef = dbAdmin.collection("systemHealth").doc("firestoreAdmin");
+    await healthRef.set({
+      lastCheckedAt: new Date().toISOString(),
+      testedBy: "Portal BOSS Layer Zero Check on Save",
+      status: "operational"
+    }, { merge: true });
+
+    const snap = await healthRef.get();
+    if (!snap.exists) {
+      throw new Error("Não foi possível ler após gravação de teste no Firestore.");
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Firebase Admin inicializado com absoluto sucesso!",
+      firebaseAdminStatus
+    });
+
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      errorCode: "FIRESTORE_VERIFICATION_FAILED",
+      errorMessage: `As credenciais foram salvas e o motor reiniciado, mas a verificação fática falhou: ${err.message}`,
+      firebaseAdminStatus
+    });
+  }
+});
+
+app.post("/api/google-docs/test-auth", async (req: any, res: any) => {
+  try {
+    const { jwtClient, serviceAccountEmail, projectId, credentialSource } = await createGoogleDocsJwtClient(req);
+    return res.status(200).json({
+      success: true,
+      status: "operational",
+      serviceAccountEmail,
+      projectId,
+      credentialSource,
+      message: "Credencial Google autenticada com sucesso."
+    });
+  } catch (err: any) {
+    return res.status(err.errorCode === "CREDENTIAL_OVERRIDE_DISABLED_IN_PRODUCTION" ? 403 : 401).json({
+      success: false,
+      errorCode: err.errorCode || "GOOGLE_DOCS_AUTH_FAILED",
+      errorMessage: err.message || `Falha na autenticação Google: ${err}`
+    });
+  }
+});
+
+app.post("/api/google-docs/test-drive-api", async (req: any, res: any) => {
+  try {
+    const { jwtClient } = await createGoogleDocsJwtClient(req);
+    const drive = google.drive({ version: "v3", auth: jwtClient });
+    await drive.files.list({ pageSize: 1 });
+    return res.status(200).json({
+      success: true,
+      service: "google_drive",
+      status: "operational",
+      message: "Google Drive API acessível."
+    });
+  } catch (err: any) {
+    const msg = err.message || "";
+    let code = err.errorCode || "GOOGLE_DRIVE_API_DISABLED_OR_FORBIDDEN";
+    if (msg.includes("API has not been used") || msg.includes("disabled")) {
+      code = "GOOGLE_DRIVE_API_DISABLED_OR_FORBIDDEN";
+    }
+    return res.status(400).json({
+      success: false,
+      errorCode: code,
+      errorMessage: `A Google Drive API não está habilitada ou a Service Account não possui permissão suficiente: ${msg}`
+    });
+  }
+});
+
+app.post("/api/google-docs/check-google-apis", async (req: any, res: any) => {
+  const { templateId } = req.body || {};
+  try {
+    const { jwtClient, serviceAccountEmail, projectId, credentialSource } = await createGoogleDocsJwtClient(req);
+
+    // 1. Google Drive API Check
+    let driveCheckOk = false;
+    let driveErrorMsg = "";
+    try {
+      const drive = google.drive({ version: "v3", auth: jwtClient });
+      await drive.files.list({ pageSize: 1 });
+      driveCheckOk = true;
+    } catch (errDrive: any) {
+      driveErrorMsg = errDrive.message || "";
+    }
+
+    if (!driveCheckOk) {
+      return res.status(400).json({
+        success: false,
+        errorCode: "GOOGLE_DRIVE_API_DISABLED",
+        errorMessage: `A API Google Drive parece não estar habilitada no projeto Google Cloud vinculado à Service Account, ou não tem permissão: ${driveErrorMsg}`
+      });
+    }
+
+    // 2. Google Docs API Check
+    let docsCheckOk = false;
+    let docsErrorMsg = "";
+    const docs = google.docs({ version: "v1", auth: jwtClient });
+    
+    if (templateId) {
+      try {
+        await docs.documents.get({ documentId: templateId });
+        docsCheckOk = true;
+      } catch (errDocs: any) {
+        docsErrorMsg = errDocs.message || "";
+      }
+    } else {
+      return res.status(200).json({
+        success: true,
+        driveApi: "operational",
+        docsApi: "auth_verified_only",
+        message: "A API Google Drive está operacional. Google Docs autenticada, mas requere ID do template para confirmação real."
+      });
+    }
+
+    if (!docsCheckOk) {
+      if (docsErrorMsg.includes("API has not been used") || docsErrorMsg.includes("disabled")) {
+        return res.status(400).json({
+          success: false,
+          errorCode: "GOOGLE_DOCS_API_DISABLED",
+          errorMessage: `A API Google Docs parece não estar habilitada no projeto Google Cloud vinculado à Service Account: ${docsErrorMsg}`
+        });
+      } else {
+        return res.status(200).json({
+          success: true,
+          driveApi: "operational",
+          docsApi: "operational",
+          warning: `A API Google Docs está habilitada, mas o templateId informado falhou na leitura: ${docsErrorMsg}`
+        });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      driveApi: "operational",
+      docsApi: "operational",
+      message: "APIs Google Drive e Google Docs estão totalmente habilitadas e operacionais."
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      errorCode: err.errorCode || "GOOGLE_API_PERMISSION_DENIED",
+      errorMessage: `Erro ao validar APIs do Google: ${err.message || err}`
+    });
+  }
+});
+
+app.post("/api/google-docs/test-template-access", async (req: any, res: any) => {
+  const { templateId } = req.body || {};
+  if (!templateId) {
+    return res.status(400).json({
+      success: false,
+      errorCode: "TEMPLATE_ID_REQUIRED",
+      errorMessage: "O ID do template é obrigatório para este teste."
+    });
+  }
+
+  try {
+    const { jwtClient } = await createGoogleDocsJwtClient(req);
+    const drive = google.drive({ version: "v3", auth: jwtClient });
+    const docs = google.docs({ version: "v1", auth: jwtClient });
+
+    const fileRes = await drive.files.get({
+      fileId: templateId,
+      fields: "id,name,mimeType"
+    });
+
+    const file = fileRes.data;
+    if (!file) {
+      return res.status(404).json({
+        success: false,
+        errorCode: "TEMPLATE_NOT_ACCESSIBLE",
+        errorMessage: "Não foi possível obter dados do template. Resposta vazia."
+      });
+    }
+
+    if (file.mimeType !== "application/vnd.google-apps.document") {
+      return res.status(400).json({
+        success: false,
+        errorCode: "TEMPLATE_NOT_GOOGLE_DOCS",
+        errorMessage: `O template fornecido possui mimeType inválido '${file.mimeType}'. Deve ser um documento Google Docs.`
+      });
+    }
+
+    // Call Docs API to confirm full access
+    await docs.documents.get({ documentId: templateId });
+
+    return res.status(200).json({
+      success: true,
+      templateId: file.id,
+      templateName: file.name,
+      message: "Template acessível pela Service Account."
+    });
+  } catch (err: any) {
+    const msg = err.message || "";
+    let code = "TEMPLATE_NOT_ACCESSIBLE";
+    if (msg.includes("API has not been used") || msg.includes("disabled")) {
+      code = "GOOGLE_DOCS_API_DISABLED_OR_FORBIDDEN";
+    } else if (msg.includes("Permission denied") || msg.includes("forbidden") || err.code === 403) {
+      code = "TEMPLATE_PERMISSION_DENIED";
+    }
+
+    return res.status(400).json({
+      success: false,
+      errorCode: err.errorCode || code,
+      errorMessage: `O template não é legível pela Service Account: ${msg}`
+    });
+  }
+});
+
+app.post("/api/google-docs/test-folder-access", async (req: any, res: any) => {
+  const { destinationFolderId } = req.body || {};
+  if (!destinationFolderId) {
+    return res.status(400).json({
+      success: false,
+      errorCode: "DESTINATION_FOLDER_ID_REQUIRED",
+      errorMessage: "O ID da pasta mestre de destino é obrigatório."
+    });
+  }
+
+  try {
+    const { jwtClient } = await createGoogleDocsJwtClient(req);
+    const drive = google.drive({ version: "v3", auth: jwtClient });
+
+    // Validate folder exists and is indeed a folder
+    let folder: any;
+    try {
+      const folderRes = await drive.files.get({
+        fileId: destinationFolderId,
+        fields: "id,name,mimeType"
+      });
+      folder = folderRes.data;
+    } catch (errFolder: any) {
+      return res.status(400).json({
+        success: false,
+        errorCode: "DESTINATION_FOLDER_NOT_FOUND",
+        errorMessage: `A pasta informada não foi localizada ou não está visível para a Service Account: ${errFolder.message}`
+      });
+    }
+
+    if (folder.mimeType !== "application/vnd.google-apps.folder") {
+      return res.status(400).json({
+        success: false,
+        errorCode: "DESTINATION_NOT_FOLDER",
+        errorMessage: `O ID informado não representa uma pasta válida (MimeType recebido: ${folder.mimeType}).`
+      });
+    }
+
+    // Actively attempt writing a simple text temporary file to confirm write permission
+    const tempFileName = `TESTE_PORTAL_BOSS_PERMISSAO_${Date.now()}`;
+    let createdFileId = "";
+    try {
+      const tempFileRes = await drive.files.create({
+        requestBody: {
+          name: tempFileName,
+          parents: [destinationFolderId],
+          mimeType: "text/plain"
+        },
+        media: {
+          mimeType: "text/plain",
+          body: "Automação de permissões de escrita do Portal BOSS"
+        }
+      });
+      createdFileId = tempFileRes.data.id || "";
+    } catch (errWrite: any) {
+      return res.status(400).json({
+        success: false,
+        errorCode: "DESTINATION_FOLDER_PERMISSION_DENIED",
+        errorMessage: `Service account não possui permissão de escrita nessa pasta vinculada: ${errWrite.message}`
+      });
+    }
+
+    // Cleanup: Remove the temporary text file immediately
+    if (createdFileId) {
+      try {
+        await drive.files.delete({ fileId: createdFileId });
+      } catch (errDel: any) {
+        console.warn(`[GoogleDocsEngine] Permission test file cleanup warn: ${createdFileId}`, errDel.message);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      destinationFolderId,
+      folderName: folder.name,
+      writePermission: true,
+      message: "Pasta acessível com permissão de escrita."
+    });
+  } catch (err: any) {
+    const msg = err.message || "";
+    let code = "DESTINATION_FOLDER_NOT_FOUND";
+    if (msg.includes("API has not been used") || msg.includes("disabled")) {
+      code = "GOOGLE_DRIVE_API_DISABLED";
+    } else if (msg.includes("Permission denied") || msg.includes("forbidden") || err.code === 403) {
+      code = "DESTINATION_FOLDER_PERMISSION_DENIED";
+    }
+
+    return res.status(400).json({
+      success: false,
+      errorCode: err.errorCode || code,
+      errorMessage: `A pasta não pôde ser lida: ${msg}`
+    });
+  }
+});
+
+app.post("/api/google-docs/preflight", async (req: any, res: any) => {
+  const { templateId, destinationFolderId, caseId, clientId, mode } = req.body || {};
+  const isStateless = mode === "stateless";
+
+  const checks: Record<string, string> = {
+    firebaseAdmin: "pending",
+    firestore: "pending",
+    client: "pending",
+    case: "pending",
+    googleAuth: "pending",
+    driveApi: "pending",
+    docsApi: "pending",
+    template: "pending",
+    folder: "pending"
+  };
+
+  try {
+    // 1. Check Firebase Admin
+    if (!dbAdmin || !firebaseAdminStatus.initialized) {
+      checks.firebaseAdmin = "error";
+      if (!isStateless) {
+        return res.status(200).json({
+          success: false,
+          status: "blocked",
+          blockingStep: "firebaseAdmin",
+          errorCode: "FIREBASE_ADMIN_NOT_INITIALIZED",
+          errorMessage: "Configure FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON antes de gerar documentos.",
+          checks: {}
+        });
+      } else {
+        checks.firebaseAdmin = "skipped_stateless";
+      }
+    } else {
+      checks.firebaseAdmin = "ok";
+    }
+
+    // 2. Check Firestore Database ID
+    if (!isStateless && !firebaseAdminStatus.firestoreDatabaseId) {
+      checks.firestore = "error";
+      return res.status(200).json({
+        success: false,
+        status: "blocked",
+        blockingStep: "firestore",
+        errorCode: "FIRESTORE_DATABASE_NOT_CONFIGURED",
+        errorMessage: "O ID do banco de dados Firestore não está definido.",
+        checks
+      });
+    }
+
+    if (!isStateless) {
+      try {
+        await dbAdmin.collection("settings").doc("connectors").get();
+        checks.firestore = "ok";
+      } catch (errFs: any) {
+        checks.firestore = "error";
+        return res.status(200).json({
+          success: false,
+          status: "blocked",
+          blockingStep: "firestore",
+          errorCode: "FIRESTORE_DATABASE_UNAVAILABLE",
+          errorMessage: `Banco de dados Firestore ou coleção 'settings/connectors' ilegível: ${errFs.message}`,
+          checks
+        });
+      }
+    } else {
+      checks.firestore = "skipped_stateless";
+    }
+
+    // 3. Validate Client existence
+    if (clientId && !isStateless) {
+      try {
+        const clSnap = await dbAdmin.collection("clients").doc(clientId).get();
+        if (clSnap.exists) {
+          checks.client = "ok";
+        } else {
+          checks.client = "not_found";
+          return res.status(200).json({
+            success: false,
+            status: "blocked",
+            blockingStep: "client",
+            errorCode: "CLIENT_NOT_FOUND",
+            errorMessage: `Cliente de ID '${clientId}' não foi localizado.`,
+            checks
+          });
+        }
+      } catch (errCl: any) {
+        checks.client = "error";
+        return res.status(200).json({
+          success: false,
+          status: "blocked",
+          blockingStep: "client",
+          errorCode: "CLIENT_READ_ERROR",
+          errorMessage: `Erro ao carregar dados do cliente: ${errCl.message}`,
+          checks
+        });
+      }
+    } else {
+      checks.client = isStateless ? "skipped_stateless" : "missing";
+    }
+
+    // 4. Validate Case existence
+    if (caseId && !isStateless) {
+      try {
+        const cSnap = await dbAdmin.collection("cases").doc(caseId).get();
+        if (cSnap.exists) {
+          checks.case = "ok";
+        } else {
+          checks.case = "not_found";
+          return res.status(200).json({
+            success: false,
+            status: "blocked",
+            blockingStep: "case",
+            errorCode: "CASE_NOT_FOUND",
+            errorMessage: `Caso de ID '${caseId}' não foi localizado.`,
+            checks
+          });
+        }
+      } catch (errC: any) {
+        checks.case = "error";
+        return res.status(200).json({
+          success: false,
+          status: "blocked",
+          blockingStep: "case",
+          errorCode: "CASE_READ_ERROR",
+          errorMessage: `Erro ao carregar dados do caso: ${errC.message}`,
+          checks
+        });
+      }
+    } else {
+      checks.case = isStateless ? "skipped_stateless" : "missing";
+    }
+
+    // 5. Validate Google Authenticity (Service Account credentials)
+    let jwtClient: any = null;
+    try {
+      const authResult = await createGoogleDocsJwtClient(req);
+      jwtClient = authResult.jwtClient;
+      checks.googleAuth = "ok";
+    } catch (errAuth: any) {
+      checks.googleAuth = "error";
+      return res.status(200).json({
+        success: false,
+        status: "blocked",
+        blockingStep: "googleAuth",
+        errorCode: errAuth.errorCode || "GOOGLE_DOCS_AUTH_FAILED",
+        errorMessage: `Erro ao logar com credenciais Google: ${errAuth.message}`,
+        checks
+      });
+    }
+
+    // 5. Verify Google Drive API
+    try {
+      const drive = google.drive({ version: "v3", auth: jwtClient });
+      await drive.files.list({ pageSize: 1 });
+      checks.driveApi = "ok";
+    } catch (errApis: any) {
+      checks.driveApi = "error";
+      checks.docsApi = "error";
+      return res.status(200).json({
+        success: false,
+        status: "blocked",
+        blockingStep: "driveApi",
+        errorCode: "GOOGLE_DRIVE_API_DISABLED",
+        errorMessage: `A API Google Drive não está habilitada ou acessível: ${errApis.message}`,
+        checks
+      });
+    }
+
+    // 6. Verify Google Docs API
+    try {
+      const docs = google.docs({ version: "v1", auth: jwtClient });
+      checks.docsApi = "ok";
+    } catch (errApis: any) {
+      checks.docsApi = "error";
+      return res.status(200).json({
+        success: false,
+        status: "blocked",
+        blockingStep: "docsApi",
+        errorCode: "GOOGLE_DOCS_API_DISABLED",
+        errorMessage: `A API Google Docs não está habilitada no projeto: ${errApis.message}`,
+        checks
+      });
+    }
+
+    // 7. Verify template access
+    if (templateId) {
+      try {
+        const drive = google.drive({ version: "v3", auth: jwtClient });
+        const fileRes = await drive.files.get({ fileId: templateId, fields: "id,mimeType" });
+        if (fileRes.data.mimeType !== "application/vnd.google-apps.document") {
+          checks.template = "invalid_type";
+          return res.status(200).json({
+            success: false,
+            status: "blocked",
+            blockingStep: "template",
+            errorCode: "TEMPLATE_NOT_GOOGLE_DOCS",
+            errorMessage: "O ID do template não possui mimeType válido de Google Docs.",
+            checks
+          });
+        }
+        checks.template = "ok";
+      } catch (errT: any) {
+        checks.template = "error";
+        return res.status(200).json({
+          success: false,
+          status: "blocked",
+          blockingStep: "template",
+          errorCode: "TEMPLATE_NOT_ACCESSIBLE",
+          errorMessage: `Não possui leitura do template Google Docs: ${errT.message}`,
+          checks
+        });
+      }
+    } else {
+      checks.template = "missing";
+    }
+
+    // 8. Verify Folder write access
+    if (destinationFolderId) {
+      try {
+        const drive = google.drive({ version: "v3", auth: jwtClient });
+        const fold = await drive.files.get({ fileId: destinationFolderId, fields: "id,mimeType" });
+        if (fold.data.mimeType !== "application/vnd.google-apps.folder") {
+          checks.folder = "invalid_type";
+          return res.status(200).json({
+            success: false,
+            status: "blocked",
+            blockingStep: "folder",
+            errorCode: "DESTINATION_NOT_FOLDER",
+            errorMessage: "O ID de destino no Google Drive não é do tipo Pasta.",
+            checks
+          });
+        }
+        
+        // Active WRITE/DELETE test as specified
+        const tempFileName = `TEST_PREFLIGHT_WRITE_${Date.now()}`;
+        let createdFileId = "";
+        try {
+          const tempFileRes = await drive.files.create({
+            requestBody: {
+              name: tempFileName,
+              parents: [destinationFolderId],
+              mimeType: "text/plain"
+            },
+            media: {
+              mimeType: "text/plain",
+              body: "Validacao de escrita via preflight do Portal BOSS"
+            }
+          });
+          createdFileId = tempFileRes.data.id || "";
+        } catch (errWrite: any) {
+          checks.folder = "permission_denied";
+          return res.status(200).json({
+            success: false,
+            status: "blocked",
+            blockingStep: "folder",
+            errorCode: "DESTINATION_FOLDER_PERMISSION_DENIED",
+            errorMessage: `Sem permissão de escrita na pasta destino do Drive: ${errWrite.message}. Certifique-se de compartilhar a pasta com o e-mail da Service Account.`,
+            checks
+          });
+        }
+
+        // Cleanup the test file
+        if (createdFileId) {
+          try {
+            await drive.files.delete({ fileId: createdFileId });
+          } catch (errDel: any) {
+            console.warn(`[GoogleDocsEngine] Preflight test file cleanup warn: ${createdFileId}`, errDel.message);
+          }
+        }
+
+        checks.folder = "ok";
+      } catch (errF: any) {
+        checks.folder = "error";
+        return res.status(200).json({
+          success: false,
+          status: "blocked",
+          blockingStep: "folder",
+          errorCode: "DESTINATION_FOLDER_PERMISSION_DENIED",
+          errorMessage: `Pasta de destino do Drive não pôde ser lida ou acessada: ${errF.message}`,
+          checks
+        });
+      }
+    } else {
+      checks.folder = "missing";
+    }
+
+    const isReady = checks.firebaseAdmin === "ok" &&
+                    checks.firestore === "ok" && 
+                    checks.googleAuth === "ok" && 
+                    checks.driveApi === "ok" && 
+                    checks.docsApi === "ok" && 
+                    checks.template === "ok" && 
+                    checks.folder === "ok" &&
+                    (clientId ? checks.client === "ok" : true) &&
+                    (caseId ? checks.case === "ok" : true);
+
+    return res.status(200).json({
+      success: isReady,
+      status: isReady ? "ready_for_real_test" : "blocked",
+      checks
+    });
+  } catch (errPre: any) {
+    return res.status(500).json({
+      success: false,
+      status: "blocked",
+      errorCode: "PREFLIGHT_ERROR",
+      errorMessage: `Erro interno crítico ao analisar preflight: ${errPre.message}`,
+      checks
+    });
+  }
 });
 
 // Dedicated health-check endpoint for validating GDI integrations

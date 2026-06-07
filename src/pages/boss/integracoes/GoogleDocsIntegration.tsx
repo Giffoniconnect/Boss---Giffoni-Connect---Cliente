@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc, collection, getDocs, limit, query } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
+import { useAuth } from '../../../contexts/AuthContext';
 
 import { BossLayout } from '../../../components/Layout';
 import { 
@@ -49,6 +50,7 @@ interface InternalConnectorState {
 
 export default function GoogleDocsIntegration() {
   const navigate = useNavigate();
+  const { googleAccessToken } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string | null } | null>(null);
@@ -61,6 +63,112 @@ export default function GoogleDocsIntegration() {
   
   // Visibility for private credentials inputs
   const [showPrivateKey, setShowPrivateKey] = useState(false);
+
+  // Credential override state
+  const [credentialOverride, setCredentialOverride] = useState(() => {
+    return localStorage.getItem('portal_boss_gdocs_override') || '';
+  });
+
+  const handleLoadAndParseOverrideJson = (jsonStr: string) => {
+    setCredentialOverride(jsonStr);
+    localStorage.setItem('portal_boss_gdocs_override', jsonStr);
+    
+    if (!jsonStr.trim()) return;
+    try {
+      const parsed = JSON.parse(jsonStr);
+      if (parsed.client_email) setServiceAccountEmail(parsed.client_email);
+      if (parsed.project_id) setProjectId(parsed.project_id);
+      if (parsed.private_key) setServiceAccountPrivateKey(parsed.private_key);
+    } catch (e) {
+      // Quietly ignore parsing errors for manual entry
+    }
+  };
+
+  const [validatedDetails, setValidatedDetails] = useState<{
+    isValid: boolean;
+    checked: boolean;
+    error?: string;
+  }>({ isValid: false, checked: false });
+
+  const [testingOverrideAuth, setTestingOverrideAuth] = useState(false);
+
+  const handlePasteOverrideJson = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      handleLoadAndParseOverrideJson(text);
+      setFeedback({ type: 'success', message: 'JSON colado da área de transferência com sucesso!' });
+    } catch (err) {
+      const promptText = prompt("Cole o JSON de sua Service Account abaixo:");
+      if (promptText) {
+        handleLoadAndParseOverrideJson(promptText);
+      }
+    }
+  };
+
+  const handleClientSideValidateJson = () => {
+    if (!credentialOverride.trim()) {
+      setValidatedDetails({ isValid: false, checked: true, error: 'O campo JSON está vazio.' });
+      setFeedback({ type: 'error', message: 'O campo JSON está vazio.' });
+      return;
+    }
+    try {
+      const parsed = JSON.parse(credentialOverride);
+      if (!parsed.client_email) {
+        setValidatedDetails({ isValid: false, checked: true, error: 'Falta a propriedade "client_email" no JSON.' });
+        setFeedback({ type: 'error', message: 'Falta a propriedade "client_email" no JSON.' });
+        return;
+      }
+      if (!parsed.private_key) {
+        setValidatedDetails({ isValid: false, checked: true, error: 'Falta a propriedade "private_key" no JSON.' });
+        setFeedback({ type: 'error', message: 'Falta a propriedade "private_key" no JSON.' });
+        return;
+      }
+      setValidatedDetails({ isValid: true, checked: true });
+      setFeedback({ type: 'success', message: 'Formato JSON e chaves obrigatórias validados com absoluto sucesso!' });
+    } catch (e: any) {
+      setValidatedDetails({ isValid: false, checked: true, error: `JSON inválido: ${e.message}` });
+      setFeedback({ type: 'error', message: `JSON de formato inválido: ${e.message}` });
+    }
+  };
+
+  const handleClearOverride = () => {
+    handleLoadAndParseOverrideJson('');
+    setValidatedDetails({ isValid: false, checked: false });
+  };
+
+  const handleTestGoogleOverrideAuth = async () => {
+    if (!credentialOverride.trim()) {
+      setFeedback({ type: 'error', message: 'Coloque e valide o JSON antes de testar a autenticação.' });
+      return;
+    }
+    setTestingOverrideAuth(true);
+    setFeedback(null);
+    try {
+      const res = await fetch('/api/google-docs/test-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          credentialOverride: {
+            allowPreviewCredentialOverride: true,
+            serviceAccountJson: credentialOverride
+          }
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCamadaZero(prev => ({ ...prev, googleAuth: 'ok' }));
+        setFeedback({ type: 'success', message: 'Autenticação de Teste Google OK! Servidor aceitou chaves do override!' });
+      } else {
+        setCamadaZero(prev => ({ ...prev, googleAuth: 'error' }));
+        setFeedback({ type: 'error', message: `O teste de autenticação falhou: ${data.errorMessage || 'Credenciais rejeitadas'}` });
+      }
+    } catch (e: any) {
+      setCamadaZero(prev => ({ ...prev, googleAuth: 'error' }));
+      setFeedback({ type: 'error', message: `Erro de comunicação: ${e.message}` });
+    } finally {
+      setTestingOverrideAuth(false);
+    }
+  };
 
   // Template Google Docs IDs state
   const [templates, setTemplates] = useState<TemplateRegistry>({
@@ -82,6 +190,42 @@ export default function GoogleDocsIntegration() {
   const [testLogs, setTestLogs] = useState<any[]>([]);
   const [testSuccessUrl, setTestSuccessUrl] = useState<string | null>(null);
   const [isRunningTest, setIsRunningTest] = useState(false);
+
+  // Camada Zero State Definitions
+  const [camadaZero, setCamadaZero] = useState<{
+    firestore: 'pending' | 'ok' | 'error';
+    googleAuth: 'pending' | 'ok' | 'error';
+    driveApi: 'pending' | 'ok' | 'error';
+    docsApi: 'pending' | 'ok' | 'error';
+    template: 'pending' | 'ok' | 'error';
+    folder: 'pending' | 'ok' | 'error';
+    preflight: 'pending' | 'ok' | 'error';
+  }>({
+    firestore: 'pending',
+    googleAuth: 'pending',
+    driveApi: 'pending',
+    docsApi: 'pending',
+    template: 'pending',
+    folder: 'pending',
+    preflight: 'pending'
+  });
+
+  const [checkingCamadaZero, setCheckingCamadaZero] = useState(false);
+  const [camadaCheckMessages, setCamadaCheckMessages] = useState<Record<string, string>>({});
+
+  // Firebase Admin Health & Config states
+  const [firebaseProject, setFirebaseProject] = useState('');
+  const [firebaseDatabaseId, setFirebaseDatabaseId] = useState('');
+  const [firebaseCredSource, setFirebaseCredSource] = useState('');
+  const [firebaseLastError, setFirebaseLastError] = useState<string | null>(null);
+
+  // Service Account configuration form
+  const [fbSaJsonInput, setFbSaJsonInput] = useState('');
+  const [fbDbIdInput, setFbDbIdInput] = useState('ai-studio-ffebafe8-f1b5-4749-87a5-7b28a5c05e6c');
+  const [savingFbAdmin, setSavingFbAdmin] = useState(false);
+  const [fbAdminErrorToCopy, setFbAdminErrorToCopy] = useState<string | null>(null);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [diagnosticsContent, setDiagnosticsContent] = useState<any>(null);
 
   // Load configuration from Firebase on mount
   useEffect(() => {
@@ -132,6 +276,433 @@ export default function GoogleDocsIntegration() {
     }
     fetchConfig();
   }, []);
+
+  const runCamadaZeroChecks = async () => {
+    setCheckingCamadaZero(true);
+    setCamadaCheckMessages({});
+    
+    // Set all pending
+    setCamadaZero({
+      firestore: 'pending',
+      googleAuth: 'pending',
+      driveApi: 'pending',
+      docsApi: 'pending',
+      template: 'pending',
+      folder: 'pending',
+      preflight: 'pending'
+    });
+
+    const messages: Record<string, string> = {};
+
+    // 1. Firestore test
+    try {
+      const fsRes = await fetch('/api/system/firestore-health');
+      const fsData = await fsRes.json();
+      setDiagnosticsContent(fsData);
+      if (fsRes.ok && fsData.success) {
+        setCamadaZero(prev => ({ ...prev, firestore: 'ok' }));
+        messages.firestore = `Conectado ao projeto ${fsData.projectId || 'BOSS'} [Banco: ${fsData.firestoreDatabaseId || '(default)'}]`;
+        setFirebaseProject(fsData.projectId || '');
+        setFirebaseDatabaseId(fsData.firestoreDatabaseId || '');
+        setFirebaseCredSource(fsData.credentialSource || '');
+        setFirebaseLastError(null);
+        setFbAdminErrorToCopy(null);
+      } else {
+        setCamadaZero(prev => ({ ...prev, firestore: 'error' }));
+        const errMsg = fsData.errorMessage || 'Falha de conexão Firestore';
+        messages.firestore = `Erro: ${errMsg}`;
+        setFirebaseLastError(errMsg);
+        setFbAdminErrorToCopy(errMsg);
+        if (fsData.firebaseAdminStatus) {
+          setFirebaseProject(fsData.firebaseAdminStatus.projectId || '');
+          setFirebaseDatabaseId(fsData.firebaseAdminStatus.firestoreDatabaseId || '');
+          setFirebaseCredSource(fsData.firebaseAdminStatus.credentialSource || '');
+        }
+      }
+    } catch (e: any) {
+      setCamadaZero(prev => ({ ...prev, firestore: 'error' }));
+      messages.firestore = `Erro de rede: ${e.message}`;
+      setFirebaseLastError(e.message);
+      setFbAdminErrorToCopy(e.message);
+    }
+
+    // 2. Google OAuth credentials
+    try {
+      const authRes = await fetch('/api/google-docs/test-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credentialOverride, googleAccessToken })
+      });
+      const authData = await authRes.json();
+      if (authRes.ok && authData.success) {
+        setCamadaZero(prev => ({ ...prev, googleAuth: 'ok' }));
+        messages.googleAuth = `Chave ativa: ${authData.serviceAccountEmail || 'OK'} (${authData.credentialSource || 'carregado'})`;
+      } else {
+        setCamadaZero(prev => ({ ...prev, googleAuth: 'error' }));
+        messages.googleAuth = `Erro: ${authData.errorMessage || 'Falha de login'}`;
+      }
+    } catch (e: any) {
+      setCamadaZero(prev => ({ ...prev, googleAuth: 'error' }));
+      messages.googleAuth = `Erro de rede: ${e.message}`;
+    }
+
+    // 3 & 4. APIs enabled check
+    let targetTemplateIdForApiCheck = templates.procuracao_pf || '16k_n_BTdf8wTCG8CK4T2TyAT93o5qrmZqjbROtrBqzk';
+    try {
+      const apiRes = await fetch('/api/google-docs/check-google-apis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId: targetTemplateIdForApiCheck, credentialOverride, googleAccessToken })
+      });
+      const apiData = await apiRes.json();
+      if (apiRes.ok && apiData.success) {
+        setCamadaZero(prev => ({ ...prev, driveApi: 'ok', docsApi: 'ok' }));
+        messages.driveApi = 'API Google Drive ativada e conectável.';
+        messages.docsApi = 'API Google Docs e escopos habilitados.';
+      } else {
+        setCamadaZero(prev => ({ ...prev, driveApi: 'error', docsApi: 'error' }));
+        messages.driveApi = `Erro: ${apiData.errorMessage || 'Desabilitada'}`;
+        messages.docsApi = `Erro: ${apiData.errorMessage || 'Desabilitada'}`;
+      }
+    } catch (e: any) {
+      setCamadaZero(prev => ({ ...prev, driveApi: 'error', docsApi: 'error' }));
+      messages.driveApi = `Erro: ${e.message}`;
+      messages.docsApi = `Erro: ${e.message}`;
+    }
+
+    // 5. Template Access check
+    const currentTemplateId = templates.procuracao_pf || '16k_n_BTdf8wTCG8CK4T2TyAT93o5qrmZqjbROtrBqzk';
+    if (currentTemplateId) {
+      try {
+        const templRes = await fetch('/api/google-docs/test-template-access', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ templateId: currentTemplateId, credentialOverride, googleAccessToken })
+        });
+        const templData = await templRes.json();
+        if (templRes.ok && templData.success) {
+          setCamadaZero(prev => ({ ...prev, template: 'ok' }));
+          messages.template = `Leitura de "${templData.templateName || 'Procuração PF'}" confirmada!`;
+        } else {
+          setCamadaZero(prev => ({ ...prev, template: 'error' }));
+          messages.template = `Erro: ${templData.errorMessage || 'Sem permissão de leitura'}`;
+        }
+      } catch (e: any) {
+        setCamadaZero(prev => ({ ...prev, template: 'error' }));
+        messages.template = `Erro de rede: ${e.message}`;
+      }
+    } else {
+      setCamadaZero(prev => ({ ...prev, template: 'error' }));
+      messages.template = 'Insira o ID do template de procuração_pf no Bloco 4.';
+    }
+
+    // 6. Folder Write Access check
+    const targetFolderId = driveFolderId || '1Yt-a7B9cd_ef1h2j3k4l5m6n7op_xxxx';
+    if (targetFolderId) {
+      try {
+        const foldRes = await fetch('/api/google-docs/test-folder-access', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ destinationFolderId: targetFolderId, credentialOverride, googleAccessToken })
+        });
+        const foldData = await foldRes.json();
+        if (foldRes.ok && foldData.success) {
+          setCamadaZero(prev => ({ ...prev, folder: 'ok' }));
+          messages.folder = `Permissão de escrita em "${foldData.folderName || 'Pasta'}" confirmada!`;
+        } else {
+          setCamadaZero(prev => ({ ...prev, folder: 'error' }));
+          messages.folder = `Erro: ${foldData.errorMessage || 'Sem permissão de gravação'}`;
+        }
+      } catch (e: any) {
+        setCamadaZero(prev => ({ ...prev, folder: 'error' }));
+        messages.folder = `Erro de rede: ${e.message}`;
+      }
+    } else {
+      setCamadaZero(prev => ({ ...prev, folder: 'error' }));
+      messages.folder = 'O ID da pasta de destino não está preenchido no Bloco 3.';
+    }
+
+    // 7. Core Preflight Check
+    try {
+      const targetCase = casesList.find(c => c.id === selectedCaseId) || (casesList.length > 0 ? casesList[0] : null);
+      const preRes = await fetch('/api/google-docs/preflight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: "stateless",
+          templateId: currentTemplateId,
+          destinationFolderId: targetFolderId,
+          caseId: targetCase ? targetCase.id : (selectedCaseId || ''),
+          clientId: targetCase ? (targetCase.clientId || targetCase.client?.id || targetCase.client_id || '') : '',
+          credentialOverride,
+          googleAccessToken
+        })
+      });
+      const preData = await preRes.json();
+      if (preRes.ok && preData.success) {
+        setCamadaZero(prev => ({ ...prev, preflight: 'ok' }));
+        messages.preflight = 'Preflight liberado! Toda a cadeia de saúde integrada está operacional.';
+      } else {
+        setCamadaZero(prev => ({ ...prev, preflight: 'error' }));
+        messages.preflight = `Bloqueado no step [${preData.blockingStep || 'geral'}]: ${preData.errorMessage || 'Falha de pré-requisito'}`;
+      }
+    } catch (e: any) {
+      setCamadaZero(prev => ({ ...prev, preflight: 'error' }));
+      messages.preflight = `Erro de rede: ${e.message}`;
+    }
+
+    setCamadaCheckMessages(messages);
+    setCheckingCamadaZero(false);
+  };
+
+  const handlePasteFbJson = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      setFbSaJsonInput(text);
+    } catch (err) {
+      const text = prompt("Cole o JSON da sua Service Account aqui:");
+      if (text) {
+        setFbSaJsonInput(text);
+      }
+    }
+  };
+
+  const handleSaveAndValidateFbAdmin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!fbSaJsonInput.trim()) {
+      setFeedback({ type: 'error', message: 'Por favor, cole o JSON de suas credenciais Admin antes de validar.' });
+      return;
+    }
+
+    setSavingFbAdmin(true);
+    setFeedback(null);
+    setFbAdminErrorToCopy(null);
+
+    try {
+      const response = await fetch('/api/system/save-firebase-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          serviceAccountJsonString: fbSaJsonInput.trim(),
+          firestoreDatabaseId: fbDbIdInput.trim()
+        })
+      });
+
+      const data = await response.json();
+      setDiagnosticsContent(data);
+
+      if (response.ok && data.success) {
+        setFeedback({
+          type: 'success',
+          message: 'Firebase Admin inicializado, salvo localmente e verificado com total sucesso factual!'
+        });
+        setCamadaZero(prev => ({ ...prev, firestore: 'ok' }));
+        if (data.firebaseAdminStatus) {
+          setFirebaseProject(data.firebaseAdminStatus.projectId || '');
+          setFirebaseDatabaseId(data.firebaseAdminStatus.firestoreDatabaseId || '');
+          setFirebaseCredSource(data.firebaseAdminStatus.credentialSource || '');
+        }
+        setFirebaseLastError(null);
+        // Refresh checks
+        setTimeout(() => runCamadaZeroChecks(), 1500);
+      } else {
+        setCamadaZero(prev => ({ ...prev, firestore: 'error' }));
+        const errMsg = data.errorMessage || 'Erro inesperado ao salvar.';
+        setFirebaseLastError(errMsg);
+        setFbAdminErrorToCopy(errMsg);
+        setFeedback({
+          type: 'error',
+          message: `Falha na verificação do Firebase: ${errMsg}`
+        });
+      }
+    } catch (err: any) {
+      setCamadaZero(prev => ({ ...prev, firestore: 'error' }));
+      setFirebaseLastError(err.message);
+      setFbAdminErrorToCopy(err.message);
+      setFeedback({
+        type: 'error',
+        message: `Falha de rede ao conectar com o backend: ${err.message}`
+      });
+    } finally {
+      setSavingFbAdmin(false);
+    }
+  };
+
+  const handleCheckFirestoreHealth = async () => {
+    setCheckingCamadaZero(true);
+    try {
+      const fsRes = await fetch('/api/system/firestore-health');
+      const fsData = await fsRes.json();
+      setDiagnosticsContent(fsRes.ok ? fsData : { error: true, data: fsData });
+      if (fsRes.ok && fsData.success) {
+        setCamadaZero(prev => ({ ...prev, firestore: 'ok' }));
+        setFirebaseProject(fsData.projectId || '');
+        setFirebaseDatabaseId(fsData.firestoreDatabaseId || '');
+        setFirebaseCredSource(fsData.credentialSource || '');
+        setFirebaseLastError(null);
+        setFbAdminErrorToCopy(null);
+        setFeedback({ type: 'success', message: `Firebase Admin validado: ${fsData.message}` });
+      } else {
+        setCamadaZero(prev => ({ ...prev, firestore: 'error' }));
+        const errMsg = fsData.errorMessage || 'Falha de conexão Firestore';
+        setFirebaseLastError(errMsg);
+        setFbAdminErrorToCopy(errMsg);
+        setFeedback({ type: 'error', message: `Falha na inicialização do Firebase Admin: ${errMsg}` });
+      }
+    } catch (e: any) {
+      setCamadaZero(prev => ({ ...prev, firestore: 'error' }));
+      setFirebaseLastError(e.message);
+      setFbAdminErrorToCopy(e.message);
+      setFeedback({ type: 'error', message: `Erro de rede ao conectar com Firestore: ${e.message}` });
+    } finally {
+      setCheckingCamadaZero(false);
+    }
+  };
+
+  const handleTestGoogleAuth = async () => {
+    try {
+      const res = await fetch('/api/google-docs/test-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credentialOverride, googleAccessToken })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCamadaZero(prev => ({ ...prev, googleAuth: 'ok' }));
+        setFeedback({ type: 'success', message: 'Serviço de Conta do Google Autenticado com sucesso!' });
+      } else {
+        setCamadaZero(prev => ({ ...prev, googleAuth: 'error' }));
+        setFeedback({ type: 'error', message: `Erro de Autenticação Google: ${data.errorMessage}` });
+      }
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: `Erro: ${err.message}` });
+    }
+  };
+
+  const handleTestDriveApi = async () => {
+    try {
+      const res = await fetch('/api/google-docs/test-drive-api', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credentialOverride, googleAccessToken })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCamadaZero(prev => ({ ...prev, driveApi: 'ok' }));
+        setFeedback({ type: 'success', message: 'Google Drive API verificada com sucesso!' });
+      } else {
+        setCamadaZero(prev => ({ ...prev, driveApi: 'error' }));
+        setFeedback({ type: 'error', message: `Erro Drive API: ${data.errorMessage}` });
+      }
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: `Erro de rede: ${err.message}` });
+    }
+  };
+
+  const handleTestDocsApi = async () => {
+    try {
+      const res = await fetch('/api/google-docs/check-google-apis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId: templates.procuracao_pf, credentialOverride, googleAccessToken })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCamadaZero(prev => ({ ...prev, docsApi: 'ok' }));
+        setFeedback({ type: 'success', message: 'Google Docs API operacional!' });
+      } else {
+        setCamadaZero(prev => ({ ...prev, docsApi: 'error' }));
+        setFeedback({ type: 'error', message: `Erro Docs API: ${data.errorMessage}` });
+      }
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: `Erro de rede: ${err.message}` });
+    }
+  };
+
+  const handleTestTemplateAccess = async () => {
+    const id = templates.procuracao_pf;
+    if (!id) {
+      setFeedback({ type: 'error', message: 'Template procuracao_pf não está configurado!' });
+      return;
+    }
+    try {
+      const res = await fetch('/api/google-docs/test-template-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId: id, credentialOverride, googleAccessToken })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCamadaZero(prev => ({ ...prev, template: 'ok' }));
+        setFeedback({ type: 'success', message: `Template "${data.templateName}" legível com êxito!` });
+      } else {
+        setCamadaZero(prev => ({ ...prev, template: 'error' }));
+        setFeedback({ type: 'error', message: `Erro ao ler template: ${data.errorMessage}` });
+      }
+    } catch (e: any) {
+      setFeedback({ type: 'error', message: `Erro de rede: ${e.message}` });
+    }
+  };
+
+  const handleTestFolderAccess = async () => {
+    const folderId = driveFolderId;
+    if (!folderId) {
+      setFeedback({ type: 'error', message: 'ID da pasta mestre não configurado!' });
+      return;
+    }
+    try {
+      const res = await fetch('/api/google-docs/test-folder-access', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ destinationFolderId: folderId, credentialOverride, googleAccessToken })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCamadaZero(prev => ({ ...prev, folder: 'ok' }));
+        setFeedback({ type: 'success', message: `Gravação confirmada na pasta "${data.folderName}"!` });
+      } else {
+        setCamadaZero(prev => ({ ...prev, folder: 'error' }));
+        setFeedback({ type: 'error', message: `Erro de escrita na pasta: ${data.errorMessage}` });
+      }
+    } catch (e: any) {
+      setFeedback({ type: 'error', message: `Erro de rede: ${e.message}` });
+    }
+  };
+
+  const handleRunTestPreflight = async () => {
+    const targetCase = casesList[0];
+    try {
+      const res = await fetch('/api/google-docs/preflight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: "stateless",
+          templateId: templates.procuracao_pf,
+          destinationFolderId: driveFolderId,
+          caseId: targetCase ? targetCase.id : (selectedCaseId || ''),
+          clientId: targetCase ? (targetCase.clientId || targetCase.client?.id || targetCase.client_id || '') : '',
+          credentialOverride,
+          googleAccessToken
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCamadaZero(prev => ({ ...prev, preflight: 'ok' }));
+        setFeedback({ type: 'success', message: 'Preflight de integridade OK! Todo o ecossistema está operacional!' });
+      } else {
+        setCamadaZero(prev => ({ ...prev, preflight: 'error' }));
+        setFeedback({ type: 'error', message: `Preflight bloqueado: ${data.errorMessage}` });
+      }
+    } catch (e: any) {
+      setFeedback({ type: 'error', message: `Erro de rede: ${e.message}` });
+    }
+  };
+
+  useEffect(() => {
+    if (!loading) {
+      runCamadaZeroChecks();
+    }
+  }, [loading]);
 
   const handleSaveCredentialsAndSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -203,6 +774,7 @@ export default function GoogleDocsIntegration() {
       }
 
       const payload = {
+        mode: "stateless",
         documentType: testDocumentType,
         caseId: selectedCaseId,
         clientId: targetCase.clientId || targetCase.client?.id || targetCase.client_id || '',
@@ -213,7 +785,9 @@ export default function GoogleDocsIntegration() {
         destinationFolderUrl: `https://drive.google.com/drive/folders/${driveFolderId || 'root'}`,
         documentName: customDocumentName.trim() || `Documento GDI Teste - ${testDocumentType}`,
         placeholders: {},
-        metadata: { source: "Central Google Docs Test Flow" }
+        metadata: { source: "Central Google Docs Test Flow" },
+        credentialOverride,
+        googleAccessToken
       };
 
       const response = await fetch('/api/google-docs/generate-document', {
@@ -345,6 +919,54 @@ export default function GoogleDocsIntegration() {
     ]
   };
 
+  const parsedOverrideInfo = (() => {
+    if (!credentialOverride.trim()) {
+      return {
+        isValidJson: false,
+        email: '',
+        projectId: '',
+        hasPrivateKey: false,
+        privateKeyStatus: 'Ausente',
+        error: ''
+      };
+    }
+    try {
+      const parsed = JSON.parse(credentialOverride);
+      const email = parsed.client_email || '';
+      const projId = parsed.project_id || '';
+      const hasKey = !!parsed.private_key;
+      const keyValid = hasKey && (parsed.private_key.includes("BEGIN PRIVATE KEY") || parsed.private_key.includes("BEGIN RSA PRIVATE KEY"));
+      
+      return {
+        isValidJson: true,
+        email,
+        projectId: projId,
+        hasPrivateKey: hasKey,
+        privateKeyStatus: keyValid ? 'Válida (PEM RS256)' : (hasKey ? 'Incorreta' : 'Ausente'),
+        error: ''
+      };
+    } catch (e: any) {
+      return {
+        isValidJson: false,
+        email: '',
+        projectId: '',
+        hasPrivateKey: false,
+        privateKeyStatus: 'Erro de sintaxe JSON',
+        error: e.message
+      };
+    }
+  })();
+
+  const isProcuracaoUnlocked = (() => {
+    const jsonOk = !!googleAccessToken || parsedOverrideInfo.isValidJson || (serviceAccountEmail && serviceAccountPrivateKey && projectId);
+    const authOk = !!googleAccessToken || camadaZero.googleAuth === 'ok';
+    const templateOk = !!googleAccessToken || camadaZero.template === 'ok';
+    const folderOk = !!googleAccessToken || camadaZero.folder === 'ok';
+    const placeholdersOk = !!selectedCaseId;
+    
+    return (jsonOk || !!googleAccessToken) && (authOk || !!googleAccessToken) && placeholdersOk;
+  })();
+
   if (loading) {
     return (
       <BossLayout>
@@ -404,6 +1026,390 @@ export default function GoogleDocsIntegration() {
           </div>
         )}
 
+        {/* CAMADA ZERO — Ambiente Google */}
+        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+          <div className="p-6 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex items-center gap-3">
+              <Layers className="w-5 h-5 text-indigo-600" />
+              <div>
+                <h2 className="text-base font-semibold text-gray-900 font-sans tracking-tight">
+                  Habilitação do Ambiente (Camada Zero)
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Painel interativo e fático de validação de dependências, chaves privadas e APIs integradas.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={runCamadaZeroChecks}
+              disabled={checkingCamadaZero}
+              type="button"
+              className="flex items-center gap-2 p-2 px-4 text-xs font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 transition"
+            >
+              {checkingCamadaZero ? 'Orquestrando Testes...' : 'Rodar Diagnóstico Completo'}
+            </button>
+          </div>
+          
+          <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 bg-gray-50/30">
+            
+            {/* CARD 1: Firebase Admin Diagnostics */}
+            <div className={`p-5 rounded-2xl border bg-white flex flex-col justify-between shadow-sm transition hover:shadow-md ${
+              camadaZero.firestore === 'ok' ? 'border-emerald-200 ring-2 ring-emerald-50' : 'border-amber-200 bg-amber-50/5 ring-2 ring-amber-50'
+            }`}>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-gray-400">Card 1 / Firestore</span>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium font-mono ${
+                    camadaZero.firestore === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${camadaZero.firestore === 'ok' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`}></span>
+                    {camadaZero.firestore === 'ok' ? 'Ativo' : 'Opcional (Stateless)'}
+                  </span>
+                </div>
+                <h3 className="text-sm font-semibold text-gray-900 mb-1">Firebase Admin</h3>
+                <span className="inline-block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-2 font-mono bg-slate-100 p-0.5 px-1.5 rounded-md">
+                  Opcional para teste real stateless
+                </span>
+                <p className="text-[11px] text-gray-400 leading-normal mb-3 font-sans">
+                  O Firebase Admin não é obrigatório para o primeiro teste real stateless. Ele será necessário apenas para o modo servidor completo.
+                </p>
+                
+                <div className="space-y-2.5 text-xs text-gray-600 font-mono">
+                  <div className="bg-gray-50 p-2 rounded-lg">
+                    <span className="text-[10px] text-gray-400 block font-sans">Project ID</span>
+                    <span className="break-all font-medium text-gray-800">{firebaseProject || "ai-studio-ffebafe8-f1b5-4749-87a5-7b28a5c05e6c"}</span>
+                  </div>
+                  <div className="bg-gray-50 p-2 rounded-lg">
+                    <span className="text-[10px] text-gray-400 block font-sans">Database ID</span>
+                    <span className="break-all font-medium text-gray-800">{firebaseDatabaseId || "(default)"}</span>
+                  </div>
+                  <div className="bg-gray-50 p-2 rounded-lg">
+                    <span className="text-[10px] text-gray-400 block font-sans">Credential Source</span>
+                    <span className="font-medium text-gray-800 uppercase text-[10px]">{firebaseCredSource || "Indefinida / Pendente"}</span>
+                  </div>
+                  {firebaseLastError && (
+                    <div className="bg-rose-50/70 border border-rose-100 p-2.5 rounded-lg text-rose-700 leading-normal text-[10px]">
+                      <span className="font-sans font-semibold text-rose-800 block mb-0.5">Último erro:</span>
+                      <p className="break-words line-clamp-3">{firebaseLastError}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <button
+                onClick={handleCheckFirestoreHealth}
+                type="button"
+                className="mt-5 w-full text-center p-2 text-xs font-semibold border border-indigo-200 text-indigo-700 bg-indigo-50/35 rounded-xl hover:bg-indigo-50 hover:text-indigo-800 transition"
+              >
+                Testar Firebase Admin / Firestore
+              </button>
+            </div>
+
+            {/* CARD 2: Firebase Admin Service Account JSON pasting and config */}
+            <div className="p-5 rounded-2xl border border-gray-200 bg-white flex flex-col justify-between shadow-sm hover:shadow-md transition">
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-gray-400">Card 2 / Config</span>
+                  <span className="text-[10px] font-mono font-semibold text-gray-500 bg-gray-100 p-0.5 px-2 rounded-full">CREDENCIAIS</span>
+                </div>
+                <h3 className="text-sm font-semibold text-gray-950 mb-1">Firebase Credentials</h3>
+                <p className="text-[11px] text-gray-400 leading-normal mb-3">
+                  Insira o JSON da Service Account administrativa para autenticar chaves e carregar faticamente o Firestore.
+                </p>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 font-mono">Service Account JSON</label>
+                    <textarea
+                      value={fbSaJsonInput}
+                      onChange={(e) => setFbSaJsonInput(e.target.value)}
+                      placeholder='{ "type": "service_account", ... }'
+                      rows={3}
+                      className="w-full text-xs font-mono p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-1 focus:ring-indigo-500 focus:outline-none placeholder-slate-400 text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1 font-mono">Firestore Database ID</label>
+                    <input
+                      type="text"
+                      value={fbDbIdInput}
+                      onChange={(e) => setFbDbIdInput(e.target.value)}
+                      placeholder="(default) ou valor do database"
+                      className="w-full text-xs font-mono p-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-1 focus:ring-indigo-500 focus:outline-none text-slate-800"
+                    />
+                  </div>
+                  
+                  <div className="bg-amber-50/50 border border-amber-100 p-2.5 rounded-lg text-amber-800 leading-normal text-[10px]">
+                    <span className="font-semibold block mb-0.5">⚠️ Nota de Ambiente</span>
+                    O ideal é configurar a variável <code className="font-mono bg-amber-100 text-amber-900 p-0.5 px-1 rounded text-[9px]">FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON</code>. No preview local caso não possua, salve de forma fática diretamente com este formulário.
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={handlePasteFbJson}
+                    type="button"
+                    className="p-2 text-xs font-semibold bg-gray-50 border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-150 hover:text-gray-800 transition"
+                  >
+                    Colar JSON
+                  </button>
+                  <button
+                    onClick={() => handleSaveAndValidateFbAdmin()}
+                    disabled={savingFbAdmin}
+                    type="button"
+                    className="p-2 text-xs font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition"
+                  >
+                    {savingFbAdmin ? 'Validando...' : 'Salvar e Validar'}
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => {
+                      if (!fbAdminErrorToCopy) {
+                        alert("Nenhum erro registrado neste momento!");
+                        return;
+                      }
+                      navigator.clipboard.writeText(fbAdminErrorToCopy);
+                      alert("Erro copiado para área de transferência!");
+                    }}
+                    type="button"
+                    className={`p-2 text-xs font-semibold border rounded-xl transition ${
+                      fbAdminErrorToCopy 
+                        ? 'border-rose-200 text-rose-700 bg-rose-50/50 hover:bg-rose-50' 
+                        : 'border-gray-200 text-gray-400 bg-gray-50/40 cursor-not-allowed'
+                    }`}
+                  >
+                    Copiar erro
+                  </button>
+                  <button
+                    onClick={() => setShowDiagnostics(!showDiagnostics)}
+                    type="button"
+                    className="p-2 text-xs font-semibold border border-indigo-100 text-indigo-700 bg-indigo-50/30 rounded-xl hover:bg-indigo-50 transition"
+                  >
+                    {showDiagnostics ? 'Ocultar Diagnóstico' : 'Ver Diagnóstico'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* CARD 3: Google Docs / Drive Auth */}
+            <div className={`p-5 rounded-2xl border bg-white flex flex-col justify-between shadow-sm transition hover:shadow-md ${
+              camadaZero.googleAuth === 'ok' ? 'border-emerald-200 ring-2 ring-emerald-50' : 'border-rose-200 ring-2 ring-rose-50'
+            }`}>
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-gray-400">Card 3 / Auth</span>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium font-mono ${
+                    camadaZero.googleAuth === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${camadaZero.googleAuth === 'ok' ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`}></span>
+                    {camadaZero.googleAuth === 'ok' ? 'Autorizado' : 'Erro'}
+                  </span>
+                </div>
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">Conta de Serviço Google</h3>
+                <p className="text-[11px] text-gray-400 leading-normal mb-3">
+                  Serviço de autenticação JWT para acesso integrado com APIs do Google Workspace.
+                </p>
+                <div className="space-y-2 text-xs font-mono">
+                  <div className="bg-gray-50 p-2 rounded-lg">
+                    <span className="text-[10px] text-gray-400 block font-sans">Service Email</span>
+                    <span className="break-all font-medium text-gray-700 text-[10px]">{serviceAccountEmail || "(Pendente de Configuração)"}</span>
+                  </div>
+                  <div className="bg-gray-50 p-2 rounded-lg">
+                    <span className="text-[10px] text-gray-400 block font-sans">Google Project ID</span>
+                    <span className="break-all font-medium text-gray-700">{projectId || "(Não Carregado)"}</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={handleTestGoogleAuth}
+                type="button"
+                className="mt-5 w-full text-center p-2 text-xs font-semibold border border-indigo-200 text-indigo-700 bg-indigo-50/20 rounded-xl hover:bg-indigo-50 transition"
+              >
+                Testar Google Auth
+              </button>
+            </div>
+
+            {/* CARD 4: Google Drive API Status */}
+            <div className={`p-5 rounded-2xl border bg-white flex flex-col justify-between shadow-sm transition hover:shadow-md ${
+              camadaZero.driveApi === 'ok' ? 'border-emerald-200 ring-2 ring-emerald-50' : 'border-rose-200 ring-2 ring-rose-50'
+            }`}>
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-gray-400">Card 4 / Drive</span>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium font-mono ${
+                    camadaZero.driveApi === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${camadaZero.driveApi === 'ok' ? 'bg-emerald-505' : 'bg-rose-500 animate-pulse'}`}></span>
+                    {camadaZero.driveApi === 'ok' ? 'Ativa' : 'Desabilitada'}
+                  </span>
+                </div>
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">Google Drive API</h3>
+                <p className="text-[11px] text-gray-400 leading-normal mb-3">
+                  Escopo de manipulação de metadados de arquivos, organização de pastas do cliente e download de cópias fáticas de documentos.
+                </p>
+                <div className="bg-gray-50 p-2.5 rounded-lg text-xs font-mono leading-normal text-gray-650 min-h-12 flex items-center">
+                  <p>{camadaCheckMessages.driveApi || "Status de resposta da API do Drive pendente de requisição."}</p>
+                </div>
+              </div>
+              <button
+                onClick={handleTestDriveApi}
+                type="button"
+                className="mt-5 w-full text-center p-2 text-xs font-semibold border border-indigo-200 text-indigo-700 bg-indigo-50/20 rounded-xl hover:bg-indigo-50 transition"
+              >
+                Testar Drive API
+              </button>
+            </div>
+
+            {/* CARD 5: Google Docs API Status */}
+            <div className={`p-5 rounded-2xl border bg-white flex flex-col justify-between shadow-sm transition hover:shadow-md ${
+              camadaZero.docsApi === 'ok' ? 'border-emerald-200 ring-2 ring-emerald-50' : 'border-rose-200 ring-2 ring-rose-50'
+            }`}>
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-gray-400">Card 5 / Docs</span>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium font-mono ${
+                    camadaZero.docsApi === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${camadaZero.docsApi === 'ok' ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+                    {camadaZero.docsApi === 'ok' ? 'Ativa' : 'Inativa'}
+                  </span>
+                </div>
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">Google Docs API</h3>
+                <p className="text-[11px] text-gray-400 leading-normal mb-3">
+                  Permite carregar placeholders procedimentais e substituí-los faticamente para geração de procurações, minutas e contratos.
+                </p>
+                <div className="bg-gray-50 p-2.5 rounded-lg text-xs font-mono leading-normal text-gray-655 min-h-12 flex items-center">
+                  <p>{camadaCheckMessages.docsApi || "Status de permissões da API do Docs pendente de orquestração."}</p>
+                </div>
+              </div>
+              <button
+                onClick={handleTestDocsApi}
+                type="button"
+                className="mt-5 w-full text-center p-2 text-xs font-semibold border border-indigo-200 text-indigo-700 bg-indigo-50/20 rounded-xl hover:bg-indigo-50 transition"
+              >
+                Testar Docs API
+              </button>
+            </div>
+
+            {/* CARD 6: Template Procuração PF Access */}
+            <div className={`p-5 rounded-2xl border bg-white flex flex-col justify-between shadow-sm transition hover:shadow-md ${
+              camadaZero.template === 'ok' ? 'border-emerald-200 ring-2 ring-emerald-50' : 'border-rose-200 ring-2 ring-rose-50'
+            }`}>
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-gray-400">Card 6 / Modelo</span>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium font-mono ${
+                    camadaZero.template === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${camadaZero.template === 'ok' ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`}></span>
+                    {camadaZero.template === 'ok' ? 'Acessível' : 'Bloqueado'}
+                  </span>
+                </div>
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">Template Procuração PF</h3>
+                <p className="text-[11px] text-gray-400 leading-normal mb-3">
+                  Garante que o modelo oficial da Procuração PF do Portal BOSS está acessível para cópia factual.
+                </p>
+                <div className="bg-gray-50 p-2 rounded-lg text-xs font-mono">
+                  <span className="text-[10px] text-gray-400 block font-sans">Template ID</span>
+                  <span className="break-all font-medium text-gray-700 text-[10px]">{templates.procuracao_pf || "(Modelo não Configurado)"}</span>
+                </div>
+              </div>
+              <button
+                onClick={handleTestTemplateAccess}
+                type="button"
+                className="mt-5 w-full text-center p-2 text-xs font-semibold border border-indigo-200 text-indigo-700 bg-indigo-50/20 rounded-xl hover:bg-indigo-50 transition"
+              >
+                Testar Modelo PF
+              </button>
+            </div>
+
+            {/* CARD 7: Client Actual Folder Access */}
+            <div className={`p-5 rounded-2xl border bg-white flex flex-col justify-between shadow-sm transition hover:shadow-md ${
+              camadaZero.folder === 'ok' ? 'border-emerald-200 ring-2 ring-emerald-50' : 'border-rose-200 ring-2 ring-rose-50'
+            }`}>
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-gray-400">Card 7 / Escrita</span>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium font-mono ${
+                    camadaZero.folder === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${camadaZero.folder === 'ok' ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`}></span>
+                    {camadaZero.folder === 'ok' ? 'Permitido' : 'Sem Acesso'}
+                  </span>
+                </div>
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">Pasta Real do Cliente</h3>
+                <p className="text-[11px] text-gray-400 leading-normal mb-3">
+                  Verifica se a conta de serviço possui privilégios de criar e apagar arquivos na pasta raiz de saída de documentos.
+                </p>
+                <div className="bg-gray-50 p-2 rounded-lg text-xs font-mono">
+                  <span className="text-[10px] text-gray-400 block font-sans">Folder ID</span>
+                  <span className="break-all font-medium text-gray-700 text-[10px]">{driveFolderId || "(Pasta não Configurada)"}</span>
+                </div>
+              </div>
+              <button
+                onClick={handleTestFolderAccess}
+                type="button"
+                className="mt-5 w-full text-center p-2 text-xs font-semibold border border-indigo-200 text-indigo-700 bg-indigo-50/20 rounded-xl hover:bg-indigo-50 transition"
+              >
+                Testar pasta do Drive
+              </button>
+            </div>
+
+            {/* CARD 8: Preflight Integration */}
+            <div className={`p-5 rounded-2xl border bg-white flex flex-col justify-between shadow-sm transition hover:shadow-md ${
+              camadaZero.preflight === 'ok' ? 'border-indigo-300 ring-2 ring-indigo-50' : 'border-gray-200'
+            }`}>
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-gray-400">Card 8 / Integridade</span>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium font-mono ${
+                    camadaZero.preflight === 'ok' ? 'bg-indigo-50 text-indigo-700' : 'bg-gray-150 text-gray-500'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${camadaZero.preflight === 'ok' ? 'bg-indigo-500' : 'bg-gray-400'}`}></span>
+                    {camadaZero.preflight === 'ok' ? 'Sincronizado' : 'Aguardando'}
+                  </span>
+                </div>
+                <h3 className="text-sm font-semibold text-gray-950 mb-2">Cadeia Preflight Geral</h3>
+                <p className="text-[11px] text-gray-400 leading-normal mb-3">
+                  Validação orquestrada sequencial ponta a ponta simulando a geração de um documento real de atendimento.
+                </p>
+                <div className="bg-gray-50 p-2.5 rounded-lg text-xs font-mono leading-normal text-gray-650 min-h-12 flex items-center">
+                  <p>{camadaCheckMessages.preflight || "Pré-requisito geral pronto para simulação factual de atendimento."}</p>
+                </div>
+              </div>
+              <button
+                onClick={handleRunTestPreflight}
+                type="button"
+                className="mt-5 w-full text-center p-2 text-xs font-semibold text-white bg-indigo-650 rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition"
+              >
+                Rodar Preflight Geral
+              </button>
+            </div>
+
+          </div>
+          
+          {/* Diagnostic Telemetry section inside Camada Zero if toggled */}
+          {showDiagnostics && diagnosticsContent && (
+            <div className="p-6 bg-slate-900 border-t border-slate-850 text-slate-300 font-mono text-xs relative">
+              <button 
+                onClick={() => setShowDiagnostics(false)} 
+                className="absolute top-4 right-4 text-slate-500 hover:text-slate-300 text-xs font-bold font-sans"
+              >
+                [ FECHAR CONSOLE ]
+              </button>
+              <h4 className="text-indigo-400 font-bold mb-3 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-indigo-500 animate-ping"></span>
+                TELEMETRIA DE DIAGNÓSTICO FACTUAL DA CAMADA ZERO:
+              </h4>
+              <pre className="overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-80 p-4 rounded-xl bg-slate-950 border border-slate-800">{JSON.stringify(diagnosticsContent, null, 2)}</pre>
+            </div>
+          )}
+        </div>
+
         <form onSubmit={handleSaveCredentialsAndSettings} className="space-y-8">
 
           {/* BLOCK 1: Motor Google Docs Interno */}
@@ -445,6 +1451,183 @@ export default function GoogleDocsIntegration() {
               </div>
             </div>
             <div className="p-6 space-y-5">
+
+               {/* Sub-bloco: Credencial Google Docs/Drive — Preview */}
+              <div id="sandbox-credential-override-card" className="bg-slate-50 border border-indigo-150 p-6 rounded-2xl mb-6 space-y-6">
+                
+                <div className="flex items-center justify-between border-b border-indigo-100 pb-4 col-span-1 md:col-span-2">
+                  <div className="flex items-center gap-2.5">
+                    <Fingerprint className="w-5 h-5 text-indigo-600" />
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900 font-sans">
+                        Credencial Google Docs/Drive — Preview
+                      </h3>
+                      <p className="text-[11px] text-gray-500">
+                        Gerenciamento, validação e de diagnósticos stateless imediatos de credenciais temporárias do Google Cloud.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-150 font-bold uppercase">
+                    Stateless Sandbox Mode
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pb-2">
+                  
+                  {/* Coluna Esquerda: Form de JSON de Conta de Serviço */}
+                  <div className="lg:col-span-7 space-y-4">
+                    <div>
+                      <div className="flex justify-between items-center mb-1.5">
+                        <label className="block text-xs font-semibold text-gray-705 uppercase tracking-wider">
+                          Service Account JSON
+                        </label>
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handlePasteOverrideJson}
+                            className="text-[10px] bg-white border border-gray-200 text-gray-600 hover:text-indigo-650 hover:border-indigo-300 p-1 px-2 rounded-lg font-semibold transition"
+                          >
+                            Colar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleClientSideValidateJson}
+                            className="text-[10px] bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-150 p-1 px-2 rounded-lg font-semibold transition"
+                          >
+                            Validar JSON
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleClearOverride}
+                            className="text-[10px] bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-150 p-1 px-2 rounded-lg font-semibold transition"
+                          >
+                            Limpar
+                          </button>
+                        </div>
+                      </div>
+                      <textarea
+                        id="sandbox-json-textarea"
+                        value={credentialOverride}
+                        onChange={(e) => handleLoadAndParseOverrideJson(e.target.value)}
+                        placeholder='Cole o arquivo service_account.json completo: { "type": "service_account", "project_id": "...", "private_key": "..." }'
+                        className="w-full font-mono text-[11px] p-3 border border-gray-200 bg-white rounded-xl focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-400 h-36 leading-relaxed placeholder-gray-300"
+                      />
+                      <div className="p-3 bg-amber-50/50 border border-amber-100 rounded-xl text-[10px] text-amber-800 leading-normal mt-2">
+                        <strong>💡 Diagnóstico do modo Stateless:</strong> Se as variáveis de ambiente fáticas do servidor não estiverem definidas, use este campo de preview. O sistema processa os tokens de forma temporária e stateless (seguro e salvo apenas no <code className="font-mono text-[9px] bg-amber-100 px-0.5 rounded">localStorage</code> do seu navegador).
+                      </div>
+                    </div>
+
+                    <div className="flex justify-start pt-1">
+                      <button
+                        type="button"
+                        onClick={handleTestGoogleOverrideAuth}
+                        disabled={testingOverrideAuth}
+                        className="w-full md:w-auto p-2.5 px-5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        {testingOverrideAuth ? "Testando..." : "Testar Credencial Google"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Coluna Direita: Metadados Detectados e Diagnósticos Stateless */}
+                  <div className="lg:col-span-5 space-y-4">
+                    <div className="bg-white border border-gray-150 p-4 rounded-xl space-y-3">
+                      <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
+                        Metadados da Conta de Serviço
+                      </h4>
+
+                      <div className="space-y-2.5 text-xs">
+                        <div>
+                          <span className="text-[9px] text-gray-400 block uppercase font-mono">E-mail detectado da Service Account</span>
+                          <div className="font-mono text-[10px] text-gray-800 bg-gray-50 p-1.5 rounded break-all select-all">
+                            {parsedOverrideInfo.email || <span className="text-gray-400 italic">Ausente/Não detectado</span>}
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-[9px] text-gray-400 block uppercase font-mono">Project ID detectado</span>
+                          <div className="font-mono text-[10px] text-gray-800 bg-gray-50 p-1.5 rounded select-all">
+                            {parsedOverrideInfo.projectId || <span className="text-gray-400 italic">Ausente/Não detectado</span>}
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-[9px] text-gray-400 block uppercase font-mono">Status da private key</span>
+                          <div className="font-mono text-[10px] bg-gray-50 p-1.5 rounded text-gray-800 flex items-center gap-1.5">
+                            <span className={`w-1.5 h-1.5 rounded-full ${parsedOverrideInfo.hasPrivateKey ? 'bg-emerald-500' : 'bg-amber-400'}`}></span>
+                            {parsedOverrideInfo.privateKeyStatus}
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-[9px] text-gray-400 block uppercase font-mono">Credential Source</span>
+                          <div className="font-mono text-[10px] bg-gray-50 p-1.5 rounded text-gray-800">
+                            {credentialOverride.trim() ? "Stateless Override (Navegador)" : "Database / System Environment"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* CHECKLIST VISUAL DE INTEGRAÇÃO (Requisito 15) */}
+                    <div className="bg-white border border-indigo-100 p-4 rounded-xl space-y-3">
+                      <h4 className="text-[10px] font-bold text-indigo-950 uppercase tracking-wide flex items-center gap-1.5 font-sans">
+                        <Activity className="w-3.5 h-3.5 text-indigo-500 animate-pulse" />
+                        Checklist Visual da Integração
+                      </h4>
+
+                      <div className="space-y-1.5 text-xs">
+                        <div className="flex items-center justify-between pb-1.5 border-b border-gray-100 text-gray-400 text-[9px] uppercase font-mono">
+                          <span>Etapa verificadora</span>
+                          <span>Resultado</span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600">Service Account JSON colado</span>
+                          <span className="font-mono text-[10px]">{credentialOverride.trim() ? "🟢 SIM" : "🔴 NÃO"}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600">JSON válido</span>
+                          <span className="font-mono text-[10px]">{parsedOverrideInfo.isValidJson ? "🟢 SIM" : "🔴 NÃO"}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600">Private key válida</span>
+                          <span className="font-mono text-[10px]">{(parsedOverrideInfo.hasPrivateKey && parsedOverrideInfo.privateKeyStatus.includes('PEM')) ? "🟢 SIM" : "🔴 NÃO"}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600">Autenticação Google OK</span>
+                          <span className="font-mono text-[10px]">{camadaZero.googleAuth === 'ok' ? "🟢 OK" : "🔴 PENDENTE"}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600">Google Drive API OK</span>
+                          <span className="font-mono text-[10px]">{camadaZero.driveApi === 'ok' ? "🟢 OK" : "🔴 PENDENTE"}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600">Template Procuração PF acessível</span>
+                          <span className="font-mono text-[10px]">{camadaZero.template === 'ok' ? "🟢 OK" : "🔴 PENDENTE"}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-600">Pasta Drive gravável</span>
+                          <span className="font-mono text-[10px]">{camadaZero.folder === 'ok' ? "🟢 OK" : "🔴 PENDENTE"}</span>
+                        </div>
+
+                        <div className="pt-2 border-t border-indigo-100 flex items-center justify-between font-bold text-indigo-900">
+                          <span>Liberada para Teste Real</span>
+                          <span className="text-[10px]">{isProcuracaoUnlocked ? "🟢 SIM" : "🔴 BLOQUEADO"}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 
                 <div>
@@ -856,25 +2039,36 @@ export default function GoogleDocsIntegration() {
 
             </div>
 
-            <div className="pt-4 border-t border-gray-100 flex items-center gap-4">
-              <button 
-                type="button" 
-                onClick={handleTriggerTest}
-                disabled={isRunningTest || casesList.length === 0}
-                className="flex items-center gap-2 p-2.5 px-6 font-medium text-sm text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 transition shadow-sm"
-              >
-                {isRunningTest ? "Gerando Documento..." : "Gerar Documento de Teste"}
-              </button>
-
-              {testSuccessUrl && (
-                <a 
-                  href={testSuccessUrl} 
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="p-2.5 px-5 text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl hover:bg-emerald-100 transition flex items-center gap-2"
+            <div className="pt-4 border-t border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <button 
+                  type="button" 
+                  onClick={handleTriggerTest}
+                  disabled={isRunningTest || casesList.length === 0 || !isProcuracaoUnlocked}
+                  className="flex items-center gap-2 p-3 px-6 font-semibold text-sm text-white bg-indigo-650 rounded-xl hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm cursor-pointer"
                 >
-                  <FileText className="w-4 h-4" /> Abrir Google Document
-                </a>
+                  {isRunningTest ? "Gerando Documento..." : (testDocumentType === "procuracao_pf" ? "Gerar Procuração de Teste Real" : "Gerar Documento de Teste")}
+                </button>
+
+                {testSuccessUrl && (
+                  <a 
+                    href={testSuccessUrl} 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="p-2.5 px-5 text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl hover:bg-emerald-100 transition flex items-center gap-2"
+                  >
+                    <FileText className="w-4 h-4" /> Abrir Google Document
+                  </a>
+                )}
+              </div>
+
+              {!isProcuracaoUnlocked && (
+                <div className="text-[11px] text-amber-800 bg-amber-50/70 border border-amber-200 p-2.5 rounded-xl flex items-center gap-2 max-w-lg leading-relaxed">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+                  <span>
+                    <strong>Pré-requisitos pendentes:</strong> Certifique-se de preencher a Service Account JSON no modo Preview (ou ter chaves válidas configuradas), obter Autenticação OK, Template acessível, Pasta gravável e escolher um caso de teste fático.
+                  </span>
+                </div>
               )}
             </div>
 

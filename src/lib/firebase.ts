@@ -4,7 +4,8 @@ import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+const firestoreDatabaseId = (firebaseConfig as any).firestoreDatabaseId || "ai-studio-ffebafe8-f1b5-4749-87a5-7b28a5c05e6c";
+export const db = getFirestore(app, firestoreDatabaseId);
 export const auth = getAuth(app);
 
 // Connectivity check

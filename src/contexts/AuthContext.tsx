@@ -23,6 +23,7 @@ interface AuthContextType {
   setErrorMsg: (msg: string | null) => void;
   logout: () => Promise<void>;
   loginWithGoogle: (role?: UserRole) => Promise<void>;
+  googleAccessToken: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -32,6 +33,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(() => {
+    return sessionStorage.getItem('google_access_token');
+  });
 
   const resolveUserProfile = async (firebaseUser: FirebaseUser, requestedRole?: UserRole): Promise<UserProfile | null> => {
     try {
@@ -117,9 +121,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
+      provider.addScope('https://www.googleapis.com/auth/drive');
+      provider.addScope('https://www.googleapis.com/auth/documents');
       
       const result = await signInWithPopup(auth, provider);
       const newUser = result.user;
+
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const token = credential?.accessToken || null;
+      if (token) {
+        setGoogleAccessToken(token);
+        sessionStorage.setItem('google_access_token', token);
+      }
 
       const matchedProfile = await resolveUserProfile(newUser, role);
       if (!matchedProfile) {
@@ -133,6 +146,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await signOut(auth);
       setProfile(null);
       setUser(null);
+      setGoogleAccessToken(null);
+      sessionStorage.removeItem('google_access_token');
     } finally {
       setLoading(false);
     }
@@ -141,6 +156,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     setErrorMsg(null);
     setProfile(null);
+    setGoogleAccessToken(null);
+    sessionStorage.removeItem('google_access_token');
     await signOut(auth);
   };
 
@@ -153,7 +170,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     errorMsg,
     setErrorMsg,
     logout,
-    loginWithGoogle
+    loginWithGoogle,
+    googleAccessToken
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
