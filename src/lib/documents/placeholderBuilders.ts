@@ -222,6 +222,7 @@ export function buildProcuracaoPfPlaceholders(clientData: any, caseData?: any): 
     "{{OUTORGANTE_FACEBOOK}}": getField(["pf_facebook"]),
     "{{OUTORGANTE_TIKTOK}}": getField(["pf_tiktok"]),
     "{{LOCAL_ASSINATURA}}": global["{{CIDADE_ASSINATURA}}"],
+    "{{DATA_ASSINATURA}}": global["{{DATA_ATUAL}}"],
   };
 
   return {

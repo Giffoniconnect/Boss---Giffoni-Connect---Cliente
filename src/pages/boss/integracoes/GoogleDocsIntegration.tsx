@@ -29,6 +29,10 @@ import {
   FolderOpen
 } from 'lucide-react';
 
+const OFFICIAL_PROCURACAO_PF_TEMPLATE_ID = '16k_n_BTdf8wTCG8CK4T2TyAT93o5qrmZqjbROtrBqzk';
+const OFFICIAL_PROCURACAO_PF_TEMPLATE_URL = `https://docs.google.com/document/d/${OFFICIAL_PROCURACAO_PF_TEMPLATE_ID}/edit?tab=t.0`;
+const PROCURACAO_PF_PLACEHOLDER_SOURCE_ROUTE = '/boss-giffoni-clientes/fluxo-producao/:caseId/editar-cadastro-cliente';
+
 interface TemplateRegistry {
   primeiro_atendimento: string;
   procuracao_pf: string;
@@ -173,7 +177,7 @@ export default function GoogleDocsIntegration() {
   // Template Google Docs IDs state
   const [templates, setTemplates] = useState<TemplateRegistry>({
     primeiro_atendimento: '',
-    procuracao_pf: '',
+    procuracao_pf: OFFICIAL_PROCURACAO_PF_TEMPLATE_ID,
     procuracao_pj: '',
     declaracao_pobreza_pf: '',
     declaracao_pobreza_pj: '',
@@ -247,7 +251,7 @@ export default function GoogleDocsIntegration() {
           if (gdocsData.templates) {
             setTemplates({
               primeiro_atendimento: gdocsData.templates.primeiro_atendimento || '',
-              procuracao_pf: gdocsData.templates.procuracao_pf || '',
+              procuracao_pf: gdocsData.templates.procuracao_pf || OFFICIAL_PROCURACAO_PF_TEMPLATE_ID,
               procuracao_pj: gdocsData.templates.procuracao_pj || '',
               declaracao_pobreza_pf: gdocsData.templates.declaracao_pobreza_pf || '',
               declaracao_pobreza_pj: gdocsData.templates.declaracao_pobreza_pj || '',
@@ -347,7 +351,7 @@ export default function GoogleDocsIntegration() {
     }
 
     // 3 & 4. APIs enabled check
-    let targetTemplateIdForApiCheck = templates.procuracao_pf || '16k_n_BTdf8wTCG8CK4T2TyAT93o5qrmZqjbROtrBqzk';
+    let targetTemplateIdForApiCheck = templates.procuracao_pf || OFFICIAL_PROCURACAO_PF_TEMPLATE_ID;
     try {
       const apiRes = await fetch('/api/google-docs/check-google-apis', {
         method: 'POST',
@@ -371,7 +375,7 @@ export default function GoogleDocsIntegration() {
     }
 
     // 5. Template Access check
-    const currentTemplateId = templates.procuracao_pf || '16k_n_BTdf8wTCG8CK4T2TyAT93o5qrmZqjbROtrBqzk';
+    const currentTemplateId = templates.procuracao_pf || OFFICIAL_PROCURACAO_PF_TEMPLATE_ID;
     if (currentTemplateId) {
       try {
         const templRes = await fetch('/api/google-docs/test-template-access', {
@@ -713,13 +717,18 @@ export default function GoogleDocsIntegration() {
       const docSnap = await getDoc(docRef);
       const currentData = docSnap.exists() ? docSnap.data() : {};
 
+      const normalizedTemplates = {
+        ...templates,
+        procuracao_pf: templates.procuracao_pf?.trim() || OFFICIAL_PROCURACAO_PF_TEMPLATE_ID
+      };
+
       const updatedGoogleDocs = {
         ...currentData.googleDocs,
         serviceAccountEmail: serviceAccountEmail.trim(),
         serviceAccountPrivateKey: serviceAccountPrivateKey.trim(),
         projectId: projectId.trim(),
         driveFolderId: driveFolderId.trim(),
-        templates,
+        templates: normalizedTemplates,
         updatedAt: new Date().toISOString()
       };
 
@@ -727,6 +736,8 @@ export default function GoogleDocsIntegration() {
         ...currentData,
         googleDocs: updatedGoogleDocs
       });
+
+      setTemplates(normalizedTemplates);
 
       setFeedback({
         type: 'success',
@@ -852,18 +863,23 @@ export default function GoogleDocsIntegration() {
       { key: "{{RESPONSAVEL_ATENDIMENTO}}", desc: "Nome do operador ou advogado associado" }
     ],
     procuracao_pf: [
-      { key: "{{NOME_COMPLETO}}", desc: "Nome civil completo do outorgante" },
-      { key: "{{NACIONALIDADE}}", desc: "Nacionalidade do outorgante (padrão: Brasileiro(a))" },
-      { key: "{{ESTADO_CIVIL}}", desc: "Estado civil do outorgante (padrão: Solteiro(a))" },
-      { key: "{{PROFISSAO}}", desc: "Profissão do outorgante cadastrada" },
-      { key: "{{CPF}}", desc: "CPF do outorgante" },
-      { key: "{{RG}}", desc: "RG do outorgante" },
-      { key: "{{ENDERECO_COMPLETO}}", desc: "Endereço completo estruturado do outorgante" },
-      { key: "{{EMAIL}}", desc: "Email principal do outorgante" },
-      { key: "{{TELEFONE}}", desc: "Telefone de contato do outorgante" },
-      { key: "{{DATA_ASSINATURA}}", desc: "Data carimbada para assinatura ou data atual" },
-      { key: "{{OUTORGANTE_NOME}}", desc: "Compatibilidade: Nome Civil Completo" },
-      { key: "{{OUTORGANTE_CPF}}", desc: "Compatibilidade: CPF do Outorgante" }
+      { key: "{{OUTORGANTE_NOME}}", desc: "Etapa 1 / Pessoa Física / Dados Pessoais / Nome Completo" },
+      { key: "{{OUTORGANTE_NACIONALIDADE}}", desc: "Etapa 1 / Pessoa Física / Dados Pessoais / Nacionalidade" },
+      { key: "{{OUTORGANTE_ESTADO_CIVIL}}", desc: "Etapa 1 / Pessoa Física / Dados Pessoais / Estado Civil" },
+      { key: "{{OUTORGANTE_PROFISSAO}}", desc: "Etapa 1 / Pessoa Física / Dados Pessoais / Profissão" },
+      { key: "{{OUTORGANTE_RG}}", desc: "Etapa 1 / Pessoa Física / Dados Pessoais / RG" },
+      { key: "{{OUTORGANTE_CPF}}", desc: "Etapa 1 / Pessoa Física / Dados Pessoais / CPF" },
+      { key: "{{OUTORGANTE_ENDERECO}}", desc: "Etapa 1 / Pessoa Física / Endereço / Endereço" },
+      { key: "{{OUTORGANTE_NUMERO}}", desc: "Etapa 1 / Pessoa Física / Endereço / Número" },
+      { key: "{{OUTORGANTE_COMPLEMENTO}}", desc: "Etapa 1 / Pessoa Física / Endereço / Complemento" },
+      { key: "{{OUTORGANTE_BAIRRO}}", desc: "Etapa 1 / Pessoa Física / Endereço / Bairro" },
+      { key: "{{OUTORGANTE_CIDADE}}", desc: "Etapa 1 / Pessoa Física / Endereço / Cidade" },
+      { key: "{{OUTORGANTE_ESTADO}}", desc: "Etapa 1 / Pessoa Física / Endereço / Estado" },
+      { key: "{{OUTORGANTE_CEP}}", desc: "Etapa 1 / Pessoa Física / Endereço / CEP" },
+      { key: "{{OUTORGANTE_TELEFONE}}", desc: "Etapa 1 / Pessoa Física / Contato / Telefone" },
+      { key: "{{OUTORGANTE_WHATSAPP}}", desc: "Etapa 1 / Pessoa Física / Contato / WhatsApp" },
+      { key: "{{OUTORGANTE_EMAIL}}", desc: "Etapa 1 / Pessoa Física / Contato / E-mail" },
+      { key: "{{DATA_ASSINATURA}}", desc: "Data gerada automaticamente no momento da emissão da procuração" }
     ],
     procuracao_pj: [
       { key: "{{RAZAO_SOCIAL}}", desc: "Razão social oficial da empresa outorgante" },
@@ -1315,8 +1331,20 @@ export default function GoogleDocsIntegration() {
                 </p>
                 <div className="bg-gray-50 p-2 rounded-lg text-xs font-mono">
                   <span className="text-[10px] text-gray-400 block font-sans">Template ID</span>
-                  <span className="break-all font-medium text-gray-700 text-[10px]">{templates.procuracao_pf || "(Modelo não Configurado)"}</span>
+                  <span className="break-all font-medium text-gray-700 text-[10px]">{templates.procuracao_pf || OFFICIAL_PROCURACAO_PF_TEMPLATE_ID}</span>
                 </div>
+                <div className="mt-2 bg-indigo-50/50 border border-indigo-100 rounded-lg p-2.5 text-[10px] text-indigo-950/80 leading-normal">
+                  <strong className="text-indigo-950">Fonte dos placeholders:</strong><br />
+                  <span>Etapa 1 — Cadastro PF</span><br />
+                  <code className="text-indigo-700 select-all block mt-0.5 break-all">{PROCURACAO_PF_PLACEHOLDER_SOURCE_ROUTE}</code>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => window.open(OFFICIAL_PROCURACAO_PF_TEMPLATE_URL, '_blank')}
+                  className="mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition underline cursor-pointer"
+                >
+                  Abrir modelo oficial
+                </button>
               </div>
               <button
                 onClick={handleTestTemplateAccess}

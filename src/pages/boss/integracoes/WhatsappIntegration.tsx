@@ -17,8 +17,11 @@ import {
 
 interface WhatsappConfig {
   status: 'não_configurado' | 'preparado' | 'em_teste' | 'ativo' | 'erro';
-  provider: 'meta_api' | 'evolution_api' | 'z-api';
+  provider: 'meta_api' | 'evolution_api' | 'z-api' | 'wa_speed';
   notes: string;
+  waSpeedUrl?: string;
+  waSpeedToken?: string;
+  waSpeedInstanceId?: string;
 }
 
 export default function WhatsappIntegration() {
@@ -31,7 +34,10 @@ export default function WhatsappIntegration() {
   const [config, setConfig] = useState<WhatsappConfig>({
     status: 'não_configurado',
     provider: 'meta_api',
-    notes: ''
+    notes: '',
+    waSpeedUrl: '',
+    waSpeedToken: '',
+    waSpeedInstanceId: ''
   });
 
   // Simulated logs
@@ -50,7 +56,10 @@ export default function WhatsappIntegration() {
             setConfig({
               status: data.whatsapp.status || 'não_configurado',
               provider: data.whatsapp.provider || 'meta_api',
-              notes: data.whatsapp.notes || ''
+              notes: data.whatsapp.notes || '',
+              waSpeedUrl: data.whatsapp.waSpeedUrl || '',
+              waSpeedToken: data.whatsapp.waSpeedToken || '',
+              waSpeedInstanceId: data.whatsapp.waSpeedInstanceId || ''
             });
           }
         }
@@ -73,7 +82,10 @@ export default function WhatsappIntegration() {
         whatsapp: {
           status: config.status,
           provider: config.provider,
-          notes: config.notes.trim()
+          notes: config.notes.trim(),
+          waSpeedUrl: (config.waSpeedUrl || '').trim(),
+          waSpeedToken: (config.waSpeedToken || '').trim(),
+          waSpeedInstanceId: (config.waSpeedInstanceId || '').trim()
         },
         updatedAt: new Date().toISOString()
       }, { merge: true });
@@ -216,8 +228,44 @@ export default function WhatsappIntegration() {
                 <option value="meta_api">Meta Cloud API (Oficial)</option>
                 <option value="evolution_api">Evolution API (Multi-dispositivos)</option>
                 <option value="z-api">Z-API Gateway</option>
+                <option value="wa_speed">WA Speed API Gateway</option>
               </select>
             </div>
+
+            {config.provider === 'wa_speed' && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">URL do WA Speed *</label>
+                  <input
+                    type="text"
+                    value={config.waSpeedUrl || ''}
+                    onChange={(e) => setConfig({ ...config, waSpeedUrl: e.target.value })}
+                    placeholder="Ex: https://api.waspeed.com.br"
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Token do WA Speed *</label>
+                  <input
+                    type="password"
+                    value={config.waSpeedToken || ''}
+                    onChange={(e) => setConfig({ ...config, waSpeedToken: e.target.value })}
+                    placeholder="Insira seu Token do WA Speed"
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">ID da Instância (Opcional)</label>
+                  <input
+                    type="text"
+                    value={config.waSpeedInstanceId || ''}
+                    onChange={(e) => setConfig({ ...config, waSpeedInstanceId: e.target.value })}
+                    placeholder="ID da instância"
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100"
+                  />
+                </div>
+              </>
+            )}
 
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Status Conexão *</label>

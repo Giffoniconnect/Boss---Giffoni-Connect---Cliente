@@ -2434,6 +2434,7 @@ export default function Configuracoes() {
                               <option value="meta_api">API do WhatsApp Business Oficial (Meta)</option>
                               <option value="evolution_api">Evolution API (WebSockets)</option>
                               <option value="z-api">Z-API Gateway</option>
+                              <option value="wa_speed">WA Speed API Gateway</option>
                             </select>
                           </div>
 

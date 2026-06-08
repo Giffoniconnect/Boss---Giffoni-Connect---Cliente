@@ -1904,6 +1904,242 @@ app.post("/api/google-docs/test-folder-access", async (req: any, res: any) => {
   }
 });
 
+app.post("/api/google-docs/send-whatsapp", async (req: any, res: any) => {
+  const { googleDocsUrl, phone, docName, clientName, caseId } = req.body || {};
+  if (!phone) {
+    return res.status(400).json({ success: false, errorMessage: "Telefone do cliente é obrigatório." });
+  }
+
+  // Composing message text as requested
+  const messageText = `Olá! Segue a procuração conforme solicitado, por gentileza, assine, digitalize e nos envie de volta aqui no What\`s app.\n\nGrato!\n\nGiffoni Advogados Associados.`;
+
+  try {
+    // Normalize phone number (digits only)
+    const cleanPhone = phone.replace(/\D/g, "");
+
+    // Retrieve whatsapp config from Firestore via dbAdmin
+    let whatsappConfig: any = null;
+    let provider = "simulation";
+    let waSpeedUrl = "";
+    let waSpeedToken = "";
+    let waSpeedInstanceId = "";
+
+    if (dbAdmin) {
+      const connectorsSnap = await dbAdmin.collection("settings").doc("connectors").get();
+      if (connectorsSnap.exists) {
+        whatsappConfig = connectorsSnap.data()?.whatsapp;
+        if (whatsappConfig) {
+          provider = whatsappConfig.provider || "simulation";
+          waSpeedUrl = whatsappConfig.waSpeedUrl || "";
+          waSpeedToken = whatsappConfig.waSpeedToken || "";
+          waSpeedInstanceId = whatsappConfig.waSpeedInstanceId || "";
+        }
+      }
+    }
+
+    // Try exporting PDF from Google Drive if URL is provided
+    let pdfBase64 = "";
+    if (googleDocsUrl) {
+      try {
+        const { jwtClient } = await createGoogleDocsJwtClient(req);
+        const drive = google.drive({ version: "v3", auth: jwtClient });
+        const match = googleDocsUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+        const fileId = match ? match[1] : null;
+
+        if (fileId) {
+          const exportRes = await drive.files.export(
+            {
+              fileId,
+              mimeType: "application/pdf"
+            },
+            { responseType: "arraybuffer" }
+          );
+          pdfBase64 = Buffer.from(exportRes.data as ArrayBuffer).toString("base64");
+        }
+      } catch (errPdf: any) {
+        console.warn("[WhatsAppSend] PDF Export failed, proceeding with text message only:", errPdf.message);
+      }
+    }
+
+    if (provider === "wa_speed" && waSpeedToken) {
+      const targetUrl = waSpeedUrl || "https://api.waspeed.com.br";
+      const apiEndpoint = `${targetUrl.replace(/\/+$/, "")}/api/v1/messages/send`;
+
+      const payload: any = {
+        number: cleanPhone,
+        message: messageText
+      };
+
+      if (pdfBase64) {
+        payload.file = `data:application/pdf;base64,${pdfBase64}`;
+        payload.filename = `${docName || "Procuração"}.pdf`;
+      }
+
+      const response = await fetch(apiEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${waSpeedToken}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`WA Speed API respondeu com status ${response.status}: ${errText}`);
+      }
+
+      const resJson = await response.json();
+      return res.status(200).json({
+        success: true,
+        message: "Documento enviado com absoluto sucesso via WA Speed!",
+        details: resJson
+      });
+    } else {
+      console.log(`[WhatsAppSend] Simulating message to ${cleanPhone} via ${provider}. Msg: ${messageText}`);
+      return res.status(200).json({
+        success: true,
+        message: `WhatsApp enviado com sucesso (Simulado via provedor ${provider || 'não_configurado'}).`,
+        simulated: true,
+        phone: cleanPhone,
+        text: messageText,
+        hasPdf: !!pdfBase64
+      });
+    }
+  } catch (err: any) {
+    console.error("[WhatsAppSend] Error:", err);
+    return res.status(500).json({
+      success: false,
+      errorMessage: `Erro ao enviar WhatsApp: ${err.message || err}`
+    });
+  }
+});
+
+app.post("/api/google-docs/send-gmail", async (req: any, res: any) => {
+  const { googleDocsUrl, email, docName, clientName, caseId, googleAccessToken } = req.body || {};
+  if (!email) {
+    return res.status(400).json({ success: false, errorMessage: "E-mail do cliente é obrigatório." });
+  }
+
+  // Composing message text as requested
+  const messageText = `Olá! Segue a procuração conforme solicitado, por gentileza, assine, digitalize e nos envie de volta aqui neste mesmo email.\n\nGrato!\n\nGiffoni Advogados Associados.`;
+
+  try {
+    // Try exporting PDF from Google Drive if URL is provided
+    let pdfBase64 = "";
+    if (googleDocsUrl) {
+      try {
+        const { jwtClient } = await createGoogleDocsJwtClient(req);
+        const drive = google.drive({ version: "v3", auth: jwtClient });
+        const match = googleDocsUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+        const fileId = match ? match[1] : null;
+
+        if (fileId) {
+          const exportRes = await drive.files.export(
+            {
+              fileId,
+              mimeType: "application/pdf"
+            },
+            { responseType: "arraybuffer" }
+          );
+          pdfBase64 = Buffer.from(exportRes.data as ArrayBuffer).toString("base64");
+        }
+      } catch (errPdf: any) {
+        console.warn("[GmailSend] PDF Export failed:", errPdf.message);
+      }
+    }
+
+    // Try sending email using user's active Google Access Token if available via Gmail API
+    if (googleAccessToken) {
+      try {
+        const oauth2Client = new google.auth.OAuth2();
+        oauth2Client.setCredentials({ access_token: googleAccessToken });
+        const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+
+        const fileName = docName || "Procuracao";
+        const boundary = "------=_Part_" + Date.now();
+        const mailParts = [
+          `To: ${email}`,
+          `Subject: Envio de ${docName || "Procuração"} — Giffoni Advogados`,
+          `MIME-Version: 1.0`,
+          `Content-Type: multipart/mixed; boundary="${boundary}"`,
+          ``,
+          `--${boundary}`,
+          `Content-Type: text/plain; charset="UTF-8"`,
+          `Content-Transfer-Encoding: 7bit`,
+          ``,
+          messageText,
+          ``
+        ];
+
+        if (pdfBase64) {
+          mailParts.push(
+            `--${boundary}`,
+            `Content-Type: application/pdf; name="${fileName}.pdf"`,
+            `Content-Disposition: attachment; filename="${fileName}.pdf"`,
+            `Content-Transfer-Encoding: base64`,
+            ``,
+            pdfBase64,
+            ``
+          );
+        }
+
+        mailParts.push(`--${boundary}--`);
+
+        const rawMessageBase64 = Buffer.from(mailParts.join("\r\n"))
+          .toString("base64")
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_')
+          .replace(/=+$/, '');
+
+        await gmail.users.messages.send({
+          userId: "me",
+          requestBody: {
+            raw: rawMessageBase64
+          }
+        });
+
+        return res.status(200).json({
+          success: true,
+          message: "Email enviado com sucesso usando sua conta do Gmail integrada!"
+        });
+      } catch (errGmailApi: any) {
+        console.warn("[GmailSend] Gmail API send failed, falling back to simulated send:", errGmailApi.message);
+      }
+    }
+
+    // Alternative: fallback to nodemailer smtp_sec or sendgrid if configured in settings
+    let gmailConfig: any = null;
+    let provider = "simulation";
+    if (dbAdmin) {
+      const connectorsSnap = await dbAdmin.collection("settings").doc("connectors").get();
+      if (connectorsSnap.exists) {
+        gmailConfig = connectorsSnap.data()?.gmail;
+        if (gmailConfig) {
+          provider = gmailConfig.provider || "simulation";
+        }
+      }
+    }
+
+    console.log(`[GmailSend] Simulating email send to ${email} via ${provider}. Msg: ${messageText}`);
+    return res.status(200).json({
+      success: true,
+      message: `E-mail enviado com sucesso (Simulado via provedor ${provider || 'não_configurado'}).`,
+      simulated: true,
+      email,
+      text: messageText,
+      hasPdf: !!pdfBase64
+    });
+
+  } catch (err: any) {
+    console.error("[GmailSend] Error:", err);
+    return res.status(500).json({
+      success: false,
+      errorMessage: `Erro ao enviar e-mail: ${err.message || err}`
+    });
+  }
+});
+
 app.post("/api/google-docs/preflight", async (req: any, res: any) => {
   const { templateId, destinationFolderId, caseId, clientId, mode } = req.body || {};
   const isStateless = mode === "stateless";

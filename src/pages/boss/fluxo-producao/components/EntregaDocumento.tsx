@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Printer, MessageCircle, Mail, Settings, Check, ExternalLink } from 'lucide-react';
+import { useAuth } from '../../../../contexts/AuthContext';
 
 interface EntregaDocumentoProps {
   tipoDocumento: 'procuracao' | 'declaracao' | 'contrato';
@@ -28,6 +29,13 @@ export default function EntregaDocumento({
   onOutroChange,
   questionNumber = '1.2'
 }: EntregaDocumentoProps) {
+  const { googleAccessToken } = useAuth();
+
+  const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
+  const [whatsappResult, setWhatsappResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const [sendingGmail, setSendingGmail] = useState(false);
+  const [gmailResult, setGmailResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Resolve localized text based on documento
   const getDocInfo = () => {
@@ -61,12 +69,69 @@ export default function EntregaDocumento({
 
   const docInfo = getDocInfo();
 
-  // Handle method selection
+  // Handle method selection (single-choice)
   const toggleMethod = (method: string) => {
-    const updated = selectedMethods.includes(method)
-      ? selectedMethods.filter((m) => m !== method)
-      : [...selectedMethods, method];
+    const updated = selectedMethods.includes(method) ? [] : [method];
     onMethodsChange(updated);
+  };
+
+  const handleSendWhatsapp = async () => {
+    setSendingWhatsapp(true);
+    setWhatsappResult(null);
+    try {
+      const response = await fetch('/api/google-docs/send-whatsapp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          googleDocsUrl: docUrl,
+          phone: whatsappCliente,
+          docName: docInfo.label,
+          clientName: nomeCliente
+        })
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setWhatsappResult({ success: true, message: data.message });
+      } else {
+        setWhatsappResult({ success: false, message: data.errorMessage || 'Falha ao enviar por WhatsApp.' });
+      }
+    } catch (err: any) {
+      setWhatsappResult({ success: false, message: err.message || 'Erro ao conectar à API de WhatsApp.' });
+    } finally {
+      setSendingWhatsapp(false);
+    }
+  };
+
+  const handleSendGmail = async () => {
+    setSendingGmail(true);
+    setGmailResult(null);
+    try {
+      const response = await fetch('/api/google-docs/send-gmail', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          googleDocsUrl: docUrl,
+          email: emailCliente,
+          docName: docInfo.label,
+          clientName: nomeCliente,
+          googleAccessToken
+        })
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setGmailResult({ success: true, message: data.message });
+      } else {
+        setGmailResult({ success: false, message: data.errorMessage || 'Falha ao enviar por e-mail.' });
+      }
+    } catch (err: any) {
+      setGmailResult({ success: false, message: err.message || 'Erro ao conectar à API de e-mail.' });
+    } finally {
+      setSendingGmail(false);
+    }
   };
 
   // Generate clean direct link for WhatsApp
@@ -94,7 +159,7 @@ export default function EntregaDocumento({
           {questionNumber} Como você entregará o documento ao cliente?
         </p>
         <p className="text-[11px] text-gray-400">
-          Selecione uma ou mais formas de entrega para liberar as respectivas ações e logs operacionais.
+          Selecione o canal exclusivo de entrega para habilitar e realizar os disparos fáticos de envio automático.
         </p>
       </div>
 
@@ -168,35 +233,57 @@ export default function EntregaDocumento({
                     {questionNumber}.2 — WhatsApp Integration
                   </span>
                   <span className="text-[9px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-200 rounded px-1.5 py-0.2 tracking-wider">
-                    Automação Reservada
+                    Conector WA Speed Ativo
                   </span>
                 </div>
                 <p className="text-xs font-extrabold text-emerald-950">
                   Transmissão por WhatsApp ({whatsappCliente || 'Número não cadastrado'})
                 </p>
                 <p className="text-[10px] text-emerald-700/80 font-semibold font-sans">
-                  Ação futura: enviar automaticamente o documento ao cliente via WhatsApp.
+                  Enviar {docInfo.label} de forma automatizada ao número do cliente.
                 </p>
               </div>
 
-              {cleanPhone && (
-                <a
-                  href={whatsappUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition-all shadow-3xs"
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSendWhatsapp}
+                  disabled={sendingWhatsapp || !cleanPhone || !docUrl}
+                  className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition-all shadow-3xs cursor-pointer"
                 >
-                  <MessageCircle size={12} />
-                  <span>Ver conversa de WhatsApp</span>
-                </a>
-              )}
+                  {sendingWhatsapp ? (
+                    <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                  ) : (
+                    <MessageCircle size={12} />
+                  )}
+                  <span>{sendingWhatsapp ? 'Enviando...' : 'Enviar Procuração via WhatsApp'}</span>
+                </button>
+
+                {cleanPhone && (
+                  <a
+                    href={whatsappUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold rounded-xl transition-all"
+                  >
+                    <ExternalLink size={11} />
+                    <span>WhatsApp Web</span>
+                  </a>
+                )}
+              </div>
             </div>
 
-            {/* Validation Log */}
-            <div className="bg-emerald-500/10 border border-emerald-200 p-2.5 rounded-xl flex items-center gap-2 text-[11px] font-bold text-emerald-800">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              <span>{docInfo.label} enviado com sucesso (fila de envio futuro programada).</span>
-            </div>
+            {/* Send status feedback */}
+            {whatsappResult && (
+              <div className={`p-2.5 rounded-xl border flex items-center gap-2 text-[11px] font-bold ${
+                whatsappResult.success 
+                  ? 'bg-emerald-500/10 border-emerald-250 text-emerald-800' 
+                  : 'bg-rose-550/10 border-rose-200 text-rose-800'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${whatsappResult.success ? 'bg-emerald-550 animate-pulse' : 'bg-rose-550'}`}></span>
+                <span>{whatsappResult.message}</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -209,36 +296,58 @@ export default function EntregaDocumento({
                   <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest block font-mono">
                     {questionNumber}.3 — Gmail Integration
                   </span>
-                  <span className="text-[9px] font-black uppercase bg-blue-100 text-blue-800 border border-blue-200 rounded px-1.5 py-0.2 tracking-wider">
-                    Automação Reservada
+                  <span className="text-[9px] font-black uppercase bg-blue-105 text-blue-800 border border-blue-200 rounded px-1.5 py-0.2 tracking-wider">
+                    Conector Gmail
                   </span>
                 </div>
                 <p className="text-xs font-extrabold text-blue-950">
                   Transmissão por E-mail ({emailCliente || 'Email não cadastrado'})
                 </p>
                 <p className="text-[10px] text-blue-700/85 font-semibold font-sans">
-                  Ação futura: enviar automaticamente o documento ao cliente via Gmail.
+                  Enviar {docInfo.label} com anexo PDF automático via integração Gmail ou SMTP.
                 </p>
               </div>
 
-              {emailCliente && (
-                <a
-                  href={gmailUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition-all shadow-3xs"
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSendGmail}
+                  disabled={sendingGmail || !emailCliente || !docUrl}
+                  className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition-all shadow-3xs cursor-pointer"
                 >
-                  <Mail size={12} />
-                  <span>Abrir conversa no Gmail</span>
-                </a>
-              )}
+                  {sendingGmail ? (
+                    <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                  ) : (
+                    <Mail size={12} />
+                  )}
+                  <span>{sendingGmail ? 'Enviando...' : 'Enviar Procuração via Gmail'}</span>
+                </button>
+
+                {emailCliente && (
+                  <a
+                    href={gmailUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold rounded-xl transition-all"
+                  >
+                    <ExternalLink size={11} />
+                    <span>Gmail Web</span>
+                  </a>
+                )}
+              </div>
             </div>
 
-            {/* Validation Log */}
-            <div className="bg-blue-500/10 border border-blue-200 p-2.5 rounded-xl flex items-center gap-2 text-[11px] font-bold text-blue-800">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-              <span>{docInfo.label} enviado com sucesso (fila de envio futuro programada).</span>
-            </div>
+            {/* Gmail result feedback */}
+            {gmailResult && (
+              <div className={`p-2.5 rounded-xl border flex items-center gap-2 text-[11px] font-bold ${
+                gmailResult.success 
+                  ? 'bg-blue-500/10 border-blue-250 text-blue-800' 
+                  : 'bg-rose-550/10 border-rose-200 text-rose-800'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${gmailResult.success ? 'bg-blue-550' : 'bg-rose-550'}`}></span>
+                <span>{gmailResult.message}</span>
+              </div>
+            )}
           </div>
         )}
 
