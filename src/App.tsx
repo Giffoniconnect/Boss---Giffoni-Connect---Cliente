@@ -64,6 +64,7 @@ import EditarCadastroCliente from './pages/boss/fluxo-producao/EditarCadastroCli
 import CadastroFluxo from './pages/boss/fluxo-producao/CadastroFluxo';
 import PortalClienteFluxo from './pages/boss/fluxo-producao/PortalClienteFluxo';
 import EditarPortalCliente from './pages/boss/fluxo-producao/EditarPortalCliente';
+import CentralAtalhos from './pages/boss/giffoni-connect/CentralAtalhos';
 
 
 
@@ -102,6 +103,15 @@ const router = createBrowserRouter(
         element={
           <ProtectedRoute role="boss_admin">
             <BossDashboard />
+          </ProtectedRoute>
+        } 
+      />
+
+      <Route 
+        path="/boss-giffoni-clientes/giffoni-connect-atalhos" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <CentralAtalhos />
           </ProtectedRoute>
         } 
       />

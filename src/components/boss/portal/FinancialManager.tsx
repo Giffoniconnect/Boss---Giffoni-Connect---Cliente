@@ -7,7 +7,9 @@ import {
   RefreshCw, 
   Coins, 
   TrendingUp, 
-  Wallet 
+  Wallet,
+  Eye,
+  X
 } from 'lucide-react';
 
 interface FinancialManagerProps {
@@ -56,6 +58,7 @@ export const FinancialManager: React.FC<FinancialManagerProps> = ({
   handleDeleteFinancial
 }) => {
   const [showForm, setShowForm] = useState(false);
+  const [selectedDetailFinancial, setSelectedDetailFinancial] = useState<any | null>(null);
 
   // Consolidated Math
   const totalBilled = allClientFinancials.reduce((sum, item) => sum + (Number(item.totalAmount) || 0), 0);
@@ -107,7 +110,7 @@ export const FinancialManager: React.FC<FinancialManagerProps> = ({
             <Coins size={18} />
           </div>
           <div>
-            <span className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-wider block">Total Baturado</span>
+            <span className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-wider block">Total Faturado</span>
             <span className="text-sm font-black text-slate-900 font-mono block">{formatBRL(totalBilled)}</span>
           </div>
         </div>
@@ -297,8 +300,9 @@ export const FinancialManager: React.FC<FinancialManagerProps> = ({
                         <div className="flex items-center justify-end gap-2">
                           {item.financialStatus !== 'pago' && (
                             <button
+                              type="button"
                               onClick={() => handleMarkFinancialPaid(item)}
-                              className="p-1 px-2 hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700 border border-emerald-100 rounded-lg text-[10px] font-bold uppercase transition flex items-center gap-1"
+                              className="p-1 px-2 hover:bg-emerald-50 text-emerald-600 hover:text-emerald-700 border border-emerald-100 rounded-lg text-[10px] font-bold uppercase transition flex items-center gap-1 cursor-pointer"
                               title="Liquidar Pagamento"
                             >
                               <Check size={12} />
@@ -306,8 +310,17 @@ export const FinancialManager: React.FC<FinancialManagerProps> = ({
                             </button>
                           )}
                           <button
+                            type="button"
+                            onClick={() => setSelectedDetailFinancial(item)}
+                            className="p-1.5 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 border border-transparent hover:border-indigo-100 rounded-lg transition cursor-pointer"
+                            title="Visualizar Faturamento"
+                          >
+                            <Eye size={13} />
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleDeleteFinancial(item.id)}
-                            className="p-1.5 text-rose-600 hover:bg-rose-50 hover:text-rose-700 border border-transparent hover:border-rose-100 rounded-lg transition"
+                            className="p-1.5 text-rose-600 hover:bg-rose-50 hover:text-rose-700 border border-transparent hover:border-rose-100 rounded-lg transition cursor-pointer"
                             title="Remover Faturamento"
                           >
                             <Trash2 size={13} />
@@ -322,6 +335,90 @@ export const FinancialManager: React.FC<FinancialManagerProps> = ({
           </div>
         )}
       </div>
+
+      {/* Modal de Detalhes do Faturamento */}
+      {selectedDetailFinancial && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white border border-gray-150 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl relative text-left space-y-6">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="text-sm font-black uppercase text-indigo-650 font-mono tracking-wider">Detalhes do Faturamento</h3>
+              <button
+                type="button"
+                onClick={() => setSelectedDetailFinancial(null)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-lg transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <span className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest block">Classificação</span>
+                <span className="text-sm font-extrabold text-gray-900 block mt-0.5">
+                  {getChargeTypeLabel(selectedDetailFinancial.chargeType)}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest block">Valor Total</span>
+                  <span className="text-sm font-black text-gray-900 font-mono block mt-0.5">
+                    {formatBRL(selectedDetailFinancial.totalAmount)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest block">Vencimento</span>
+                  <span className="text-sm font-extrabold text-gray-900 font-mono block mt-0.5 font-semibold">
+                    {selectedDetailFinancial.firstDueDate || '—'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest block">Parcelas</span>
+                  <span className="text-sm font-extrabold text-gray-900 block mt-0.5">
+                    {selectedDetailFinancial.installments || 1}x
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest block">Meio de Pagamento</span>
+                  <span className="text-sm font-black text-indigo-650 font-mono uppercase block mt-0.5">
+                    {selectedDetailFinancial.paymentMethod || 'Não selecionado'}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest block">Situação Atual</span>
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 border rounded-lg text-[10px] font-extrabold uppercase font-mono mt-1 ${
+                  selectedDetailFinancial.financialStatus === 'pago' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+                  selectedDetailFinancial.financialStatus === 'vencido' ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-amber-50 border-amber-200 text-amber-800'
+                }`}>
+                  {selectedDetailFinancial.financialStatus === 'pago' ? '🟢 PAGO' : selectedDetailFinancial.financialStatus === 'vencido' ? '⚠️ VENCIDO' : '🟡 PENDENTE'}
+                </span>
+              </div>
+
+              {selectedDetailFinancial.publicMessage && (
+                <div className="p-3 bg-gray-50 border border-gray-150 rounded-xl">
+                  <span className="text-[9px] font-mono font-black text-gray-400 uppercase tracking-widest block mb-1">Aviso/Instrução ao Cliente</span>
+                  <p className="text-xs font-semibold text-gray-700 leading-relaxed break-words">{selectedDetailFinancial.publicMessage}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setSelectedDetailFinancial(null)}
+                className="w-full py-2.5 bg-gray-900 hover:bg-gray-950 text-white rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer"
+              >
+                Voltar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

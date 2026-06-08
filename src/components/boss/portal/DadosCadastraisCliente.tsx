@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   User, 
   Briefcase, 
@@ -7,7 +7,9 @@ import {
   Eye, 
   EyeOff, 
   ShieldCheck, 
-  CreditCard 
+  CreditCard,
+  Instagram,
+  Facebook
 } from 'lucide-react';
 
 interface DadosCadastraisProps {
@@ -19,6 +21,23 @@ interface DadosCadastraisProps {
   getClientName: (c: any) => string;
   navigate: any;
 }
+
+const Tiktok = ({ size = 14, className = "" }: { size?: number; className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    width={size}
+    height={size}
+    className={className}
+  >
+    <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />
+  </svg>
+);
 
 export const DadosCadastraisCliente: React.FC<DadosCadastraisProps> = ({
   selectedClient,
@@ -35,6 +54,50 @@ export const DadosCadastraisCliente: React.FC<DadosCadastraisProps> = ({
   const socio = selectedClient.socioData || selectedClient.socioDadosPessoais || {};
   const acesso = selectedClient.acessoSistema || {};
   const bancario = selectedClient.bancarioData || selectedClient.bancarioDadosBancarios || {};
+
+  const [hideInstagram, setHideInstagram] = useState(false);
+  const [hideFacebook, setHideFacebook] = useState(false);
+  const [hideTiktok, setHideTiktok] = useState(false);
+
+  const getSocialUrl = (type: 'instagram' | 'facebook' | 'tiktok', value: string) => {
+    if (!value || value === '—' || value === 'Não possuo' || value === 'Nao possuo') return null;
+    let clean = value.trim();
+    if (clean.startsWith('@')) {
+      clean = clean.substring(1);
+    }
+    if (clean.startsWith('http://') || clean.startsWith('https://')) {
+      return clean;
+    }
+    if (type === 'instagram') {
+      return `https://instagram.com/${clean}`;
+    }
+    if (type === 'facebook') {
+      return `https://facebook.com/${clean}`;
+    }
+    if (type === 'tiktok') {
+      return `https://tiktok.com/@${clean}`;
+    }
+    return null;
+  };
+
+  const renderSocialLink = (type: 'instagram' | 'facebook' | 'tiktok', value: string) => {
+    const url = getSocialUrl(type, value);
+    if (!url) return null;
+
+    const IconComponent = type === 'instagram' ? Instagram : type === 'facebook' ? Facebook : Tiktok;
+
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-indigo-650 hover:text-indigo-850 p-1 rounded hover:bg-gray-150 transition cursor-pointer flex items-center justify-center shrink-0"
+        title={`Entrar em contato via ${type}`}
+      >
+        <IconComponent size={14} className="shrink-0" />
+      </a>
+    );
+  };
 
   return (
     <div className="bg-white border border-gray-150 rounded-3xl p-6 md:p-8 shadow-xs relative overflow-hidden text-left space-y-6">
@@ -189,16 +252,61 @@ export const DadosCadastraisCliente: React.FC<DadosCadastraisProps> = ({
                     <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pf.pf_telefoneCelular || '—'}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Instagram</span>
-                    <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pf.pf_instagram || '—'}</span>
+                    <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-1">
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Instagram</span>
+                      <div className="flex items-center gap-1.5 leading-none">
+                        {!hideInstagram && renderSocialLink('instagram', pf.pf_instagram)}
+                        <button
+                          type="button"
+                          onClick={() => setHideInstagram(!hideInstagram)}
+                          className="hover:text-indigo-600 text-gray-400 transition cursor-pointer p-0.5 rounded hover:bg-gray-150"
+                          title={hideInstagram ? "Mostrar atalho" : "Esconder atalho"}
+                        >
+                          {hideInstagram ? <EyeOff size={13} /> : <Eye size={13} />}
+                        </button>
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">
+                      {hideInstagram ? '••••••••' : (pf.pf_instagram || '—')}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Facebook</span>
-                    <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pf.pf_facebook || '—'}</span>
+                    <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-1">
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Facebook</span>
+                      <div className="flex items-center gap-1.5 leading-none">
+                        {!hideFacebook && renderSocialLink('facebook', pf.pf_facebook)}
+                        <button
+                          type="button"
+                          onClick={() => setHideFacebook(!hideFacebook)}
+                          className="hover:text-indigo-600 text-gray-400 transition cursor-pointer p-0.5 rounded hover:bg-gray-150"
+                          title={hideFacebook ? "Mostrar atalho" : "Esconder atalho"}
+                        >
+                          {hideFacebook ? <EyeOff size={13} /> : <Eye size={13} />}
+                        </button>
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">
+                      {hideFacebook ? '••••••••' : (pf.pf_facebook || '—')}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">TikTok</span>
-                    <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pf.pf_tiktok || '—'}</span>
+                    <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-1">
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">TikTok</span>
+                      <div className="flex items-center gap-1.5 leading-none">
+                        {!hideTiktok && renderSocialLink('tiktok', pf.pf_tiktok)}
+                        <button
+                          type="button"
+                          onClick={() => setHideTiktok(!hideTiktok)}
+                          className="hover:text-indigo-600 text-gray-400 transition cursor-pointer p-0.5 rounded hover:bg-gray-150"
+                          title={hideTiktok ? "Mostrar atalho" : "Esconder atalho"}
+                        >
+                          {hideTiktok ? <EyeOff size={13} /> : <Eye size={13} />}
+                        </button>
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">
+                      {hideTiktok ? '••••••••' : (pf.pf_tiktok || '—')}
+                    </span>
                   </div>
                 </>
               ) : (
@@ -236,16 +344,61 @@ export const DadosCadastraisCliente: React.FC<DadosCadastraisProps> = ({
                     <span className="text-xs font-mono font-bold text-gray-950 mt-1 block">{pj.pj_siteEmpresa || '—'}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Instagram</span>
-                    <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pj.pj_instagramEmpresa || '—'}</span>
+                    <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-1">
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Instagram</span>
+                      <div className="flex items-center gap-1.5 leading-none">
+                        {!hideInstagram && renderSocialLink('instagram', pj.pj_instagramEmpresa)}
+                        <button
+                          type="button"
+                          onClick={() => setHideInstagram(!hideInstagram)}
+                          className="hover:text-indigo-600 text-gray-400 transition cursor-pointer p-0.5 rounded hover:bg-gray-150"
+                          title={hideInstagram ? "Mostrar atalho" : "Esconder atalho"}
+                        >
+                          {hideInstagram ? <EyeOff size={13} /> : <Eye size={13} />}
+                        </button>
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">
+                      {hideInstagram ? '••••••••' : (pj.pj_instagramEmpresa || '—')}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Facebook</span>
-                    <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pj.pj_facebookEmpresa || '—'}</span>
+                    <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-1">
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Facebook</span>
+                      <div className="flex items-center gap-1.5 leading-none">
+                        {!hideFacebook && renderSocialLink('facebook', pj.pj_facebookEmpresa)}
+                        <button
+                          type="button"
+                          onClick={() => setHideFacebook(!hideFacebook)}
+                          className="hover:text-indigo-600 text-gray-400 transition cursor-pointer p-0.5 rounded hover:bg-gray-150"
+                          title={hideFacebook ? "Mostrar atalho" : "Esconder atalho"}
+                        >
+                          {hideFacebook ? <EyeOff size={13} /> : <Eye size={13} />}
+                        </button>
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">
+                      {hideFacebook ? '••••••••' : (pj.pj_facebookEmpresa || '—')}
+                    </span>
                   </div>
                   <div>
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">TikTok</span>
-                    <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pj.pj_tiktokEmpresa || '—'}</span>
+                    <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-1">
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">TikTok</span>
+                      <div className="flex items-center gap-1.5 leading-none">
+                        {!hideTiktok && renderSocialLink('tiktok', pj.pj_tiktokEmpresa)}
+                        <button
+                          type="button"
+                          onClick={() => setHideTiktok(!hideTiktok)}
+                          className="hover:text-indigo-600 text-gray-400 transition cursor-pointer p-0.5 rounded hover:bg-gray-150"
+                          title={hideTiktok ? "Mostrar atalho" : "Esconder atalho"}
+                        >
+                          {hideTiktok ? <EyeOff size={13} /> : <Eye size={13} />}
+                        </button>
+                      </div>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">
+                      {hideTiktok ? '••••••••' : (pj.pj_tiktokEmpresa || '—')}
+                    </span>
                   </div>
                 </>
               )}
