@@ -51,13 +51,16 @@ import DocumentosAuditoriaPJ from './pages/boss/fluxo-producao/coleta/Documentos
 import FinanceiroFluxo from './pages/boss/fluxo-producao/FinanceiroFluxo';
 import EDRPFluxo from './pages/boss/fluxo-producao/EDRPFluxo';
 import RevisaoFluxo from './pages/boss/fluxo-producao/RevisaoFluxo';
+import DelegacaoFluxo from './pages/boss/fluxo-producao/DelegacaoFluxo';
 import ProtocoloFluxo from './pages/boss/fluxo-producao/ProtocoloFluxo';
 import NovoCasoFluxo from './pages/boss/fluxo-producao/NovoCasoFluxo';
 import ControladoriaFluxo from './pages/boss/fluxo-producao/ControladoriaFluxo';
 import RelatorioIntegridadeFluxo from './pages/boss/fluxo-producao/RelatorioIntegridadeFluxo';
+import ArquivamentoFluxo from './pages/boss/fluxo-producao/ArquivamentoFluxo';
 import Recadastramento from './pages/boss/fluxo-producao/Recadastramento';
 import EditarCadastroCliente from './pages/boss/fluxo-producao/EditarCadastroCliente';
 import CadastroFluxo from './pages/boss/fluxo-producao/CadastroFluxo';
+import PortalClienteFluxo from './pages/boss/fluxo-producao/PortalClienteFluxo';
 
 
 
@@ -248,6 +251,14 @@ const router = createBrowserRouter(
         element={
           <ProtectedRoute role="boss_admin">
             <CadastroFluxo />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/portal-cliente" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <PortalClienteFluxo />
           </ProtectedRoute>
         } 
       />
@@ -500,6 +511,14 @@ const router = createBrowserRouter(
         } 
       />
       <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/delegacao" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DelegacaoFluxo />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
         path="/boss-giffoni-clientes/fluxo-producao/:caseId/revisao" 
         element={
           <ProtectedRoute role="boss_admin">
@@ -536,6 +555,14 @@ const router = createBrowserRouter(
         element={
           <ProtectedRoute role="boss_admin">
             <RelatorioIntegridadeFluxo />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/arquivamento" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <ArquivamentoFluxo />
           </ProtectedRoute>
         } 
       />

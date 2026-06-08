@@ -24,7 +24,7 @@ import { flowSteps } from './utils/flowSteps';
 export default function FluxoHome() {
   const navigate = useNavigate();
 
-  // Define the 4 Main Entry Cards (Requested by User)
+  // Define the 5 Main Entry Cards (Requested by User)
   const entryCards = [
     {
       title: '1. Novo Cliente',
@@ -57,6 +57,14 @@ export default function FluxoHome() {
       color: 'cyan',
       action: () => navigate('/boss-giffoni-clientes/fluxo-producao/recadastramento'),
       actionLabel: 'Cadastrar Legado'
+    },
+    {
+      title: '5. Portal do Cliente',
+      description: 'Central do Portal do Cliente. Permite visualizar dados cadastrais do cliente, casos, entrevistas, serviços, provas e financeiro.',
+      icon: Eye,
+      color: 'emerald',
+      action: () => navigate('/boss-giffoni-clientes/fluxo-producao/portal-cliente'),
+      actionLabel: 'Gerenciar Portal'
     }
   ];
 
@@ -125,7 +133,7 @@ export default function FluxoHome() {
           <div className="mb-4">
             <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Opções de Início Operacional</h3>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
             {entryCards.map((card, idx) => {
               const Icon = card.icon;
               return (
@@ -138,6 +146,7 @@ export default function FluxoHome() {
                       card.color === 'blue' ? 'bg-blue-50 text-blue-600 border border-blue-100/50' :
                       card.color === 'purple' ? 'bg-purple-50 text-purple-600 border border-purple-100/50' :
                       card.color === 'cyan' ? 'bg-cyan-50 text-cyan-600 border border-cyan-100/50' :
+                      card.color === 'emerald' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100/50' :
                       'bg-orange-50 text-orange-600 border border-orange-100/50'
                     }`}>
                       <Icon size={22} />
@@ -158,6 +167,7 @@ export default function FluxoHome() {
                       card.color === 'blue' ? 'bg-blue-600 hover:bg-blue-700' :
                       card.color === 'purple' ? 'bg-purple-600 hover:bg-purple-700' :
                       card.color === 'cyan' ? 'bg-cyan-600 hover:bg-cyan-700' :
+                      card.color === 'emerald' ? 'bg-emerald-600 hover:bg-emerald-700' :
                       'bg-orange-600 hover:bg-orange-700'
                     }`}
                   >

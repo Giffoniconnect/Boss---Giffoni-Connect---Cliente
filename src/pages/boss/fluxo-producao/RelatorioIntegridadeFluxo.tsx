@@ -219,6 +219,98 @@ export default function RelatorioIntegridadeFluxo() {
     }
   }, [caseObj]);
 
+  const getEDRPValidationWarnings = () => {
+    const list: { type: 'warning' | 'info' | 'error'; msg: string }[] = [];
+    const edrp = caseObj?.edrp;
+    if (!edrp) {
+      list.push({
+        type: 'warning',
+        msg: 'A estruturação fática e jurídica do EDRP não foi localizada neste caso.'
+      });
+      return list;
+    }
+
+    // 1. Estruturação vazia
+    const struct = edrp.structuring || {};
+    const isStructuringEmpty = !(
+      struct.competence?.trim() ||
+      struct.parties?.trim() ||
+      struct.relevantFacts?.trim() ||
+      struct.legalGrounds?.trim() ||
+      struct.claims?.trim() ||
+      struct.evidenceSummary?.trim() ||
+      struct.risks?.trim() ||
+      struct.strategy?.trim()
+    );
+    if (isStructuringEmpty) {
+      list.push({
+        type: 'warning',
+        msg: 'A estruturação fática e jurídica do EDRP está totalmente vazia.'
+      });
+    }
+
+    // 2. Delegação sem responsável
+    if (!edrp.delegation?.responsiblePerson?.trim()) {
+      list.push({
+        type: 'warning',
+        msg: 'Nenhum profissional responsável principal foi designado para a delegação.'
+      });
+    }
+
+    // 3. Revisão sem revisor
+    if (!edrp.reviewPreparation?.reviewResponsible?.trim()) {
+      list.push({
+        type: 'warning',
+        msg: 'Nenhum revisor interno foi definido na etapa de Revisão.'
+      });
+    }
+
+    // 4. Protocolo sem responsável
+    if (!edrp.protocolPreparation?.protocolResponsible?.trim()) {
+      list.push({
+        type: 'warning',
+        msg: 'Nenhum responsável foi designado para a preparação de protocolo.'
+      });
+    }
+
+    // 5. Protocolo sem sistema
+    if (!edrp.protocolPreparation?.protocolSystem?.trim()) {
+      list.push({
+        type: 'warning',
+        msg: 'Nenhum sistema de protocolo eletrônico (ex: PJe, Projudi, e-SAJ) foi preenchido.'
+      });
+    }
+
+    // 6. Revisão não aprovada
+    const isApproved = edrp.reviewPreparation?.approvedForProtocol || edrp.reviewPreparation?.reviewStatus === 'aprovado';
+    if (!isApproved) {
+      list.push({
+        type: 'warning',
+        msg: 'A análise de revisão interna do EDRP não está aprovada para a liberação de protocolo.'
+      });
+    }
+
+    // 7. Protocolo pronto sem revisão aprovada
+    if (edrp.protocolPreparation?.protocolStatus === 'pronto_para_protocolar' && !isApproved) {
+      list.push({
+        type: 'error',
+        msg: 'Inconsistência Grave: O protocolo está marcado como "Pronto para protocolar", mas a revisão da estruturação ainda não foi aprovada formalmente.'
+      });
+    }
+
+    // 8. Service recommendations check
+    const serviceKey = caseObj?.registrationTypeKey;
+    const isOngoingJudicial = serviceKey === 'processo_judicial_em_andamento' || serviceKey === 'processo_judicial_ajuizado';
+    if (isOngoingJudicial && !edrp.protocolPreparation?.processNumber?.trim()) {
+      list.push({
+        type: 'info',
+        msg: 'CNJ Recomendado: O tipo de serviço selecionado exige a identificação do número de processo judicial anterior.'
+      });
+    }
+
+    return list;
+  };
+
   // Master finish action
   const handleFinalizeProduction = async () => {
     if (!caseId || !reportResult) {
@@ -629,6 +721,60 @@ export default function RelatorioIntegridadeFluxo() {
           </div>
         </div>
 
+
+        {/* DIAGNÓSTICO PREVENTIVO DE INTEGRIDADE DO EDRP */}
+        {(() => {
+          const edrpValidationAlerts = getEDRPValidationWarnings();
+          return (
+            <div className="border border-gray-150 rounded-3xl p-6 space-y-4 bg-white shadow-xs">
+              <div className="flex items-center gap-2.5 pb-2 border-b border-gray-100">
+                <div className="w-8 h-8 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
+                  <Activity size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-gray-900 uppercase tracking-tight">Diagnóstico Preventivo de Integridade do EDRP</h3>
+                  <p className="text-[10.5px] text-gray-400">Alertas fáticos e procedimentais do caso que alimentam o Relatório Final de Integridade do BOSS.</p>
+                </div>
+              </div>
+
+              {edrpValidationAlerts.length === 0 ? (
+                <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl text-emerald-900 text-xs flex gap-3 items-center font-semibold leading-relaxed">
+                  <Check className="text-emerald-500 shrink-0" size={16} />
+                  <span>Excelente! Nenhum aviso ou inconsistência detectados para este rascunho de EDRP.</span>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {edrpValidationAlerts.map((alert, idx) => {
+                    const isError = alert.type === 'error';
+                    const isWarning = alert.type === 'warning';
+                    
+                    let boxClass = 'bg-blue-50 border-blue-100 text-blue-900';
+                    let Icon = Info;
+                    let textStyle = 'text-blue-500';
+
+                    if (isError) {
+                      boxClass = 'bg-red-50 border-red-155 text-red-900';
+                      Icon = AlertCircle;
+                      textStyle = 'text-red-500';
+                    } else if (isWarning) {
+                      boxClass = 'bg-amber-50 border-amber-155 text-amber-900';
+                      Icon = AlertTriangle;
+                      textStyle = 'text-amber-500';
+                    }
+
+                    return (
+                      <div key={idx} className={`p-3.5 border rounded-xl flex gap-x-3 items-start text-xs font-medium leading-relaxed ${boxClass}`}>
+                        <Icon size={15} className={`${textStyle} shrink-0 mt-0.5`} />
+                        <div>{alert.msg}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* AUDIT CHECKLIST PANEL */}
         <div className="border border-gray-150 rounded-3xl bg-white overflow-hidden shadow-xs">
           
@@ -714,11 +860,11 @@ export default function RelatorioIntegridadeFluxo() {
         <div className="flex flex-col sm:flex-row sm:justify-between items-center gap-4 pt-6 border-t border-gray-150">
           <button
             type="button"
-            onClick={() => navigate(flowRoutes.controladoria(caseId))}
+            onClick={() => navigate(flowRoutes.protocolo(caseId!))}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-200 hover:border-gray-300 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white"
           >
             <ArrowLeft size={14} />
-            Voltar para Controladoria
+            Voltar para Protocolo / Distribuição
           </button>
 
           <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto">
@@ -734,11 +880,11 @@ export default function RelatorioIntegridadeFluxo() {
 
             <button
               type="button"
-              onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao')}
+              onClick={() => navigate(flowRoutes.controladoria(caseId!))}
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-950 text-white px-7 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-sm"
             >
-              <span>Concluir Fluxo</span>
-              <Check size={14} />
+              <span>Avançar para Controladoria</span>
+              <ChevronRight size={14} />
             </button>
           </div>
         </div>

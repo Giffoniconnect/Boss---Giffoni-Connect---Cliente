@@ -178,24 +178,49 @@ export function buildProcuracaoPfPlaceholders(clientData: any, caseData?: any): 
   const client = buildClientCommonPlaceholders(clientData);
   const casePls = buildCaseCommonPlaceholders(caseData);
   
+  const getField = (keys: string[]): string => {
+    for (const key of keys) {
+      const val = clientData?.[key] ?? clientData?.pfDadosPessoais?.[key] ?? clientData?.pfData?.[key];
+      if (val !== undefined && val !== null) {
+        return String(val).trim();
+      }
+    }
+    return "";
+  };
+
+  // Extract separate street address
+  const rua = getField(["pf_endereco", "endereco", "rua"]);
+  const numOrig = getField(["pf_numero", "numero"]);
+  const compOrig = getField(["pf_complemento", "complemento"]);
+  const bairroOrig = getField(["pf_bairro", "bairro"]);
+  const cidadeOrig = getField(["pf_cidade", "cidade", "pf_localidade"]);
+  const estadoOrig = getField(["pf_estado", "estado", "pf_uf"]);
+  const cepOrig = getField(["pf_cep", "cep"]);
+
   // Legacy keys mapped for older document templates
   const oldPfPls: Record<string, string> = {
-    "{{OUTORGANTE_NOME}}": client["{{NOME_COMPLETO}}"],
-    "{{OUTORGANTE_NACIONALIDADE}}": client["{{NACIONALIDADE}}"],
-    "{{OUTORGANTE_ESTADO_CIVIL}}": client["{{ESTADO_CIVIL}}"],
-    "{{OUTORGANTE_PROFISSAO}}": client["{{PROFISSAO}}"],
-    "{{OUTORGANTE_CPF}}": client["{{CPF}}"],
-    "{{OUTORGANTE_RG}}": client["{{RG}}"],
-    "{{OUTORGANTE_ENDERECO}}": client["{{ENDERECO_COMPLETO}}"],
-    "{{OUTORGANTE_NUMERO}}": clientData?.pfDadosPessoais?.pf_numero || clientData?.pfData?.pf_numero || "",
-    "{{OUTORGANTE_COMPLEMENTO}}": clientData?.pfDadosPessoais?.pf_complemento || clientData?.pfData?.pf_complemento || "",
-    "{{OUTORGANTE_BAIRRO}}": clientData?.pfDadosPessoais?.pf_bairro || clientData?.pfData?.pf_bairro || "",
-    "{{OUTORGANTE_CIDADE}}": clientData?.pfDadosPessoais?.pf_cidade || clientData?.pfData?.pf_cidade || "",
-    "{{OUTORGANTE_ESTADO}}": clientData?.pfDadosPessoais?.pf_estado || clientData?.pfData?.pf_estado || "",
-    "{{OUTORGANTE_CEP}}": clientData?.pfDadosPessoais?.pf_cep || clientData?.pfData?.pf_cep || "",
-    "{{OUTORGANTE_EMAIL}}": client["{{EMAIL}}"],
-    "{{OUTORGANTE_TELEFONE}}": client["{{TELEFONE}}"],
-    "{{OUTORGANTE_WHATSAPP}}": client["{{WHATSAPP}}"],
+    "{{OUTORGANTE_NOME}}": client["{{NOME_COMPLETO}}"] || getField(["pf_nomeCompleto"]),
+    "{{OUTORGANTE_NACIONALIDADE}}": client["{{NACIONALIDADE}}"] || getField(["pf_nacionalidade"]) || "Brasileira",
+    "{{OUTORGANTE_ESTADO_CIVIL}}": client["{{ESTADO_CIVIL}}"] || getField(["pf_estadoCivil"]) || "Solteiro(a)",
+    "{{OUTORGANTE_PROFISSAO}}": client["{{PROFISSAO}}"] || getField(["pf_profissao"]),
+    "{{OUTORGANTE_CPF}}": client["{{CPF}}"] || getField(["pf_cpf"]),
+    "{{OUTORGANTE_RG}}": client["{{RG}}"] || getField(["pf_rg"]),
+    "{{OUTORGANTE_ORGAO_EMISSOR}}": getField(["pf_orgaoEmissor"]),
+    "{{OUTORGANTE_DATA_EMISSAO}}": getField(["pf_dataEmissao"]),
+    "{{OUTORGANTE_DATA_NASCIMENTO}}": getField(["pf_dataNascimento", "pf_nascimento"]),
+    "{{OUTORGANTE_ENDERECO}}": rua || client["{{ENDERECO_COMPLETO}}"],
+    "{{OUTORGANTE_NUMERO}}": numOrig,
+    "{{OUTORGANTE_COMPLEMENTO}}": compOrig,
+    "{{OUTORGANTE_BAIRRO}}": bairroOrig,
+    "{{OUTORGANTE_CIDADE}}": cidadeOrig,
+    "{{OUTORGANTE_ESTADO}}": estadoOrig,
+    "{{OUTORGANTE_CEP}}": cepOrig,
+    "{{OUTORGANTE_EMAIL}}": client["{{EMAIL}}"] || getField(["pf_email"]),
+    "{{OUTORGANTE_TELEFONE}}": client["{{TELEFONE}}"] || getField(["pf_telefone"]),
+    "{{OUTORGANTE_WHATSAPP}}": client["{{WHATSAPP}}"] || getField(["pf_whatsapp"]),
+    "{{OUTORGANTE_INSTAGRAM}}": getField(["pf_instagram"]),
+    "{{OUTORGANTE_FACEBOOK}}": getField(["pf_facebook"]),
+    "{{OUTORGANTE_TIKTOK}}": getField(["pf_tiktok"]),
     "{{LOCAL_ASSINATURA}}": global["{{CIDADE_ASSINATURA}}"],
   };
 

@@ -14,11 +14,13 @@ export const flowRoutes = {
   solicitacoesProvas: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/card-iniciar-coleta-obrigatoria`,
   financeiro: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/financeiro`,
   edrp: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp`,
+  delegacao: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/delegacao`,
   revisao: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/revisao`,
   protocolo: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/protocolo`,
   novoCaso: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/novo-caso`,
   controladoria: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/controladoria`,
   relatorioIntegridade: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/relatorio-integridade`,
+  arquivamento: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/arquivamento`,
   recadastramento: () => '/boss-giffoni-clientes/fluxo-producao/recadastramento'
 };
 

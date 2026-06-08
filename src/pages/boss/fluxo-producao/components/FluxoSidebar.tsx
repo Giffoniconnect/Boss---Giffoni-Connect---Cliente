@@ -82,10 +82,12 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
           else if (s.id === 'solicitacoes-informacoes') shortLabel = 'Info. Complementares';
           else if (s.id === 'financeiro') shortLabel = 'Financeiro';
           else if (s.id === 'edrp') shortLabel = 'Estruturação (EDRP)';
-          else if (s.id === 'revisao') shortLabel = 'Delegação e Revisão';
+          else if (s.id === 'delegacao') shortLabel = 'Delegação';
+          else if (s.id === 'revisao') shortLabel = 'Revisão';
           else if (s.id === 'protocolo') shortLabel = 'Protocolo';
+          else if (s.id === 'relatorio-integridade') shortLabel = 'Relatório de Integridade e Auditoria';
           else if (s.id === 'controladoria') shortLabel = 'Controladoria';
-          else if (s.id === 'relatorio-integridade') shortLabel = 'Arquivamento';
+          else if (s.id === 'arquivamento') shortLabel = 'Arquivamento';
           else if (s.id === 'recadastramento') shortLabel = 'Recadastramento';
 
           return { ...s, label: shortLabel };
@@ -214,6 +216,12 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
       return caseObj.edrp ? 'complete' : 'uninitiated';
     }
 
+    if (stepId === 'delegacao') {
+      if (!caseObj) return 'uninitiated';
+      const isComplete = !!(caseObj.operatorId || caseObj.taskDescription || caseObj.delegationCompleted);
+      return isComplete ? 'complete' : 'uninitiated';
+    }
+
     if (stepId === 'revisao') {
       if (!caseObj) return 'uninitiated';
       return (caseObj.revisionCompleted || caseObj.statusInterno === 'Aprovado para protocolo') ? 'complete' : 'uninitiated';
@@ -224,14 +232,24 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
       return (caseObj.statusInterno === 'Protocolado' || caseObj.processNumber) ? 'complete' : 'uninitiated';
     }
 
+    if (stepId === 'relatorio-integridade') {
+      if (!caseObj) return 'uninitiated';
+      return (caseObj.integrityReport || caseObj.integrityStatus) ? 'complete' : 'uninitiated';
+    }
+
     if (stepId === 'controladoria') {
       if (!caseObj) return 'uninitiated';
       return (caseObj.controladoriaCompleted || caseObj.statusInterno === 'Em controladoria') ? 'complete' : 'uninitiated';
     }
 
-    if (stepId === 'relatorio-integridade') {
+    if (stepId === 'arquivamento') {
       if (!caseObj) return 'uninitiated';
-      return caseObj.statusInterno === 'Arquivado' ? 'complete' : 'uninitiated';
+      return (caseObj.statusInterno === 'Arquivado' || caseObj.archived) ? 'complete' : 'uninitiated';
+    }
+
+    if (stepId === 'recadastramento') {
+      if (!caseObj) return 'uninitiated';
+      return caseObj.recadastramentoCompleted ? 'complete' : 'uninitiated';
     }
 
     return 'uninitiated';
