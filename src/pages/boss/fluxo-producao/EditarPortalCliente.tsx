@@ -33,8 +33,22 @@ import {
   Eye,
   EyeOff,
   ExternalLink,
-  ShieldCheck
+  ShieldCheck,
+  Calendar,
+  Clock,
+  Activity,
+  UserCheck,
+  Inbox,
+  Coins,
+  Check,
+  TrendingUp,
+  Wallet
 } from 'lucide-react';
+
+import { PainelGeralCliente } from '../../../components/boss/portal/PainelGeralCliente';
+import { EventsManager } from '../../../components/boss/portal/EventsManager';
+import { FinancialManager } from '../../../components/boss/portal/FinancialManager';
+import { DadosCadastraisCliente } from '../../../components/boss/portal/DadosCadastraisCliente';
 
 export default function EditarPortalCliente() {
   const navigate = useNavigate();
@@ -87,6 +101,25 @@ export default function EditarPortalCliente() {
   const [newPublicMessage, setNewPublicMessage] = useState('');
   const [addingFinancial, setAddingFinancial] = useState(false);
 
+  // Master client-wide data for dashboard summaries
+  const [allClientEvents, setAllClientEvents] = useState<any[]>([]);
+  const [allClientEvidence, setAllClientEvidence] = useState<any[]>([]);
+  const [allClientInformation, setAllClientInformation] = useState<any[]>([]);
+  const [allClientFinancials, setAllClientFinancials] = useState<any[]>([]);
+  const [loadingDashboard, setLoadingDashboard] = useState(false);
+
+  const [activeSidebarSection, setActiveSidebarSection] = useState<'painel_geral' | 'dados_cadastrais' | 'relacao_casos' | 'audiencias' | 'pericias' | 'reunioes' | 'financeiro'>('painel_geral');
+
+  // Event creation form local states
+  const [addingEvent, setAddingEvent] = useState(false);
+  const [newEventCaseId, setNewEventCaseId] = useState('');
+  const [newEventTitle, setNewEventTitle] = useState('');
+  const [newEventDate, setNewEventDate] = useState('');
+  const [newEventTime, setNewEventTime] = useState('');
+  const [newEventLocation, setNewEventLocation] = useState('');
+  const [newEventDesc, setNewEventDesc] = useState('');
+  const [newEventVisible, setNewEventVisible] = useState(true);
+
   // Fetch client by slug or fallback to ID
   const fetchClientData = async () => {
     if (!slug) {
@@ -130,6 +163,53 @@ export default function EditarPortalCliente() {
         listCases.push({ id: d.id, ...d.data() });
       });
       setClientCases(listCases);
+      if (listCases.length > 0) {
+        setNewEventCaseId(listCases[0].id);
+      }
+
+      // Query client-wide data for dashboard summaries
+      setLoadingDashboard(true);
+      try {
+        // 1. Fetch caseEvidenceRequests of client
+        const qAllEvidence = query(collection(db, 'caseEvidenceRequests'), where('clientId', '==', clientDoc.id));
+        const snapAllEvidence = await getDocs(qAllEvidence);
+        const listAllEvidence: any[] = [];
+        snapAllEvidence.forEach((d) => {
+          listAllEvidence.push({ id: d.id, ...d.data() });
+        });
+        setAllClientEvidence(listAllEvidence);
+
+        // 2. Fetch caseInformationRequests of client
+        const qAllInfo = query(collection(db, 'caseInformationRequests'), where('clientId', '==', clientDoc.id));
+        const snapAllInfo = await getDocs(qAllInfo);
+        const listAllInfo: any[] = [];
+        snapAllInfo.forEach((d) => {
+          listAllInfo.push({ id: d.id, ...d.data() });
+        });
+        setAllClientInformation(listAllInfo);
+
+        // 3. Fetch caseFinancials of client
+        const qAllFin = query(collection(db, 'caseFinancials'), where('clientId', '==', clientDoc.id));
+        const snapAllFin = await getDocs(qAllFin);
+        const listAllFin: any[] = [];
+        snapAllFin.forEach((d) => {
+          listAllFin.push({ id: d.id, ...d.data() });
+        });
+        setAllClientFinancials(listAllFin);
+
+        // 4. Fetch caseEvents of client
+        const qAllEvents = query(collection(db, 'caseEvents'), where('clientId', '==', clientDoc.id));
+        const snapAllEvents = await getDocs(qAllEvents);
+        const listAllEvents: any[] = [];
+        snapAllEvents.forEach((d) => {
+          listAllEvents.push({ id: d.id, ...d.data() });
+        });
+        setAllClientEvents(listAllEvents);
+      } catch (dashErr) {
+        console.error("Erro ao carregar dados do painel do cliente:", dashErr);
+      } finally {
+        setLoadingDashboard(false);
+      }
 
       // Auto-select first case if exists to facilitate editing immediately
       if (listCases.length > 0) {
@@ -284,7 +364,9 @@ export default function EditarPortalCliente() {
 
     try {
       const docRef = await addDoc(collection(db, 'caseEvidenceRequests'), payload);
-      setEvidenceRequests((prev) => [{ id: docRef.id, ...payload }, ...prev]);
+      const newProof = { id: docRef.id, ...payload };
+      setEvidenceRequests((prev) => [newProof, ...prev]);
+      setAllClientEvidence((prev) => [newProof, ...prev]);
       setNewProofTitle('');
       setNewProofDesc('');
       showToastSuccess('Nova solicitação de prova cadastrada com sucesso!');
@@ -307,6 +389,9 @@ export default function EditarPortalCliente() {
       setEvidenceRequests((prev) =>
         prev.map((p) => (p.id === proof.id ? { ...p, status: nextStatus } : p))
       );
+      setAllClientEvidence((prev) =>
+        prev.map((p) => (p.id === proof.id ? { ...p, status: nextStatus } : p))
+      );
       showToastSuccess('Status da prova atualizado!');
     } catch (err: any) {
       console.error(err);
@@ -320,6 +405,7 @@ export default function EditarPortalCliente() {
     try {
       await deleteDoc(doc(db, 'caseEvidenceRequests', proofId));
       setEvidenceRequests((prev) => prev.filter((p) => p.id !== proofId));
+      setAllClientEvidence((prev) => prev.filter((p) => p.id !== proofId));
       showToastSuccess('Documento removido da coleta!');
     } catch (err: any) {
       console.error(err);
@@ -345,7 +431,9 @@ export default function EditarPortalCliente() {
 
     try {
       const docRef = await addDoc(collection(db, 'caseInformationRequests'), payload);
-      setInformationRequests((prev) => [{ id: docRef.id, ...payload }, ...prev]);
+      const newQuestion = { id: docRef.id, ...payload };
+      setInformationRequests((prev) => [newQuestion, ...prev]);
+      setAllClientInformation((prev) => [newQuestion, ...prev]);
       setNewQuestionText('');
       showToastSuccess('Pergunta de informação complementar adicionada!');
     } catch (err: any) {
@@ -365,6 +453,9 @@ export default function EditarPortalCliente() {
         updatedAt: new Date().toISOString()
       });
       setInformationRequests((prev) =>
+        prev.map((q) => (q.id === id ? { ...q, answer: ans, status: status } : q))
+      );
+      setAllClientInformation((prev) =>
         prev.map((q) => (q.id === id ? { ...q, answer: ans, status: status } : q))
       );
       showToastSuccess('Informação salva no histórico!');
@@ -402,7 +493,9 @@ export default function EditarPortalCliente() {
 
     try {
       const docRef = await addDoc(collection(db, 'caseFinancials'), payload);
-      setFinancials((prev) => [{ id: docRef.id, ...payload }, ...prev]);
+      const newFin = { id: docRef.id, ...payload };
+      setFinancials((prev) => [newFin, ...prev]);
+      setAllClientFinancials((prev) => [newFin, ...prev]);
       setNewAmount('');
       setNewPublicMessage('');
       showToastSuccess('Relatório financeiro do caso atualizado!');
@@ -420,10 +513,117 @@ export default function EditarPortalCliente() {
     try {
       await deleteDoc(doc(db, 'caseFinancials', finId));
       setFinancials((prev) => prev.filter((f) => f.id !== finId));
+      setAllClientFinancials((prev) => prev.filter((f) => f.id !== finId));
       showToastSuccess('Faturamento excluído!');
     } catch (err: any) {
       console.error(err);
       setError('Erro ao excluir financeiro: ' + (err.message || err));
+    }
+  };
+
+  const handleCreateEvent = async (type: 'audiencia' | 'pericia' | 'reuniao', customForm?: any) => {
+    if (!selectedClient) return;
+    setAddingEvent(true);
+    setError(null);
+    try {
+      const payload = {
+        caseId: customForm?.caseId || newEventCaseId || (clientCases[0]?.id || 'f60jptoSi8Z9xat45yIb'),
+        clientId: selectedClient.id,
+        type: type,
+        title: customForm?.title || newEventTitle.trim() || `${type.charAt(0).toUpperCase() + type.slice(1)} de Processo`,
+        description: customForm?.description || newEventDesc.trim() || '',
+        date: customForm?.date || newEventDate || new Date().toISOString().split('T')[0],
+        time: customForm?.time || newEventTime || '14:00',
+        location: customForm?.location || newEventLocation.trim() || '',
+        status: customForm?.status || 'agendado',
+        visibleToClient: customForm?.visibleToClient !== undefined ? customForm.visibleToClient : newEventVisible,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      const docRef = await addDoc(collection(db, 'caseEvents'), payload);
+      setAllClientEvents((prev) => [{ id: docRef.id, ...payload }, ...prev]);
+      
+      // Clear event form fields
+      setNewEventTitle('');
+      setNewEventDate('');
+      setNewEventTime('');
+      setNewEventLocation('');
+      setNewEventDesc('');
+      showToastSuccess(`Agendado com êxito!`);
+    } catch (err: any) {
+      console.error(err);
+      setError(`Erro ao agendar ${type}: ` + (err.message || err));
+    } finally {
+      setAddingEvent(false);
+    }
+  };
+
+  const handleToggleEventVisibility = async (event: any) => {
+    setError(null);
+    try {
+      await updateDoc(doc(db, 'caseEvents', event.id), {
+        visibleToClient: !event.visibleToClient,
+        updatedAt: new Date().toISOString()
+      });
+      setAllClientEvents((prev) =>
+        prev.map((e) => (e.id === event.id ? { ...e, visibleToClient: !e.visibleToClient } : e))
+      );
+      showToastSuccess('Visibilidade alterada!');
+    } catch (err: any) {
+      console.error(err);
+      setError('Erro ao alterar visibilidade: ' + (err.message || err));
+    }
+  };
+
+  const handleUpdateEventStatus = async (eventId: string, status: string) => {
+    setError(null);
+    try {
+      await updateDoc(doc(db, 'caseEvents', eventId), {
+        status,
+        updatedAt: new Date().toISOString()
+      });
+      setAllClientEvents((prev) =>
+        prev.map((e) => (e.id === eventId ? { ...e, status } : e))
+      );
+      showToastSuccess('Status do evento atualizado com sucesso!');
+    } catch (err: any) {
+      console.error(err);
+      setError('Erro ao atualizar status do evento: ' + (err.message || err));
+    }
+  };
+
+  const handleDeleteEvent = async (eventId: string) => {
+    if (!window.confirm('Excluir este evento permanentemente?')) return;
+    setError(null);
+    try {
+      await deleteDoc(doc(db, 'caseEvents', eventId));
+      setAllClientEvents((prev) => prev.filter((e) => e.id !== eventId));
+      showToastSuccess('Evento removido com sucesso!');
+    } catch (err: any) {
+      console.error(err);
+      setError('Erro ao apagar evento: ' + (err.message || err));
+    }
+  };
+
+  const handleMarkFinancialPaid = async (fin: any) => {
+    setError(null);
+    try {
+      await updateDoc(doc(db, 'caseFinancials', fin.id), {
+        financialStatus: 'pago',
+        updatedAt: new Date().toISOString()
+      });
+      setAllClientFinancials((prev) =>
+        prev.map((f) => (f.id === fin.id ? { ...f, financialStatus: 'pago' } : f))
+      );
+      if (selectedCase && fin.caseId === selectedCase.id) {
+        setFinancials((prev) =>
+          prev.map((f) => (f.id === fin.id ? { ...f, financialStatus: 'pago' } : f))
+        );
+      }
+      showToastSuccess('Pagamento liquidado com sucesso!');
+    } catch (err: any) {
+      console.error(err);
+      setError('Erro ao liquidar cobrança: ' + (err.message || err));
     }
   };
 
@@ -487,470 +687,224 @@ export default function EditarPortalCliente() {
             <p className="text-xs font-extrabold uppercase font-mono tracking-wider">Carregando painel do cliente...</p>
           </div>
         ) : selectedClient ? (
-          <div className="space-y-8 animate-fade-in">
-            {/* 1. SECTOR: CADASTRO COMPLETO DO CLIENTE */}
-            {(() => {
-              const isPf = selectedClient.type === 'PF';
-              const pf = selectedClient.pfData || selectedClient.pfDadosPessoais || {};
-              const pj = selectedClient.pjData || selectedClient.pjDadosEmpresa || {};
-              const socio = selectedClient.socioData || selectedClient.socioDadosPessoais || {};
-              const acesso = selectedClient.acessoSistema || {};
-              const bancario = selectedClient.bancarioData || selectedClient.bancarioDadosBancarios || {};
-
-              return (
-                <div className="bg-white border border-gray-150 rounded-3xl p-6 md:p-8 shadow-xs relative overflow-hidden text-left space-y-6">
-                  {/* TOP BRANDING & META */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-indigo-50 border border-indigo-100 text-indigo-650 rounded-2xl flex items-center justify-center shadow-3xs shrink-0">
-                        {isPf ? <User size={22} className="stroke-[2px]" /> : <Building2 size={22} className="stroke-[2px]" />}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[9px] font-mono font-black text-gray-400 uppercase tracking-widest block">FICHA DE IDENTIFICAÇÃO CADASTRAL</span>
-                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-lg font-mono border ${
-                            isPf 
-                              ? 'bg-blue-50 text-blue-700 border-blue-200' 
-                              : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          }`}>
-                            {selectedClient.type}
-                          </span>
-                        </div>
-                        <h2 className="text-xl font-black text-gray-900 tracking-tight mt-0.5">{getClientName(selectedClient)}</h2>
-                      </div>
-                    </div>
-
-                    {/* BOTÃO DE ATALHO DE EDIÇÃO DA FICHA */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const targetCaseId = selectedCase?.id || clientCases[0]?.id || 'f60jptoSi8Z9xat45yIb';
-                        navigate(`/boss-giffoni-clientes/fluxo-producao/${targetCaseId}/editar-cadastro-cliente`);
-                      }}
-                      className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-xs shrink-0 cursor-pointer text-center"
-                    >
-                      <ExternalLink size={13} />
-                      <span>Editar Ficha Completa</span>
-                    </button>
-                  </div>
-
-                  {/* TABS INTERNAS DA FICHA DE CADASTRO */}
-                  <div className="flex flex-wrap gap-1.5 bg-gray-50/70 p-1.5 rounded-2xl border border-gray-150">
-                    <button
-                      type="button"
-                      onClick={() => setFichaActiveTab('contratante')}
-                      className={`flex-1 min-w-[124px] px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition duration-150 ${
-                        fichaActiveTab === 'contratante'
-                          ? 'bg-white text-gray-950 shadow-2xs font-black'
-                          : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/55'
-                      }`}
-                    >
-                      1. {isPf ? 'Dados Pessoais' : 'Dados Societários'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFichaActiveTab('endereco')}
-                      className={`flex-1 min-w-[124px] px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition duration-150 ${
-                        fichaActiveTab === 'endereco'
-                          ? 'bg-white text-gray-950 shadow-2xs font-black'
-                          : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/55'
-                      }`}
-                    >
-                      2. Endereço Registrado
-                    </button>
-                    {!isPf && (
-                      <button
-                        type="button"
-                        onClick={() => setFichaActiveTab('socios')}
-                        className={`flex-1 min-w-[124px] px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition duration-150 ${
-                          fichaActiveTab === 'socios'
-                            ? 'bg-white text-gray-950 shadow-2xs font-black'
-                            : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/55'
-                        }`}
-                      >
-                        3. Quadro de Sócios
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setFichaActiveTab('bancarios')}
-                      className={`flex-1 min-w-[124px] px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition duration-150 ${
-                        fichaActiveTab === 'bancarios'
-                          ? 'bg-white text-gray-950 shadow-2xs font-black'
-                          : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/55'
-                      }`}
-                    >
-                      {isPf ? '3.' : '4.'} Dados Bancários
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setFichaActiveTab('acesso')}
-                      className={`flex-1 min-w-[124px] px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition duration-150 ${
-                        fichaActiveTab === 'acesso'
-                          ? 'bg-white text-gray-950 shadow-2xs font-black'
-                          : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/55'
-                      }`}
-                    >
-                      {isPf ? '4.' : '5.'} Credenciais & Acesso
-                    </button>
-                  </div>
-
-                  {/* CONTEÚDO DA TAB ATIVA */}
-                  <div className="bg-gray-50/30 border border-gray-150 rounded-2xl p-5 md:p-6 min-h-[220px]">
-                    {/* 1. TAB CONTRATANTE (PF OU PJ) */}
-                    {fichaActiveTab === 'contratante' && (
-                      <div className="space-y-6 animate-in fade-in duration-300">
-                        <h4 className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono flex items-center gap-1.5 border-b border-gray-100 pb-2">
-                          <User size={14} className="text-gray-50/50 fill-gray-450 shrink-0 text-indigo-550" />
-                          {isPf ? 'Informações de Registro (Pessoa Física)' : 'Informações de Registro (Pessoa Jurídica)'}
-                        </h4>
-                        
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
-                          {isPf ? (
-                            <>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Nome Completo</span>
-                                <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{pf.pf_nomeCompleto || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">CPF</span>
-                                <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pf.pf_cpf || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">RG</span>
-                                <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pf.pf_rg || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Órgão Emissor</span>
-                                <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{pf.pf_orgaoEmissor || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Data de Emissão</span>
-                                <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pf.pf_dataEmissao || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Data de Nascimento</span>
-                                <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pf.pf_dataNascimento || pf.pf_nascimento || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Nacionalidade</span>
-                                <span className="text-xs font-bold text-gray-900 mt-1 block">{pf.pf_nacionalidade || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Estado Civil</span>
-                                <span className="text-xs font-bold text-gray-900 mt-1 block">{pf.pf_estadoCivil || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Profissão</span>
-                                <span className="text-xs font-bold text-gray-900 mt-1 block">{pf.pf_profissao || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">E-mail de Contato</span>
-                                <span className="text-xs font-bold text-gray-900 mt-1 block truncate">{pf.pf_email || selectedClient.email || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Telefone</span>
-                                <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pf.pf_telefone || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">WhatsApp</span>
-                                <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pf.pf_whatsapp || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Instagram</span>
-                                <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pf.pf_instagram || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Facebook</span>
-                                <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pf.pf_facebook || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">TikTok</span>
-                                <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pf.pf_tiktok || '—'}</span>
-                              </div>
-                            </>
-                          ) : (
-                            <>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Razão Social</span>
-                                <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{pj.pj_razaoSocial || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Nome Fantasia</span>
-                                <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{pj.pj_nomeFantasia || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">CNPJ</span>
-                                <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pj.pj_cnpj || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Inscrição Estadual</span>
-                                <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pj.pj_inscricaoEstadual || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Inscrição Municipal</span>
-                                <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pj.pj_inscricaoMunicipal || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">E-mail da Empresa</span>
-                                <span className="text-xs font-bold text-gray-900 mt-1 block truncate">{pj.pj_emailEmpresa || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Telefone Comercial</span>
-                                <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pj.pj_telefoneEmpresa || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">WhatsApp Comercial</span>
-                                <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pj.pj_whatsappEmpresa || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Instagram</span>
-                                <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pj.pj_instagramEmpresa || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Facebook</span>
-                                <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pj.pj_facebookEmpresa || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">TikTok</span>
-                                <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pj.pj_tiktokEmpresa || '—'}</span>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 2. TAB ENDEREÇO */}
-                    {fichaActiveTab === 'endereco' && (
-                      <div className="space-y-6 animate-in fade-in duration-300">
-                        <h4 className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono flex items-center gap-1.5 border-b border-gray-100 pb-2">
-                          <Briefcase size={14} className="text-indigo-505 shrink-0" />
-                          Sede / Endereço Fiscal Registrado No Contrato
-                        </h4>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">CEP</span>
-                            <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{isPf ? pf.pf_cep || '—' : pj.pj_cepEmpresa || '—'}</span>
-                          </div>
-                          <div className="sm:col-span-2">
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Logradouro / Endereço</span>
-                            <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{isPf ? pf.pf_endereco || '—' : pj.pj_enderecoEmpresa || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Número</span>
-                            <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{isPf ? pf.pf_numero || '—' : pj.pj_numeroEmpresa || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Complemento</span>
-                            <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{isPf ? pf.pf_complemento || '—' : pj.pj_complementoEmpresa || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Bairro</span>
-                            <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{isPf ? pf.pf_bairro || '—' : pj.pj_bairroEmpresa || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Cidade</span>
-                            <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{isPf ? pf.pf_cidade || '—' : pj.pj_cidadeEmpresa || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Estado (UF)</span>
-                            <span className="text-xs font-mono font-bold text-gray-900 mt-1 block uppercase">{isPf ? pf.pf_estado || '—' : pj.pj_estadoEmpresa || '—'}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 3. QUADRO DE SÓCIOS (PJ ONLY) */}
-                    {!isPf && fichaActiveTab === 'socios' && (
-                      <div className="space-y-6 animate-in fade-in duration-300">
-                        <h4 className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono flex items-center gap-1.5 border-b border-gray-100 pb-2">
-                          <ShieldCheck size={14} className="text-teal-600 shrink-0" />
-                          Quadro de Sócios / Representante Legal da Empresa
-                        </h4>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Nome Completo</span>
-                            <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{socio.socio_nomeCompleto || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">CPF</span>
-                            <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{socio.socio_cpf || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Cargo</span>
-                            <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{socio.socio_cargo || 'Representante'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">RG</span>
-                            <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{socio.socio_rg || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Órgão Emissor</span>
-                            <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{socio.socio_orgaoEmissor || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Data de Emissão</span>
-                            <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{socio.socio_dataEmissao || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Nacionalidade</span>
-                            <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{socio.socio_nacionalidade || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Estado Civil</span>
-                            <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{socio.socio_estadoCivil || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Profissão</span>
-                            <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{socio.socio_profissao || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">E-mail</span>
-                            <span className="text-xs font-bold text-gray-900 mt-1 block truncate">{socio.socio_email || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Telefone</span>
-                            <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{socio.socio_telefone || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">WhatsApp</span>
-                            <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{socio.socio_whatsapp || '—'}</span>
-                          </div>
-
-                          <div className="sm:col-span-3 border-t border-gray-150/50 pt-4 mt-2">
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block font-mono mb-2">Endereço de Residência do Sócio</span>
-                            <p className="text-xs text-gray-800 font-bold uppercase leading-normal">
-                              {socio.socio_endereco ? (
-                                `${socio.socio_endereco}, n. ${socio.socio_numero || 'S/N'} ${socio.socio_complemento ? `- ${socio.socio_complemento}` : ''} - ${socio.socio_bairro || ''}, CEP ${socio.socio_cep || ''} — ${socio.socio_cidade || ''}/${socio.socio_estado || ''}`
-                              ) : (
-                                'Nenhum endereço registrado para o sócio.'
-                              )}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 4. TAB DADOS BANCÁRIOS */}
-                    {fichaActiveTab === 'bancarios' && (
-                      <div className="space-y-6 animate-in fade-in duration-300">
-                        <h4 className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono flex items-center gap-1.5 border-b border-gray-100 pb-2">
-                          <CreditCard size={14} className="text-emerald-600 shrink-0" />
-                          Informações Financeiras & Dados Bancários de Repasse
-                        </h4>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Possui Dados Bancários Registrados?</span>
-                            <span className={`inline-flex items-center gap-1.5 text-xs font-bold mt-1 px-2.5 py-0.5 rounded-lg ${
-                              bancario.bancario_possuiDadosBancarios 
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
-                                : 'bg-gray-100 text-gray-600 border border-gray-200'
-                            }`}>
-                              {bancario.bancario_possuiDadosBancarios ? 'Sim, Ativo' : 'Não'}
-                            </span>
-                          </div>
-
-                          {bancario.bancario_possuiDadosBancarios && (
-                            <>
-                              <div className="border-l border-gray-150 pl-4 sm:border-l-0 sm:pl-0">
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Tipo de Chave Pix</span>
-                                <span className="text-xs font-bold text-gray-900 mt-1 block">{bancario.bancario_tipoChavePix || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Chave Pix</span>
-                                <span className="text-xs font-mono font-bold text-gray-900 mt-1 block select-all">{bancario.bancario_chavePix || '—'}</span>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Banco do Pix</span>
-                                <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{bancario.bancario_bancoPix || '—'}</span>
-                              </div>
-                              <div className="sm:col-span-2">
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Titular do Pix</span>
-                                <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{bancario.bancario_titularPix || '—'}</span>
-                              </div>
-
-                              <div className="sm:col-span-3 border-t border-gray-150/50 pt-4 mt-2">
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider block font-mono mb-2">Dados da Conta Bancária Convencional</span>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                                  <div>
-                                    <span className="text-[9.5px] font-extrabold text-gray-400 uppercase tracking-wider block font-mono">Nome do Banco</span>
-                                    <span className="text-xs font-bold text-gray-900 block uppercase mt-0.5">{bancario.bancario_banco || '—'}</span>
-                                  </div>
-                                  <div>
-                                    <span className="text-[9.5px] font-extrabold text-gray-400 uppercase tracking-wider block font-mono">Agência</span>
-                                    <span className="text-xs font-mono font-bold text-gray-900 block mt-0.5">{bancario.bancario_agencia || '—'}</span>
-                                  </div>
-                                  <div>
-                                    <span className="text-[9.5px] font-extrabold text-gray-400 uppercase tracking-wider block font-mono">Número da Conta</span>
-                                    <span className="text-xs font-mono font-bold text-gray-900 block mt-0.5">{bancario.bancario_conta || bancario.bancario_numeroConta || '—'}</span>
-                                  </div>
-                                  <div>
-                                    <span className="text-[9.5px] font-extrabold text-gray-400 uppercase tracking-wider block font-mono">Tipo de Conta</span>
-                                    <span className="text-xs font-bold text-gray-900 block uppercase mt-0.5">{bancario.bancario_tipoConta || bancario.bancario_operacao || '—'}</span>
-                                  </div>
-                                  <div className="sm:col-span-2 md:col-span-4">
-                                    <span className="text-[9.5px] font-extrabold text-gray-400 uppercase tracking-wider block font-mono">Titular da Conta</span>
-                                    <span className="text-xs font-bold text-gray-900 block uppercase mt-0.5">{bancario.bancario_titularConta || '—'}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* 5. TAB CREDENCIAIS & ACESSO */}
-                    {fichaActiveTab === 'acesso' && (
-                      <div className="space-y-6 animate-in fade-in duration-300">
-                        <h4 className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono flex items-center gap-1.5 border-b border-gray-100 pb-2">
-                          <Lock size={14} className="text-indigo-605 shrink-0" />
-                          Painel de Controle de Acesso ao Portal do Cliente
-                        </h4>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">E-mail de Login</span>
-                            <span className="text-xs font-bold text-gray-900 mt-1 block truncate select-all">{acesso.acesso_emailLogin || selectedClient.email || '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Status do Acesso</span>
-                            <span className={`inline-flex items-center gap-1.5 text-xs font-bold mt-1 px-2.5 py-0.5 rounded-lg ${
-                              (acesso.acesso_statusAcesso === 'ativo' || selectedClient.portalStatus === 'criado' || selectedClient.portalAtivo)
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : 'bg-amber-50 text-amber-700 border border-amber-200'
-                            }`}>
-                              {acesso.acesso_statusAcesso || selectedClient.status || selectedClient.portalStatus || 'Pendente'}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Senha de Acesso</span>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-xs font-mono font-black text-gray-900 tracking-wider">
-                                {showFichaPassword ? (acesso.acesso_senha || selectedClient.senhaVisivelPreview || '—') : '••••••••'}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setShowFichaPassword(!showFichaPassword)}
-                                className="p-1 hover:bg-gray-200/65 rounded-md text-gray-500 transition cursor-pointer"
-                              >
-                                {showFichaPassword ? <EyeOff size={13} /> : <Eye size={13} />}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start animate-fade-in text-left">
+            {/* LEFT SIDEBAR NAVIGATION */}
+            <div className="lg:col-span-3 space-y-4">
+              <div className="bg-white border border-gray-150 rounded-3xl p-5 shadow-xs text-left space-y-6">
+                {/* Client Profile Header */}
+                <div className="border-b border-gray-100 pb-4">
+                  <span className="text-[9px] font-mono font-black text-indigo-650 block uppercase tracking-widest">PORTAL INTEGRADO</span>
+                  <h3 className="font-extrabold text-sm text-gray-900 mt-1 truncate">{getClientName(selectedClient)}</h3>
+                  <p className="text-[10px] font-mono text-gray-400 mt-0.5">{getClientDoc(selectedClient)}</p>
                 </div>
-              );
-            })()}
 
-            {/* 2. SECTOR: TODOS OS CASOS DO CLIENTE */}
+                {/* Navigation Links */}
+                <nav className="space-y-1">
+                  {[
+                    { id: 'painel_geral', label: 'Painel Geral do Cliente', icon: Activity, desc: 'Métricas, processos e status fáticos' },
+                    { id: 'dados_cadastrais', label: 'Dados Cadastrais do Cliente', icon: User, desc: 'Ficha de identificação integrada' },
+                    { id: 'relacao_casos', label: 'Relação de casos do cliente', icon: Briefcase, desc: 'Processos e coletas fáticas por caso' },
+                    { id: 'audiencias', label: 'audiências do cliente', icon: Calendar, desc: 'Gestão de sessões e audiências' },
+                    { id: 'pericias', label: 'perícias do cliente', icon: UserCheck, desc: 'Gestão de exames e perícias técnicas' },
+                    { id: 'reunioes', label: 'Reuniões com o cliente', icon: Clock, desc: 'Controle de agendamentos fáticos' },
+                    { id: 'financeiro', label: 'Financeiro e faturamento', icon: CreditCard, desc: 'Consolidado financeiro e cobranças' }
+                  ].map((item) => {
+                    const Icon = item.icon;
+                    const isSelected = activeSidebarSection === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveSidebarSection(item.id as any);
+                          if (item.id === 'relacao_casos') {
+                            setActiveSubTab('entrevista');
+                          }
+                        }}
+                        className={`w-full flex items-start gap-3 p-3 rounded-2xl transition text-left cursor-pointer group ${
+                          isSelected 
+                            ? 'bg-indigo-600 text-white shadow-sm font-sans'
+                            : 'hover:bg-gray-50 text-gray-700 hover:text-gray-955 border border-transparent'
+                        }`}
+                        style={{ minHeight: '44px' }}
+                      >
+                        <Icon size={18} className={`shrink-0 mt-0.5 ${isSelected ? 'text-white' : 'text-gray-400 group-hover:text-gray-700'}`} />
+                        <div className="min-w-0">
+                          <span className="text-xs font-black block capitalize">{item.label}</span>
+                          <span className={`text-[9.5px] block truncate font-semibold ${isSelected ? 'text-indigo-200' : 'text-gray-450'}`}>{item.desc}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </nav>
+
+                {/* View Portal Trigger */}
+                <div className="pt-2 border-t border-gray-100">
+                  <a
+                    href={`/portal-cliente/${selectedClient?.slug || selectedClient?.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 hover:text-gray-955 rounded-2xl text-xs font-black uppercase tracking-wider font-mono text-center cursor-pointer"
+                  >
+                    <ExternalLink size={13} />
+                    <span>Ver Portal do Cliente</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            {/* RIGHT SIDE PANE / CONTENT DISPLAY */}
+            <div className="lg:col-span-9 space-y-6">
+              {/* VIEW 1: PAINEL GERAL */}
+              {activeSidebarSection === 'painel_geral' && (
+                <PainelGeralCliente
+                  selectedClient={selectedClient}
+                  clientCases={clientCases}
+                  allClientEvents={allClientEvents}
+                  allClientEvidence={allClientEvidence}
+                  allClientInformation={allClientInformation}
+                  allClientFinancials={allClientFinancials}
+                  setActiveSidebarSection={setActiveSidebarSection}
+                  handleSelectCase={handleSelectCase}
+                  setActiveSubTab={setActiveSubTab}
+                  getClientName={getClientName}
+                />
+              )}
+
+              {/* VIEW 2: DADOS CADASTRAIS */}
+              {activeSidebarSection === 'dados_cadastrais' && (
+                <DadosCadastraisCliente
+                  selectedClient={selectedClient}
+                  fichaActiveTab={fichaActiveTab}
+                  setFichaActiveTab={setFichaActiveTab}
+                  showFichaPassword={showFichaPassword}
+                  setShowFichaPassword={setShowFichaPassword}
+                  getClientName={getClientName}
+                  navigate={navigate}
+                />
+              )}
+
+              {/* VIEW 4: AUDIÊNCIAS */}
+              {activeSidebarSection === 'audiencias' && (
+                <EventsManager
+                  type="audiencia"
+                  title="Audiências do Cliente"
+                  description="Agenda em tempo real das sessões de audiência fáticas vinculadas ao cliente legal."
+                  allClientEvents={allClientEvents}
+                  clientCases={clientCases}
+                  addingEvent={addingEvent}
+                  newEventCaseId={newEventCaseId}
+                  setNewEventCaseId={setNewEventCaseId}
+                  newEventTitle={newEventTitle}
+                  setNewEventTitle={setNewEventTitle}
+                  newEventDate={newEventDate}
+                  setNewEventDate={setNewEventDate}
+                  newEventTime={newEventTime}
+                  setNewEventTime={setNewEventTime}
+                  newEventLocation={newEventLocation}
+                  setNewEventLocation={setNewEventLocation}
+                  newEventDesc={newEventDesc}
+                  setNewEventDesc={setNewEventDesc}
+                  newEventVisible={newEventVisible}
+                  setNewEventVisible={setNewEventVisible}
+                  handleCreateEvent={handleCreateEvent}
+                  handleUpdateEventStatus={handleUpdateEventStatus}
+                  handleToggleEventVisibility={handleToggleEventVisibility}
+                  handleDeleteEvent={handleDeleteEvent}
+                />
+              )}
+
+              {/* VIEW 5: PERÍCIAS */}
+              {activeSidebarSection === 'pericias' && (
+                <EventsManager
+                  type="pericia"
+                  title="Perícias Clínicas ou Técnicas fáticas"
+                  description="Agenda e orientações para perícias médicas, contábeis ou de assistência técnica fática no portal."
+                  allClientEvents={allClientEvents}
+                  clientCases={clientCases}
+                  addingEvent={addingEvent}
+                  newEventCaseId={newEventCaseId}
+                  setNewEventCaseId={setNewEventCaseId}
+                  newEventTitle={newEventTitle}
+                  setNewEventTitle={setNewEventTitle}
+                  newEventDate={newEventDate}
+                  setNewEventDate={setNewEventDate}
+                  newEventTime={newEventTime}
+                  setNewEventTime={setNewEventTime}
+                  newEventLocation={newEventLocation}
+                  setNewEventLocation={setNewEventLocation}
+                  newEventDesc={newEventDesc}
+                  setNewEventDesc={setNewEventDesc}
+                  newEventVisible={newEventVisible}
+                  setNewEventVisible={setNewEventVisible}
+                  handleCreateEvent={handleCreateEvent}
+                  handleUpdateEventStatus={handleUpdateEventStatus}
+                  handleToggleEventVisibility={handleToggleEventVisibility}
+                  handleDeleteEvent={handleDeleteEvent}
+                />
+              )}
+
+              {/* VIEW 6: REUNIÕES */}
+              {activeSidebarSection === 'reunioes' && (
+                <EventsManager
+                  type="reuniao"
+                  title="Reuniões com o Cliente"
+                  description="Agenda de briefings jurídicos, entrevistas complementares e pautas de discussões processuais."
+                  allClientEvents={allClientEvents}
+                  clientCases={clientCases}
+                  addingEvent={addingEvent}
+                  newEventCaseId={newEventCaseId}
+                  setNewEventCaseId={setNewEventCaseId}
+                  newEventTitle={newEventTitle}
+                  setNewEventTitle={setNewEventTitle}
+                  newEventDate={newEventDate}
+                  setNewEventDate={setNewEventDate}
+                  newEventTime={newEventTime}
+                  setNewEventTime={setNewEventTime}
+                  newEventLocation={newEventLocation}
+                  setNewEventLocation={setNewEventLocation}
+                  newEventDesc={newEventDesc}
+                  setNewEventDesc={setNewEventDesc}
+                  newEventVisible={newEventVisible}
+                  setNewEventVisible={setNewEventVisible}
+                  handleCreateEvent={handleCreateEvent}
+                  handleUpdateEventStatus={handleUpdateEventStatus}
+                  handleToggleEventVisibility={handleToggleEventVisibility}
+                  handleDeleteEvent={handleDeleteEvent}
+                />
+              )}
+
+              {/* VIEW 7: FINANCEIRO E FATURAMENTO */}
+              {activeSidebarSection === 'financeiro' && (
+                <FinancialManager
+                  clientCases={clientCases}
+                  allClientFinancials={allClientFinancials}
+                  addingFinancial={addingFinancial}
+                  newChargeType={newChargeType}
+                  setNewChargeType={setNewChargeType}
+                  newAmount={newAmount}
+                  setNewAmount={setNewAmount}
+                  newPaymentMethod={newPaymentMethod}
+                  setNewPaymentMethod={setNewPaymentMethod}
+                  newInstallments={newInstallments}
+                  setNewInstallments={setNewInstallments}
+                  newDueDate={newDueDate}
+                  setNewDueDate={setNewDueDate}
+                  newFinancialStatus={newFinancialStatus}
+                  setNewFinancialStatus={setNewFinancialStatus}
+                  newPublicMessage={newPublicMessage}
+                  setNewPublicMessage={setNewPublicMessage}
+                  handleCreateFinancial={handleCreateFinancial}
+                  handleMarkFinancialPaid={handleMarkFinancialPaid}
+                  handleDeleteFinancial={handleDeleteFinancial}
+                />
+              )}
+
+              {/* VIEW 3: RELAÇÃO DOS CASOS DO CLIENTE (AND INNER SELECT PROCESS FORMS) */}
+              {activeSidebarSection === 'relacao_casos' && (
+                <div className="space-y-6">
+                  {/* Old Ficha Cadastro block removed */}
+                        {/* 2. SECTOR: TODOS OS CASOS DO CLIENTE */}
             <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-xs text-left">
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 bg-purple-50 border border-purple-100 text-purple-600 rounded-2xl flex items-center justify-center shadow-xs">
@@ -1037,7 +991,7 @@ export default function EditarPortalCliente() {
                     { id: 'informacoes', label: '4. Info. Complementares', icon: HelpCircle },
                     { id: 'financeiro', label: '5. Financeiro', icon: CreditCard }
                   ].map((subTab) => {
-                    const tabIcon = subTab.icon;
+                    const TabIcon = subTab.icon;
                     const isTabActive = activeSubTab === subTab.id;
                     return (
                       <button
@@ -1049,7 +1003,7 @@ export default function EditarPortalCliente() {
                             : 'bg-gray-50 border border-gray-150 text-gray-600 hover:bg-gray-100 hover:text-gray-950'
                         }`}
                       >
-                        <tabIcon size={13} className={isTabActive ? 'text-white' : 'text-gray-450'} />
+                        <TabIcon size={13} className={isTabActive ? 'text-white' : 'text-gray-450'} />
                         {subTab.label}
                       </button>
                     );
@@ -1558,6 +1512,9 @@ export default function EditarPortalCliente() {
                 </div>
               </div>
             )}
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="bg-white border border-gray-150 rounded-[2rem] p-12 text-center text-gray-400 min-h-[400px] flex flex-col items-center justify-center space-y-4">
