@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { BossLayout } from '../../../components/Layout';
 import { 
@@ -25,7 +25,8 @@ import {
   AlertTriangle,
   Clock,
   Calendar,
-  ChevronRight
+  ChevronRight,
+  Trash2
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -88,6 +89,38 @@ export default function PendenciasFluxo() {
 
   // Selected category state - defaults to the first category: cadastro_pendente
   const [selectedCategory, setSelectedCategory] = useState<string>('cadastro_pendente');
+
+  // Delete/Confirmation states
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<boolean>(false);
+
+  const handleDeletePendency = async (item: any) => {
+    setDeleting(true);
+    try {
+      if (item.type === 'case') {
+        await deleteDoc(doc(db, 'cases', item.id));
+        try {
+          await deleteDoc(doc(db, 'casos', item.id));
+        } catch (e) {
+          // ignore
+        }
+      } else {
+        await deleteDoc(doc(db, 'clients', item.id));
+        try {
+          await deleteDoc(doc(db, 'clientes', item.id));
+        } catch (e) {
+          // ignore
+        }
+      }
+      setRetryCount(prev => prev + 1);
+      setConfirmingDeleteId(null);
+    } catch (err) {
+      console.error("Error deleting:", err);
+      alert("Erro ao excluir: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   // Load pending/active flows
   useEffect(() => {
@@ -711,7 +744,47 @@ export default function PendenciasFluxo() {
                               </div>
 
                               {/* Botão */}
-                              <div className="pt-3.5 border-t border-gray-100 flex justify-end">
+                              <div className="pt-3.5 border-t border-gray-100 flex items-center justify-between gap-2">
+                                {/* DELETE ZONE */}
+                                <div className="flex items-center gap-2">
+                                  {confirmingDeleteId === item.id ? (
+                                    <div className="flex items-center gap-2 animate-in fade-in duration-200">
+                                      <button
+                                        type="button"
+                                        onClick={() => setConfirmingDeleteId(null)}
+                                        className="px-3 py-2 border border-gray-205 text-gray-500 hover:text-gray-805 rounded-xl text-[11px] font-black uppercase tracking-wider cursor-pointer bg-white transition-colors"
+                                        disabled={deleting}
+                                      >
+                                        Cancelar
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeletePendency(item)}
+                                        className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider cursor-pointer flex items-center gap-1.5 transition-all shadow-xs"
+                                        disabled={deleting}
+                                      >
+                                        {deleting ? (
+                                          <RefreshCw size={12} className="animate-spin" />
+                                        ) : (
+                                          <Trash2 size={12} />
+                                        )}
+                                        <span>Confirmar Excluir</span>
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => setConfirmingDeleteId(item.id)}
+                                      className="border border-red-200 text-red-650 hover:bg-red-50 px-3.5 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-all shadow-xs"
+                                      id={`delete-btn-${item.id}`}
+                                    >
+                                      <Trash2 size={12} />
+                                      <span>Excluir</span>
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* CONTINUE ZONE */}
                                 <button
                                   type="button"
                                   onClick={item.go}

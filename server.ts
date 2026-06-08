@@ -1597,6 +1597,10 @@ app.post("/api/google-docs/generate-document", async (req: any, res: any) => {
     } else if (documentType === "primeiro_atendimento") {
       updates.primeiroAtendimentoId = googleDocsId;
       updates.primeiroAtendimentoUrl = googleDocsUrl;
+      updates.primeiroAtendimentoGoogleDocsId = googleDocsId;
+      updates.primeiroAtendimentoGoogleDocsUrl = googleDocsUrl;
+      updates.primeiroAtendimentoStatus = "criado";
+      updates.primeiroAtendimentoLogFalha = "";
     }
     
     await caseRef.set(updates, { merge: true });

@@ -47,6 +47,7 @@ export default function CadastroFluxo() {
   const isExplicitNovoCliente = pathParam === 'novo-cliente';
   const isNovoClientePF = pathParam === 'novo-cliente-pessoa-fisica';
   const isNovoClientePJ = pathParam === 'novo-cliente-pessoa-juridica';
+  const isLeadQuery = new URLSearchParams(location.search).get('isLead') === 'true';
   const [selectedPath, setSelectedPath] = useState<CadastroPath>('novo-cliente');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -697,6 +698,7 @@ export default function CadastroFluxo() {
         portalStatus: 'nao_criado',
         cadastroIncompleto: true,
         missingFields: missing,
+        isLead: isLeadQuery || false,
         createdAt: rightNow,
         updatedAt: rightNow,
         pfData: pfBlock,
@@ -794,6 +796,7 @@ export default function CadastroFluxo() {
         slug: slug,
         senhaVisivelPreview: formData.acesso_senha,
         avisoSegurancaSenha: true,
+        isLead: isLeadQuery || false,
         createdAt: rightNow,
         updatedAt: rightNow,
         pfData: pfBlock,
@@ -865,6 +868,7 @@ export default function CadastroFluxo() {
         name: mainName,
         tipoPessoa: clientType,
         type: clientType,
+        isLead: isLeadQuery || false,
         cpf: clientType === 'PF' ? (pfBlock.pf_cpf || '') : '',
         cnpj: clientType === 'PJ' ? (pjBlock.pj_cnpj || '') : '',
         cpfCnpj: clientType === 'PF' ? (pfBlock.pf_cpf || '') : (pjBlock.pj_cnpj || ''),
@@ -1013,18 +1017,22 @@ export default function CadastroFluxo() {
   };
 
   return (
-    <FluxoStepLayout stepName="Cadastro Geral" statusText="Cadastro de Cliente">
+    <FluxoStepLayout stepName={isLeadQuery ? "Cadastro de LEAD" : "Cadastro Geral"} statusText={isLeadQuery ? "Novo LEAD" : "Cadastro de Cliente"}>
       <div className="space-y-8 relative">
         {/* HEADER WITH SAVE STATUS INDICATOR */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
           <div>
-            <span className="text-xs font-black uppercase text-gray-400 tracking-wider block font-mono">Fase de Cadastro</span>
-            <h2 className="text-2xl font-black text-gray-900 tracking-tight">Cadastro e Fluxo de Produção</h2>
+            <span className="text-xs font-black uppercase text-gray-400 tracking-wider block font-mono">
+              {isLeadQuery ? "Novo LEAD" : "Fase de Cadastro"}
+            </span>
+            <h2 className="text-2xl font-black text-gray-900 tracking-tight">
+              {isLeadQuery ? "Cadastrar Novo LEAD" : "Cadastro e Fluxo de Produção"}
+            </h2>
             {(isNovoClientePF || isNovoClientePJ) && (
               <div className="animate-in fade-in slide-in-from-top-1 duration-200 mt-1.5">
                 <button
                   type="button"
-                  onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao/cadastro?path=novo-cliente')}
+                  onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/cadastro?path=novo-cliente${isLeadQuery ? '&isLead=true' : ''}`)}
                   className="inline-flex items-center gap-2 text-indigo-650 hover:text-indigo-850 font-extrabold text-[11px] uppercase tracking-wider transition-colors cursor-pointer font-sans"
                 >
                   <ArrowLeft size={12} className="text-indigo-600" />
@@ -1105,7 +1113,7 @@ export default function CadastroFluxo() {
                 setClientType('PF');
                 setFoundDuplicateClient(null);
                 setDocValidationError(null);
-                navigate('/boss-giffoni-clientes/fluxo-producao/cadastro?path=novo-cliente-pessoa-fisica');
+                navigate(`/boss-giffoni-clientes/fluxo-producao/cadastro?path=novo-cliente-pessoa-fisica${isLeadQuery ? '&isLead=true' : ''}`);
               }}
               className="flex flex-col gap-3 p-5 rounded-2xl border text-left transition-all cursor-pointer bg-white text-gray-700 border-gray-150 hover:border-gray-350 hover:shadow-xs"
             >
@@ -1127,7 +1135,7 @@ export default function CadastroFluxo() {
                 setClientType('PJ');
                 setFoundDuplicateClient(null);
                 setDocValidationError(null);
-                navigate('/boss-giffoni-clientes/fluxo-producao/cadastro?path=novo-cliente-pessoa-juridica');
+                navigate(`/boss-giffoni-clientes/fluxo-producao/cadastro?path=novo-cliente-pessoa-juridica${isLeadQuery ? '&isLead=true' : ''}`);
               }}
               className="flex flex-col gap-3 p-5 rounded-2xl border text-left transition-all cursor-pointer bg-white text-gray-700 border-gray-150 hover:border-gray-350 hover:shadow-xs"
             >

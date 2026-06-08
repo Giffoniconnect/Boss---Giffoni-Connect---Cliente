@@ -650,17 +650,17 @@ export default function EditarPortalCliente() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao/portal-cliente')}
-                className="p-1 px-2.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-gray-900 transition flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider border border-gray-150 shadow-xs cursor-pointer"
+                className="p-1 px-2.5 hover:bg-gray-100 rounded-lg text-gray-500 hover:text-gray-900 transition flex items-center gap-1.5 text-[15px] font-bold uppercase tracking-wider border border-gray-150 shadow-xs cursor-pointer"
               >
                 <ArrowLeft size={14} /> Voltar à Busca
               </button>
-              <h1 className="text-3xl font-black text-gray-950 tracking-tight">Editar o Portal do Cliente</h1>
+              <h1 className="text-[25px] font-black text-gray-950 tracking-tight">Editar o Portal do Cliente</h1>
             </div>
-            <p className="text-xs text-gray-400 font-semibold mt-1">Configuração individual das seções e fichas integradas fáticas para o portal do cliente.</p>
+            <p className="text-[15px] text-gray-400 font-semibold mt-1">Configuração individual das seções e fichas integradas fáticas para o portal do cliente.</p>
           </div>
           <button
             onClick={fetchClientData}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 hover:text-gray-955 rounded-2xl text-xs font-extrabold transition uppercase tracking-wider font-mono self-start cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 hover:text-gray-955 rounded-2xl text-[15px] font-extrabold transition uppercase tracking-wider font-mono self-start cursor-pointer"
           >
             <RefreshCw size={14} className={loadingClient ? 'animate-spin' : ''} />
             Recarregar Cliente
@@ -693,9 +693,9 @@ export default function EditarPortalCliente() {
               <div className="bg-white border border-gray-150 rounded-3xl p-5 shadow-xs text-left space-y-6">
                 {/* Client Profile Header */}
                 <div className="border-b border-gray-100 pb-4">
-                  <span className="text-[9px] font-mono font-black text-indigo-650 block uppercase tracking-widest">PORTAL INTEGRADO</span>
-                  <h3 className="font-extrabold text-sm text-gray-900 mt-1 truncate">{getClientName(selectedClient)}</h3>
-                  <p className="text-[10px] font-mono text-gray-400 mt-0.5">{getClientDoc(selectedClient)}</p>
+                  <span className="text-[15px] font-mono font-black text-indigo-650 block uppercase tracking-widest">PORTAL INTEGRADO</span>
+                  <h3 className="font-extrabold text-[20px] text-gray-900 mt-1 break-words whitespace-normal leading-tight">{getClientName(selectedClient)}</h3>
+                  <p className="text-[15px] font-mono text-gray-400 mt-0.5">{getClientDoc(selectedClient)}</p>
                 </div>
 
                 {/* Navigation Links */}
@@ -703,11 +703,11 @@ export default function EditarPortalCliente() {
                   {[
                     { id: 'painel_geral', label: 'Painel Geral do Cliente', icon: Activity, desc: 'Métricas, processos e status fáticos' },
                     { id: 'dados_cadastrais', label: 'Dados Cadastrais do Cliente', icon: User, desc: 'Ficha de identificação integrada' },
-                    { id: 'relacao_casos', label: 'Relação de casos do cliente', icon: Briefcase, desc: 'Processos e coletas fáticas por caso' },
-                    { id: 'audiencias', label: 'audiências do cliente', icon: Calendar, desc: 'Gestão de sessões e audiências' },
-                    { id: 'pericias', label: 'perícias do cliente', icon: UserCheck, desc: 'Gestão de exames e perícias técnicas' },
-                    { id: 'reunioes', label: 'Reuniões com o cliente', icon: Clock, desc: 'Controle de agendamentos fáticos' },
-                    { id: 'financeiro', label: 'Financeiro e faturamento', icon: CreditCard, desc: 'Consolidado financeiro e cobranças' }
+                    { id: 'relacao_casos', label: 'Relação de Casos do Cliente', icon: Briefcase, desc: 'Processos e coletas fáticas por caso' },
+                    { id: 'audiencias', label: 'Audiências do Cliente', icon: Calendar, desc: 'Gestão de sessões e audiências' },
+                    { id: 'pericias', label: 'Perícias do Cliente', icon: UserCheck, desc: 'Gestão de exames e perícias técnicas' },
+                    { id: 'reunioes', label: 'Reuniões com o Cliente', icon: Clock, desc: 'Controle de agendamentos fáticos' },
+                    { id: 'financeiro', label: 'Financeiro e Faturamento', icon: CreditCard, desc: 'Consolidado financeiro e cobranças' }
                   ].map((item) => {
                     const Icon = item.icon;
                     const isSelected = activeSidebarSection === item.id;
@@ -730,8 +730,8 @@ export default function EditarPortalCliente() {
                       >
                         <Icon size={18} className={`shrink-0 mt-0.5 ${isSelected ? 'text-white' : 'text-gray-400 group-hover:text-gray-700'}`} />
                         <div className="min-w-0">
-                          <span className="text-xs font-black block capitalize">{item.label}</span>
-                          <span className={`text-[9.5px] block truncate font-semibold ${isSelected ? 'text-indigo-200' : 'text-gray-450'}`}>{item.desc}</span>
+                          <span className="text-[15px] font-black block">{item.label}</span>
+                          <span className={`text-[12px] block whitespace-normal break-words leading-tight font-semibold mt-0.5 ${isSelected ? 'text-indigo-200' : 'text-gray-450'}`}>{item.desc}</span>
                         </div>
                       </button>
                     );

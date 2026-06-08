@@ -24,8 +24,16 @@ import { flowSteps } from './utils/flowSteps';
 export default function FluxoHome() {
   const navigate = useNavigate();
 
-  // Define the 5 Main Entry Cards (Requested by User)
+  // Define the 6 Main Entry Cards (Requested by User)
   const entryCards = [
+    {
+      title: 'Cadastrar Novo LEAD',
+      description: 'Crie um lead no sistema para iniciar a prospecção técnica e o primeiro atendimento rápido de novos contatos.',
+      icon: UserPlus,
+      color: 'red',
+      action: () => navigate('/boss-giffoni-clientes/fluxo-producao/cadastro?path=novo-cliente&isLead=true'),
+      actionLabel: 'Cadastrar Lead'
+    },
     {
       title: '1. Novo Cliente',
       description: 'Para pessoa que nunca foi cliente do escritório, não possui cadastro e não possui caso no sistema.',
@@ -133,7 +141,7 @@ export default function FluxoHome() {
           <div className="mb-4">
             <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Opções de Início Operacional</h3>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5">
             {entryCards.map((card, idx) => {
               const Icon = card.icon;
               return (
@@ -143,6 +151,7 @@ export default function FluxoHome() {
                 >
                   <div className="space-y-4">
                     <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-105 ${
+                      card.color === 'red' ? 'bg-red-50 text-red-600 border border-red-100/50' :
                       card.color === 'blue' ? 'bg-blue-50 text-blue-600 border border-blue-100/50' :
                       card.color === 'purple' ? 'bg-purple-50 text-purple-600 border border-purple-100/50' :
                       card.color === 'cyan' ? 'bg-cyan-50 text-cyan-600 border border-cyan-100/50' :
@@ -164,6 +173,7 @@ export default function FluxoHome() {
                   <button
                     onClick={card.action}
                     className={`mt-5 py-2 px-3 rounded-xl text-center text-[10.5px] tracking-wide font-black uppercase text-white transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                      card.color === 'red' ? 'bg-red-600 hover:bg-red-700' :
                       card.color === 'blue' ? 'bg-blue-600 hover:bg-blue-700' :
                       card.color === 'purple' ? 'bg-purple-600 hover:bg-purple-700' :
                       card.color === 'cyan' ? 'bg-cyan-600 hover:bg-cyan-700' :

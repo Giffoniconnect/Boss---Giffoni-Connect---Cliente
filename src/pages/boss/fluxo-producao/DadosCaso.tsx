@@ -629,15 +629,125 @@ export default function DadosCaso() {
     }
   };
 
-  const handleGeneratePrimeiroAtendimento = () => {
+  const handleGeneratePrimeiroAtendimento = async () => {
+    setError(null);
+    setSuccess(null);
     setGeneratingDoc(true);
-    setTimeout(() => {
-      setGeneratingDoc(false);
+
+    try {
+      const connectorsRef = doc(db, 'settings', 'connectors');
+      const connectorsSnap = await getDoc(connectorsRef);
+      const connectorsData = connectorsSnap.exists() ? connectorsSnap.data() : {};
+      const googleDocs = connectorsData?.googleDocs || {};
+
+      // 1. Get configured Template ID or default to the requested one
+      const configuredTemplateId = googleDocs.templates?.['primeiro_atendimento'] || '';
+      const officialTemplateId = (configuredTemplateId || "1ODrPbz7qtyeiTYnjzSdv9YQ3NqdafYoub6-KpkmTQTo").trim();
+
+      // 2. Drive Folder Destination
+      const destinationFolderId = (
+        client?.googleDriveClientFolderId || 
+        client?.gdriveFolderId || 
+        caseObj?.gdriveFolderId || 
+        googleDocs.destinationFolderIds?.['primeiro_atendimento'] || 
+        googleDocs.destinationFolderId || 
+        ''
+      ).trim();
+
+      const destinationFolderUrl = (
+        client?.googleDriveClientFolderUrl || 
+        client?.gdriveFolderUrl || 
+        caseObj?.gdriveFolderUrl || 
+        googleDocs.destinationFolderUrls?.['primeiro_atendimento'] || 
+        googleDocs.destinationFolderUrl || 
+        ''
+      ).trim();
+
+      // Check if folder is missing
+      if (!destinationFolderId) {
+        throw new Error("Não há pasta real do Google Drive vinculada ao cliente ou salva nas configurações de Conectores. Por favor, configure a pasta do cliente.");
+      }
+
+      // 3. Document Name
+      const clientName = client?.nome || client?.nomeCompleto || client?.razaoSocial || "Cliente";
+      const docName = `1º Atendimento PF - ${clientName}`;
+
+      // 4. Access tokens and overrides
+      const googleAccessToken = localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken') || '';
+      const localOverride = localStorage.getItem('portal_boss_gdocs_override') || '';
+
+      const targetEndpoint = "/api/google-docs/generate-document";
+      const internalPayload = {
+        mode: "standard",
+        googleAccessToken,
+        documentType: "primeiro_atendimento",
+        caseId,
+        clientId: caseObj?.clientId || client?.id,
+        clientType: client?.clientType || "PF",
+        templateId: officialTemplateId,
+        templateKey: "primeiro_atendimento",
+        destinationFolderId,
+        destinationFolderUrl,
+        documentName: docName,
+        placeholders: {},
+        metadata: { source: "Operational DadosCaso Flow" },
+        credentialOverride: localOverride
+      };
+
+      const response = await fetch(targetEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(internalPayload)
+      });
+
+      const responseText = await response.text();
+      let responseData: any;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = { error: responseText };
+      }
+
+      if (!response.ok || !responseData.success) {
+        const errorDetail = responseData.errorMessage || responseData.error || responseText || "Falha na geração integrada.";
+        throw new Error(errorDetail);
+      }
+
+      const googleDocsId = responseData.googleDocsId;
+      const googleDocsUrl = responseData.googleDocsUrl;
+
       setPrimeiroAtendimentoStatus('criado');
-      setPrimeiroAtendimentoGoogleDocsUrl('https://docs.google.com/document/d/1g6z8Pkt-mock-google-docs-id-1st-attendance/edit?usp=sharing');
+      setPrimeiroAtendimentoGoogleDocsUrl(googleDocsUrl);
       setPrimeiroAtendimentoLogFalha('');
       setSuccess('Comando de automação disparado com sucesso! Link gerado abaixo.');
-    }, 1500);
+
+      // Update Case in Firestore
+      const caseDocRef = doc(db, 'cases', caseId!);
+      await updateDoc(caseDocRef, {
+        primeiroAtendimentoStatus: 'criado',
+        primeiroAtendimentoGoogleDocsId: googleDocsId,
+        primeiroAtendimentoGoogleDocsUrl: googleDocsUrl,
+        primeiroAtendimentoId: googleDocsId,
+        primeiroAtendimentoUrl: googleDocsUrl
+      });
+    } catch (err: any) {
+      console.error(err);
+      setPrimeiroAtendimentoStatus('falha');
+      setPrimeiroAtendimentoLogFalha(err.message || String(err));
+      setError(`Falha ao gerar o 1º Atendimento: ${err.message || err}`);
+
+      try {
+        const caseDocRef = doc(db, 'cases', caseId!);
+        await updateDoc(caseDocRef, {
+          primeiroAtendimentoStatus: 'falha',
+          primeiroAtendimentoLogFalha: err.message || String(err)
+        });
+      } catch (e) {
+        console.warn("Could not save failure state to case document", e);
+      }
+    } finally {
+      setGeneratingDoc(false);
+    }
   };
 
   const handleSimulateStatus = (status: 'aguardando' | 'criado' | 'falha', url: string, log: string) => {
@@ -933,28 +1043,42 @@ export default function DadosCaso() {
             </div>
 
             {/* AUTOMAÇÃO GOOGLE DOCS — 1º ATENDIMENTO */}
-            <div className="border border-gray-150 rounded-3xl p-6 bg-white space-y-6 shadow-xs">
-              <div className="border-b border-gray-100 pb-3">
-                <h3 className="text-[18px] font-extrabold text-gray-900 tracking-tight flex items-center gap-2">
-                  <FileText className="text-blue-600" size={18} />
-                  <span>Automação Google Docs — 1º Atendimento</span>
+            <div className="bg-gradient-to-br from-indigo-50/60 to-blue-50/20 border border-indigo-150 rounded-3xl p-6 shadow-3xs space-y-6">
+              <div className="border-b border-indigo-100/80 pb-3">
+                <h3 className="text-[18px] font-extrabold text-indigo-950 tracking-tight flex items-center gap-2">
+                  <FileText className="text-indigo-650 animate-pulse" size={18} />
+                  <span>Automação Google Docs — 1º Atendimento - Pessoa física</span>
                 </h3>
-                <p className="text-[15px] text-gray-500 mt-1">
+                <p className="text-[14px] text-indigo-900/80 mt-1 font-semibold">
                   Gere o roteiro do primeiro atendimento de forma estruturada e automatizada diretamente no ecossistema Google Docs.
                 </p>
+              </div>
+
+              {/* Informações de consulta do modelo oficial */}
+              <div className="p-4 bg-white/80 border border-indigo-100 rounded-2xl text-xs space-y-1.5 shadow-2xs">
+                <p className="font-bold text-indigo-950 text-[10px] uppercase tracking-wider font-mono">Modelo Utilizado para Consulta / Edição</p>
+                <a
+                  href="https://docs.google.com/document/d/1ODrPbz7qtyeiTYnjzSdv9YQ3NqdafYoub6-KpkmTQTo/edit?tab=t.0"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-indigo-650 font-extrabold hover:underline flex items-center gap-1.5 text-xs transition-colors"
+                >
+                  <Sparkles size={13} className="text-indigo-500 animate-pulse" />
+                  <span>Abrir Modelo 1º Atendimento (Pessoa Física)</span>
+                </a>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <div className="flex flex-col gap-3">
-                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                    <span className="text-xs font-bold text-indigo-800 uppercase tracking-wider block">
                       Ações de Automação
                     </span>
                     <button
                       type="button"
                       onClick={handleGeneratePrimeiroAtendimento}
                       disabled={generatingDoc}
-                      className="w-full inline-flex items-center justify-center gap-2 bg-blue-650 hover:bg-blue-700 text-white font-bold px-5 py-3 rounded-xl transition-all text-xs cursor-pointer shadow-sm disabled:opacity-50"
+                      className="w-full inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-5 py-3 rounded-xl transition-all text-xs cursor-pointer shadow-sm disabled:opacity-50"
                     >
                       {generatingDoc ? (
                         <>
@@ -972,23 +1096,23 @@ export default function DadosCaso() {
 
                   {/* Status Visual com opções para simulação fática */}
                   <div className="space-y-2">
-                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                    <span className="text-xs font-bold text-indigo-800 uppercase tracking-wider block">
                       Status da Automação
                     </span>
                     {primeiroAtendimentoStatus === 'criado' && (
-                      <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 text-xs flex items-center gap-2 animate-fadeIn">
+                      <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 text-xs flex items-center gap-2 animate-fadeIn">
                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
                         <span className="font-extrabold">1º Atendimento criado com sucesso</span>
                       </div>
                     )}
                     {primeiroAtendimentoStatus === 'falha' && (
-                      <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-900 text-xs flex items-center gap-2 animate-fadeIn">
+                      <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-950 text-xs flex items-center gap-2 animate-fadeIn">
                         <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
                         <span className="font-extrabold">Falha na criação do 1º Atendimento</span>
                       </div>
                     )}
                     {primeiroAtendimentoStatus === 'aguardando' && (
-                      <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-center gap-2">
+                      <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
                         <span className="font-extrabold">Aguardando geração</span>
                       </div>
@@ -999,7 +1123,7 @@ export default function DadosCaso() {
                 <div className="space-y-4">
                   {/* Google Docs link output blanket */}
                   <div className="space-y-2">
-                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                    <span className="text-xs font-bold text-indigo-800 uppercase tracking-wider block">
                       Link do Documento no Google Docs
                     </span>
                     {primeiroAtendimentoStatus === 'criado' && primeiroAtendimentoGoogleDocsUrl ? (
@@ -1009,25 +1133,25 @@ export default function DadosCaso() {
                           target="_blank"
                           referrerPolicy="no-referrer"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 font-extrabold rounded-xl text-xs transition-all cursor-pointer"
+                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-50 hover:bg-indigo-110 border border-indigo-200 text-indigo-700 font-extrabold rounded-xl text-xs transition-colors cursor-pointer"
                         >
                           <FileText size={14} />
                           <span>Abrir 1º Atendimento</span>
                         </a>
-                        <p className="text-xs text-gray-400 font-mono select-all overflow-hidden text-ellipsis whitespace-nowrap bg-gray-50 p-2 rounded-lg border border-gray-100">
+                        <p className="text-xs text-gray-400 font-mono select-all overflow-hidden text-ellipsis whitespace-nowrap bg-white p-2 rounded-lg border border-gray-150 shadow-3xs">
                           {primeiroAtendimentoGoogleDocsUrl}
                         </p>
                       </div>
                     ) : (
-                      <p className="text-xs text-gray-500 italic">
+                      <p className="text-xs text-indigo-900/60 italic font-semibold">
                         Link ainda não recebido pela automação.
                       </p>
                     )}
                   </div>
 
                   {/* QA/Manual status simulation control widget seamlessly integrated */}
-                  <div className="p-3 border border-gray-100 bg-gray-50/50 rounded-xl space-y-1">
-                    <span className="text-[12px] uppercase font-bold text-gray-400 block tracking-wide">
+                  <div className="p-3 border border-indigo-100 bg-white/60 rounded-xl space-y-1 shadow-3xs">
+                    <span className="text-[11px] uppercase font-bold text-indigo-800 block tracking-wide font-mono">
                       ⚡ Simular Retorno da Automação (Fase de Testes)
                     </span>
                     <div className="flex gap-2 pt-1 flex-wrap font-sans">
@@ -1042,7 +1166,7 @@ export default function DadosCaso() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleSimulateStatus('criado', 'https://docs.google.com/document/d/1g6z8Pkt-mock-google-docs-id-1st-attendance/edit?usp=sharing', '')}
+                        onClick={() => handleSimulateStatus('criado', 'https://docs.google.com/document/d/1ODrPbz7qtyeiTYnjzSdv9YQ3NqdafYoub6-KpkmTQTo/edit?tab=t.0', '')}
                         className={`px-2.5 py-1 rounded text-xs font-bold border transition-colors cursor-pointer select-none ${
                           primeiroAtendimentoStatus === 'criado' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-white text-gray-500 border-gray-200'
                         }`}
@@ -1051,7 +1175,7 @@ export default function DadosCaso() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleSimulateStatus('falha', '', 'Erro 403: Permissão negada no Google Drive do assessor (carlos@giffoni.com.br). Por favor, configure as credenciais da conta.')}
+                        onClick={() => handleSimulateStatus('falha', '', `Sua sessão do Google Docs não possui autorização fática ativa ou suas credenciais de Service Account estão ausentes. Para corrigir:\n1. Clique em 'Sair / trocar conta' e faça logon novamente usando 'Entrar com Google' para autorizar a integração e criar seu token ativo (Google OAuth);\nOU\n2. Cole as chaves JSON PEM de sua Conta de Serviço (Service Account) própria do seu projeto Google Cloud na Central de Integrações do BOSS.`)}
                         className={`px-2.5 py-1 rounded text-xs font-bold border transition-colors cursor-pointer select-none ${
                           primeiroAtendimentoStatus === 'falha' ? 'bg-red-100 border-red-300 text-red-800' : 'bg-white text-gray-500 border-gray-200'
                         }`}
