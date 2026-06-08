@@ -1339,6 +1339,60 @@ app.post("/api/google-docs/generate-document", async (req: any, res: any) => {
 
   addLog("PLACEHOLDERS_BUILT", { count: Object.keys(placeholdersToUse).length });
 
+  // 4.5 Validate Procuracao PF placeholder contract (Tarefa 5)
+  if (documentType === "procuracao_pf" || templateKey === "procuracao_pf") {
+    const requiredKeys = [
+      "{{OUTORGANTE_NOME}}",
+      "{{OUTORGANTE_NACIONALIDADE}}",
+      "{{OUTORGANTE_ESTADO_CIVIL}}",
+      "{{OUTORGANTE_PROFISSAO}}",
+      "{{OUTORGANTE_RG}}",
+      "{{OUTORGANTE_CPF}}",
+      "{{OUTORGANTE_ENDERECO}}",
+      "{{OUTORGANTE_NUMERO}}",
+      "{{OUTORGANTE_COMPLEMENTO}}",
+      "{{OUTORGANTE_BAIRRO}}",
+      "{{OUTORGANTE_CIDADE}}",
+      "{{OUTORGANTE_ESTADO}}",
+      "{{OUTORGANTE_CEP}}",
+      "{{OUTORGANTE_TELEFONE}}",
+      "{{OUTORGANTE_WHATSAPP}}",
+      "{{OUTORGANTE_EMAIL}}",
+      "{{DATA_ASSINATURA}}"
+    ];
+
+    const essentialKeys = [
+      "{{OUTORGANTE_NOME}}",
+      "{{OUTORGANTE_CPF}}",
+      "{{OUTORGANTE_RG}}",
+      "{{OUTORGANTE_ENDERECO}}",
+      "{{OUTORGANTE_NUMERO}}",
+      "{{OUTORGANTE_BAIRRO}}",
+      "{{OUTORGANTE_CIDADE}}",
+      "{{OUTORGANTE_ESTADO}}",
+      "{{OUTORGANTE_CEP}}",
+      "{{OUTORGANTE_EMAIL}}",
+      "{{DATA_ASSINATURA}}"
+    ];
+
+    const missingKeys = requiredKeys.filter(k => !(k in placeholdersToUse));
+    const emptyEssentials = essentialKeys.filter(k => {
+      const val = placeholdersToUse[k];
+      return !val || String(val).trim() === "";
+    });
+
+    if (missingKeys.length > 0 || emptyEssentials.length > 0) {
+      addLog("PROCURACAO_PF_REQUIRED_PLACEHOLDER_EMPTY", { missingKeys, emptyEssentials });
+      const errorNames = emptyEssentials.map(k => k.replace("{{", "").replace("}}", "")).join(", ");
+      return res.status(400).json({
+        success: false,
+        documentType,
+        errorCode: "PROCURACAO_PF_REQUIRED_PLACEHOLDER_EMPTY",
+        errorMessage: `Erro de validação: Existem campos essenciais vazios ou ausentes no cadastro do cliente: ${errorNames}`
+      });
+    }
+  }
+
   // 5. Copy templates
   let googleDocsId = "";
   try {
