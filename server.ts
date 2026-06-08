@@ -134,20 +134,24 @@ async function initializeFirebaseAdmin() {
       }
     }
     
-    if (admin.apps.length > 0) {
+    const adminProps = (admin as any);
+    const adminSdk = adminProps?.initializeApp ? admin : (adminProps?.default || admin);
+    const appsList = adminSdk.apps || [];
+    
+    if (appsList.length > 0) {
       try {
-        await Promise.all(admin.apps.map(app => app ? app.delete() : Promise.resolve()));
+        await Promise.all(appsList.map(app => app ? app.delete() : Promise.resolve()));
       } catch (err) {
         // Ignored
       }
     }
     
     if (serviceAccount) {
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
+      adminSdk.initializeApp({
+        credential: adminSdk.credential.cert(serviceAccount),
         projectId: serviceAccount.project_id || configProjectId
       });
-      dbAdmin = getFirestore(admin.app(), firestoreDatabaseId === "(default)" ? undefined : firestoreDatabaseId);
+      dbAdmin = getFirestore(adminSdk.app(), firestoreDatabaseId === "(default)" ? undefined : firestoreDatabaseId);
       
       firebaseAdminStatus.initialized = true;
       firebaseAdminStatus.projectId = serviceAccount.project_id || configProjectId;
@@ -157,13 +161,13 @@ async function initializeFirebaseAdmin() {
       console.log(`[FirebaseAdmin] Success on initialisation through service account ${credentialSource}, db: ${firestoreDatabaseId}`);
     } else {
       try {
-        admin.initializeApp({
+        adminSdk.initializeApp({
           projectId: configProjectId || undefined
         });
-        dbAdmin = getFirestore(admin.app(), firestoreDatabaseId === "(default)" ? undefined : firestoreDatabaseId);
+        dbAdmin = getFirestore(adminSdk.app(), firestoreDatabaseId === "(default)" ? undefined : firestoreDatabaseId);
         
         firebaseAdminStatus.initialized = true;
-        firebaseAdminStatus.projectId = configProjectId || admin.app().options.projectId || "";
+        firebaseAdminStatus.projectId = configProjectId || adminSdk.app().options?.projectId || "";
         firebaseAdminStatus.credentialSource = "ADC";
         firebaseAdminStatus.errorCode = null;
         firebaseAdminStatus.errorMessage = null;
@@ -171,10 +175,10 @@ async function initializeFirebaseAdmin() {
       } catch (adcErr: any) {
         if (configProjectId) {
           try {
-            admin.initializeApp({
+            adminSdk.initializeApp({
               projectId: configProjectId
             });
-            dbAdmin = getFirestore(admin.app(), firestoreDatabaseId === "(default)" ? undefined : firestoreDatabaseId);
+            dbAdmin = getFirestore(adminSdk.app(), firestoreDatabaseId === "(default)" ? undefined : firestoreDatabaseId);
             
             firebaseAdminStatus.initialized = true;
             firebaseAdminStatus.projectId = configProjectId;
@@ -393,6 +397,8 @@ app.post("/api/proxy-google-drive", async (req, res) => {
   }
 });
 
+// LEGADO — NÃO USAR NO FLUXO DA PROCURAÇÃO PF.
+// O GDI não faz mais parte da arquitetura do Portal BOSS.
 // Proxy requests to the Google Docs Integration (GDI) to keep keys hidden & bypass CORS
 app.post("/api/proxy-google-docs", async (req, res) => {
   try {
@@ -530,6 +536,8 @@ app.post("/api/proxy-google-docs", async (req, res) => {
   }
 });
 
+// LEGADO — NÃO USAR NO FLUXO DA PROCURAÇÃO PF.
+// O GDI não faz mais parte da arquitetura do Portal BOSS.
 // Live revalidation endpoint for GDI matching exact validations of Task 1
 app.post("/api/proxy-google-docs/revalidate", async (req, res) => {
   try {
@@ -964,16 +972,6 @@ async function getGoogleDocsCredentials(req?: any) {
     }
   }
 
-  // 7. Fallback legacy GDI_GOOGLE_* environment variables (LEGADO GDI)
-  if (!parsedEmail || !parsedPrivateKey) {
-    if (process.env.GDI_GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GDI_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY) {
-      parsedEmail = process.env.GDI_GOOGLE_SERVICE_ACCOUNT_EMAIL.trim();
-      parsedPrivateKey = process.env.GDI_GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY.trim();
-      parsedProjectId = (process.env.GDI_GOOGLE_PROJECT_ID || "").trim();
-      credentialSource = "env_legacy_fallback";
-    }
-  }
-
   return {
     serviceAccountEmail: parsedEmail,
     serviceAccountPrivateKey: parsedPrivateKey,
@@ -1094,6 +1092,46 @@ async function createGoogleJwtClient(credentials: { serviceAccountEmail: string;
 
   await jwtClient.authorize();
   return jwtClient;
+}
+
+function extractTextFromGoogleDoc(docObj: any): string {
+  let text = "";
+  if (!docObj || !docObj.body || !docObj.body.content) return "";
+  
+  const extractFromElements = (elements: any[]) => {
+    for (const elem of elements) {
+      if (elem.textRun && elem.textRun.content) {
+        text += elem.textRun.content;
+      }
+    }
+  };
+
+  for (const item of docObj.body.content) {
+    if (item.paragraph && item.paragraph.elements) {
+      extractFromElements(item.paragraph.elements);
+    } else if (item.table && item.table.tableRows) {
+      for (const row of item.table.tableRows) {
+        if (row.tableCells) {
+          for (const cell of row.tableCells) {
+            if (cell.content) {
+              for (const cellItem of cell.content) {
+                if (cellItem.paragraph && cellItem.paragraph.elements) {
+                  extractFromElements(cellItem.paragraph.elements);
+                }
+              }
+            }
+          }
+        }
+      }
+    } else if (item.tableOfContents && item.tableOfContents.content) {
+      for (const tocItem of item.tableOfContents.content) {
+        if (tocItem.paragraph && tocItem.paragraph.elements) {
+          extractFromElements(tocItem.paragraph.elements);
+        }
+      }
+    }
+  }
+  return text;
 }
 
 app.post("/api/google-docs/generate-document", async (req: any, res: any) => {
@@ -1337,6 +1375,68 @@ app.post("/api/google-docs/generate-document", async (req: any, res: any) => {
       errorCode: "DOCUMENT_COPY_FAILED",
       errorMessage: `Falha ao duplicar o modelo de Google Docs: ${finalErrorDetail}. Certifique-se de que a Conta de Serviço Google (${serviceAccountEmail}) possui acesso de LEITURA ao template de ID '${templateId}' e de GRAVAÇÃO à pasta de ID '${destinationFolderId}'.`,
     });
+  }
+
+  // Validation tasks for Procuração PF (Tarefa 3)
+  if (documentType === "procuracao_pf" || documentType === "procuracao-pf") {
+    try {
+      addLog("TEMPLATE_VALIDATION_STARTED", { googleDocsId });
+      const docsObj = google.docs({ version: "v1", auth: jwtClient });
+      const docDataObj = await docsObj.documents.get({ documentId: googleDocsId });
+      const rawText = extractTextFromGoogleDoc(docDataObj.data);
+
+      const normalize = (val: string) => val.replace(/\s+/g, " ").trim();
+      const normalizedRawText = normalize(rawText);
+
+      const requiredFixedBlocks = [
+        "PROCURAÇÃO",
+        "OUTORGANTE:",
+        "OUTORGADO:",
+        "RODRIGO GIFFONI RODRIGUES",
+        "PODERES:",
+        "Todos os poderes para que o OUTORGADO",
+        "Viçosa,",
+        "{{OUTORGANTE_NOME}}",
+        "{{DATA_ASSINATURA}}"
+      ];
+
+      const missingBlocks = [];
+      for (const block of requiredFixedBlocks) {
+        const normalizedBlock = normalize(block);
+        if (!normalizedRawText.includes(normalizedBlock)) {
+          missingBlocks.push(block);
+        }
+      }
+
+      if (missingBlocks.length > 0) {
+        console.error(`[GoogleDocsEngine] Template mismatch. Missing fixed blocks: ${JSON.stringify(missingBlocks)}`);
+        
+        // Delete the copied file to prevent leaving incorrect files in Drive
+        try {
+          const drive = google.drive({ version: "v3", auth: jwtClient });
+          await drive.files.delete({ fileId: googleDocsId });
+        } catch (delErr: any) {
+          console.warn("[GoogleDocsEngine] Failed to delete mismatch document:", delErr.message);
+        }
+
+        return res.status(400).json({
+          success: false,
+          documentType,
+          errorCode: "PROCURACAO_PF_TEMPLATE_MISMATCH",
+          errorMessage: "O documento copiado não corresponde ao template oficial da Procuração PF. A geração foi bloqueada para impedir criação fora do modelo."
+        });
+      }
+
+      addLog("TEMPLATE_VALIDATED_AS_OFFICIAL", { status: "OK" });
+    } catch (errCheck: any) {
+      addLog("TEMPLATE_VALIDATION_FAILED", { error: errCheck.message });
+      return res.status(500).json({
+        success: false,
+        documentType,
+        errorCode: "PROCURACAO_PF_TEMPLATE_MISMATCH",
+        errorMessage: `Não foi possível validar o template copiado: ${errCheck.message}`
+      });
+    }
   }
 
   // 6. Substitute placeholders within document

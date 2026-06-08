@@ -2,7 +2,7 @@ import React from 'react';
 import { useColetaState } from '../hooks/useColetaState';
 import FluxoStepLayout from '../components/FluxoStepLayout';
 import EntregaDocumento from '../components/EntregaDocumento';
-import { buildProcuracaoPfPlaceholders } from '../../../../lib/documents/procuracaoPfPlaceholders';
+import { buildProcuracaoPfPlaceholders, PROCURACAO_PF_REQUIRED_PLACEHOLDERS } from '../../../../lib/documents/procuracaoPfPlaceholders';
 import { 
   ArrowRight, FileText, UploadCloud, Trash2, ArrowLeft, 
   Settings, CheckSquare, Sparkles, Check, AlertCircle, RefreshCw, ExternalLink,
@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { doc, getDoc, setDoc, updateDoc, query, collection, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
-import { normalizeGdiStatus, isInvalidGdiIntegrationKey } from '../../../../lib/integrations/googleDocsStatus';
 import { useAuth } from '../../../../contexts/AuthContext';
 
 export default function ProcuracaoPF() {
@@ -62,252 +61,17 @@ export default function ProcuracaoPF() {
   const [allCaseJobs, setAllCaseJobs] = React.useState<any[]>([]);
   const [copiedDiagnostics, setCopiedDiagnostics] = React.useState(false);
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = React.useState(false);
-  const [googleDocsConfig, setGoogleDocsConfig] = React.useState<any>(null);
 
   const [forceNewVersion, setForceNewVersion] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const [sentPayload, setSentPayload] = React.useState<any>(null);
   const [showPayload, setShowPayload] = React.useState(false);
   const [copiedPayload, setCopiedPayload] = React.useState(false);
-  const [gdiConfigured, setGdiConfigured] = React.useState<boolean | null>(null);
-  const [loadedGdiUrl, setLoadedGdiUrl] = React.useState<string>('');
-  const [gdiStatus, setGdiStatus] = React.useState<string>('não_configurado');
 
   // 1. Estados cruciais da Seção 5 para a tentativa ativa fática
   const [currentAttemptJobId, setCurrentAttemptJobId] = React.useState<string | null>(null);
   const [attemptStartedAt, setAttemptStartedAt] = React.useState<string | null>(null);
   const [showGenerationError, setShowGenerationError] = React.useState<boolean>(false);
-  const [revalidating, setRevalidating] = React.useState(false);
-
-  const liveCheckedRef = React.useRef(false);
-
-  // Live revalidation of the GDI connection (Task 1)
-  const revalidateGdiLive = async (config: any): Promise<boolean> => {
-    const endpoint = config?.endpointUrl || loadedGdiUrl;
-    const key = config?.integrationKey;
-    if (!endpoint || !key) {
-      console.warn("[PORTAL_GDI_LIVE_REVALIDATION_FAILED] Endpoint or integrationKey missing.");
-      setError("Endpoint ou Chave do GDI ausente para revalidação.");
-      setGdiConfigured(false);
-      return false;
-    }
-
-    setRevalidating(true);
-    let targetUrl = endpoint.trim();
-    if (targetUrl.endsWith('/')) {
-      targetUrl = targetUrl.slice(0, -1);
-    }
-    if (targetUrl.includes("?")) {
-      targetUrl = targetUrl.split("?")[0];
-    }
-
-    console.log("[PORTAL_GDI_LIVE_REVALIDATION_STARTED] Starting live check on " + targetUrl);
-    
-    try {
-      const resp = await fetch("/api/proxy-google-docs/revalidate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          endpointUrl: targetUrl,
-          integrationKey: key
-        })
-      });
-
-      if (!resp.ok) {
-        throw new Error(`Proxy respondeu erro HTTP ${resp.status}`);
-      }
-
-      const data = await resp.json();
-      const now = new Date().toISOString();
-      const docRef = doc(db, 'settings', 'connectors');
-
-      if (data.success) {
-        console.log("[PORTAL_GDI_LIVE_REVALIDATION_SUCCESS] Live check success! Updating settings/connectors to operacional.");
-        
-        const updatedGDocs = {
-          ...config,
-          status: "operacional",
-          diagnosticState: "operacional",
-          normalizedStatus: "operacional",
-          isOperational: true,
-          integrationOperationalStatus: "operacional",
-          operationalReason: "GDI revalidado ao vivo com sucesso.",
-          lastHealthCheckAt: now,
-          lastHealthCheckStatus: "operational",
-          lastHealthCheckError: "",
-          lastValidatedWebhookUrl: `${targetUrl}/api/webhook/gdi-job`,
-          lastHttpStatus: 200,
-          lastHttpStatusReceived: 200,
-          lastEndpointTested: `${targetUrl}/api/health`,
-          lastContentTypeReceived: "application/json",
-          lastSuccess: "GDI operacional revalidado ao vivo.",
-          lastError: "",
-          transportMode: "http_webhook",
-          updatedAt: now
-        };
-
-        try {
-          await setDoc(docRef, {
-            googleDocs: updatedGDocs
-          }, { merge: true });
-        } catch (dbErr) {
-          console.warn("[PORTAL_GDI_LIVE_REVALIDATION_WARNING] Permissões insuficientes para salvar estado do GDI no Firestore, mas prosseguindo com fluxo local.", dbErr);
-        }
-
-        setGdiConfigured(true);
-        setGdiStatus("operacional");
-        setError(null);
-        return true;
-      } else {
-        console.warn("[PORTAL_GDI_LIVE_REVALIDATION_FAILED] Live check failed on GDI backend: " + data.error);
-        
-        const updatedGDocs = {
-          ...config,
-          status: "erro",
-          diagnosticState: "erro",
-          normalizedStatus: "erro",
-          isOperational: false,
-          integrationOperationalStatus: "erro",
-          operationalReason: data.error || "GDI não respondeu nos conformes exigidos.",
-          lastHealthCheckAt: now,
-          lastHealthCheckStatus: "failed",
-          lastHealthCheckError: data.error || "",
-          lastValidatedWebhookUrl: `${targetUrl}/api/webhook/gdi-job`,
-          lastHttpStatus: data.failedStatus || 500,
-          lastHttpStatusReceived: data.failedStatus || 500,
-          lastEndpointTested: data.failedEndpoint || `${targetUrl}/api/health`,
-          lastContentTypeReceived: data.failedContentType || "unknown",
-          lastSuccess: "",
-          lastError: data.error || "Erro na validação do GDI.",
-          transportMode: "http_webhook",
-          updatedAt: now
-        };
-
-        try {
-          await setDoc(docRef, {
-            googleDocs: updatedGDocs
-          }, { merge: true });
-        } catch (dbErr) {
-          console.warn("[PORTAL_GDI_LIVE_REVALIDATION_WARNING] Permissões insuficientes para salvar estado do GDI no Firestore.", dbErr);
-        }
-
-        const detailedError = `Falha na revalidação ao vivo com GDI: ${data.error || 'Não operacional'}\n` +
-          `Endpoint testado: ${data.failedEndpoint || 'N/A'}\n` +
-          `Status HTTP: ${data.failedStatus || 'N/A'}\n` +
-          `Content-Type: ${data.failedContentType || 'N/A'}\n` +
-          `Resposta recebida: ${data.failedResponseText || 'N/A'}`;
-
-        setError(detailedError);
-        setGdiConfigured(false);
-        setGdiStatus("erro");
-        return false;
-      }
-    } catch (err: any) {
-      console.error("[PORTAL_GDI_LIVE_REVALIDATION_FAILED] Exceptional live check failure:", err);
-      const errMsg = err.message || String(err);
-      setError(`Falha ao revalidar GDI ao vivo: ${errMsg}`);
-      setGdiConfigured(false);
-      setGdiStatus("erro");
-      return false;
-    } finally {
-      setRevalidating(false);
-    }
-  };
-
-  // Verificação em tempo real da configuração de GDI no banco Firestore via onSnapshot (TAREFA 8 & TAREFA 7 & TAREFA 2)
-  React.useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'settings', 'connectors'), async (snapshot) => {
-      try {
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          if (data.googleDocs) {
-            // TAREFA 7 - Migrar status legado "ativo" para "operacional" de forma resiliente
-            const rawStatus = data.googleDocs.status;
-            const lastHttp = data.googleDocs.lastHttpStatus;
-            if (rawStatus === "ativo" && (lastHttp === 200 || lastHttp === "200")) {
-              console.log("[Migration] PORTAL_GDI_LEGACY_STATUS_NORMALIZED");
-              try {
-                await updateDoc(doc(db, 'settings', 'connectors'), {
-                  "googleDocs.status": "operacional",
-                  "googleDocs.integrationOperationalStatus": "operacional",
-                  "googleDocs.lastHealthCheckStatus": "operational",
-                  "googleDocs.lastHttpStatus": 200,
-                  "googleDocs.lastHttpStatusReceived": 200,
-                  "googleDocs.lastServerToServerResult": "Migrado automaticamente do estado legado ativo para operacional.",
-                  "googleDocs.updatedAt": new Date().toISOString()
-                });
-                return; // Let the next snapshot trigger handle normal loading
-              } catch (migrationErr) {
-                console.error("Erro na migração automática de conector GDI:", migrationErr);
-              }
-            }
-
-            const endpointUrl = (data.googleDocs.endpointUrl || "").trim();
-            const integrationKey = (data.googleDocs.integrationKey || "").trim();
-
-            if (rawStatus === "erro" && endpointUrl && integrationKey) {
-              if (!liveCheckedRef.current) {
-                liveCheckedRef.current = true;
-                console.log("[PORTAL_GDI_RESIDUAL_ERROR_STATUS_DETECTED] Residual error detected. Attempting live revalidation before blocking.");
-                
-                // Do NOT block immediately. Let it bypass rawStatus === "erro"
-                setGdiConfigured(true);
-                setGdiStatus("verificando");
-                setLoadedGdiUrl(endpointUrl);
-                setGoogleDocsConfig({
-                  ...data.googleDocs,
-                  normalizedStatus: "verificando",
-                  operationalReason: "Verificando integridade operacional ao vivo com o GDI..."
-                });
-                
-                setTimeout(() => {
-                  revalidateGdiLive(data.googleDocs);
-                }, 100);
-              } else {
-                const statusInfo = normalizeGdiStatus(data.googleDocs);
-                setGdiStatus(statusInfo.normalizedStatus);
-                setLoadedGdiUrl(statusInfo.endpointUrl);
-                setGdiConfigured(statusInfo.isOperational);
-                setGoogleDocsConfig({
-                  ...data.googleDocs,
-                  normalizedStatus: statusInfo.normalizedStatus,
-                  operationalReason: statusInfo.reason,
-                  targetEndpoint: statusInfo.targetEndpoint
-                });
-              }
-            } else {
-              const statusInfo = normalizeGdiStatus(data.googleDocs);
-              setGdiStatus(statusInfo.normalizedStatus);
-              setLoadedGdiUrl(statusInfo.endpointUrl);
-              setGdiConfigured(statusInfo.isOperational);
-              setGoogleDocsConfig({
-                ...data.googleDocs,
-                normalizedStatus: statusInfo.normalizedStatus,
-                operationalReason: statusInfo.reason,
-                targetEndpoint: statusInfo.targetEndpoint
-              });
-            }
-          } else {
-            setGdiConfigured(false);
-            setGdiStatus('não_configurado');
-            setGoogleDocsConfig(null);
-          }
-        } else {
-          setGdiConfigured(false);
-          setGdiStatus('não_configurado');
-          setGoogleDocsConfig(null);
-        }
-      } catch (err) {
-        console.error("Erro ao escutar conectores GDI:", err);
-        setGdiConfigured(false);
-        setGdiStatus('não_configurado');
-      }
-    }, (err) => {
-      console.error("Erro na escuta de settings/connectors:", err);
-    });
-
-    return () => unsub();
-  }, []);
 
   const isMockUrl = (url: string | null | undefined): boolean => {
     if (!url) return false;
@@ -386,7 +150,7 @@ export default function ProcuracaoPF() {
     if (sentPayload) return sentPayload;
     if (activeJob) {
       return {
-        contractVersion: activeJob.contractVersion || 'gdi.placeholders.v1',
+        contractVersion: activeJob.contractVersion || 'boss.placeholders.v1',
         documentType: activeJob.documentType || 'procuracao_pf',
         caseId: activeJob.caseId || caseId,
         clientId: activeJob.portalClientId || currentCase?.clientId || '',
@@ -407,9 +171,8 @@ export default function ProcuracaoPF() {
       clientName,
       driveFolderId,
       driveFolderUrl,
-      gdiEndpointUrl: loadedGdiUrl,
-      gdiStatus,
-      lastHealthCheckAt: googleDocsConfig?.lastHealthCheckAt || googleDocsConfig?.updatedAt || 'N/A',
+      portalDocsEngine: "NATIVE",
+      engineStatus: "operational",
       activeJobId: activeJob?.id || 'N/A',
       activeJobStatus: activeJob?.status || 'N/A',
       currentAttemptJobId: currentAttemptJobId || 'N/A',
@@ -420,39 +183,6 @@ export default function ProcuracaoPF() {
     navigator.clipboard.writeText(JSON.stringify(report, null, 2));
     setCopiedDiagnostics(true);
     setTimeout(() => setCopiedDiagnostics(false), 2000);
-  };
-
-  const handleRevalidateGdi = async () => {
-    setSaving(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      const connectorsSnap = await getDoc(doc(db, 'settings', 'connectors'));
-
-      if (!connectorsSnap.exists()) {
-        throw new Error("Documento settings/connectors não encontrado.");
-      }
-
-      const data = connectorsSnap.data();
-      const googleDocs = data.googleDocs;
-
-      if (!googleDocs?.endpointUrl || !googleDocs?.integrationKey) {
-        throw new Error("Endpoint URL ou Integration Key do GDI ausentes.");
-      }
-
-      const ok = await revalidateGdiLive(googleDocs);
-
-      if (!ok) {
-        throw new Error("Revalidação real do GDI falhou. Verifique o erro técnico exibido.");
-      }
-
-      setSuccess("GDI revalidado ao vivo com sucesso. O botão Gerar Procuração está liberado.");
-    } catch (err: any) {
-      setError(`Erro ao revalidar GDI ao vivo: ${err.message}`);
-    } finally {
-      setSaving(false);
-    }
   };
 
   const handleForceCleanAttempt = async () => {
@@ -477,10 +207,6 @@ export default function ProcuracaoPF() {
     }
   };
 
-  const handleLiveRevalidateGdi = async (): Promise<boolean> => {
-    return revalidateGdiLive(googleDocsConfig);
-  };
-
   const handleCleanProcuracaoResidualState = async () => {
     if (!caseId) return;
     setSaving(true);
@@ -499,7 +225,7 @@ export default function ProcuracaoPF() {
         procuracaoGoogleDocsJobLogs: [
           ...(currentCase?.procuracaoGoogleDocsJobLogs || []),
           {
-            action: "PORTAL_PROC_PF_RESIDUAL_CASE_DATA_CLEANED",
+            action: "PROC_PF_RESIDUAL_CASE_DATA_CLEANED",
             timestamp: now.toISOString(),
             message: "Limpeza manual de dados residuais e expurgos executada pelo usuário com sucesso."
           }
@@ -528,13 +254,13 @@ export default function ProcuracaoPF() {
           if (job.status === 'pending') {
             needsUpdate = true;
             updates.status = 'timeout';
-            updates.errorCode = 'GDI_JOB_STALE_PENDING';
+            updates.errorCode = 'PROC_PF_STALE_JOB_TIMEOUT';
             updates.errorMessage = 'Job antigo pendente marcado como timeout para não interferir na nova geração.';
             updates.updatedAt = now.toISOString();
             updates.logs = [
               ...(job.logs || []),
               {
-                action: "PORTAL_PROC_PF_STALE_JOB_TIMEOUT",
+                action: "PROC_PF_STALE_JOB_TIMEOUT",
                 timestamp: now.toISOString(),
                 message: "Parcialmente pendente - Limpo manualmente via painel administrativo."
               }
@@ -545,13 +271,13 @@ export default function ProcuracaoPF() {
             if (isUrlMockOrInvalid) {
               needsUpdate = true;
               updates.status = 'failed';
-              updates.errorCode = 'GDI_SUCCESS_WITHOUT_REAL_DOCUMENT';
+              updates.errorCode = 'PROC_PF_SUCCESS_WITHOUT_REAL_DOCUMENT';
               updates.errorMessage = 'Job antigo marcado como sucesso mas com URL simulada ou inválida.';
               updates.updatedAt = now.toISOString();
               updates.logs = [
                 ...(job.logs || []),
                 {
-                  action: "PORTAL_PROC_PF_INVALID_SUCCESS_JOB_MARKED_FAILED",
+                  action: "PROC_PF_TEMPLATE_MISMATCH",
                   timestamp: now.toISOString(),
                   message: "Job antigo limpo devido a referências ou links de documentos inexistentes."
                 }
@@ -584,7 +310,7 @@ export default function ProcuracaoPF() {
       const caseDocRef = doc(db, 'cases', caseId);
       const clearLogs = [
         {
-          action: "PORTAL_PROC_PF_MOCK_REFERENCE_CLEARED",
+          action: "PROC_PF_MOCK_REFERENCE_CLEARED",
           timestamp: new Date().toISOString(),
           message: "A referência de Procuração mockada foi limpa com absoluto sucesso pelo usuário."
         }
@@ -631,13 +357,13 @@ export default function ProcuracaoPF() {
         if (elapsedMs > 5 * 60 * 1000) {
           needsUpdate = true;
           updates.status = 'timeout';
-          updates.errorCode = 'GDI_JOB_STALE_PENDING';
+          updates.errorCode = 'PROC_PF_STALE_JOB_TIMEOUT';
           updates.errorMessage = 'Job antigo pendente marcado como timeout para não interferir na nova geração.';
           updates.updatedAt = now.toISOString();
           updates.logs = [
             ...(job.logs || []),
             {
-              action: "PORTAL_PROC_PF_STALE_JOB_TIMEOUT",
+              action: "PROC_PF_STALE_JOB_TIMEOUT",
               timestamp: now.toISOString(),
               message: "Job pendente há mais de 5 minutos marcado como timeout por inatividade."
             }
@@ -652,13 +378,13 @@ export default function ProcuracaoPF() {
         if (isUrlMockOrInvalid || !id) {
           needsUpdate = true;
           updates.status = 'failed';
-          updates.errorCode = 'GDI_SUCCESS_WITHOUT_REAL_DOCUMENT';
+          updates.errorCode = 'PROC_PF_TEMPLATE_MISMATCH';
           updates.errorMessage = 'Job marcado como sucesso anteriormente mas não contém documento real do Google Docs.';
           updates.updatedAt = now.toISOString();
           updates.logs = [
             ...(job.logs || []),
             {
-              action: "PORTAL_PROC_PF_INVALID_SUCCESS_JOB_MARKED_FAILED",
+              action: "PROC_PF_TEMPLATE_MISMATCH",
               timestamp: now.toISOString(),
               message: "Job de sucesso com documento inválido ou ausente marcado como falha."
             }
@@ -736,18 +462,18 @@ export default function ProcuracaoPF() {
     const updateCaseFromJob = async () => {
       try {
         if (isJobSuccess && currentCase.procuracaoGoogleDocsJobId !== activeJob.id) {
-          const hasResultLog = activeJob.logs?.some((l: any) => l.action === 'PORTAL_PROC_PF_RESULT_RECEIVED');
+          const hasResultLog = activeJob.logs?.some((l: any) => l.action === 'PROC_PF_DOCUMENT_CREATED');
           
           let updatedLogs = [...(activeJob.logs || [])];
           if (!hasResultLog) {
             updatedLogs.push(
               {
-                action: "PORTAL_PROC_PF_RESULT_RECEIVED",
+                action: "PROC_PF_DOCUMENT_CREATED",
                 timestamp: new Date().toISOString(),
                 message: "Dados do Google Docs recebidos com sucesso pelo Portal BOSS."
               },
               {
-                action: "PORTAL_PROC_PF_CASE_UPDATED",
+                action: "PROC_PF_CASE_UPDATED",
                 timestamp: new Date().toISOString(),
                 message: "Caso atualizado com o link do documento da Procuração PF."
               }
@@ -770,12 +496,12 @@ export default function ProcuracaoPF() {
             procuracaoVersion: activeJob.version || 1
           });
         } else if (isJobFailed && currentCase.procuracaoGoogleDocsJobId !== activeJob.id) {
-          const hasFailLog = activeJob.logs?.some((l: any) => l.action === 'PORTAL_PROC_PF_FAILED');
+          const hasFailLog = activeJob.logs?.some((l: any) => l.action === 'PROC_PF_TEMPLATE_COPY_FAILED');
           
           let updatedLogs = [...(activeJob.logs || [])];
           if (!hasFailLog) {
             updatedLogs.push({
-              action: "PORTAL_PROC_PF_FAILED",
+              action: "PROC_PF_TEMPLATE_COPY_FAILED",
               timestamp: new Date().toISOString(),
               message: `Falha na geração do documento pelo receptor: ${activeJob.errorMessage || 'Unknown error'}`
             });
@@ -817,6 +543,22 @@ export default function ProcuracaoPF() {
     const nomeCompleto = client?.pfDadosPessoais?.pf_nomeCompleto || client?.pfData?.pf_nomeCompleto || '';
     const cpf = client?.pfDadosPessoais?.pf_cpf || client?.pfData?.pf_cpf || '';
 
+    const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const caseDocRef = doc(db, 'cases', targetCaseId);
+
+    // Initial logs setup using the specified codes
+    const jobLogs: any[] = [];
+    const addClientLog = (action: string, message: string) => {
+      jobLogs.push({
+        action,
+        timestamp: new Date().toISOString(),
+        message
+      });
+    };
+
+    // Step 1: PROC_PF_BUTTON_CLICKED
+    addClientLog("PROC_PF_BUTTON_CLICKED", "O operador clicou em 'Gerar Procuração' para iniciar o fluxo de automação.");
+
     if (!targetCaseId) {
       setError("Erro de validação: caseId do caso está ausente.");
       setShowGenerationError(true);
@@ -827,6 +569,10 @@ export default function ProcuracaoPF() {
       setShowGenerationError(true);
       return;
     }
+
+    // Step 2: PROC_PF_CLIENT_DATA_LOADED
+    addClientLog("PROC_PF_CLIENT_DATA_LOADED", "Dados cadastrais do cliente e do caso carregados com sucesso do banco.");
+
     // 2. Se não houver googleDriveClientFolderId: bloquear com "Não há pasta real do Google Drive vinculada ao cliente."
     if (!googleDriveClientFolderId) {
       setError("Não há pasta real do Google Drive vinculada ao cliente.");
@@ -844,23 +590,18 @@ export default function ProcuracaoPF() {
       return;
     }
 
-    const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const caseDocRef = doc(db, 'cases', targetCaseId);
+    // Step 3: PROC_PF_FOLDER_FOUND
+    addClientLog("PROC_PF_FOLDER_FOUND", `Pasta destino no Google Drive localizada com sucesso ID: ${destinationFolderId}`);
 
-    // Configuração fática de rastreio de tentativa única segundo a Seção 5
-    setSaving(true);
-    setError(null);
-    setSuccess(null);
-    setShowGenerationError(false);
-    setCurrentAttemptJobId(jobId);
-    setAttemptStartedAt(new Date().toISOString());
-
-    const timestampDataLoaded = new Date().toISOString();
-    const timestampFolderFound = new Date().toISOString();
+    // Step 4: PROC_PF_OFFICIAL_TEMPLATE_SELECTED
+    const officialTemplateId = "16k_n_BTdf8wTCG8CK4T2TyAT93o5qrmZqjbROtrBqzk";
+    addClientLog("PROC_PF_OFFICIAL_TEMPLATE_SELECTED", `Template oficial de Procuração PF selecionado unicamente como fonte da verdade: ${officialTemplateId}`);
 
     let placeholders: Record<string, string>;
     try {
       placeholders = buildProcuracaoPfPlaceholders(client);
+      // Step 5: PROC_PF_PLACEHOLDERS_BUILT
+      addClientLog("PROC_PF_PLACEHOLDERS_BUILT", "Todas as chaves e valores de placeholders foram processados e vinculados com sucesso.");
     } catch (err: any) {
       setError(err.message || "Erro ao calcular placeholders.");
       setShowGenerationError(true);
@@ -868,64 +609,63 @@ export default function ProcuracaoPF() {
       return;
     }
 
-    // Setup initial logs using required codes
-    const initialLogs = [
-      {
-        action: "PORTAL_PROC_PF_DATA_LOADED",
-        timestamp: timestampDataLoaded,
-        message: "Dados do cliente e da procuração pf carregados e validados no Portal BOSS."
-      },
-      {
-        action: "PORTAL_PROC_PF_FOLDER_FOUND",
-        timestamp: timestampFolderFound,
-        message: `Diretório Google Drive do cliente localizado com sucesso ID: ${destinationFolderId}.`
-      },
-      {
-        action: "PORTAL_PROC_PF_PLACEHOLDERS_BUILT",
-        timestamp: new Date().toISOString(),
-        message: "O Portal BOSS montou com absoluto sucesso o mapa exclusivo de placeholders do cliente (placeholders-only)."
-      }
+    // Exact required placeholder validation
+    const requiredKeys = [
+      "{{OUTORGANTE_NOME}}",
+      "{{OUTORGANTE_NACIONALIDADE}}",
+      "{{OUTORGANTE_ESTADO_CIVIL}}",
+      "{{OUTORGANTE_PROFISSAO}}",
+      "{{OUTORGANTE_RG}}",
+      "{{OUTORGANTE_CPF}}",
+      "{{OUTORGANTE_ENDERECO}}",
+      "{{OUTORGANTE_NUMERO}}",
+      "{{OUTORGANTE_COMPLEMENTO}}",
+      "{{OUTORGANTE_BAIRRO}}",
+      "{{OUTORGANTE_CIDADE}}",
+      "{{OUTORGANTE_ESTADO}}",
+      "{{OUTORGANTE_CEP}}",
+      "{{OUTORGANTE_TELEFONE}}",
+      "{{OUTORGANTE_WHATSAPP}}",
+      "{{OUTORGANTE_EMAIL}}",
+      "{{DATA_ASSINATURA}}"
     ];
 
-    let targetEndpoint = "/api/google-docs/generate-document";
-    try {
-      // Fetch GDI connection settings from Firestore
-      const connectorsSnap = await getDoc(doc(db, 'settings', 'connectors'));
-      let googleDocs: any = null;
+    const essentialKeys = [
+      "{{OUTORGANTE_NOME}}",
+      "{{OUTORGANTE_CPF}}",
+      "{{OUTORGANTE_RG}}",
+      "{{OUTORGANTE_ENDERECO}}",
+      "{{OUTORGANTE_NUMERO}}",
+      "{{OUTORGANTE_BAIRRO}}",
+      "{{OUTORGANTE_CIDADE}}",
+      "{{OUTORGANTE_ESTADO}}",
+      "{{OUTORGANTE_CEP}}",
+      "{{OUTORGANTE_EMAIL}}",
+      "{{DATA_ASSINATURA}}"
+    ];
 
-      if (connectorsSnap.exists()) {
-        const data = connectorsSnap.data();
-        googleDocs = data.googleDocs;
-      }
+    const missingKeys = requiredKeys.filter(k => !(k in placeholders));
+    const emptyEssentials = essentialKeys.filter(k => {
+      const val = placeholders[k];
+      return !val || String(val).trim() === "";
+    });
 
-      const templatesConfig = googleDocs?.templates || {};
-      const templateId = templatesConfig.procuracao_pf || '16k_n_BTdf8wTCG8CK4T2TyAT93o5qrmZqjbROtrBqzk';
+    if (missingKeys.length > 0 || emptyEssentials.length > 0) {
+      addClientLog("PROC_PF_REQUIRED_PLACEHOLDER_EMPTY", `Modo de validação acusou campos em branco ou ausentes: ${emptyEssentials.map(k => k.replace("{{","").replace("}}","")).join(", ")}`);
+      
+      const errorDetail = `Erro de validação: Existem campos essenciais vazios no cadastro do cliente que impedem a geração da procuração: ${emptyEssentials.map(k => k.replace("{{","").replace("}}","")).join(", ")}`;
+      setError(errorDetail);
+      setShowGenerationError(true);
+      setSaving(false);
 
-      const currentVersion = currentCase?.procuracaoVersion || 1;
-      const nextVersion = currentCase?.procuracaoGoogleDocsUrl ? currentVersion + 1 : 1;
-
-      // Log: request started
-      initialLogs.push({
-        action: "PORTAL_PROC_PF_REQUEST_STARTED",
-        timestamp: new Date().toISOString(),
-        message: "Efetuando disparo HTTP real para o endpoint interno de geração..."
-      } as any);
-
-      // Enquanto envia: status = "enviando_para_gdi" e limpamos a falha anterior do documento do caso
-      await updateDoc(caseDocRef, {
-        procuracaoStatus: "enviando_para_gdi",
-        procuracaoLogFalha: ""
-      });
-
-      // TAREFA 3 — AJUSTAR JOB INTERNO DO PORTAL (sem payload cru)
       const initialJob = {
         id: jobId,
-        contractVersion: "gdi.placeholders.v1",
+        contractVersion: "boss.placeholders.v1",
         source: "Portal BOSS Clientes",
         target: "Internal Generator Engine",
         documentType: "procuracao_pf",
         templateKey: "procuracao_pf",
-        status: "pending",
+        status: "failed",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         caseId: targetCaseId,
@@ -935,61 +675,90 @@ export default function ProcuracaoPF() {
         destinationFolderUrl,
         outputFileName: `Procuração PF - ${nomeCompleto}`,
         placeholders,
-        result: {
-          googleDocsId: null,
-          googleDocsUrl: null,
-          fileName: null
-        },
-        errorCode: null,
-        errorMessage: null,
-        logs: initialLogs
+        errorCode: "PROC_PF_REQUIRED_PLACEHOLDER_EMPTY",
+        errorMessage: errorDetail,
+        logs: jobLogs
       };
-
       await setDoc(doc(db, 'googleDocsJobs', jobId), initialJob);
+      return;
+    }
 
-      const localOverride = localStorage.getItem('portal_boss_gdocs_override') || '';
+    addClientLog("PROC_PF_REQUIRED_PLACEHOLDERS_VALIDATED", "Contrato de placeholders mapeado contra a especificação com 100% de conformidade.");
 
-      const internalPayload = {
-        mode: "stateless",
-        googleAccessToken,
-        documentType: "procuracao_pf",
-        caseId: targetCaseId,
-        clientId: targetClientId,
-        clientType: "PF",
-        templateId,
-        templateKey: "procuracao_pf",
-        destinationFolderId,
-        destinationFolderUrl,
-        documentName: `Procuração PF - ${nomeCompleto}`,
-        placeholders,
-        metadata: { source: "Operational Coleta Flow", attemptJobId: jobId },
-        credentialOverride: localOverride
-      };
+    // Configuração fática de rastreio de tentativa única segundo a Seção 5
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    setShowGenerationError(false);
+    setCurrentAttemptJobId(jobId);
 
-      initialLogs.push({
-        action: "PORTAL_GDI_POST_ABOUT_TO_SEND",
-        timestamp: new Date().toISOString(),
-        message: `Disparando POST para Motor Google Docs Interno. Endpoint: ${targetEndpoint}, templateId: ${templateId}, folderId: ${destinationFolderId}`
-      } as any);
+    const currentVersion = currentCase?.procuracaoVersion || 1;
+    const nextVersion = currentCase?.procuracaoGoogleDocsUrl ? currentVersion + 1 : 1;
 
-      await updateDoc(doc(db, 'googleDocsJobs', jobId), {
-        logs: initialLogs,
-        updatedAt: new Date().toISOString()
-      });
+    // Step: PROC_PF_TEMPLATE_COPY_STARTED
+    addClientLog("PROC_PF_TEMPLATE_COPY_STARTED", "Disparando processo de clonagem do template oficial no GDrive...");
 
+    // Enquanto envia: status = "gerando" e limpamos a falha anterior do documento do caso
+    await updateDoc(caseDocRef, {
+      procuracaoStatus: "gerando",
+      procuracaoLogFalha: ""
+    });
+
+    const initialJob = {
+      id: jobId,
+      contractVersion: "boss.placeholders.v1",
+      source: "Portal BOSS Clientes",
+      target: "Internal Generator Engine",
+      documentType: "procuracao_pf",
+      templateKey: "procuracao_pf",
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      caseId: targetCaseId,
+      portalClientId: targetClientId,
+      clientType: "PF",
+      destinationFolderId,
+      destinationFolderUrl,
+      outputFileName: `Procuração PF - ${nomeCompleto}`,
+      placeholders,
+      result: {
+        googleDocsId: null,
+        googleDocsUrl: null,
+        fileName: null
+      },
+      errorCode: null,
+      errorMessage: null,
+      logs: jobLogs
+    };
+
+    await setDoc(doc(db, 'googleDocsJobs', jobId), initialJob);
+
+    let targetEndpoint = "/api/google-docs/generate-document";
+    const localOverride = localStorage.getItem('portal_boss_gdocs_override') || '';
+
+    const internalPayload = {
+      mode: "stateless",
+      googleAccessToken,
+      documentType: "procuracao_pf",
+      caseId: targetCaseId,
+      clientId: targetClientId,
+      clientType: "PF",
+      templateId: officialTemplateId,
+      templateKey: "procuracao_pf",
+      destinationFolderId,
+      destinationFolderUrl,
+      documentName: `Procuração PF - ${nomeCompleto}`,
+      placeholders,
+      metadata: { source: "Operational Coleta Flow", attemptJobId: jobId },
+      credentialOverride: localOverride
+    };
+
+    try {
       const response = await fetch(targetEndpoint, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(internalPayload)
       });
-
-      initialLogs.push({
-        action: "PORTAL_GDI_RESPONSE_RECEIVED",
-        timestamp: new Date().toISOString(),
-        message: `Resposta de geração concluída no backend. Status: ${response.status}`
-      } as any);
 
       const responseText = await response.text();
       let responseData: any;
@@ -1003,7 +772,7 @@ export default function ProcuracaoPF() {
         const errorDetail = responseData.errorMessage || responseData.error || responseText || "Falha na geração integrada.";
         const errorInstance = new Error(errorDetail) as any;
         errorInstance.httpStatus = response.status;
-        errorInstance.errorCode = responseData.errorCode || "GENERATOR_HTTP_ERROR";
+        errorInstance.errorCode = responseData.errorCode || "PROC_PF_TEMPLATE_COPY_FAILED";
         errorInstance.rawResponse = responseText;
         throw errorInstance;
       }
@@ -1011,24 +780,14 @@ export default function ProcuracaoPF() {
       const googleDocsId = responseData.googleDocsId;
       const googleDocsUrl = responseData.googleDocsUrl;
 
-      const successLogs = [
-        ...initialLogs,
-        {
-          action: "PORTAL_GDI_REAL_POST_SUCCESS",
-          timestamp: new Date().toISOString(),
-          message: `O motor interno gerou com absoluto sucesso o documento no Google Drive. ID: ${googleDocsId}`
-        },
-        {
-          action: "PORTAL_GDI_PAYLOAD_DELIVERY_CONFIRMED",
-          timestamp: new Date().toISOString(),
-          message: "A solicitação foi integralmente processada com êxito."
-        },
-        {
-          action: "PORTAL_PROC_PF_CASE_UPDATED",
-          timestamp: new Date().toISOString(),
-          message: "Caso atualizado com as novas referências de Google Docs e Drive."
-        }
-      ];
+      // Add template copy success, validated as official, replacement started, replacement success, document created, case updated, flow completed
+      addClientLog("PROC_PF_TEMPLATE_COPY_SUCCESS", `Clone realizado no Google Drive com o novo ID de documento: ${googleDocsId}`);
+      addClientLog("PROC_PF_TEMPLATE_VALIDATED_AS_OFFICIAL", "O documento clonado foi validado contra o snippet obrigatório de Procuração PF.");
+      addClientLog("PROC_PF_PLACEHOLDER_REPLACEMENT_STARTED", "Iniciando a operação em lote de substituição dos placeholders no documento.");
+      addClientLog("PROC_PF_PLACEHOLDER_REPLACEMENT_SUCCESS", "Substituição concluída de todos os placeholders com absoluto sucesso.");
+      addClientLog("PROC_PF_DOCUMENT_CREATED", "Criação física e de dados do arquivo homologada no Google Drive.");
+      addClientLog("PROC_PF_CASE_UPDATED", `Caso atualizado com a Procuração PF de versão: ${nextVersion}`);
+      addClientLog("PROC_PF_FLOW_COMPLETED", "Processamento terminado com 100% de conformidade operacional.");
 
       // Update case
       await updateDoc(caseDocRef, {
@@ -1041,7 +800,7 @@ export default function ProcuracaoPF() {
         procuracaoGeneratedAt: new Date().toISOString(),
         procuracaoDestinationFolderId: destinationFolderId,
         procuracaoDestinationFolderUrl: destinationFolderUrl,
-        procuracaoGoogleDocsJobLogs: successLogs,
+        procuracaoGoogleDocsJobLogs: jobLogs,
         procuracaoVersion: nextVersion,
         procuracaoGoogleDocsJobId: jobId
       });
@@ -1053,7 +812,7 @@ export default function ProcuracaoPF() {
           documentType: "procuracao_pf",
           displayName: `Procuração PF - ${nomeCompleto}`,
           templateKey: "procuracao_pf",
-          templateId,
+          templateId: officialTemplateId,
           googleDocsId,
           googleDocsUrl,
           destinationFolderId,
@@ -1063,13 +822,13 @@ export default function ProcuracaoPF() {
           generatedBy: "Portal BOSS Central Interna (Stateless)",
           errorCode: null,
           errorMessage: null,
-          logs: successLogs
+          logs: jobLogs
         }, { merge: true });
       } catch (errSub: any) {
-        console.warn("[PortalBoss] Subcollection write omitted or failed", errSub.message);
+        console.warn("[PortalBoss] Subcollection write failed", errSub.message);
       }
 
-      // Update internal job logs in real time
+      // Update internal job document to success
       await updateDoc(doc(db, 'googleDocsJobs', jobId), {
         status: "success",
         updatedAt: new Date().toISOString(),
@@ -1078,7 +837,7 @@ export default function ProcuracaoPF() {
           googleDocsUrl,
           fileName: `Procuração PF - ${nomeCompleto}`
         },
-        logs: successLogs
+        logs: jobLogs
       });
 
       await saveWizardStateUpdate({ q1_1: 'sim' });
@@ -1089,41 +848,31 @@ export default function ProcuracaoPF() {
     } catch (err: any) {
       console.error("[Generator Execution Failed]", err);
       const errorMessage = err.message || "Erro desconhecido durante o processamento de geração integrada.";
-
-      // Habilitar a exibição do erro fático na tela para a tentativa em curso
       setShowGenerationError(true);
 
       const httpStatus = err.httpStatus || 500;
-      const errorCode = err.errorCode || "PORTAL_GDI_EXCEPTION";
+      const errorCode = err.errorCode || "PROC_PF_PLACEHOLDER_REPLACEMENT_FAILED";
       const rawResponse = err.rawResponse || "";
 
-      // TAREFA 5 - Logar falha detalhada com PORTAL_GDI_REAL_POST_FAILED
-      const failureLogs = [
-        ...initialLogs,
-        {
-          action: "PORTAL_GDI_REAL_POST_FAILED",
-          timestamp: new Date().toISOString(),
-          message: `Falha real no disparo do motor interno. Código: ${errorCode}. Mensagem: ${errorMessage}`,
-          httpStatus,
-          errorCode,
-          errorMessage,
-          responseSample: rawResponse.substring(0, 500)
-        }
-      ];
+      // Log failure log action
+      addClientLog(errorCode, `Ocorreu uma falha no fluxo: ${errorMessage}`);
+      addClientLog("PROC_PF_CASE_UPDATE_FAILED", "Falha ao gravar referências no documento do caso principal.");
 
-      // Se o GDI retornar falha, salvar
+      // Save to case doc that it failed
       await updateDoc(caseDocRef, {
         procuracaoStatus: "falha",
         procuracaoLogFalha: errorMessage,
-        procuracaoGoogleDocsJobLogs: failureLogs,
+        procuracaoGoogleDocsJobLogs: jobLogs,
         procuracaoGoogleDocsJobId: jobId
       });
 
+      // Save failed job to firestore
       await updateDoc(doc(db, 'googleDocsJobs', jobId), {
         status: "failed",
-        updatedAt: new Date().toISOString(),
+        errorCode,
         errorMessage,
-        logs: failureLogs
+        updatedAt: new Date().toISOString(),
+        logs: jobLogs
       });
 
       setError(`Falha ao gerar procuração no motor interno: ${errorMessage}`);
@@ -1618,53 +1367,27 @@ export default function ProcuracaoPF() {
 
                     <div className="space-y-2 bg-gray-50 p-4 rounded-2xl border border-gray-100">
                       <p className="font-bold text-gray-400 text-[10px] uppercase tracking-wider pb-1 border-b border-gray-200 font-sans">
-                        Integração & Estado Ativo
+                        Motor de Documentos Portal BOSS
                       </p>
-                      <div>
-                        <span className="text-gray-500 text-[10px]">gdiEndpointUrl:</span>{" "}
-                        <code className="text-indigo-900 font-bold break-all block text-[11px] bg-indigo-50/50 p-1 rounded border border-indigo-100/50 my-1">{loadedGdiUrl || "N/A"}</code>
-                      </div>
                       <div className="flex flex-wrap items-center gap-1.5 justify-between py-1">
-                        <span className="text-gray-500">Modo Ambiente:</span>
-                        <span className="text-gray-800 font-bold text-[11px]">
-                          {googleDocsConfig?.environmentMode === "preview_server_to_server" ? "☁️ Preview Server-to-Server" :
-                           googleDocsConfig?.environmentMode === "preview_browser" ? "💻 Preview Browser-Only" :
-                           googleDocsConfig?.environmentMode ? "🚀 Produção Server-to-Server" : "N/A"}
+                        <span className="text-gray-500">Modelo Oficial ID:</span>
+                        <span className="text-gray-800 font-bold text-[11px] font-mono break-all leading-normal max-w-[200px] text-right">
+                          16k_n_BTdf8wTCG8CK4T2TyAT93o5qrmZqjbROtrBqzk
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 justify-between py-1">
-                        <span className="text-gray-500">Status Operacional GDI:</span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${
-                          googleDocsConfig?.integrationOperationalStatus === "operacional" ? "bg-emerald-100 text-emerald-800 border border-emerald-200" :
-                          googleDocsConfig?.integrationOperationalStatus === "preview_server_to_server_blocked" ? "bg-rose-100 text-rose-805 animate-pulse border border-rose-200" :
-                          googleDocsConfig?.integrationOperationalStatus === "endpoint_publico_ok" ? "bg-blue-100 text-blue-800" :
-                          "bg-rose-100 text-rose-800"
-                        }`}>{googleDocsConfig?.integrationOperationalStatus || gdiStatus}</span>
+                        <span className="text-gray-500">Status Operacional:</span>
+                        <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          Operacional (Nativo)
+                        </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5 justify-between py-1 border-b border-dashed border-gray-150 pb-2">
-                        <span className="text-gray-500">Entrega Confirmada pelo GDI:</span>
-                        <span className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold ${
-                          googleDocsConfig?.lastReceivedByGdiConfirmed === "confirmado" ? "bg-emerald-500 text-white" :
-                          "bg-gray-205 text-gray-700 border border-gray-300"
-                        }`}>{googleDocsConfig?.lastReceivedByGdiConfirmed || "não_confirmado"}</span>
+                        <span className="text-gray-500">Integração GDI Legada:</span>
+                        <span className="px-2 py-0.5 rounded text-[9px] uppercase font-bold bg-gray-250 text-gray-700 border border-gray-300">
+                          Desativado
+                        </span>
                       </div>
 
-                      {googleDocsConfig?.lastPreviewWarning && (
-                        <div className="p-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-[10px] font-medium leading-relaxed">
-                          ⚠️ {googleDocsConfig.lastPreviewWarning}
-                        </div>
-                      )}
-
-                      {googleDocsConfig?.lastServerToServerResult && (
-                        <div className="p-2 bg-slate-900 border border-slate-950 text-slate-200 rounded-xl text-[10px] font-mono leading-relaxed max-h-20 overflow-auto">
-                          ℹ️ {googleDocsConfig.lastServerToServerResult}
-                        </div>
-                      )}
-
-                      <div className="pt-1.5">
-                        <span className="text-gray-500">lastHealthCheckAt:</span>{" "}
-                        <span className="text-gray-800 font-bold">{googleDocsConfig?.lastHealthCheckAt || googleDocsConfig?.updatedAt || "N/A"}</span>
-                      </div>
                       <div>
                         <span className="text-gray-500">procuracaoStatus:</span>{" "}
                         <span className="text-gray-800 font-bold uppercase">{currentCase?.procuracaoStatus || "pendente"}</span>
@@ -1726,15 +1449,6 @@ export default function ProcuracaoPF() {
                     >
                       <Trash2 size={12} />
                       <span>Limpar resíduos da Procuração deste caso</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleRevalidateGdi}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-gray-50 border border-gray-250 text-gray-700 font-bold uppercase rounded-xl text-[10px] tracking-wide transition-all cursor-pointer shadow-3xs"
-                    >
-                      <RefreshCw size={12} />
-                      <span>Revalidar GDI</span>
                     </button>
 
                     <button

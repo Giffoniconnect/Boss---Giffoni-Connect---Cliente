@@ -3,6 +3,26 @@
  * Implements architectural requirements: Section 10.
  */
 
+export const PROCURACAO_PF_REQUIRED_PLACEHOLDERS = [
+  "{{OUTORGANTE_NOME}}",
+  "{{OUTORGANTE_NACIONALIDADE}}",
+  "{{OUTORGANTE_ESTADO_CIVIL}}",
+  "{{OUTORGANTE_PROFISSAO}}",
+  "{{OUTORGANTE_RG}}",
+  "{{OUTORGANTE_CPF}}",
+  "{{OUTORGANTE_ENDERECO}}",
+  "{{OUTORGANTE_NUMERO}}",
+  "{{OUTORGANTE_COMPLEMENTO}}",
+  "{{OUTORGANTE_BAIRRO}}",
+  "{{OUTORGANTE_CIDADE}}",
+  "{{OUTORGANTE_ESTADO}}",
+  "{{OUTORGANTE_CEP}}",
+  "{{OUTORGANTE_TELEFONE}}",
+  "{{OUTORGANTE_WHATSAPP}}",
+  "{{OUTORGANTE_EMAIL}}",
+  "{{DATA_ASSINATURA}}"
+];
+
 export function buildGlobalPlaceholders(): Record<string, string> {
   const now = new Date();
   const day = now.getDate();
