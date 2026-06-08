@@ -1006,6 +1006,17 @@ export default function ProcuracaoPF() {
                   </div>
                 ) : (
                   <div className="space-y-4">
+                    {/* Atalho para as configurações de integração */}
+                    <div className="flex justify-start">
+                      <button
+                        onClick={() => navigate('/boss-giffoni-clientes/configuracoes/integracoes-google-docs/config-procuracao-PF')}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 border border-indigo-150 hover:border-indigo-300 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-3xs"
+                      >
+                        <Settings size={13} className="text-indigo-500" />
+                        Ver Configurações de integração
+                      </button>
+                    </div>
+
                     {/* Informações da pasta do cliente */}
                     <div className="p-3.5 bg-white border border-gray-150 rounded-2xl text-xs flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-3xs animate-in fade-in">
                       <div className="space-y-1">

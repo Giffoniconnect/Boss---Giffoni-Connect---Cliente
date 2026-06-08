@@ -19,7 +19,9 @@ import GoogleDriveIntegration from './pages/boss/integracoes/GoogleDriveIntegrat
 import TodoistIntegration from './pages/boss/integracoes/TodoistIntegration';
 import GoogleCalendarIntegration from './pages/boss/integracoes/GoogleCalendarIntegration';
 import GoogleDocsIntegration from './pages/boss/integracoes/GoogleDocsIntegration';
+import GoogleDocsGeraisConfig from './pages/boss/integracoes/GoogleDocsGeraisConfig';
 import ProcuracaoPFConfig from './pages/boss/integracoes/ProcuracaoPFConfig';
+import DocTypeConfig from './pages/boss/integracoes/DocTypeConfig';
 import WhatsappIntegration from './pages/boss/integracoes/WhatsappIntegration';
 import GmailIntegration from './pages/boss/integracoes/GmailIntegration';
 
@@ -61,6 +63,7 @@ import Recadastramento from './pages/boss/fluxo-producao/Recadastramento';
 import EditarCadastroCliente from './pages/boss/fluxo-producao/EditarCadastroCliente';
 import CadastroFluxo from './pages/boss/fluxo-producao/CadastroFluxo';
 import PortalClienteFluxo from './pages/boss/fluxo-producao/PortalClienteFluxo';
+import EditarPortalCliente from './pages/boss/fluxo-producao/EditarPortalCliente';
 
 
 
@@ -161,10 +164,74 @@ const router = createBrowserRouter(
         } 
       />
       <Route 
-        path="/automacao-procuracao-pf/configuracao-da-procuracao-pf" 
+        path="/boss-giffoni-clientes/configuracoes/integracoes-google-docs/config-gerais-google-docs" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <GoogleDocsGeraisConfig />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/integracoes-google-docs/config-procuracao-PF" 
         element={
           <ProtectedRoute role="boss_admin">
             <ProcuracaoPFConfig />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/integracoes-google-docs/config-1-atendimento-PF" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DocTypeConfig />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/integracoes-google-docs/config-1-atendimento-PJ" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DocTypeConfig />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/integracoes-google-docs/config-procuracao-PJ" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DocTypeConfig />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/integracoes-google-docs/config-declaracao-PF" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DocTypeConfig />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/integracoes-google-docs/config-declaracao-PJ" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DocTypeConfig />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/integracoes-google-docs/config-contrato-de-honorarios-PF" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DocTypeConfig />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/configuracoes/integracoes-google-docs/config-contrato-de-honorarios-PJ" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <DocTypeConfig />
           </ProtectedRoute>
         } 
       />
@@ -259,6 +326,14 @@ const router = createBrowserRouter(
         element={
           <ProtectedRoute role="boss_admin">
             <PortalClienteFluxo />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <EditarPortalCliente />
           </ProtectedRoute>
         } 
       />
