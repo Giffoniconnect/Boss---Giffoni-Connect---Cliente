@@ -180,16 +180,170 @@ export function buildCaseCommonPlaceholders(caseData: any): Record<string, strin
   };
 }
 
+export function resolvePfClientData(clientData: any) {
+  if (!clientData) return {};
+  
+  const getVal = (vals: any[]) => {
+    for (const v of vals) {
+      if (v !== undefined && v !== null && String(v).trim() !== "") {
+        return String(v).trim();
+      }
+    }
+    return "";
+  };
+
+  const nomeCompleto = getVal([
+    clientData?.pfData?.pf_nomeCompleto,
+    clientData?.pfDadosPessoais?.pf_nomeCompleto,
+    clientData?.portalMirror?.pfDadosPessoais?.nomeCompleto,
+    clientData?.nomeCompleto,
+    clientData?.nome,
+    clientData?.name
+  ]);
+
+  const cpf = getVal([
+    clientData?.pfData?.pf_cpf,
+    clientData?.pfDadosPessoais?.pf_cpf,
+    clientData?.portalMirror?.pfDadosPessoais?.cpf,
+    clientData?.cpf
+  ]);
+
+  const rg = getVal([
+    clientData?.pfData?.pf_rg,
+    clientData?.pfDadosPessoais?.pf_rg,
+    clientData?.portalMirror?.pfDadosPessoais?.rg,
+    clientData?.rg
+  ]);
+
+  const nacionalidade = getVal([
+    clientData?.pfData?.pf_nacionalidade,
+    clientData?.pfDadosPessoais?.pf_nacionalidade,
+    clientData?.portalMirror?.pfDadosPessoais?.nacionalidade
+  ]) || "Brasileiro(a)";
+
+  const estadoCivil = getVal([
+    clientData?.pfData?.pf_estadoCivil,
+    clientData?.pfDadosPessoais?.pf_estadoCivil,
+    clientData?.portalMirror?.pfDadosPessoais?.estadoCivil
+  ]) || "Solteiro(a)";
+
+  const profissao = getVal([
+    clientData?.pfData?.pf_profissao,
+    clientData?.pfDadosPessoais?.pf_profissao,
+    clientData?.portalMirror?.pfDadosPessoais?.profissao
+  ]);
+
+  const telefone = getVal([
+    clientData?.pfData?.pf_telefone,
+    clientData?.pfDadosPessoais?.pf_telefone,
+    clientData?.portalMirror?.pfContato?.telefone,
+    clientData?.telefone
+  ]);
+
+  const whatsapp = getVal([
+    clientData?.pfData?.pf_whatsapp,
+    clientData?.pfDadosPessoais?.pf_whatsapp,
+    clientData?.portalMirror?.pfContato?.whatsapp,
+    clientData?.whatsapp
+  ]);
+
+  const email = getVal([
+    clientData?.pfData?.pf_email,
+    clientData?.pfDadosPessoais?.pf_email,
+    clientData?.portalMirror?.pfContato?.email,
+    clientData?.email
+  ]);
+
+  const endereco = getVal([
+    clientData?.pfData?.pf_endereco,
+    clientData?.pfDadosPessoais?.pf_endereco,
+    clientData?.portalMirror?.pfEndereco?.logradouro,
+    clientData?.endereco
+  ]);
+
+  const numero = getVal([
+    clientData?.pfData?.pf_numero,
+    clientData?.pfDadosPessoais?.pf_numero,
+    clientData?.portalMirror?.pfEndereco?.numero
+  ]);
+
+  const complemento = getVal([
+    clientData?.pfData?.pf_complemento,
+    clientData?.pfDadosPessoais?.pf_complemento
+  ]);
+
+  const bairro = getVal([
+    clientData?.pfData?.pf_bairro,
+    clientData?.pfDadosPessoais?.pf_bairro,
+    clientData?.portalMirror?.pfEndereco?.bairro
+  ]);
+
+  const cidade = getVal([
+    clientData?.pfData?.pf_cidade,
+    clientData?.pfDadosPessoais?.pf_cidade,
+    clientData?.portalMirror?.pfEndereco?.cidade
+  ]);
+
+  const estado = getVal([
+    clientData?.pfData?.pf_estado,
+    clientData?.pfDadosPessoais?.pf_estado,
+    clientData?.portalMirror?.pfEndereco?.uf
+  ]);
+
+  const cep = getVal([
+    clientData?.pfData?.pf_cep,
+    clientData?.pfDadosPessoais?.pf_cep,
+    clientData?.portalMirror?.pfEndereco?.cep
+  ]);
+
+  return {
+    nomeCompleto,
+    cpf,
+    rg,
+    nacionalidade,
+    estadoCivil,
+    profissao,
+    telefone,
+    whatsapp,
+    email,
+    endereco,
+    numero,
+    complemento,
+    bairro,
+    cidade,
+    estado,
+    cep
+  };
+}
+
 export function buildPrimeiroAtendimentoPlaceholders(clientData: any, caseData: any): Record<string, string> {
   const global = buildGlobalPlaceholders();
   const client = buildClientCommonPlaceholders(clientData);
   const casePls = buildCaseCommonPlaceholders(caseData);
+  const solved = resolvePfClientData(clientData);
   
   return {
     ...global,
     ...client,
     ...casePls,
-    "{{DATA_ATENDIMENTO}}": global["{{DATA_ATUAL}}"]
+    "{{DATA_ATENDIMENTO}}": global["{{DATA_ATUAL}}"],
+
+    "{{OUTORGANTE_NOME}}": solved.nomeCompleto || client["{{NOME_COMPLETO}}"] || "",
+    "{{OUTORGANTE_NACIONALIDADE}}": solved.nacionalidade || client["{{NACIONALIDADE}}"] || "Brasileira",
+    "{{OUTORGANTE_ESTADO_CIVIL}}": solved.estadoCivil || client["{{ESTADO_CIVIL}}"] || "Solteiro(a)",
+    "{{OUTORGANTE_PROFISSAO}}": solved.profissao || client["{{PROFISSAO}}"] || "",
+    "{{OUTORGANTE_RG}}": solved.rg || client["{{RG}}"] || "",
+    "{{OUTORGANTE_CPF}}": solved.cpf || client["{{CPF}}"] || "",
+    "{{OUTORGANTE_ENDERECO}}": solved.endereco || client["{{ENDERECO_COMPLETO}}"] || "",
+    "{{OUTORGANTE_NUMERO}}": solved.numero || "",
+    "{{OUTORGANTE_COMPLEMENTO}}": solved.complemento || "",
+    "{{OUTORGANTE_BAIRRO}}": solved.bairro || "",
+    "{{OUTORGANTE_CIDADE}}": solved.cidade || "",
+    "{{OUTORGANTE_ESTADO}}": solved.estado || "",
+    "{{OUTORGANTE_CEP}}": solved.cep || "",
+    "{{OUTORGANTE_TELEFONE}}": solved.telefone || client["{{TELEFONE}}"] || "",
+    "{{OUTORGANTE_WHATSAPP}}": solved.whatsapp || client["{{WHATSAPP}}"] || "",
+    "{{OUTORGANTE_EMAIL}}": solved.email || client["{{EMAIL}}"] || ""
   };
 }
 

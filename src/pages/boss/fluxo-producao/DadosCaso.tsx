@@ -694,10 +694,28 @@ export default function DadosCaso() {
         throw new Error("Esta automação é de uso exclusivo para primeiro atendimento de pessoa física (PF).");
       }
 
-      // 6. nome completo existe
-      const nomeCompleto = (client?.nomeCompleto || client?.nome || client?.razaoSocial || "").trim();
+      // 6. nome completo existe de forma robusta
+      const nomeCompleto = (
+        client?.pfData?.pf_nomeCompleto ||
+        client?.pfDadosPessoais?.pf_nomeCompleto ||
+        client?.portalMirror?.pfDadosPessoais?.nomeCompleto ||
+        client?.nomeCompleto ||
+        client?.nome ||
+        client?.name ||
+        ""
+      ).trim();
+
       if (!nomeCompleto) {
-        throw new Error("Nome completo do cliente não localizado no cadastro.");
+        console.error("PF_FULL_NAME_NOT_FOUND: Nome completo do cliente não localizado.", {
+          hasPfData: !!client?.pfData,
+          hasPfDadosPessoais: !!client?.pfDadosPessoais,
+          pfDataNome: !!client?.pfData?.pf_nomeCompleto,
+          pfDadosNome: !!client?.pfDadosPessoais?.pf_nomeCompleto,
+          clientType: client?.type || client?.clientType || "PF",
+          clientId: targetClientId,
+          caseId: targetCaseId
+        });
+        throw new Error("Nome completo do cliente não localizado no cadastro PF. Verifique o campo pf_nomeCompleto na Etapa 1 — Cadastro do Cliente.");
       }
 
       // 7. googleDriveClientFolderId existe
