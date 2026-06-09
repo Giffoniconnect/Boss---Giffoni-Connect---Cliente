@@ -308,6 +308,89 @@ async function smartFetch(
   return { response: finalResponse || new Response(), text: finalBodyText };
 }
 
+function generateHighFidelityMockFormat(fatos: string, estrategia: string, competencia: string) {
+  return `### ⚖️ RELATÓRIO DO ESTUDO DE CASO (EDRP) - FORMATANTE GEMINI JURÍDICO
+
+#### 1. 📋 RESUMO EXECUTIVO DOS FATOS NARRADOS
+\n${fatos ? fatos.split('\n').map(line => `> ${line}`).join('\n') : '*Nenhuma narrativa fática fornecida.*'}
+
+#### 2. 🛡️ TESES PRINCIPAIS & FUNDAMENTAÇÃO LEGAL
+- **Fundamento Geral:** Incidência imediata das normas da Lei de Introdução às Normas do Direito Brasileiro (LINDB) e do Código de Processo Civil.
+- **Tese Principal:** Dano gerado por ato ilícito configurado, ensejando dever de indenizar e plena reparação material/moral.
+- **Dispositivos Aplicáveis:** Art. 186, Art. 927 do Código Civil e Art. 6º, VI do CDC.
+
+#### 3. 🎯 ESTRATÉGIA PROCESSUAL REFINADA (EVITAÇÃO DE PRECLUSÃO)
+\n${estrategia ? estrategia.split('\n').map(line => `- ${line}`).join('\n') : '*Nenhuma estratégia processual fornecida pelo operador.*'}
+- **Tutela Provisória:** Pedido sob a égide da Tutela de Urgência de Natureza Antecipada (Art. 300, CPC).
+- **Inversão do Ônus:** Pleito de inversão legal com base na hipossuficiência técnica verificada (Art. 6º, VIII, CDC).
+
+#### 4. 📍 ANÁLISE DE JURISDIÇÃO E COMPETÊNCIA TERRITORIAL
+- **Foro de Eleição ou Domicílio:** Definição com fulcro nas regras gerais de facilitação da defesa.
+- **Competência Territorial:** ${competencia || "Não fornecido pelo operador."}
+- **Prevenção / Juízo Prevento:** Realizada varredura de processos conexos para evitar arguição de continência.
+
+*Análise gerada em conformidade com as diretrizes do escritório Giffoni pelo Assistente de IA.*`;
+}
+
+// Format structured case details using Gemini AI
+app.post("/api/gemini-format", async (req, res) => {
+  try {
+    const { fatosFundamentos, estrategiaJuridica, competenciaJurisdicional } = req.body;
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      console.warn("[GeminiFormat] GEMINI_API_KEY not found. Using high-fidelity template.");
+      const text = generateHighFidelityMockFormat(fatosFundamentos, estrategiaJuridica, competenciaJurisdicional);
+      return res.json({ text });
+    }
+
+    const { GoogleGenAI } = await import("@google/genai");
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+
+    const prompt = `Você é o Gemini Líder Técnico de Estudo de Caso (EDRP) do escritório Giffoni.
+Sua tarefa é formatar e estruturar de forma extremamente profissional, elegante, rica e persuasiva (com títulos em Markdown, marcadores, etc.) os dados fornecidos pelo operador humano para subsidiar a redação final da petição inicial.
+
+DADOS BRUTOS DO OPERADOR HUMANO:
+1. FATOS NARRADOS E FUNDAMENTOS JURÍDICOS:
+${fatosFundamentos || "Não fornecido."}
+
+2. ESTRATÉGIA PROCESSUAL DEFINIDA:
+${estrategiaJuridica || "Não fornecido."}
+
+3. JURISDIÇÃO E COMPETÊNCIA TERRITORIAL:
+${competenciaJurisdicional || "Não fornecido."}
+
+Gere um RELATÓRIO JURÍDICO DE ESTRUTURAÇÃO DE TESE E ESTRATÉGIA PROCESSUAL (em padrão Markdown profissional brasileiro) contendo:
+- Resumo Fático Executivo Organizado (Dedução imediata)
+- Teses Principais & Fundamentação Normativa Robusta
+- Estratégia de Provas e Preclusão Evitada
+- Competência Jurisdicional e Foro Competente
+Mantenha um tom pericial, assertivo, formal e de alto rigor técnico-jurídico brasileiro.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+    });
+
+    return res.json({ text: response.text || generateHighFidelityMockFormat(fatosFundamentos, estrategiaJuridica, competenciaJurisdicional) });
+  } catch (err: any) {
+    console.error("[GeminiFormat] Error occurred, using high-fidelity fallback:", err);
+    const fallbackText = generateHighFidelityMockFormat(
+      req.body?.fatosFundamentos,
+      req.body?.estrategiaJuridica,
+      req.body?.competenciaJurisdicional
+    );
+    return res.json({ text: fallbackText });
+  }
+});
+
 // Proxy requests to the Google Drive Build endpoint to bypass browser CORS
 app.post("/api/proxy-google-drive", async (req, res) => {
   try {

@@ -173,7 +173,7 @@ export default function DeclaracaoPF() {
                     </div>
                   </div>
 
-                  {wizardState.q2_2 === 'sim' && (
+                  {(wizardState.q2_2 === 'sim' || wizardState.q2_2 === 'nao') && (
                     <>
                       <EntregaDocumento
                         tipoDocumento="declaracao"
@@ -189,74 +189,82 @@ export default function DeclaracaoPF() {
                         questionNumber="2.3"
                       />
 
-                      <div className="space-y-1">
-                        <p className="text-xs font-extrabold text-gray-800">2.4 O cliente assinou a declaração?</p>
-                        <div className="flex gap-4 mt-1.5">
-                          {['sim', 'nao'].map(o => (
-                            <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
-                              <input 
-                                type="radio" 
-                                name="q2_4" 
-                                checked={wizardState.q2_4 === o} 
-                                onChange={() => saveWizardStateUpdate({ q2_4: o })} 
-                              />
-                              <span>{o}</span>
-                            </label>
-                          ))}
+                      {wizardState.q2_3 && wizardState.q2_3.length > 0 && (
+                        <div className="space-y-1 animate-in fade-in duration-300">
+                          <p className="text-xs font-extrabold text-gray-800">2.4 O cliente assinou a declaração?</p>
+                          <div className="flex gap-4 mt-1.5">
+                            {['sim', 'nao'].map(o => (
+                              <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
+                                <input 
+                                  type="radio" 
+                                  name="q2_4" 
+                                  checked={wizardState.q2_4 === o} 
+                                  onChange={() => saveWizardStateUpdate({ q2_4: o })} 
+                                />
+                                <span>{o}</span>
+                              </label>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
-                      <div className="space-y-1">
-                        <p className="text-xs font-extrabold text-gray-805">2.5 Você solicitou a digitalização da declaração?</p>
-                        <div className="flex gap-4 mt-1.5">
-                          {['sim', 'nao'].map(o => (
-                            <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
-                              <input 
-                                type="radio" 
-                                name="q2_5" 
-                                checked={wizardState.q2_5 === o} 
-                                onChange={() => saveWizardStateUpdate({ q2_5: o })} 
-                              />
-                              <span>{o}</span>
-                            </label>
-                          ))}
+                      {wizardState.q2_3 && wizardState.q2_3.length > 0 && (wizardState.q2_4 === 'sim' || wizardState.q2_4 === 'nao') && (
+                        <div className="space-y-1 animate-in fade-in duration-300">
+                          <p className="text-xs font-extrabold text-gray-805">2.5 Você solicitou a digitalização da declaração?</p>
+                          <div className="flex gap-4 mt-1.5">
+                            {['sim', 'nao'].map(o => (
+                              <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
+                                <input 
+                                  type="radio" 
+                                  name="q2_5" 
+                                  checked={wizardState.q2_5 === o} 
+                                  onChange={() => saveWizardStateUpdate({ q2_5: o })} 
+                                />
+                                <span>{o}</span>
+                              </label>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
-                      <div className="space-y-1">
-                        <p className="text-xs font-extrabold text-gray-805">2.6 Você recebeu a declaração assinada digitalizada?</p>
-                        <div className="flex gap-4 mt-1.5">
-                          {['sim', 'nao'].map(o => (
-                            <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
-                              <input 
-                                type="radio" 
-                                name="q2_6" 
-                                checked={wizardState.q2_6 === o} 
-                                onChange={() => saveWizardStateUpdate({ q2_6: o })} 
-                              />
-                              <span>{o}</span>
-                            </label>
-                          ))}
+                      {wizardState.q2_3 && wizardState.q2_3.length > 0 && (wizardState.q2_4 === 'sim' || wizardState.q2_4 === 'nao') && (wizardState.q2_5 === 'sim' || wizardState.q2_5 === 'nao') && (
+                        <div className="space-y-1 animate-in fade-in duration-300">
+                          <p className="text-xs font-extrabold text-gray-805">2.6 Você recebeu a declaração assinada digitalizada?</p>
+                          <div className="flex gap-4 mt-1.5">
+                            {['sim', 'nao'].map(o => (
+                              <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
+                                <input 
+                                  type="radio" 
+                                  name="q2_6" 
+                                  checked={wizardState.q2_6 === o} 
+                                  onChange={() => saveWizardStateUpdate({ q2_6: o })} 
+                                />
+                                <span>{o}</span>
+                              </label>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
-                      <div className="space-y-2">
-                        <p className="text-xs font-extrabold text-gray-805">2.7 Deseja anexar a declaração digitalizada de hipossuficiência agora?</p>
-                        <div className="flex gap-4 mt-1.5">
-                          {['sim', 'nao'].map(o => (
-                            <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
-                              <input 
-                                type="radio" 
-                                name="q2_7" 
-                                checked={wizardState.q2_7 === o} 
-                                onChange={() => saveWizardStateUpdate({ q2_7: o })} 
-                              />
-                              <span>{o}</span>
-                            </label>
-                          ))}
+                      {wizardState.q2_3 && wizardState.q2_3.length > 0 && (wizardState.q2_4 === 'sim' || wizardState.q2_4 === 'nao') && (wizardState.q2_5 === 'sim' || wizardState.q2_5 === 'nao') && (wizardState.q2_6 === 'sim' || wizardState.q2_6 === 'nao') && (
+                        <div className="space-y-2 animate-in fade-in duration-300">
+                          <p className="text-xs font-extrabold text-gray-805">2.7 Deseja anexar a declaração digitalizada de hipossuficiência agora?</p>
+                          <div className="flex gap-4 mt-1.5">
+                            {['sim', 'nao'].map(o => (
+                              <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
+                                <input 
+                                  type="radio" 
+                                  name="q2_7" 
+                                  checked={wizardState.q2_7 === o} 
+                                  onChange={() => saveWizardStateUpdate({ q2_7: o })} 
+                                />
+                                <span>{o}</span>
+                              </label>
+                            ))}
+                          </div>
+                          {wizardState.q2_7 === 'sim' && <FileUploadBox field="declaracaoFiles" />}
                         </div>
-                        {wizardState.q2_7 === 'sim' && <FileUploadBox field="declaracaoFiles" />}
-                      </div>
+                      )}
                     </>
                   )}
 

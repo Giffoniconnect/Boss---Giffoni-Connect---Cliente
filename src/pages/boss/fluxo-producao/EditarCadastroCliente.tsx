@@ -434,7 +434,9 @@ export default function EditarCadastroCliente() {
             dataNascimento: pfBlock.pf_dataNascimento || pfBlock.pf_nascimento || '',
             nacionalidade: pfBlock.pf_nacionalidade || '',
             profissao: pfBlock.pf_profissao || '',
-            estadoCivil: pfBlock.pf_estadoCivil || ''
+            estadoCivil: pfBlock.pf_estadoCivil || '',
+            nomePai: pfBlock.pf_nomePai || '',
+            nomeMae: pfBlock.pf_nomeMae || ''
           },
           pfContato: {
             email: pfBlock.pf_email || '',
@@ -776,8 +778,19 @@ export default function EditarCadastroCliente() {
               <h2 className="text-xl font-black text-gray-900 tracking-tight">Editar Ficha de Identificação Cadastral</h2>
             </div>
           </div>
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
             <SaveStatusIndicator />
+            {(prevClientData?.slug || clientId) && (
+              <button
+                type="button"
+                onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${prevClientData?.slug || clientId}`)}
+                className="inline-flex items-center gap-1.5 px-3 py-1 border bg-orange-100/80 hover:bg-orange-200/80 text-orange-800 border-orange-200 hover:border-orange-355 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all duration-300 shadow-3xs cursor-pointer"
+                title="Editar dados ou portal do cliente"
+              >
+                <ExternalLink size={12} />
+                <span>Editar Portal do Cliente</span>
+              </button>
+            )}
           </div>
         </div>
 

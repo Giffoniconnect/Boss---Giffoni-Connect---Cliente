@@ -147,7 +147,7 @@ export default function ProcuracaoPJ() {
                 </div>
               </div>
 
-              {wizardState.q1_1 === 'sim' && (
+              {(wizardState.q1_1 === 'sim' || wizardState.q1_1 === 'nao') && (
                 <div className="space-y-4 border-l-2 border-indigo-200 pl-4 animate-in fade-in duration-200">
                   
                   <EntregaDocumento
@@ -164,74 +164,82 @@ export default function ProcuracaoPJ() {
                     questionNumber="1.2"
                   />
 
-                  <div className="space-y-1">
-                    <p className="text-xs font-extrabold text-gray-800">1.3 O representante da PJ assinou a procuração?</p>
-                    <div className="flex gap-4 mt-1.5">
-                      {['sim', 'nao'].map(o => (
-                        <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
-                          <input 
-                            type="radio" 
-                            name="q1_3" 
-                            checked={wizardState.q1_3 === o} 
-                            onChange={() => saveWizardStateUpdate({ q1_3: o })} 
-                          />
-                          <span>{o}</span>
-                        </label>
-                      ))}
+                  {wizardState.q1_2 && wizardState.q1_2.length > 0 && (
+                    <div className="space-y-1 animate-in fade-in duration-300">
+                      <p className="text-xs font-extrabold text-gray-800">1.3 O representante da PJ assinou a procuração?</p>
+                      <div className="flex gap-4 mt-1.5">
+                        {['sim', 'nao'].map(o => (
+                          <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
+                            <input 
+                              type="radio" 
+                              name="q1_3" 
+                              checked={wizardState.q1_3 === o} 
+                              onChange={() => saveWizardStateUpdate({ q1_3: o })} 
+                            />
+                            <span>{o}</span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  <div className="space-y-1">
-                    <p className="text-xs font-extrabold text-gray-800">1.4 Solicitou digitalização do ato arquivístico/procuração assinado?</p>
-                    <div className="flex gap-4 mt-1.5">
-                      {['sim', 'nao'].map(o => (
-                        <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
-                          <input 
-                            type="radio" 
-                            name="q1_4" 
-                            checked={wizardState.q1_4 === o} 
-                            onChange={() => saveWizardStateUpdate({ q1_4: o })} 
-                          />
-                          <span>{o}</span>
-                        </label>
-                      ))}
+                  {wizardState.q1_2 && wizardState.q1_2.length > 0 && (wizardState.q1_3 === 'sim' || wizardState.q1_3 === 'nao') && (
+                    <div className="space-y-1 animate-in fade-in duration-300">
+                      <p className="text-xs font-extrabold text-gray-800">1.4 Solicitou digitalização do ato arquivístico/procuração assinado?</p>
+                      <div className="flex gap-4 mt-1.5">
+                        {['sim', 'nao'].map(o => (
+                          <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
+                            <input 
+                              type="radio" 
+                              name="q1_4" 
+                              checked={wizardState.q1_4 === o} 
+                              onChange={() => saveWizardStateUpdate({ q1_4: o })} 
+                            />
+                            <span>{o}</span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  <div className="space-y-1">
-                    <p className="text-xs font-extrabold text-gray-800">1.5 Procuração PJ digitalizada recebida?</p>
-                    <div className="flex gap-4 mt-1.5">
-                      {['sim', 'nao'].map(o => (
-                        <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
-                          <input 
-                            type="radio" 
-                            name="q1_5" 
-                            checked={wizardState.q1_5 === o} 
-                            onChange={() => saveWizardStateUpdate({ q1_5: o })} 
-                          />
-                          <span>{o}</span>
-                        </label>
-                      ))}
+                  {wizardState.q1_2 && wizardState.q1_2.length > 0 && (wizardState.q1_3 === 'sim' || wizardState.q1_3 === 'nao') && (wizardState.q1_4 === 'sim' || wizardState.q1_4 === 'nao') && (
+                    <div className="space-y-1 animate-in fade-in duration-300">
+                      <p className="text-xs font-extrabold text-gray-800">1.5 Procuração PJ digitalizada recebida?</p>
+                      <div className="flex gap-4 mt-1.5">
+                        {['sim', 'nao'].map(o => (
+                          <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
+                            <input 
+                              type="radio" 
+                              name="q1_5" 
+                              checked={wizardState.q1_5 === o} 
+                              onChange={() => saveWizardStateUpdate({ q1_5: o })} 
+                            />
+                            <span>{o}</span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  <div className="space-y-2">
-                    <p className="text-xs font-extrabold text-gray-800">1.6 Anexar arquivo no diretório empresarial?</p>
-                    <div className="flex gap-4 mt-1.5">
-                      {['sim', 'nao'].map(o => (
-                        <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
-                          <input 
-                            type="radio" 
-                            name="q1_6" 
-                            checked={wizardState.q1_6 === o} 
-                            onChange={() => saveWizardStateUpdate({ q1_6: o })} 
-                          />
-                          <span>{o}</span>
-                        </label>
-                      ))}
+                  {wizardState.q1_2 && wizardState.q1_2.length > 0 && (wizardState.q1_3 === 'sim' || wizardState.q1_3 === 'nao') && (wizardState.q1_4 === 'sim' || wizardState.q1_4 === 'nao') && (wizardState.q1_5 === 'sim' || wizardState.q1_5 === 'nao') && (
+                    <div className="space-y-2 animate-in fade-in duration-300">
+                      <p className="text-xs font-extrabold text-gray-800">1.6 Anexar arquivo no diretório empresarial?</p>
+                      <div className="flex gap-4 mt-1.5">
+                        {['sim', 'nao'].map(o => (
+                          <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
+                            <input 
+                              type="radio" 
+                              name="q1_6" 
+                              checked={wizardState.q1_6 === o} 
+                              onChange={() => saveWizardStateUpdate({ q1_6: o })} 
+                            />
+                            <span>{o}</span>
+                          </label>
+                        ))}
+                      </div>
+                      {wizardState.q1_6 === 'sim' && <FileUploadBox field="procuracaoFiles" />}
                     </div>
-                    {wizardState.q1_6 === 'sim' && <FileUploadBox field="procuracaoFiles" />}
-                  </div>
+                  )}
 
                 </div>
               )}

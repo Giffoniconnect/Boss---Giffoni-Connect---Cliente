@@ -21,7 +21,10 @@ import {
   X,
   HelpCircle,
   Sparkles,
-  BookOpen
+  BookOpen,
+  Settings,
+  ExternalLink,
+  Copy
 } from 'lucide-react';
 import { flowRoutes } from './utils/flowRoutes';
 import { useUnsavedChangesGuard } from './hooks/useUnsavedChangesGuard';
@@ -192,6 +195,8 @@ export default function DadosCaso() {
   const [primeiroAtendimentoStatus, setPrimeiroAtendimentoStatus] = useState<'aguardando' | 'criado' | 'falha'>('aguardando');
   const [primeiroAtendimentoGoogleDocsUrl, setPrimeiroAtendimentoGoogleDocsUrl] = useState('');
   const [primeiroAtendimentoLogFalha, setPrimeiroAtendimentoLogFalha] = useState('');
+  const [forceNewVersion, setForceNewVersion] = useState(false);
+  const [copied, setCopied] = useState(false);
   
   // Backward preservation memory
   const [basesFaticas, setBasesFaticas] = useState('');
@@ -629,6 +634,16 @@ export default function DadosCaso() {
     }
   };
 
+  const handleCopyLink = (url: string) => {
+    if (!url) return;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(err => {
+      console.error("Erro ao copiar link:", err);
+    });
+  };
+
   const handleGeneratePrimeiroAtendimento = async () => {
     setError(null);
     setSuccess(null);
@@ -645,28 +660,8 @@ export default function DadosCaso() {
       const officialTemplateId = (configuredTemplateId || "1ODrPbz7qtyeiTYnjzSdv9YQ3NqdafYoub6-KpkmTQTo").trim();
 
       // 2. Drive Folder Destination
-      const destinationFolderId = (
-        client?.googleDriveClientFolderId || 
-        client?.gdriveFolderId || 
-        caseObj?.gdriveFolderId || 
-        googleDocs.destinationFolderIds?.['primeiro_atendimento'] || 
-        googleDocs.destinationFolderId || 
-        ''
-      ).trim();
-
-      const destinationFolderUrl = (
-        client?.googleDriveClientFolderUrl || 
-        client?.gdriveFolderUrl || 
-        caseObj?.gdriveFolderUrl || 
-        googleDocs.destinationFolderUrls?.['primeiro_atendimento'] || 
-        googleDocs.destinationFolderUrl || 
-        ''
-      ).trim();
-
-      // Check if folder is missing
-      if (!destinationFolderId) {
-        throw new Error("Não há pasta real do Google Drive vinculada ao cliente ou salva nas configurações de Conectores. Por favor, configure a pasta do cliente.");
-      }
+      const destinationFolderId = "1YUl0Z3hbptBaXfdp0vSnvGTQv0ChsPMs";
+      const destinationFolderUrl = "https://drive.google.com/drive/folders/1YUl0Z3hbptBaXfdp0vSnvGTQv0ChsPMs";
 
       // 3. Document Name
       const clientName = client?.nome || client?.nomeCompleto || client?.razaoSocial || "Cliente";
@@ -719,6 +714,7 @@ export default function DadosCaso() {
       setPrimeiroAtendimentoStatus('criado');
       setPrimeiroAtendimentoGoogleDocsUrl(googleDocsUrl);
       setPrimeiroAtendimentoLogFalha('');
+      setForceNewVersion(false);
       setSuccess('Comando de automação disparado com sucesso! Link gerado abaixo.');
 
       // Update Case in Firestore
@@ -1043,148 +1039,206 @@ export default function DadosCaso() {
             </div>
 
             {/* AUTOMAÇÃO GOOGLE DOCS — 1º ATENDIMENTO */}
-            <div className="bg-gradient-to-br from-indigo-50/60 to-blue-50/20 border border-indigo-150 rounded-3xl p-6 shadow-3xs space-y-6">
-              <div className="border-b border-indigo-100/80 pb-3">
-                <h3 className="text-[18px] font-extrabold text-indigo-950 tracking-tight flex items-center gap-2">
-                  <FileText className="text-indigo-650 animate-pulse" size={18} />
-                  <span>Automação Google Docs — 1º Atendimento - Pessoa física</span>
-                </h3>
-                <p className="text-[14px] text-indigo-900/80 mt-1 font-semibold">
-                  Gere o roteiro do primeiro atendimento de forma estruturada e automatizada diretamente no ecossistema Google Docs.
-                </p>
+            <div className="bg-gradient-to-br from-indigo-50/60 to-blue-50/20 border border-indigo-150 rounded-3xl p-6 shadow-3xs space-y-5 animate-in fade-in">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1 px-2.5 bg-indigo-100 text-indigo-800 rounded-full font-black text-[9px] uppercase tracking-wider font-mono">
+                      Automação Ativa
+                    </span>
+                    <Sparkles size={16} className="text-indigo-600 animate-pulse" />
+                  </div>
+                  <h3 className="text-sm font-black text-slate-900">
+                    Automação Google Docs — 1º Atendimento - Pessoa física
+                  </h3>
+                  <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
+                    Esta ferramenta envia os dados consolidados do cadastro de pessoa física diretamente ao build receptor do Google Docs para preenchimento de placeholders, indexação e arquivamento automatizado na pasta em tempo real.
+                  </p>
+                </div>
               </div>
 
-              {/* Informações de consulta do modelo oficial */}
-              <div className="p-4 bg-white/80 border border-indigo-100 rounded-2xl text-xs space-y-1.5 shadow-2xs">
-                <p className="font-bold text-indigo-950 text-[10px] uppercase tracking-wider font-mono">Modelo Utilizado para Consulta / Edição</p>
-                <a
-                  href="https://docs.google.com/document/d/1ODrPbz7qtyeiTYnjzSdv9YQ3NqdafYoub6-KpkmTQTo/edit?tab=t.0"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-indigo-650 font-extrabold hover:underline flex items-center gap-1.5 text-xs transition-colors"
-                >
-                  <Sparkles size={13} className="text-indigo-500 animate-pulse" />
-                  <span>Abrir Modelo 1º Atendimento (Pessoa Física)</span>
-                </a>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div className="flex flex-col gap-3">
-                    <span className="text-xs font-bold text-indigo-800 uppercase tracking-wider block">
-                      Ações de Automação
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleGeneratePrimeiroAtendimento}
-                      disabled={generatingDoc}
-                      className="w-full inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-5 py-3 rounded-xl transition-all text-xs cursor-pointer shadow-sm disabled:opacity-50"
-                    >
-                      {generatingDoc ? (
-                        <>
-                          <Loader2 size={14} className="animate-spin" />
-                          <span>Gerando Roteiro...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles size={14} />
-                          <span>Gerar 1º Atendimento</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Status Visual com opções para simulação fática */}
-                  <div className="space-y-2">
-                    <span className="text-xs font-bold text-indigo-800 uppercase tracking-wider block">
-                      Status da Automação
-                    </span>
-                    {primeiroAtendimentoStatus === 'criado' && (
-                      <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 text-xs flex items-center gap-2 animate-fadeIn">
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                        <span className="font-extrabold">1º Atendimento criado com sucesso</span>
-                      </div>
-                    )}
-                    {primeiroAtendimentoStatus === 'falha' && (
-                      <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-950 text-xs flex items-center gap-2 animate-fadeIn">
-                        <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                        <span className="font-extrabold">Falha na criação do 1º Atendimento</span>
-                      </div>
-                    )}
-                    {primeiroAtendimentoStatus === 'aguardando' && (
-                      <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
-                        <span className="font-extrabold">Aguardando geração</span>
-                      </div>
-                    )}
-                  </div>
+              <div className="space-y-4">
+                {/* Atalho para as configurações de integração */}
+                <div className="flex justify-start">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/boss-giffoni-clientes/configuracoes/integracoes-google-docs/config-primeiro-atendimento-PF')}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 border border-indigo-150 hover:border-indigo-300 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-3xs"
+                  >
+                    <Settings size={13} className="text-indigo-500" />
+                    Ver Configurações de integração
+                  </button>
                 </div>
 
-                <div className="space-y-4">
-                  {/* Google Docs link output blanket */}
-                  <div className="space-y-2">
-                    <span className="text-xs font-bold text-indigo-800 uppercase tracking-wider block">
-                      Link do Documento no Google Docs
-                    </span>
-                    {primeiroAtendimentoStatus === 'criado' && primeiroAtendimentoGoogleDocsUrl ? (
-                      <div className="space-y-2">
-                        <a
-                          href={primeiroAtendimentoGoogleDocsUrl}
-                          target="_blank"
-                          referrerPolicy="no-referrer"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-50 hover:bg-indigo-110 border border-indigo-200 text-indigo-700 font-extrabold rounded-xl text-xs transition-colors cursor-pointer"
-                        >
-                          <FileText size={14} />
-                          <span>Abrir 1º Atendimento</span>
-                        </a>
-                        <p className="text-xs text-gray-400 font-mono select-all overflow-hidden text-ellipsis whitespace-nowrap bg-white p-2 rounded-lg border border-gray-150 shadow-3xs">
-                          {primeiroAtendimentoGoogleDocsUrl}
+                {/* Informações da pasta do cliente */}
+                <div className="p-3.5 bg-white border border-gray-150 rounded-2xl text-xs flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-3xs animate-in fade-in">
+                  <div className="space-y-1">
+                    <p className="font-bold text-gray-500 text-[10px] uppercase tracking-wider">Destino da Pasta Associada</p>
+                    <p className="text-slate-800 font-extrabold truncate max-w-md flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block animate-pulse" />
+                      Pasta ID: <span className="font-mono bg-slate-50 border border-gray-100 rounded px-1.5 py-0.5 font-bold select-all">1YUl0Z3hbptBaXfdp0vSnvGTQv0ChsPMs</span>
+                    </p>
+                  </div>
+                  <a
+                    href="https://drive.google.com/drive/folders/1YUl0Z3hbptBaXfdp0vSnvGTQv0ChsPMs"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-indigo-600 hover:text-indigo-800 bg-indigo-50/50 hover:bg-indigo-50 px-3.5 py-1.5 rounded-xl border border-indigo-150 transition-all cursor-pointer shadow-3xs"
+                  >
+                    Abrir Pasta <ExternalLink size={12} />
+                  </a>
+                </div>
+
+                {primeiroAtendimentoStatus === 'criado' && primeiroAtendimentoGoogleDocsUrl && !forceNewVersion ? (
+                  <div className="bg-white border border-slate-150 rounded-2xl p-5 space-y-4 shadow-3xs animate-in slide-in-from-top-1 duration-200">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2.5 bg-indigo-50 border border-indigo-150 rounded-xl text-indigo-600">
+                        <FileText size={20} />
+                      </div>
+                      <div className="space-y-1">
+                        <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">Procuração Gerada</h3>
+                        <p className="text-xs text-slate-500 leading-relaxed font-semibold">
+                          O documento de Procuração PF já foi indexado e está disponível para preenchimento de assinaturas.
                         </p>
                       </div>
-                    ) : (
-                      <p className="text-xs text-indigo-900/60 italic font-semibold">
-                        Link ainda não recebido pela automação.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* QA/Manual status simulation control widget seamlessly integrated */}
-                  <div className="p-3 border border-indigo-100 bg-white/60 rounded-xl space-y-1 shadow-3xs">
-                    <span className="text-[11px] uppercase font-bold text-indigo-800 block tracking-wide font-mono">
-                      ⚡ Simular Retorno da Automação (Fase de Testes)
-                    </span>
-                    <div className="flex gap-2 pt-1 flex-wrap font-sans">
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-2.5 pt-1.5">
+                      <a
+                        href={primeiroAtendimentoGoogleDocsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 px-4.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase rounded-xl transition-all shadow-3xs cursor-pointer font-bold animate-in"
+                      >
+                        <ExternalLink size={13} />
+                        Abrir Procuração
+                      </a>
                       <button
                         type="button"
-                        onClick={() => handleSimulateStatus('aguardando', '', '')}
-                        className={`px-2.5 py-1 rounded text-xs font-bold border transition-colors cursor-pointer select-none ${
-                          primeiroAtendimentoStatus === 'aguardando' ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white text-gray-500 border-gray-200'
+                        onClick={() => handleCopyLink(primeiroAtendimentoGoogleDocsUrl)}
+                        className={`inline-flex items-center gap-1.5 px-4.5 py-2 rounded-xl text-xs font-black uppercase transition-all border shadow-3xs cursor-pointer font-bold ${
+                          copied 
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-800' 
+                            : 'bg-white border-gray-250 hover:bg-gray-50 text-gray-700'
                         }`}
                       >
-                        Aguardando
+                        {copied ? <Check size={13} /> : <Copy size={13} />}
+                        <span>{copied ? "Copiado!" : "Copiar Link"}</span>
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleSimulateStatus('criado', 'https://docs.google.com/document/d/1ODrPbz7qtyeiTYnjzSdv9YQ3NqdafYoub6-KpkmTQTo/edit?tab=t.0', '')}
-                        className={`px-2.5 py-1 rounded text-xs font-bold border transition-colors cursor-pointer select-none ${
-                          primeiroAtendimentoStatus === 'criado' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-white text-gray-500 border-gray-200'
-                        }`}
+                        onClick={() => {
+                          setError(null);
+                          setSuccess(null);
+                          setForceNewVersion(true);
+                        }}
+                        className="px-4.5 py-2 bg-white hover:bg-gray-50 border border-gray-250 text-slate-800 text-xs font-black uppercase rounded-xl transition-all shadow-3xs cursor-pointer font-bold"
                       >
-                        Sucesso
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSimulateStatus('falha', '', `Sua sessão do Google Docs não possui autorização fática ativa ou suas credenciais de Service Account estão ausentes. Para corrigir:\n1. Clique em 'Sair / trocar conta' e faça logon novamente usando 'Entrar com Google' para autorizar a integração e criar seu token ativo (Google OAuth);\nOU\n2. Cole as chaves JSON PEM de sua Conta de Serviço (Service Account) própria do seu projeto Google Cloud na Central de Integrações do BOSS.`)}
-                        className={`px-2.5 py-1 rounded text-xs font-bold border transition-colors cursor-pointer select-none ${
-                          primeiroAtendimentoStatus === 'falha' ? 'bg-red-100 border-red-300 text-red-800' : 'bg-white text-gray-500 border-gray-200'
-                        }`}
-                      >
-                        Falha
+                        Gerar nova versão
                       </button>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Se estiver aguardando / processando o job */}
+                    {generatingDoc ? (
+                      <div className="bg-white border border-indigo-150 rounded-2xl p-5 space-y-4 shadow-3xs animate-pulse font-sans">
+                        <div className="flex items-center justify-between gap-3 border-b border-gray-100 pb-3">
+                          <div className="flex items-center gap-2">
+                            <RefreshCw className="text-indigo-600 animate-spin" size={17} />
+                            <span className="text-xs font-black uppercase text-indigo-700 tracking-wider">
+                              Gerando primeiro atendimento seguro... Por favor, aguarde alguns instantes.
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div className="bg-indigo-600 h-full rounded-full animate-infinite-loading w-3/4"></div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {forceNewVersion && (
+                          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-4 animate-in slide-in-from-top-1 text-xs">
+                            <div className="flex items-center gap-2 text-amber-950 font-semibold md:truncate">
+                              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 animate-ping" />
+                              <span>Iniciando controle de versão. Uma nova cópia será salva.</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setForceNewVersion(false)}
+                              className="text-xs font-black text-slate-500 hover:text-slate-800 uppercase cursor-pointer whitespace-nowrap"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Motor Integrado info display */}
+                        <div className="p-3.5 bg-emerald-50/60 border border-emerald-100 rounded-xl space-y-1.5 text-xs animate-fadeIn">
+                          <p className="font-extrabold text-emerald-950 uppercase tracking-widest text-[9px] font-mono flex items-center gap-1.5 align-middle">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" />
+                            <span>CONEXÃO COM MOTOR DE GOOGLE DOCS ATIVO (INTEGRADO)</span>
+                          </p>
+                          <p className="text-emerald-900 leading-normal text-[11px]">
+                            A geração documental do primeiro atendimento está configurada de forma nativa ao Portal BOSS Clientes, utilizando a Conta de Serviço Google autorizada.
+                          </p>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-3 pt-1">
+                          <button
+                            type="button"
+                            disabled={generatingDoc}
+                            onClick={handleGeneratePrimeiroAtendimento}
+                            className="w-full md:w-auto px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm hover:shadow transition-all cursor-pointer font-bold"
+                          >
+                            <Sparkles size={14} />
+                            <span>{forceNewVersion ? 'Gerar Nova Versão' : 'Gerar 1º Atendimento'}</span>
+                          </button>
+                        </div>
+
+                        {/* Simular Retorno da Automação (Fase de Testes) */}
+                        <div className="p-3 border border-indigo-100 bg-white/60 rounded-xl space-y-1 shadow-3xs">
+                          <span className="text-[11px] uppercase font-bold text-indigo-800 block tracking-wide font-mono">
+                            ⚡ Simular Retorno da Automação (Fase de Testes)
+                          </span>
+                          <div className="flex gap-2 pt-1 flex-wrap font-sans">
+                            <button
+                              type="button"
+                              onClick={() => handleSimulateStatus('aguardando', '', '')}
+                              className={`px-2.5 py-1 rounded text-xs font-bold border transition-colors cursor-pointer select-none ${
+                                primeiroAtendimentoStatus === 'aguardando' ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white text-gray-500 border-gray-200'
+                              }`}
+                            >
+                              Aguardando
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSimulateStatus('criado', 'https://docs.google.com/document/d/1ODrPbz7qtyeiTYnjzSdv9YQ3NqdafYoub6-KpkmTQTo/edit?tab=t.0', '')}
+                              className={`px-2.5 py-1 rounded text-xs font-bold border transition-colors cursor-pointer select-none ${
+                                primeiroAtendimentoStatus === 'criado' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-white text-gray-500 border-gray-200'
+                              }`}
+                            >
+                              Sucesso
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSimulateStatus('falha', '', 'Simulação de erro técnico do Google Docs no 1º Atendimento.')}
+                              className={`px-2.5 py-1 rounded text-xs font-bold border transition-colors cursor-pointer select-none ${
+                                primeiroAtendimentoStatus === 'falha' ? 'bg-red-100 border-red-300 text-red-800' : 'bg-white text-gray-500 border-gray-200'
+                              }`}
+                            >
+                              Falha
+                            </button>
+                          </div>
+                        </div>
+
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Blanket preparado para o log técnico de falha */}

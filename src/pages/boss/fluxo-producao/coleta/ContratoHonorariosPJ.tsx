@@ -797,7 +797,7 @@ export default function ContratoHonorariosPJ() {
                   </div>
                 </div>
 
-                {wizardState.q3_1 === 'sim' && (
+                {(wizardState.q3_1 === 'sim' || wizardState.q3_1 === 'nao') && (
                   <div className="space-y-4 border-l-2 border-indigo-200 pl-4 animate-in fade-in duration-200">
                     
                     {/* Question 3.2 */}
@@ -830,123 +830,135 @@ export default function ContratoHonorariosPJ() {
                     </div>
 
                     {/* Question 3.3 */}
-                    <EntregaDocumento
-                      tipoDocumento="contrato"
-                      tipoPessoa="PJ"
-                      googleDocsUrl={caseObj?.contratoHonorariosGoogleDocsUrl || ''}
-                      whatsappCliente={client?.pjDadosResponsavel?.pj_whatsappResponsavel || client?.pjDadosEmpresa?.pj_whatsappEmpresa || client?.pjData?.pj_whatsappEmpresa || client?.pjData?.pj_whatsappResponsavel || ''}
-                      emailCliente={client?.pjDadosEmpresa?.pj_emailEmpresa || client?.pjDadosEmpresa?.pj_emailCorporativo || client?.pjData?.pj_emailEmpresa || client?.pjData?.pj_emailCorporativo || ''}
-                      nomeCliente={clientName}
-                      selectedMethods={wizardState.q3_3 || []}
-                      onMethodsChange={(newMethods: string[]) => saveWizardStateUpdate({ q3_3: newMethods })}
-                      outroValue={wizardState.q3_3_outro || ''}
-                      onOutroChange={(val: string) => saveWizardStateUpdate({ q3_3_outro: val })}
-                      questionNumber="3.3"
-                    />
+                    {wizardState.q3_2 && (
+                      <EntregaDocumento
+                        tipoDocumento="contrato"
+                        tipoPessoa="PJ"
+                        googleDocsUrl={caseObj?.contratoHonorariosGoogleDocsUrl || ''}
+                        whatsappCliente={client?.pjDadosResponsavel?.pj_whatsappResponsavel || client?.pjDadosEmpresa?.pj_whatsappEmpresa || client?.pjData?.pj_whatsappEmpresa || client?.pjData?.pj_whatsappResponsavel || ''}
+                        emailCliente={client?.pjDadosEmpresa?.pj_emailEmpresa || client?.pjDadosEmpresa?.pj_emailCorporativo || client?.pjData?.pj_emailEmpresa || client?.pjData?.pj_emailCorporativo || ''}
+                        nomeCliente={clientName}
+                        selectedMethods={wizardState.q3_3 || []}
+                        onMethodsChange={(newMethods: string[]) => saveWizardStateUpdate({ q3_3: newMethods })}
+                        outroValue={wizardState.q3_3_outro || ''}
+                        onOutroChange={(val: string) => saveWizardStateUpdate({ q3_3_outro: val })}
+                        questionNumber="3.3"
+                      />
+                    )}
 
                     {/* Question 3.4 */}
-                    <div className="space-y-1">
-                      <p className="text-xs font-extrabold text-gray-800">3.4 O contrato empresarial foi assinado eletrônica ou fisicamente?</p>
-                      <div className="flex gap-4 mt-1.5">
-                        {['sim', 'nao'].map(o => (
-                          <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
-                            <input 
-                              type="radio" 
-                              name="q3_4" 
-                              checked={wizardState.q3_4 === o} 
-                              onChange={() => saveWizardStateUpdate({ q3_4: o })} 
-                            />
-                            <span>{o}</span>
-                          </label>
-                        ))}
+                    {wizardState.q3_2 && wizardState.q3_3 && wizardState.q3_3.length > 0 && (
+                      <div className="space-y-1 animate-in fade-in duration-300">
+                        <p className="text-xs font-extrabold text-gray-800">3.4 O contrato empresarial foi assinado eletrônica ou fisicamente?</p>
+                        <div className="flex gap-4 mt-1.5">
+                          {['sim', 'nao'].map(o => (
+                            <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
+                              <input 
+                                type="radio" 
+                                name="q3_4" 
+                                checked={wizardState.q3_4 === o} 
+                                onChange={() => saveWizardStateUpdate({ q3_4: o })} 
+                              />
+                              <span>{o}</span>
+                            </label>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Question 3.5 */}
-                    <div className="space-y-1">
-                      <p className="text-xs font-extrabold text-gray-800">3.5 Requisitou arquivamento no Google Drive corporativo?</p>
-                      <div className="flex gap-4 mt-1.5">
-                        {['sim', 'nao'].map(o => (
-                          <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
-                            <input 
-                              type="radio" 
-                              name="q3_5" 
-                              checked={wizardState.q3_5 === o} 
-                              onChange={() => saveWizardStateUpdate({ q3_5: o })} 
-                            />
-                            <span>{o}</span>
-                          </label>
-                        ))}
+                    {wizardState.q3_2 && wizardState.q3_3 && wizardState.q3_3.length > 0 && (wizardState.q3_4 === 'sim' || wizardState.q3_4 === 'nao') && (
+                      <div className="space-y-1 animate-in fade-in duration-300">
+                        <p className="text-xs font-extrabold text-gray-800">3.5 Requisitou arquivamento no Google Drive corporativo?</p>
+                        <div className="flex gap-4 mt-1.5">
+                          {['sim', 'nao'].map(o => (
+                            <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
+                              <input 
+                                type="radio" 
+                                name="q3_5" 
+                                checked={wizardState.q3_5 === o} 
+                                onChange={() => saveWizardStateUpdate({ q3_5: o })} 
+                              />
+                              <span>{o}</span>
+                            </label>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Question 3.6 */}
-                    <div className="space-y-1">
-                      <p className="text-xs font-extrabold text-gray-800">3.6 Recebeu o contrato corporativo assinado e rubricado?</p>
-                      <div className="flex gap-4 mt-1.5">
-                        {['sim', 'nao'].map(o => (
-                          <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
-                            <input 
-                              type="radio" 
-                              name="q3_6" 
-                              checked={wizardState.q3_6 === o} 
-                              onChange={() => saveWizardStateUpdate({ q3_6: o })} 
-                            />
-                            <span>{o}</span>
-                          </label>
-                        ))}
+                    {wizardState.q3_2 && wizardState.q3_3 && wizardState.q3_3.length > 0 && (wizardState.q3_4 === 'sim' || wizardState.q3_4 === 'nao') && (wizardState.q3_5 === 'sim' || wizardState.q3_5 === 'nao') && (
+                      <div className="space-y-1 animate-in fade-in duration-300">
+                        <p className="text-xs font-extrabold text-gray-800">3.6 Recebeu o contrato corporativo assinado e rubricado?</p>
+                        <div className="flex gap-4 mt-1.5">
+                          {['sim', 'nao'].map(o => (
+                            <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
+                              <input 
+                                type="radio" 
+                                name="q3_6" 
+                                checked={wizardState.q3_6 === o} 
+                                onChange={() => saveWizardStateUpdate({ q3_6: o })} 
+                              />
+                              <span>{o}</span>
+                            </label>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Question 3.7 */}
-                    <div className="space-y-1">
-                      <p className="text-xs font-extrabold text-gray-800">3.7 Informou a controladoria financeira interna sobre faturamento?</p>
-                      <div className="flex gap-4 mt-1.5 items-center">
-                        {['sim', 'nao'].map(o => (
-                          <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
-                            <input 
-                              type="radio" 
-                              name="q3_7" 
-                              checked={wizardState.q3_7 === o} 
-                              onChange={() => saveWizardStateUpdate({ q3_7: o })} 
-                            />
-                            <span>{o === 'sim' ? 'Sim' : 'Não'}</span>
-                          </label>
-                        ))}
-                        {wizardState.q3_7 !== 'sim' && wizardState.q3_4 === 'sim' && (
-                          <button 
-                            type="button" 
-                            onClick={() => {
-                              saveWizardStateUpdate({ q3_7: 'sim' });
-                              setSuccess('Controladoria financeira informada do contrato PJ com sucesso!');
-                              setTimeout(() => setSuccess(null), 3000);
-                            }}
-                            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 font-extrabold text-[9px] uppercase rounded-lg cursor-pointer"
-                          >
-                            Notificar Financeiro Agora
-                          </button>
-                        )}
+                    {wizardState.q3_2 && wizardState.q3_3 && wizardState.q3_3.length > 0 && (wizardState.q3_4 === 'sim' || wizardState.q3_4 === 'nao') && (wizardState.q3_5 === 'sim' || wizardState.q3_5 === 'nao') && (wizardState.q3_6 === 'sim' || wizardState.q3_6 === 'nao') && (
+                      <div className="space-y-1 animate-in fade-in duration-300">
+                        <p className="text-xs font-extrabold text-gray-800">3.7 Informou a controladoria financeira interna sobre faturamento?</p>
+                        <div className="flex gap-4 mt-1.5 items-center">
+                          {['sim', 'nao'].map(o => (
+                            <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
+                              <input 
+                                type="radio" 
+                                name="q3_7" 
+                                checked={wizardState.q3_7 === o} 
+                                onChange={() => saveWizardStateUpdate({ q3_7: o })} 
+                              />
+                              <span>{o === 'sim' ? 'Sim' : 'Não'}</span>
+                            </label>
+                          ))}
+                          {wizardState.q3_7 !== 'sim' && wizardState.q3_4 === 'sim' && (
+                            <button 
+                              type="button" 
+                              onClick={() => {
+                                saveWizardStateUpdate({ q3_7: 'sim' });
+                                setSuccess('Controladoria financeira informada do contrato PJ com sucesso!');
+                                setTimeout(() => setSuccess(null), 3000);
+                              }}
+                              className="px-2 py-1 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 font-extrabold text-[9px] uppercase rounded-lg cursor-pointer"
+                            >
+                              Notificar Financeiro Agora
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Question 3.8 */}
-                    <div className="space-y-2">
-                      <p className="text-xs font-extrabold text-gray-800">3.8 Anexar as folhas do contrato PJ no drive?</p>
-                      <div className="flex gap-4 mt-1.5">
-                        {['sim', 'nao'].map(o => (
-                          <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
-                            <input 
-                              type="radio" 
-                              name="q3_8" 
-                              checked={wizardState.q3_8 === o} 
-                              onChange={() => saveWizardStateUpdate({ q3_8: o })} 
-                            />
-                            <span>{o}</span>
-                          </label>
-                        ))}
+                    {wizardState.q3_2 && wizardState.q3_3 && wizardState.q3_3.length > 0 && (wizardState.q3_4 === 'sim' || wizardState.q3_4 === 'nao') && (wizardState.q3_5 === 'sim' || wizardState.q3_5 === 'nao') && (wizardState.q3_6 === 'sim' || wizardState.q3_6 === 'nao') && (wizardState.q3_7 === 'sim' || wizardState.q3_7 === 'nao') && (
+                      <div className="space-y-2 animate-in fade-in duration-300">
+                        <p className="text-xs font-extrabold text-gray-800">3.8 Anexar as folhas do contrato PJ no drive?</p>
+                        <div className="flex gap-4 mt-1.5">
+                          {['sim', 'nao'].map(o => (
+                            <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
+                              <input 
+                                type="radio" 
+                                name="q3_8" 
+                                checked={wizardState.q3_8 === o} 
+                                onChange={() => saveWizardStateUpdate({ q3_8: o })} 
+                              />
+                              <span>{o}</span>
+                            </label>
+                          ))}
+                        </div>
+                        {wizardState.q3_8 === 'sim' && <FileUploadBox field="contratoFiles" />}
                       </div>
-                      {wizardState.q3_8 === 'sim' && <FileUploadBox field="contratoFiles" />}
-                    </div>
+                    )}
 
                   </div>
                 )}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, updateDoc, collection, addDoc, getDocs, query, where } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, addDoc, getDocs, query, where, deleteDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import FluxoStepLayout from './components/FluxoStepLayout';
 import { 
@@ -98,9 +98,31 @@ export default function FinanceiroFluxo() {
   const [formPaymentMethod, setFormPaymentMethod] = useState('Cartão de Crédito');
   const [formInstallments, setFormInstallments] = useState<number>(1);
   const [formFirstDueDate, setFormFirstDueDate] = useState('');
-  const [formFinancialStatus, setFormFinancialStatus] = useState<CaseFinancial['financialStatus']>('pendente');
+  const [formFinancialStatus, setFormFinancialStatus] = useState<CaseFinancial['financialStatus']>('aguardando_pagamento');
   const [formVisibleToClient, setFormVisibleToClient] = useState(true);
   const [formPublicMessage, setFormPublicMessage] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const handleDeleteFinancial = async (id: string) => {
+    if (!id) return;
+    if (confirmDeleteId !== id) {
+      setConfirmDeleteId(id);
+      setTimeout(() => setConfirmDeleteId(null), 4000);
+      return;
+    }
+    setError(null);
+    setSuccess(null);
+    setConfirmDeleteId(null);
+    try {
+      await deleteDoc(doc(db, 'caseFinancials', id));
+      setSuccess('Lançamento financeiro deletado permanentemente!');
+      setRefreshToggle((prev) => prev + 1);
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      console.error(err);
+      setError(`Erro ao excluir faturamento: ${err.message || err}`);
+    }
+  };
 
   // Contract referencing
   const [formContractLinked, setFormContractLinked] = useState(false);
@@ -272,24 +294,17 @@ export default function FinanceiroFluxo() {
   const chargeTypeOptions = [
     'Honorários fixos',
     'Honorários de êxito',
-    'Entrada + êxito',
-    'Parcelado',
-    'Consulta',
-    'Taxa administrativa',
-    'Custas',
-    'Outro'
+    'Honorários Fixos + êxito'
   ];
 
   const financialStatusOptions: { value: CaseFinancial['financialStatus']; label: string }[] = [
-    { value: 'pendente', label: 'Pendente' },
-    { value: 'aguardando_pagamento', label: 'Aguardando Pagamento' },
+    { value: 'aguardando_pagamento', label: 'Aguardando pagamento' },
     { value: 'pago', label: 'Pago' },
-    { value: 'parcialmente_pago', label: 'Parcialmente Pago' },
-    { value: 'em_atraso', label: 'Em Atraso' },
+    { value: 'em_atraso', label: 'Em atraso' },
     { value: 'cancelado', label: 'Cancelado' },
     { value: 'renegociado', label: 'Renegociado' },
-    { value: 'aguardando_webhook', label: 'Aguardando Validação Webhook' },
-    { value: 'erro_webhook', label: 'Erro de Sincronização Webhook' }
+    { value: 'aguardando_webhook', label: 'Aguardando validação webhook' },
+    { value: 'erro_webhook', label: 'Erro de sincronização Webhook' }
   ];
 
   useEffect(() => {
@@ -675,7 +690,7 @@ export default function FinanceiroFluxo() {
          {!fetching && caseObj && (
            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 border-b border-gray-150 pb-4 mb-4">
              {[
-               { id: 1 as const, title: 'SubEtapa 01', label: 'Agendar novo Faturamento', icon: Calendar },
+               { id: 1 as const, title: 'SubEtapa 01', label: 'Criar Novo Contrato de Honorários', icon: Calendar },
                { id: 2 as const, title: 'SubEtapa 02', label: `Contrato de Honorários`, icon: FileText },
                { id: 3 as const, title: 'SubEtapa 03', label: `Lista de Cobranças Ativas (${financials.length})`, icon: Coins }
              ].map((sub) => {
@@ -737,11 +752,80 @@ export default function FinanceiroFluxo() {
             </button>
 
             {contractPanelOpen && (
-              <div className="p-6 bg-gray-50/10 space-y-5 animate-in slide-in-from-top duration-300">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-4">
+              <div className="p-6 bg-gray-50/10 space-y-6 animate-in slide-in-from-top duration-300">
+                <div className="max-w-3xl mx-auto space-y-6 pb-4">
                   
-                  {/* ESQUERDA: CHECKLIST E PERGUNTAS */}
-                  <div className="space-y-4">
+                  {/* Google Docs - Automação - Criar Contrato de Honorários da Pessoa Física Card */}
+                  <div className="space-y-4 bg-white border border-gray-150 rounded-2xl p-5 shadow-3xs">
+                    <h4 className="text-xs font-black uppercase text-indigo-950 tracking-wider flex items-center gap-1.5">
+                      <FileCheck2 size={16} className="text-indigo-600 animate-pulse" /> Google Docs - Automação - Criar Contrato de Honorários da Pessoa Física
+                    </h4>
+                    
+                    <div className="text-xs space-y-2.5 leading-relaxed text-gray-650 font-semibold">
+                      <p>
+                        Esta etapa integra diretamente com o Google Drive e o Google Docs para geração automatizada da minuta contratual baseada nas informações do cadastro da pessoa jurídica/física e nos dados financeiros configurados abaixo.
+                      </p>
+
+                      <div className="p-3.5 bg-gray-50 border border-gray-150 rounded-xl space-y-2">
+                        <div className="text-[10px] font-black uppercase text-gray-400 font-mono">STATUS DO DOCUMENTO</div>
+                        <div className="flex items-center gap-2 font-black text-xs">
+                          {caseObj.contratoHonorariosStatus === 'criada' ? (
+                            <>
+                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                              <span className="text-emerald-700">Documento Ativo no Google Docs</span>
+                            </>
+                          ) : caseObj.contratoHonorariosStatus === 'falha' ? (
+                            <>
+                              <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                              <span className="text-red-700">Falha na Automação GDocs</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="w-2.5 h-2.5 rounded-full bg-gray-400"></span>
+                              <span className="text-gray-500">Aguardando Execução GDocs</span>
+                            </>
+                          )}
+                        </div>
+
+                        {caseObj.contratoHonorariosGoogleDocsUrl && (
+                          <a 
+                            href={caseObj.contratoHonorariosGoogleDocsUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="mt-2 text-indigo-600 hover:text-indigo-800 font-bold block underline flex items-center gap-1 text-[11px]"
+                          >
+                            <ExternalLink size={12} /> Abrir Minuta no Google Docs
+                          </a>
+                        )}
+
+                        {caseObj.contratoHonorariosLogFalha && (
+                          <div className="p-2 border border-red-105 bg-red-50/50 rounded-lg text-[10px] text-red-650 font-mono">
+                            Erro retornado: {caseObj.contratoHonorariosLogFalha}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-gray-150 flex flex-wrap gap-2">
+                      <button 
+                        type="button" 
+                        onClick={() => triggerSimulation('Contrato de Honorários', 'criada')} 
+                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase cursor-pointer"
+                      >
+                        Simular Sucesso (GDocs)
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => triggerSimulation('Contrato de Honorários', 'falha')} 
+                        className="bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase cursor-pointer"
+                      >
+                        Simular Falha
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* CHECKLIST E PERGUNTAS */}
+                  <div className="space-y-4 bg-white border border-gray-150 rounded-2xl p-6 shadow-3xs">
                     <div className="space-y-1">
                       <p className="text-xs font-extrabold text-gray-850">3.1 Você gerou o contrato de honorários?</p>
                       <div className="flex gap-4">
@@ -841,95 +925,8 @@ export default function FinanceiroFluxo() {
                           );
                         })}
 
-                        <div className="space-y-2">
-                          <p className="text-xs font-extrabold text-gray-850">3.8 Deseja anexar o contrato agora?</p>
-                          <div className="flex gap-4">
-                            {['sim', 'nao'].map(o => (
-                              <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-750">
-                                <input 
-                                  type="radio" 
-                                  name="f_q3_8"
-                                  checked={wizardState.q3_8 === o} 
-                                  onChange={() => saveWizardStateUpdate({ q3_8: o })} 
-                                />
-                                <span>{o}</span>
-                              </label>
-                            ))}
-                          </div>
-                          {wizardState.q3_8 === 'sim' && <FileUploadBox field="contratoFiles" />}
-                        </div>
-
                       </div>
                     )}
-                  </div>
-
-                  {/* DIREITA: DETALHED CONTROLS & AUTO GDOCS STATUS */}
-                  <div className="space-y-4 bg-gray-55/60 border border-gray-150 rounded-2xl p-5">
-                    <h4 className="text-[10px] font-black uppercase text-indigo-950 tracking-wider flex items-center gap-1.5">
-                      <FileCheck2 size={15} className="text-indigo-600" /> Automação de Documentos & Google Workspace
-                    </h4>
-                    
-                    <div className="text-xs space-y-2.5 leading-relaxed text-gray-650 font-semibold">
-                      <p>
-                        Esta etapa integra diretamente com o Google Drive e o Google Docs para geração automatizada da minuta contratual baseada nas informações do cadastro da pessoa jurídica/física e nos dados financeiros configurados abaixo.
-                      </p>
-
-                      <div className="p-3.5 bg-white border border-gray-150 rounded-xl space-y-2">
-                        <div className="text-[10px] font-black uppercase text-gray-400 font-mono">STATUS DO DOCUMENTO</div>
-                        <div className="flex items-center gap-2 font-black text-xs">
-                          {caseObj.contratoHonorariosStatus === 'criada' ? (
-                            <>
-                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                              <span className="text-emerald-700">Documento Ativo no Google Docs</span>
-                            </>
-                          ) : caseObj.contratoHonorariosStatus === 'falha' ? (
-                            <>
-                              <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
-                              <span className="text-red-700">Falha na Automação GDocs</span>
-                            </>
-                          ) : (
-                            <>
-                              <span className="w-2.5 h-2.5 rounded-full bg-gray-400"></span>
-                              <span className="text-gray-500">Aguardando Execução GDocs</span>
-                            </>
-                          )}
-                        </div>
-
-                        {caseObj.contratoHonorariosGoogleDocsUrl && (
-                          <a 
-                            href={caseObj.contratoHonorariosGoogleDocsUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="mt-2 text-indigo-600 hover:text-indigo-800 font-bold block underline flex items-center gap-1 text-[11px]"
-                          >
-                            <ExternalLink size={12} /> Abrir Minuta no Google Docs
-                          </a>
-                        )}
-
-                        {caseObj.contratoHonorariosLogFalha && (
-                          <div className="p-2 border border-red-105 bg-red-50/50 rounded-lg text-[10px] text-red-650 font-mono">
-                            Erro retornado: {caseObj.contratoHonorariosLogFalha}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="pt-2 border-t border-gray-150 flex flex-wrap gap-2">
-                      <button 
-                        type="button" 
-                        onClick={() => triggerSimulation('Contrato de Honorários', 'criada')} 
-                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase cursor-pointer"
-                      >
-                        Simular Sucesso (GDocs)
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={() => triggerSimulation('Contrato de Honorários', 'falha')} 
-                        className="bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase cursor-pointer"
-                      >
-                        Simular Falha
-                      </button>
-                    </div>
                   </div>
 
                 </div>
@@ -1110,6 +1107,20 @@ export default function FinanceiroFluxo() {
                             <Archive size={11} />
                             <span>Arquivar</span>
                           </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteFinancial(fee.id!)}
+                            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1 transition-all duration-300 border ${
+                              confirmDeleteId === fee.id
+                                ? 'bg-red-600 hover:bg-red-700 text-white border-transparent'
+                                : 'hover:bg-red-50 text-red-650 border-transparent hover:border-red-105'
+                            }`}
+                            title="Excluir faturamento permanentemente"
+                          >
+                            <Trash2 size={11} />
+                            <span>{confirmDeleteId === fee.id ? 'Confirma?' : 'Excluir'}</span>
+                          </button>
                         </div>
                       </div>
 
@@ -1125,7 +1136,7 @@ export default function FinanceiroFluxo() {
             <form onSubmit={handleSubmitForm} className="xl:col-span-12 max-w-3xl mx-auto w-full bg-white border border-gray-150 rounded-2xl p-6 space-y-4 shadow-sm animate-fadeIn">
               <div className="flex justify-between items-center border-b border-gray-100 pb-3">
                 <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono">
-                  {editingId ? 'Editar Detalhes Faturamento' : 'Agendar Novo Faturamento'}
+                  {editingId ? 'Editar Contrato de Honorários' : 'Criar Novo Contrato de Honorários'}
                 </h4>
                 {editingId && (
                   <button 
@@ -1296,6 +1307,10 @@ export default function FinanceiroFluxo() {
                       />
                     </div>
 
+                    <div className="space-y-1 bg-white border border-gray-155 p-3.5 rounded-xl">
+                      <FileUploadBox field="contratoFiles" />
+                    </div>
+
                     <div className="space-y-1">
                       <label className="text-[9px] font-bold uppercase text-slate-500">Link de Verificação (Ex: DocuSign/Adimplência)</label>
                       <input
@@ -1364,6 +1379,14 @@ export default function FinanceiroFluxo() {
 
                     {formPaymentProvider === 'stripe' ? (
                       <div className="grid grid-cols-1 gap-2.5">
+                        <div className="p-3 bg-[#635BFF]/10 border border-[#635BFF]/25 rounded-xl flex gap-2.5 items-start text-[#635BFF] animate-fadeIn">
+                          <CreditCard size={15} className="shrink-0 mt-0.5" />
+                          <div className="text-[11px] leading-relaxed">
+                            <span className="font-extrabold block uppercase tracking-wider mb-0.5">Futura Integração Stripe</span>
+                            Estabilidade, alta conversão de cartão de crédito e checkout global de honorários sincronizados diretamente no ato do envio.
+                          </div>
+                        </div>
+
                         <div className="space-y-1">
                           <label className="text-[9px] font-bold uppercase text-slate-500">Stripe Customer ID (cus_...)</label>
                           <input
@@ -1398,26 +1421,36 @@ export default function FinanceiroFluxo() {
                         </div>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-bold uppercase text-slate-500">Asaas Customer ID</label>
-                          <input
-                            type="text"
-                            value={formAsaasCustomerId}
-                            onChange={(e) => setFormAsaasCustomerId(e.target.value)}
-                            placeholder="cus_00000..."
-                            className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-mono text-slate-800 outline-none"
-                          />
+                      <div className="grid grid-cols-1 gap-2.5">
+                        <div className="p-3 bg-[#0066FF]/10 border border-[#0066FF]/25 rounded-xl flex gap-2.5 items-start text-[#0066FF] animate-fadeIn">
+                          <Coins size={15} className="shrink-0 mt-0.5" />
+                          <div className="text-[11px] leading-relaxed">
+                            <span className="font-extrabold block uppercase tracking-wider mb-0.5">Futura Integração ASAAS</span>
+                            Sincronização robusta de cobranças Pix e boletos do ecossistema Giffoni com atualizações instantâneas de liquidação de honorários.
+                          </div>
                         </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-bold uppercase text-slate-500">Asaas Payment ID</label>
-                          <input
-                            type="text"
-                            value={formAsaasPaymentId}
-                            onChange={(e) => setFormAsaasPaymentId(e.target.value)}
-                            placeholder="pay_0099..."
-                            className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-mono text-slate-800 outline-none"
-                          />
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold uppercase text-slate-500">Asaas Customer ID</label>
+                            <input
+                              type="text"
+                              value={formAsaasCustomerId}
+                              onChange={(e) => setFormAsaasCustomerId(e.target.value)}
+                              placeholder="cus_00000..."
+                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-mono text-slate-800 outline-none"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-bold uppercase text-slate-500">Asaas Payment ID</label>
+                            <input
+                              type="text"
+                              value={formAsaasPaymentId}
+                              onChange={(e) => setFormAsaasPaymentId(e.target.value)}
+                              placeholder="pay_0099..."
+                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-mono text-slate-800 outline-none"
+                            />
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1448,7 +1481,7 @@ export default function FinanceiroFluxo() {
                 ) : (
                   <>
                     <FileCheck2 size={14} />
-                    <span>{editingId ? 'Salvar Edição de Faturamento' : 'Lançar Faturamento'}</span>
+                    <span>{editingId ? 'Salvar Edição do Contrato' : 'Criar Contrato de Honorários'}</span>
                   </>
                 )}
               </button>

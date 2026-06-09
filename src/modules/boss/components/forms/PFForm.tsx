@@ -82,7 +82,7 @@ export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
     const { name, value } = e.target;
     let newValue = value;
 
-    if (name === 'pf_nomeCompleto') {
+    if (name === 'pf_nomeCompleto' || name === 'pf_nomePai' || name === 'pf_nomeMae') {
       newValue = value.toUpperCase();
     } else if (name === 'pf_profissao' || name === 'pf_nacionalidade') {
       newValue = value.charAt(0).toUpperCase() + value.slice(1);
@@ -178,6 +178,8 @@ export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
           </div>
 
           <Input label="Data de Nascimento" name="pf_dataNascimento" type="text" placeholder="DD/MM/AAAA" value={data.pf_dataNascimento || data.pf_nascimento || ''} onChange={handleChange} />
+          <Input label="Nome Completo do Pai" name="pf_nomePai" value={data.pf_nomePai || ''} onChange={handleChange} className="uppercase" />
+          <Input label="Nome Completo da Mãe" name="pf_nomeMae" value={data.pf_nomeMae || ''} onChange={handleChange} className="uppercase" />
         </div>
       </div>
 

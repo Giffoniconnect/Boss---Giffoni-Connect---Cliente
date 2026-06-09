@@ -55,6 +55,32 @@ export const DadosCadastraisCliente: React.FC<DadosCadastraisProps> = ({
   const acesso = selectedClient.acessoSistema || {};
   const bancario = selectedClient.bancarioData || selectedClient.bancarioDadosBancarios || {};
 
+  const contactEmail = 
+    selectedClient.pfContato?.pf_email || 
+    selectedClient.pfContato?.email || 
+    pf.pf_email || 
+    pf.email || 
+    selectedClient.portalMirror?.pfContato?.email || 
+    '—';
+
+  const contactPhone = 
+    selectedClient.pfContato?.pf_telefone || 
+    selectedClient.pfContato?.telefone || 
+    selectedClient.pfContato?.pf_telefoneCelular || 
+    pf.pf_telefone || 
+    pf.pf_telefoneCelular || 
+    pf.telefone || 
+    selectedClient.portalMirror?.pfContato?.telefone || 
+    '—';
+
+  const hasWhatsapp = 
+    selectedClient.pfContato?.pf_possuiWhatsapp === true || 
+    selectedClient.pfContato?.pf_possuiWhatsapp === 'true' ||
+    selectedClient.pfData?.pf_possuiWhatsapp === true ||
+    pf.pf_possuiWhatsapp === true ||
+    (!!selectedClient.pfContato?.whatsapp && selectedClient.pfContato?.whatsapp !== 'Não possuo' && selectedClient.pfContato?.whatsapp !== '') ||
+    (!!selectedClient.portalMirror?.pfContato?.whatsapp && selectedClient.portalMirror?.pfContato?.whatsapp !== 'Não possuo' && selectedClient.portalMirror?.pfContato?.whatsapp !== '');
+
   const [hideInstagram, setHideInstagram] = useState(false);
   const [hideFacebook, setHideFacebook] = useState(false);
   const [hideTiktok, setHideTiktok] = useState(false);
@@ -244,12 +270,29 @@ export const DadosCadastraisCliente: React.FC<DadosCadastraisProps> = ({
                     <span className="text-xs font-mono font-bold text-gray-900 mt-1 block uppercase">{pf.pf_orgaoEmissor || '—'}</span>
                   </div>
                   <div>
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Nome Completo do Pai</span>
+                    <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{pf.pf_nomePai || selectedClient.portalMirror?.pfDadosPessoais?.nomePai || '—'}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Nome Completo da Mãe</span>
+                    <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{pf.pf_nomeMae || selectedClient.portalMirror?.pfDadosPessoais?.nomeMae || '—'}</span>
+                  </div>
+                  <div>
                     <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">E-mail Principal</span>
-                    <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pf.pf_email || '—'}</span>
+                    <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{contactEmail}</span>
                   </div>
                   <div>
                     <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Celular / WhatsApp</span>
-                    <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{pf.pf_telefoneCelular || '—'}</span>
+                    <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{contactPhone}</span>
+                    <div className="mt-1.5 flex items-center">
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 border rounded-lg text-[10px] font-black uppercase font-mono tracking-wider ${
+                        hasWhatsapp 
+                          ? 'bg-emerald-50 border-emerald-250 text-emerald-800' 
+                          : 'bg-rose-50 border-rose-250 text-rose-800'
+                      }`}>
+                        {hasWhatsapp ? '✔️ possui WhatsApp' : '❌ não possui WhatsApp'}
+                      </span>
+                    </div>
                   </div>
                   <div>
                     <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-1">
@@ -487,6 +530,14 @@ export const DadosCadastraisCliente: React.FC<DadosCadastraisProps> = ({
               <div>
                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Celular de Contato</span>
                 <span className="text-xs font-mono font-bold text-gray-900 mt-1 block">{socio.socio_telefoneCelular || '—'}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Nome Completo do Pai</span>
+                <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{socio.socio_nomePai || '—'}</span>
+              </div>
+              <div>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Nome Completo da Mãe</span>
+                <span className="text-xs font-bold text-gray-900 mt-1 block uppercase">{socio.socio_nomeMae || '—'}</span>
               </div>
               <div className="sm:col-span-2">
                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-mono block">Endereço Residencial Completo</span>

@@ -82,7 +82,7 @@ export const SocioForm: React.FC<SocioFormProps> = ({ data, onChange }) => {
     const { name, value } = e.target;
     let newValue = value;
 
-    if (name === 'socio_nomeCompleto') {
+    if (name === 'socio_nomeCompleto' || name === 'socio_nomePai' || name === 'socio_nomeMae') {
       newValue = value.toUpperCase();
     } else if (name === 'socio_profissao' || name === 'socio_nacionalidade' || name === 'socio_cargo') {
       newValue = value.charAt(0).toUpperCase() + value.slice(1);
@@ -179,6 +179,8 @@ export const SocioForm: React.FC<SocioFormProps> = ({ data, onChange }) => {
 
           <Input label="Data de Nascimento" name="socio_dataNascimento" type="text" placeholder="DD/MM/AAAA" value={data.socio_dataNascimento || ''} onChange={handleChange} />
           <Input label="Cargo" name="socio_cargo" value={data.socio_cargo || ''} onChange={handleChange} />
+          <Input label="Nome Completo do Pai" name="socio_nomePai" value={data.socio_nomePai || ''} onChange={handleChange} className="uppercase" />
+          <Input label="Nome Completo da Mãe" name="socio_nomeMae" value={data.socio_nomeMae || ''} onChange={handleChange} className="uppercase" />
         </div>
       </div>
 
