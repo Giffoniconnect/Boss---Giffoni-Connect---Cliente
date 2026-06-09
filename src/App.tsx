@@ -58,6 +58,8 @@ import ProtocoloFluxo from './pages/boss/fluxo-producao/ProtocoloFluxo';
 import NovoCasoFluxo from './pages/boss/fluxo-producao/NovoCasoFluxo';
 import ControladoriaFluxo from './pages/boss/fluxo-producao/ControladoriaFluxo';
 import RelatorioIntegridadeFluxo from './pages/boss/fluxo-producao/RelatorioIntegridadeFluxo';
+import PrePeticionamentoIaFluxo from './pages/boss/fluxo-producao/PrePeticionamentoIaFluxo';
+import ComplianceFluxo from './pages/boss/fluxo-producao/ComplianceFluxo';
 import ArquivamentoFluxo from './pages/boss/fluxo-producao/ArquivamentoFluxo';
 import Recadastramento from './pages/boss/fluxo-producao/Recadastramento';
 import EditarCadastroCliente from './pages/boss/fluxo-producao/EditarCadastroCliente';
@@ -596,6 +598,14 @@ const router = createBrowserRouter(
         } 
       />
       <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/pre-peticionamento-ia" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <PrePeticionamentoIaFluxo />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
         path="/boss-giffoni-clientes/fluxo-producao/:caseId/delegacao" 
         element={
           <ProtectedRoute role="boss_admin">
@@ -616,6 +626,14 @@ const router = createBrowserRouter(
         element={
           <ProtectedRoute role="boss_admin">
             <ProtocoloFluxo />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss-giffoni-clientes/fluxo-producao/:caseId/compliance" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <ComplianceFluxo />
           </ProtectedRoute>
         } 
       />

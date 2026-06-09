@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import { flowRoutes } from './utils/flowRoutes';
 import { useUnsavedChangesGuard } from './hooks/useUnsavedChangesGuard';
+import { useAuth } from '../../../contexts/AuthContext';
+import { buildPrimeiroAtendimentoPlaceholders } from '../../../lib/documents/placeholderBuilders';
 
 interface MiniRichEditorProps {
   id: string;
@@ -173,6 +175,7 @@ interface Checklist5W2HState {
 export default function DadosCaso() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
+  const { googleAccessToken } = useAuth();
 
   // Screen states
   const [fetching, setFetching] = useState(true);
@@ -230,6 +233,18 @@ export default function DadosCaso() {
   const [priority, setPriority] = useState('media');
   const [responsibleLawyer, setResponsibleLawyer] = useState('');
   const [visibleToClient, setVisibleToClient] = useState(true);
+
+  const clientDriveFolderId = (client?.googleDriveClientFolderId || client?.gdriveFolderId || caseObj?.gdriveFolderId || '').trim();
+  const clientDriveFolderUrl = (client?.googleDriveClientFolderUrl || client?.gdriveFolderUrl || caseObj?.gdriveFolderUrl || '').trim();
+  const folderIsReal = !!(
+    clientDriveFolderId && 
+    !clientDriveFolderId.toLowerCase().includes('mock') && 
+    !clientDriveFolderId.toLowerCase().includes('fake') && 
+    !clientDriveFolderId.toLowerCase().includes('teste') && 
+    !clientDriveFolderId.toLowerCase().includes('undefined') && 
+    !clientDriveFolderId.toLowerCase().includes('null') && 
+    !clientDriveFolderId.toLowerCase().includes('xxxx')
+  );
   const [statusInterno, setStatusInterno] = useState('Em produção');
   const [statusPublicoCliente, setStatusPublicoCliente] = useState('');
   const [isPublicStatusManuallyEdited, setIsPublicStatusManuallyEdited] = useState(false);
@@ -649,43 +664,106 @@ export default function DadosCaso() {
     setSuccess(null);
     setGeneratingDoc(true);
 
+    const targetCaseId = caseId;
+    const targetClientId = caseObj?.clientId || client?.id;
+
     try {
-      const connectorsRef = doc(db, 'settings', 'connectors');
-      const connectorsSnap = await getDoc(connectorsRef);
-      const connectorsData = connectorsSnap.exists() ? connectorsSnap.data() : {};
-      const googleDocs = connectorsData?.googleDocs || {};
+      // 1. caseId existe
+      if (!targetCaseId) {
+        throw new Error("ID do caso (caseId) está ausente.");
+      }
 
-      // 1. Get configured Template ID or default to the requested one
-      const configuredTemplateId = googleDocs.templates?.['primeiro_atendimento'] || '';
-      const officialTemplateId = (configuredTemplateId || "1ODrPbz7qtyeiTYnjzSdv9YQ3NqdafYoub6-KpkmTQTo").trim();
+      // 2. caseData existe (caseObj)
+      if (!caseObj) {
+        throw new Error("Dados do caso não foram carregados do banco de dados.");
+      }
 
-      // 2. Drive Folder Destination
-      const destinationFolderId = "1YUl0Z3hbptBaXfdp0vSnvGTQv0ChsPMs";
-      const destinationFolderUrl = "https://drive.google.com/drive/folders/1YUl0Z3hbptBaXfdp0vSnvGTQv0ChsPMs";
+      // 3. clientId existe
+      if (!targetClientId) {
+        throw new Error("ID do cliente (clientId) está ausente.");
+      }
 
-      // 3. Document Name
-      const clientName = client?.nome || client?.nomeCompleto || client?.razaoSocial || "Cliente";
-      const docName = `1º Atendimento PF - ${clientName}`;
+      // 4. clientData existe (client)
+      if (!client) {
+        throw new Error("Dados do cliente não foram carregados do banco de dados.");
+      }
 
-      // 4. Access tokens and overrides
-      const googleAccessToken = localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken') || '';
+      // 5. client.type === "PF"
+      const clientType = client?.type || client?.clientType || caseObj?.clientType || "PF";
+      if (clientType !== "PF") {
+        throw new Error("Esta automação é de uso exclusivo para primeiro atendimento de pessoa física (PF).");
+      }
+
+      // 6. nome completo existe
+      const nomeCompleto = (client?.nomeCompleto || client?.nome || client?.razaoSocial || "").trim();
+      if (!nomeCompleto) {
+        throw new Error("Nome completo do cliente não localizado no cadastro.");
+      }
+
+      // 7. googleDriveClientFolderId existe
+      // 8. googleDriveClientFolderUrl existe
+      const googleDriveClientFolderId = (client?.googleDriveClientFolderId || client?.gdriveFolderId || caseObj?.gdriveFolderId || "").trim();
+      const googleDriveClientFolderUrl = (client?.googleDriveClientFolderUrl || client?.gdriveFolderUrl || caseObj?.gdriveFolderUrl || "").trim();
+
+      // 9. googleDriveClientFolderId não contém “mock”, “fake”, Curt, “teste”, “undefined” ou “null”
+      const isMockFolderId = (id: string) => {
+        if (!id) return true;
+        const lowercaseId = id.toString().trim().toLowerCase();
+        return (
+          lowercaseId.includes('mock') || 
+          lowercaseId.includes('fake') || 
+          lowercaseId.includes('teste') || 
+          lowercaseId.includes('undefined') || 
+          lowercaseId.includes('null') || 
+          lowercaseId.includes('xxxx')
+        );
+      };
+
+      if (!googleDriveClientFolderId || !googleDriveClientFolderUrl || isMockFolderId(googleDriveClientFolderId)) {
+        setError("Não há pasta real do Google Drive vinculada ao cliente. Acesse a Etapa 1 — Cadastro do Cliente e execute primeiro a Automação Google Drive — Pasta do Cliente.");
+        setGeneratingDoc(false);
+        return;
+      }
+
+      // 10. templateId oficial está definido
+      const officialTemplateId = "1ODrPbz7qtyeiTYnjzSdv9YQ3NqdafYoub6-KpkmTQTo";
+
+      // 11. placeholders foram montados e não estão vazios
+      const placeholders = buildPrimeiroAtendimentoPlaceholders(client, caseObj);
+      if (!placeholders || Object.keys(placeholders).length === 0) {
+        throw new Error("Os placeholders do Primeiro Atendimento estão vazios ou não puderam ser gerados.");
+      }
+
+      // 12. googleAccessToken existe ou há credentialOverride válido
+      const currentGoogleAccessToken = googleAccessToken || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken') || '';
       const localOverride = localStorage.getItem('portal_boss_gdocs_override') || '';
+
+      if (!currentGoogleAccessToken && !localOverride) {
+        setError("Faça login novamente com Google para autorizar Google Docs/Drive ou configure a Service Account na Central de Integrações.");
+        setGeneratingDoc(false);
+        return;
+      }
 
       const targetEndpoint = "/api/google-docs/generate-document";
       const internalPayload = {
-        mode: "standard",
-        googleAccessToken,
+        mode: "stateless",
+        googleAccessToken: currentGoogleAccessToken,
         documentType: "primeiro_atendimento",
-        caseId,
-        clientId: caseObj?.clientId || client?.id,
-        clientType: client?.clientType || "PF",
+        caseId: targetCaseId,
+        clientId: targetClientId,
+        clientType: "PF",
         templateId: officialTemplateId,
         templateKey: "primeiro_atendimento",
-        destinationFolderId,
-        destinationFolderUrl,
-        documentName: docName,
-        placeholders: {},
-        metadata: { source: "Operational DadosCaso Flow" },
+        destinationFolderId: googleDriveClientFolderId,
+        destinationFolderUrl: googleDriveClientFolderUrl,
+        documentName: `1º Atendimento PF - ${nomeCompleto}`,
+        placeholders,
+        metadata: {
+          source: "Portal BOSS - 1º Atendimento PF",
+          folderSource: "Automação Google Drive — Pasta do Cliente",
+          caseId: targetCaseId,
+          clientId: targetClientId
+        },
         credentialOverride: localOverride
       };
 
@@ -711,6 +789,11 @@ export default function DadosCaso() {
       const googleDocsId = responseData.googleDocsId;
       const googleDocsUrl = responseData.googleDocsUrl;
 
+      // VALIDAR URL DO GOOGLE DOCS REAL
+      if (!googleDocsUrl || !googleDocsUrl.startsWith("https://docs.google.com/document/d/")) {
+        throw new Error("A URL do Google Docs retornada pelo servidor não é válida ou não pertence a um documento real.");
+      }
+
       setPrimeiroAtendimentoStatus('criado');
       setPrimeiroAtendimentoGoogleDocsUrl(googleDocsUrl);
       setPrimeiroAtendimentoLogFalha('');
@@ -718,25 +801,55 @@ export default function DadosCaso() {
       setSuccess('Comando de automação disparado com sucesso! Link gerado abaixo.');
 
       // Update Case in Firestore
-      const caseDocRef = doc(db, 'cases', caseId!);
+      const caseDocRef = doc(db, 'cases', targetCaseId);
       await updateDoc(caseDocRef, {
-        primeiroAtendimentoStatus: 'criado',
+        primeiroAtendimentoStatus: "criado",
+        primeiroAtendimentoId: googleDocsId,
+        primeiroAtendimentoUrl: googleDocsUrl,
         primeiroAtendimentoGoogleDocsId: googleDocsId,
         primeiroAtendimentoGoogleDocsUrl: googleDocsUrl,
-        primeiroAtendimentoId: googleDocsId,
-        primeiroAtendimentoUrl: googleDocsUrl
+        primeiroAtendimentoGeneratedAt: new Date().toISOString(),
+        primeiroAtendimentoDestinationFolderId: googleDriveClientFolderId,
+        primeiroAtendimentoDestinationFolderUrl: googleDriveClientFolderUrl,
+        primeiroAtendimentoLogFalha: ""
       });
+
+      // Salvar em cases/{caseId}/generatedDocuments/primeiro_atendimento
+      const subdocRef = doc(db, 'cases', targetCaseId, 'generatedDocuments', 'primeiro_atendimento');
+      await setDoc(subdocRef, {
+        documentType: "primeiro_atendimento",
+        displayName: `1º Atendimento PF - ${nomeCompleto}`,
+        templateKey: "primeiro_atendimento",
+        templateId: officialTemplateId,
+        googleDocsId,
+        googleDocsUrl,
+        destinationFolderId: googleDriveClientFolderId,
+        destinationFolderUrl: googleDriveClientFolderUrl,
+        status: "success",
+        generatedAt: new Date().toISOString(),
+        generatedBy: "Portal BOSS Central Interna (Stateless)",
+        errorCode: null,
+        errorMessage: null,
+        logs: [
+          "1ST_PF_FLOW_INITIATED: Fluxo do Primeiro Atendimento PF iniciado.",
+          `1ST_PF_TEMPLATE_ID: Configurado para o template ID oficial ${officialTemplateId}.`,
+          `1ST_PF_GEN_SUCCESS: Sucesso na geração do documento ID: ${googleDocsId}`
+        ]
+      });
+
     } catch (err: any) {
       console.error(err);
       setPrimeiroAtendimentoStatus('falha');
-      setPrimeiroAtendimentoLogFalha(err.message || String(err));
-      setError(`Falha ao gerar o 1º Atendimento: ${err.message || err}`);
+      const errorMessage = err.message || String(err);
+      setPrimeiroAtendimentoLogFalha(errorMessage);
+      setError(`Falha ao gerar o 1º Atendimento no motor interno: ${errorMessage}`);
 
       try {
-        const caseDocRef = doc(db, 'cases', caseId!);
+        const caseDocRef = doc(db, 'cases', targetCaseId!);
         await updateDoc(caseDocRef, {
-          primeiroAtendimentoStatus: 'falha',
-          primeiroAtendimentoLogFalha: err.message || String(err)
+          primeiroAtendimentoStatus: "falha",
+          primeiroAtendimentoLogFalha: errorMessage,
+          primeiroAtendimentoGeneratedAt: ""
         });
       } catch (e) {
         console.warn("Could not save failure state to case document", e);
@@ -744,12 +857,6 @@ export default function DadosCaso() {
     } finally {
       setGeneratingDoc(false);
     }
-  };
-
-  const handleSimulateStatus = (status: 'aguardando' | 'criado' | 'falha', url: string, log: string) => {
-    setPrimeiroAtendimentoStatus(status);
-    setPrimeiroAtendimentoGoogleDocsUrl(url);
-    setPrimeiroAtendimentoLogFalha(log);
   };
 
   if (!caseId) {
@@ -1071,22 +1178,48 @@ export default function DadosCaso() {
                 </div>
 
                 {/* Informações da pasta do cliente */}
-                <div className="p-3.5 bg-white border border-gray-150 rounded-2xl text-xs flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-3xs animate-in fade-in">
-                  <div className="space-y-1">
-                    <p className="font-bold text-gray-500 text-[10px] uppercase tracking-wider">Destino da Pasta Associada</p>
-                    <p className="text-slate-800 font-extrabold truncate max-w-md flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block animate-pulse" />
-                      Pasta ID: <span className="font-mono bg-slate-50 border border-gray-100 rounded px-1.5 py-0.5 font-bold select-all">1YUl0Z3hbptBaXfdp0vSnvGTQv0ChsPMs</span>
+                <div className="p-4 bg-white border border-gray-150 rounded-2xl text-xs flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-3xs animate-in fade-in">
+                  <div className="space-y-2 flex-1">
+                    <p className="font-extrabold text-gray-500 text-[10px] uppercase tracking-wider block">
+                      Destino da Pasta do Cliente
                     </p>
+                    <p className="text-[11px] text-indigo-700 font-extrabold uppercase tracking-wider">
+                      Fonte: Automação Google Drive — Pasta do Cliente
+                    </p>
+                    {folderIsReal ? (
+                      <div className="space-y-1.5 pt-1">
+                        <p className="text-slate-700 font-bold flex flex-wrap items-center gap-1">
+                          <span>Pasta ID:</span>
+                          <span className="font-mono bg-slate-50 border border-gray-150 rounded px-2 py-0.5 select-all text-slate-800 font-extrabold">{clientDriveFolderId}</span>
+                        </p>
+                        <p className="text-slate-700 font-bold flex flex-wrap items-center gap-1 leading-normal">
+                          <span>URL:</span>
+                          <span className="font-mono bg-slate-50 border border-gray-150 rounded px-2 py-0.5 select-all truncate text-[11px] max-w-lg text-indigo-800 font-extrabold">{clientDriveFolderUrl}</span>
+                        </p>
+                        <p className="text-emerald-700 font-black text-[11px] flex items-center gap-1.5 mt-1 animate-pulse">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0" />
+                          <span>Pasta real vinculada ao cliente. O 1º Atendimento será salvo nesta pasta.</span>
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="pt-1">
+                        <p className="text-amber-700 font-bold flex items-center gap-1.5 text-[11px]">
+                          <AlertCircle size={14} className="text-amber-500 shrink-0" />
+                          <span>Pasta do cliente ainda não criada. Execute primeiro a Automação Google Drive — Pasta do Cliente.</span>
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  <a
-                    href="https://drive.google.com/drive/folders/1YUl0Z3hbptBaXfdp0vSnvGTQv0ChsPMs"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-indigo-600 hover:text-indigo-800 bg-indigo-50/50 hover:bg-indigo-50 px-3.5 py-1.5 rounded-xl border border-indigo-150 transition-all cursor-pointer shadow-3xs"
-                  >
-                    Abrir Pasta <ExternalLink size={12} />
-                  </a>
+                  {folderIsReal && clientDriveFolderUrl && (
+                    <a
+                      href={clientDriveFolderUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-wider text-indigo-700 hover:text-indigo-900 bg-indigo-50/50 hover:bg-indigo-100 px-4 py-2.5 rounded-xl border border-indigo-200 transition-all cursor-pointer shadow-3xs shrink-0 self-start md:self-center font-bold"
+                    >
+                      Abrir Pasta <ExternalLink size={12} />
+                    </a>
+                  )}
                 </div>
 
                 {primeiroAtendimentoStatus === 'criado' && primeiroAtendimentoGoogleDocsUrl && !forceNewVersion ? (
@@ -1096,9 +1229,9 @@ export default function DadosCaso() {
                         <FileText size={20} />
                       </div>
                       <div className="space-y-1">
-                        <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">Procuração Gerada</h3>
+                        <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">1º Atendimento Gerado</h3>
                         <p className="text-xs text-slate-500 leading-relaxed font-semibold">
-                          O documento de Procuração PF já foi indexado e está disponível para preenchimento de assinaturas.
+                          O documento de 1º Atendimento PF já foi indexado e está disponível para visualização.
                         </p>
                       </div>
                     </div>
@@ -1111,7 +1244,7 @@ export default function DadosCaso() {
                         className="inline-flex items-center gap-2 px-4.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase rounded-xl transition-all shadow-3xs cursor-pointer font-bold animate-in"
                       >
                         <ExternalLink size={13} />
-                        Abrir Procuração
+                        Abrir 1º Atendimento
                       </a>
                       <button
                         type="button"
@@ -1176,16 +1309,18 @@ export default function DadosCaso() {
                           </div>
                         )}
 
-                        {/* Motor Integrado info display */}
-                        <div className="p-3.5 bg-emerald-50/60 border border-emerald-100 rounded-xl space-y-1.5 text-xs animate-fadeIn">
-                          <p className="font-extrabold text-emerald-950 uppercase tracking-widest text-[9px] font-mono flex items-center gap-1.5 align-middle">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" />
-                            <span>CONEXÃO COM MOTOR DE GOOGLE DOCS ATIVO (INTEGRADO)</span>
-                          </p>
-                          <p className="text-emerald-900 leading-normal text-[11px]">
-                            A geração documental do primeiro atendimento está configurada de forma nativa ao Portal BOSS Clientes, utilizando a Conta de Serviço Google autorizada.
-                          </p>
-                        </div>
+                        {/* Motor Integrado info display - omitido se falhou */}
+                        {primeiroAtendimentoStatus !== 'falha' && (
+                          <div className="p-3.5 bg-emerald-50/60 border border-emerald-100 rounded-xl space-y-1.5 text-xs animate-fadeIn">
+                            <p className="font-extrabold text-emerald-950 uppercase tracking-widest text-[9px] font-mono flex items-center gap-1.5 align-middle">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" />
+                              <span>CONEXÃO COM MOTOR DE GOOGLE DOCS ATIVO (INTEGRADO)</span>
+                            </p>
+                            <p className="text-emerald-900 leading-normal text-[11px]">
+                              A geração documental do primeiro atendimento está configurada de forma nativa ao Portal BOSS Clientes, utilizando a Conta de Serviço Google autorizada.
+                            </p>
+                          </div>
+                        )}
 
                         <div className="flex items-center justify-between gap-3 pt-1">
                           <button
@@ -1199,42 +1334,6 @@ export default function DadosCaso() {
                           </button>
                         </div>
 
-                        {/* Simular Retorno da Automação (Fase de Testes) */}
-                        <div className="p-3 border border-indigo-100 bg-white/60 rounded-xl space-y-1 shadow-3xs">
-                          <span className="text-[11px] uppercase font-bold text-indigo-800 block tracking-wide font-mono">
-                            ⚡ Simular Retorno da Automação (Fase de Testes)
-                          </span>
-                          <div className="flex gap-2 pt-1 flex-wrap font-sans">
-                            <button
-                              type="button"
-                              onClick={() => handleSimulateStatus('aguardando', '', '')}
-                              className={`px-2.5 py-1 rounded text-xs font-bold border transition-colors cursor-pointer select-none ${
-                                primeiroAtendimentoStatus === 'aguardando' ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white text-gray-500 border-gray-200'
-                              }`}
-                            >
-                              Aguardando
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleSimulateStatus('criado', 'https://docs.google.com/document/d/1ODrPbz7qtyeiTYnjzSdv9YQ3NqdafYoub6-KpkmTQTo/edit?tab=t.0', '')}
-                              className={`px-2.5 py-1 rounded text-xs font-bold border transition-colors cursor-pointer select-none ${
-                                primeiroAtendimentoStatus === 'criado' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-white text-gray-500 border-gray-200'
-                              }`}
-                            >
-                              Sucesso
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleSimulateStatus('falha', '', 'Simulação de erro técnico do Google Docs no 1º Atendimento.')}
-                              className={`px-2.5 py-1 rounded text-xs font-bold border transition-colors cursor-pointer select-none ${
-                                primeiroAtendimentoStatus === 'falha' ? 'bg-red-100 border-red-300 text-red-800' : 'bg-white text-gray-500 border-gray-200'
-                              }`}
-                            >
-                              Falha
-                            </button>
-                          </div>
-                        </div>
-
                       </div>
                     )}
                   </div>
@@ -1244,7 +1343,7 @@ export default function DadosCaso() {
               {/* Blanket preparado para o log técnico de falha */}
               <div className="space-y-2">
                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
-                  Log Técnico da Automação (Recebido por Mirror Build)
+                  Log Técnico da Automação (Motor de Geração de Google Docs)
                 </span>
                 {primeiroAtendimentoStatus === 'falha' && primeiroAtendimentoLogFalha ? (
                   <div className="p-4 bg-red-950 text-red-100 rounded-xl border border-red-900 font-mono text-xs leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap select-all shadow-inner animate-fadeIn">

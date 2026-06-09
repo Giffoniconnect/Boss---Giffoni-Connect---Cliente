@@ -517,7 +517,7 @@ export default function ProtocoloFluxo() {
       if (action === 'exit') {
         navigate('/boss-giffoni-clientes/fluxo-producao');
       } else if (action === 'advance') {
-        navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/controladoria`);
+        navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/compliance`);
       }
 
       return true;

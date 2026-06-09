@@ -155,6 +155,15 @@ export default function DocTypeConfig() {
           const raw = docSnap.data();
           const googleDocs = raw.googleDocs || {};
           
+          if (templateKey === 'primeiro_atendimento' && (!googleDocs.templates || googleDocs.templates['primeiro_atendimento'] !== '1ODrPbz7qtyeiTYnjzSdv9YQ3NqdafYoub6-KpkmTQTo')) {
+            if (!googleDocs.templates) googleDocs.templates = {};
+            googleDocs.templates['primeiro_atendimento'] = '1ODrPbz7qtyeiTYnjzSdv9YQ3NqdafYoub6-KpkmTQTo';
+            await setDoc(docRef, {
+              ...raw,
+              googleDocs
+            });
+          }
+          
           setState(prev => {
             const calculatedWebhook = googleDocs.endpointUrl 
               ? `${googleDocs.endpointUrl.trim().replace(/\/$/, '')}/api/webhook/gdi-job` 

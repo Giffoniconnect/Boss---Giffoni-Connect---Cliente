@@ -455,7 +455,7 @@ export default function EDRPFluxo() {
   };
 
   // Master Save Handler
-  const handleSave = async (showNotification = true, transitionTo: 'home' | 'delegacao' | '' = '') => {
+  const handleSave = async (showNotification = true, transitionTo: 'home' | 'prePeticionamentoIa' | 'delegacao' | '' = '') => {
     if (!caseId) return;
     setSaving(true);
     setError(null);
@@ -477,7 +477,9 @@ export default function EDRPFluxo() {
         updatedAt: now
       };
 
-      if (transitionTo === 'delegacao') {
+      if (transitionTo === 'prePeticionamentoIa') {
+        payload.productionStage = 'prePeticionamentoIa';
+      } else if (transitionTo === 'delegacao') {
         payload.productionStage = 'delegacao';
       }
 
@@ -487,14 +489,16 @@ export default function EDRPFluxo() {
       setCaseObj((prev: any) => ({
         ...prev,
         statusInterno: recommendedStatus,
-        productionStage: transitionTo === 'delegacao' ? 'delegacao' : prev.productionStage
+        productionStage: transitionTo === 'prePeticionamentoIa' ? 'prePeticionamentoIa' : (transitionTo === 'delegacao' ? 'delegacao' : prev.productionStage)
       }));
 
       if (showNotification) {
         setSuccess(`EDRP atualizado com sucesso no sistema. O status interno sugerido foi associado como: "${recommendedStatus}"`);
       }
 
-      if (transitionTo === 'delegacao') {
+      if (transitionTo === 'prePeticionamentoIa') {
+        navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/pre-peticionamento-ia`);
+      } else if (transitionTo === 'delegacao') {
         navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/delegacao`);
       } else if (transitionTo === 'home') {
         navigate('/boss-giffoni-clientes/fluxo-producao');
@@ -1173,10 +1177,10 @@ export default function EDRPFluxo() {
             <button
               type="button"
               disabled={saving}
-              onClick={() => handleSave(false, 'delegacao')}
+              onClick={() => handleSave(false, 'prePeticionamentoIa')}
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white px-8 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-md"
             >
-              <span>Salvar e Avançar para Delegação</span>
+              <span>Salvar e Avançar para Pré-Peticionamento com IA</span>
               <ArrowRight size={14} />
             </button>
           </div>

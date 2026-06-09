@@ -82,9 +82,11 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
           else if (s.id === 'solicitacoes-informacoes') shortLabel = 'Info. Complementares';
           else if (s.id === 'financeiro') shortLabel = 'Financeiro';
           else if (s.id === 'edrp') shortLabel = 'Estruturação (EDRP)';
+          else if (s.id === 'pre-peticionamento-ia') shortLabel = 'Pré-Peticionamento';
           else if (s.id === 'delegacao') shortLabel = 'Delegação';
           else if (s.id === 'revisao') shortLabel = 'Revisão';
           else if (s.id === 'protocolo') shortLabel = 'Protocolo';
+          else if (s.id === 'compliance') shortLabel = 'Compliance';
           else if (s.id === 'relatorio-integridade') shortLabel = 'Relatório de Integridade e Auditoria';
           else if (s.id === 'controladoria') shortLabel = 'Controladoria';
           else if (s.id === 'arquivamento') shortLabel = 'Arquivamento';
@@ -216,6 +218,11 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
       return caseObj.edrp ? 'complete' : 'uninitiated';
     }
 
+    if (stepId === 'pre-peticionamento-ia') {
+      if (!caseObj) return 'uninitiated';
+      return caseObj.prePeticionamentoText || caseObj.prePeticionamentoStatus === 'complete' ? 'complete' : 'uninitiated';
+    }
+
     if (stepId === 'delegacao') {
       if (!caseObj) return 'uninitiated';
       const isComplete = !!(caseObj.operatorId || caseObj.taskDescription || caseObj.delegationCompleted);
@@ -230,6 +237,11 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
     if (stepId === 'protocolo') {
       if (!caseObj) return 'uninitiated';
       return (caseObj.statusInterno === 'Protocolado' || caseObj.processNumber) ? 'complete' : 'uninitiated';
+    }
+
+    if (stepId === 'compliance') {
+      if (!caseObj) return 'uninitiated';
+      return caseObj.complianceApproved || caseObj.complianceStatus === 'complete' || caseObj.complianceStatus === 'aprovado' ? 'complete' : 'uninitiated';
     }
 
     if (stepId === 'relatorio-integridade') {
