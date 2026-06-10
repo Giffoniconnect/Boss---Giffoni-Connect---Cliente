@@ -467,6 +467,64 @@ export function buildDeclaracaoPobrezaPjPlaceholders(clientData: any, caseData: 
   };
 }
 
+export function buildClausulaSegunda(fin: any, caseData: any): string {
+  const tipoHonorario = fin?.tipoHonorario || caseData?.tipoHonorario || 'Honorários Fixos';
+  const honorarioExitoPercentual = fin?.honorarioExitoPercentual || caseData?.honorarioExitoPercentual || '30%';
+  const honorarioFixoValor = fin?.honorarioFixoValor || caseData?.honorarioFixoValor || '0,00';
+  const formaPagamento = fin?.formaPagamento || caseData?.formaPagamento || 'À vista';
+  const tipoRecebimento = fin?.tipoRecebimento || caseData?.tipoRecebimento || 'PIX';
+  const pixBanco = fin?.pixBanco || caseData?.pixBanco || 'Nubank';
+  const pixChave = fin?.pixChave || caseData?.pixChave || '';
+  const quantidadeParcelas = fin?.quantidadeParcelas || caseData?.quantidadeParcelas || '1';
+  const valorParcela = fin?.valorParcela || caseData?.valorParcela || '0,00';
+  const diaVencimento = fin?.diaVencimento || caseData?.diaVencimento || '10';
+  const valorEntrada = fin?.valorEntrada || caseData?.valorEntrada || '0,00';
+  const dataPrimeiroVencimento = fin?.dataPrimeiroVencimento || caseData?.dataPrimeiroVencimento || 'A combinar';
+
+  let descricaoFormaPagamento = '';
+  switch (tipoRecebimento) {
+    case 'Dinheiro':
+      descricaoFormaPagamento = 'pago em dinheiro, mediante recibo.';
+      break;
+    case 'PIX':
+      descricaoFormaPagamento = `pago mediante PIX para a conta de titularidade da PARTE CONTRATADA junto ao ${pixBanco}, chave PIX ${pixChave}.`;
+      break;
+    case 'Transferência Bancária':
+      descricaoFormaPagamento = 'pago mediante transferência bancária para conta indicada pela PARTE CONTRATADA.';
+      break;
+    case 'PagSeguro':
+      descricaoFormaPagamento = 'pago mediante link de pagamento emitido pela plataforma PagSeguro.';
+      break;
+    case 'InfinitePay':
+      descricaoFormaPagamento = 'pago mediante link de pagamento emitido pela plataforma InfinitePay.';
+      break;
+    case 'ASAAS':
+      descricaoFormaPagamento = 'pago mediante boleto, PIX ou link de pagamento emitido pela plataforma ASAAS.';
+      break;
+    case 'Stripe':
+      descricaoFormaPagamento = 'pago mediante link de pagamento emitido pela plataforma Stripe.';
+      break;
+    case 'Cartão de Crédito - Maquininha PagSeguro':
+      descricaoFormaPagamento = 'pago mediante cartão de crédito na maquininha da PagSeguro.';
+      break;
+    default:
+      descricaoFormaPagamento = 'pago conforme condições acordadas.';
+  }
+
+  if (tipoHonorario === 'Êxito') {
+    return `Cláusula Segunda: A título de honorários advocatícios, fica estabelecido o percentual de ${honorarioExitoPercentual} sobre o proveito econômico obtido pela PARTE CONTRATANTE, percentual este devido apenas em caso de êxito na demanda.`;
+  } else if (tipoHonorario === 'Honorários Fixos' && formaPagamento === 'À vista') {
+    return `Cláusula Segunda: A título de honorários advocatícios, fica estabelecido o valor total de R$ ${honorarioFixoValor}, a ser pago à vista, mediante ${descricaoFormaPagamento}`;
+  } else if (tipoHonorario === 'Honorários Fixos' && formaPagamento === 'Parcelado') {
+    return `Cláusula Segunda: A título de honorários advocatícios, fica estabelecido o valor total de R$ ${honorarioFixoValor}, que será pago em ${quantidadeParcelas} parcelas mensais e sucessivas de R$ ${valorParcela}, vencendo-se a primeira em ${dataPrimeiroVencimento} e as demais todo dia ${diaVencimento} dos meses subsequentes, mediante ${descricaoFormaPagamento}`;
+  } else if (tipoHonorario === 'Honorários Fixos' && formaPagamento === 'Entrada + Parcelado') {
+    return `Cláusula Segunda: A título de honorários advocatícios, fica estabelecido o valor total de R$ ${honorarioFixoValor}, sendo R$ ${valorEntrada} pagos a título de entrada e o saldo remanescente dividido em ${quantidadeParcelas} parcelas mensais e sucessivas de R$ ${valorParcela}, vencendo-se a primeira em ${dataPrimeiroVencimento} e as demais todo dia ${diaVencimento} dos meses subsequentes, mediante ${descricaoFormaPagamento}`;
+  } else if (tipoHonorario === 'Misto (Fixo + Êxito)') {
+    return `Cláusula Segunda: A título de honorários advocatícios, fica estabelecido o valor fixo de R$ ${honorarioFixoValor}, pago mediante ${descricaoFormaPagamento}, bem como o percentual de ${honorarioExitoPercentual} sobre o proveito econômico obtido pela PARTE CONTRATANTE em caso de êxito na demanda.`;
+  }
+  return '';
+}
+
 export function buildContratoHonorariosPfPlaceholders(clientData: any, caseData: any, financialData?: any): Record<string, string> {
   const global = buildGlobalPlaceholders();
   const client = buildClientCommonPlaceholders(clientData);
@@ -481,16 +539,18 @@ export function buildContratoHonorariosPfPlaceholders(clientData: any, caseData:
   const year = now.getFullYear();
   const dataAssinaturaFormated = `${day}/${month}/${year}`;
 
+  const cl2 = buildClausulaSegunda(fin, caseData);
+
   return {
     ...global,
     ...client,
     ...casePls,
-    "{{TIPO_SERVICO}}": fin?.tipoServico || caseData?.tipoServico || "Serviço de Assessoria Jurídica",
-    "{{FORMA_COBRANCA}}": fin?.formaCobranca || "Parcelado",
-    "{{VALOR_HONORARIOS}}": fin?.valorTotal || fin?.valorHonorarios || "A combinar",
-    "{{ENTRADA}}": fin?.entrada || "Não aplicável",
-    "{{PARCELAS}}": fin?.parcelas || "1",
-    "{{VENCIMENTO}}": fin?.vencimento || fin?.vencimentoPrimeiraParcela || "A vencer",
+    "{{TIPO_SERVICO}}": fin?.tipoServicoContratado || fin?.tipoServico || caseData?.tipoServicoContratado || caseData?.tipoServico || "Serviço de Assessoria Jurídica",
+    "{{FORMA_COBRANCA}}": fin?.formaPagamento || fin?.formaCobranca || "Parcelado",
+    "{{VALOR_HONORARIOS}}": fin?.honorarioFixoValor || fin?.valorTotal || fin?.valorHonorarios || "A combinar",
+    "{{ENTRADA}}": fin?.valorEntrada || fin?.entrada || "Não aplicável",
+    "{{PARCELAS}}": String(fin?.quantidadeParcelas || fin?.parcelas || "1"),
+    "{{VENCIMENTO}}": fin?.dataPrimeiroVencimento || fin?.vencimento || fin?.vencimentoPrimeiraParcela || "A vencer",
     "{{CLAUSULAS_ESPECIFICAS}}": fin?.clausulas || "Nenhuma cláusula especial cadastrada.",
 
     // OUTORGANTE MAPPINGS
@@ -513,12 +573,21 @@ export function buildContratoHonorariosPfPlaceholders(clientData: any, caseData:
 
     // NEW FINANCIAL PLACEHOLDERS
     "{{TIPO_SERVICO_CONTRATADO}}": fin?.tipoServicoContratado || caseData?.tipoServicoContratado || fin?.tipoServico || caseData?.tipoServico || "Serviços Advocatícios",
-    "{{HONORARIOS_PERCENTUAL}}": fin?.honorariosPercentual || caseData?.honorariosPercentual || "0%",
-    "{{HONORARIOS_VALOR_FIXO}}": fin?.honorariosValorFixo || caseData?.honorariosValorFixo || "0,00",
-    "{{BANCO_RECEBIMENTO}}": fin?.bancoRecebimento || caseData?.bancoRecebimento || "A combinar",
-    "{{AGENCIA_RECEBIMENTO}}": fin?.agenciaRecebimento || caseData?.agenciaRecebimento || "A combinar",
-    "{{CONTA_RECEBIMENTO}}": fin?.contaRecebimento || caseData?.contaRecebimento || "A combinar",
-    "{{PIX_RECEBIMENTO}}": fin?.pixRecebimento || caseData?.pixRecebimento || "A combinar",
+    "{{TIPO_HONORARIO}}": fin?.tipoHonorario || caseData?.tipoHonorario || "Honorários Fixos",
+    "{{HONORARIOS_PERCENTUAL}}": fin?.honorarioExitoPercentual || caseData?.honorarioExitoPercentual || "0%",
+    "{{HONORARIO_EXITO_PERCENTUAL}}": fin?.honorarioExitoPercentual || caseData?.honorarioExitoPercentual || "0%",
+    "{{HONORARIOS_VALOR_FIXO}}": fin?.honorarioFixoValor || caseData?.honorarioFixoValor || "0,00",
+    "{{HONORARIO_FIXO_VALOR}}": fin?.honorarioFixoValor || caseData?.honorarioFixoValor || "0,00",
+    "{{FORMA_PAGAMENTO}}": fin?.formaPagamento || caseData?.formaPagamento || "À vista",
+    "{{TIPO_RECEBIMENTO}}": fin?.tipoRecebimento || caseData?.tipoRecebimento || "PIX",
+    "{{PIX_BANCO}}": fin?.pixBanco || caseData?.pixBanco || "Nubank",
+    "{{PIX_CHAVE}}": fin?.pixChave || caseData?.pixChave || "",
+    "{{QUANTIDADE_PARCELAS}}": String(fin?.quantidadeParcelas || caseData?.quantidadeParcelas || "1"),
+    "{{VALOR_PARCELA}}": fin?.valorParcela || caseData?.valorParcela || "0,00",
+    "{{DIA_VENCIMENTO}}": fin?.diaVencimento || caseData?.diaVencimento || "10",
+    "{{VALOR_ENTRADA}}": fin?.valorEntrada || caseData?.valorEntrada || "0,00",
+    "{{DATA_PRIMEIRO_VENCIMENTO}}": fin?.dataPrimeiroVencimento || caseData?.dataPrimeiroVencimento || "A combinar",
+    "{{CLAUSULA_SEGUNDA}}": cl2,
 
     "{{DATA_ASSINATURA}}": dataAssinaturaFormated,
     "<<data da assinatura>>": dataAssinaturaFormated,
@@ -531,18 +600,37 @@ export function buildContratoHonorariosPjPlaceholders(clientData: any, caseData:
   const casePls = buildCaseCommonPlaceholders(caseData);
   
   const fin = financialData || caseData?.financeiro || {};
-  
+  const cl2 = buildClausulaSegunda(fin, caseData);
+
   return {
     ...global,
     ...client,
     ...casePls,
-    "{{TIPO_SERVICO}}": fin?.tipoServico || caseData?.tipoServico || "Serviço de Assessoria Jurídica Empresarial",
-    "{{FORMA_COBRANCA}}": fin?.formaCobranca || "Parcelado",
-    "{{VALOR_HONORARIOS}}": fin?.valorTotal || fin?.valorHonorarios || "A combinar",
-    "{{ENTRADA}}": fin?.entrada || "Não aplicável",
-    "{{PARCELAS}}": fin?.parcelas || "1",
-    "{{VENCIMENTO}}": fin?.vencimento || fin?.vencimentoPrimeiraParcela || "A vencer",
-    "{{CLAUSULAS_ESPECIFICAS}}": fin?.clausulas || "Nenhuma cláusula especial cadastrada."
+    "{{TIPO_SERVICO}}": fin?.tipoServicoContratado || fin?.tipoServico || caseData?.tipoServicoContratado || caseData?.tipoServico || "Serviço de Assessoria Jurídica Empresarial",
+    "{{FORMA_COBRANCA}}": fin?.formaPagamento || fin?.formaCobranca || "Parcelado",
+    "{{VALOR_HONORARIOS}}": fin?.honorarioFixoValor || fin?.valorTotal || fin?.valorHonorarios || "A combinar",
+    "{{ENTRADA}}": fin?.valorEntrada || fin?.entrada || "Não aplicável",
+    "{{PARCELAS}}": String(fin?.quantidadeParcelas || fin?.parcelas || "1"),
+    "{{VENCIMENTO}}": fin?.dataPrimeiroVencimento || fin?.vencimento || fin?.vencimentoPrimeiraParcela || "A vencer",
+    "{{CLAUSULAS_ESPECIFICAS}}": fin?.clausulas || "Nenhuma cláusula especial cadastrada.",
+
+    // NEW FINANCIAL PLACEHOLDERS
+    "{{TIPO_SERVICO_CONTRATADO}}": fin?.tipoServicoContratado || caseData?.tipoServicoContratado || "Serviços Advocatícios",
+    "{{TIPO_HONORARIO}}": fin?.tipoHonorario || caseData?.tipoHonorario || "Honorários Fixos",
+    "{{HONORARIOS_PERCENTUAL}}": fin?.honorarioExitoPercentual || caseData?.honorarioExitoPercentual || "0%",
+    "{{HONORARIO_EXITO_PERCENTUAL}}": fin?.honorarioExitoPercentual || caseData?.honorarioExitoPercentual || "0%",
+    "{{HONORARIOS_VALOR_FIXO}}": fin?.honorarioFixoValor || caseData?.honorarioFixoValor || "0,00",
+    "{{HONORARIO_FIXO_VALOR}}": fin?.honorarioFixoValor || caseData?.honorarioFixoValor || "0,00",
+    "{{FORMA_PAGAMENTO}}": fin?.formaPagamento || caseData?.formaPagamento || "À vista",
+    "{{TIPO_RECEBIMENTO}}": fin?.tipoRecebimento || caseData?.tipoRecebimento || "PIX",
+    "{{PIX_BANCO}}": fin?.pixBanco || caseData?.pixBanco || "Nubank",
+    "{{PIX_CHAVE}}": fin?.pixChave || caseData?.pixChave || "",
+    "{{QUANTIDADE_PARCELAS}}": String(fin?.quantidadeParcelas || caseData?.quantidadeParcelas || "1"),
+    "{{VALOR_PARCELA}}": fin?.valorParcela || caseData?.valorParcela || "0,00",
+    "{{DIA_VENCIMENTO}}": fin?.diaVencimento || caseData?.diaVencimento || "10",
+    "{{VALOR_ENTRADA}}": fin?.valorEntrada || caseData?.valorEntrada || "0,00",
+    "{{DATA_PRIMEIRO_VENCIMENTO}}": fin?.dataPrimeiroVencimento || caseData?.dataPrimeiroVencimento || "A combinar",
+    "{{CLAUSULA_SEGUNDA}}": cl2,
   };
 }
 
