@@ -1067,14 +1067,21 @@ async function createGoogleDocsJwtClient(req: any) {
   const googleAccessToken = req?.body?.googleAccessToken || req?.headers?.["x-google-access-token"] || req?.body?.credentialOverride?.googleAccessToken;
   
   if (googleAccessToken) {
-    const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({ access_token: googleAccessToken });
-    return {
-      jwtClient: oauth2Client,
-      serviceAccountEmail: "user-connected-via-oauth",
-      projectId: "oauth-user-project",
-      credentialSource: "user_oauth"
-    };
+    try {
+      const oauth2Client = new google.auth.OAuth2();
+      oauth2Client.setCredentials({ access_token: googleAccessToken });
+      // Validate the token to ensure it isn't expired
+      const tokenInfo = await oauth2Client.getTokenInfo(googleAccessToken);
+      console.log("[GoogleDocsEngine] Google OAuth token is active and valid. Scope:", tokenInfo.scopes);
+      return {
+        jwtClient: oauth2Client,
+        serviceAccountEmail: "user-connected-via-oauth",
+        projectId: "oauth-user-project",
+        credentialSource: "user_oauth"
+      };
+    } catch (tokenErr: any) {
+      console.warn("[GoogleDocsEngine] Passed Google OAuth token is invalid or expired. Gracefully falling back to Service Account. Error:", tokenErr.message);
+    }
   }
 
   const credentials = await getGoogleDocsCredentials(req);

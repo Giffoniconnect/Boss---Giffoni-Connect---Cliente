@@ -396,7 +396,8 @@ export function buildProcuracaoPfPlaceholders(clientData: any, caseData?: any): 
     "{{OUTORGANTE_FACEBOOK}}": getField(["pf_facebook"]) || "",
     "{{OUTORGANTE_TIKTOK}}": getField(["pf_tiktok"]) || "",
     "{{LOCAL_ASSINATURA}}": global["{{CIDADE_ASSINATURA}}"] || "Viçosa, MG",
-    "{{DATA_ASSINATURA}}": global["{{DATA_ATUAL}}"] || "",
+    "{{DATA_ASSINATURA}}": `${String(new Date().getDate()).padStart(2, '0')}/${String(new Date().getMonth() + 1).padStart(2, '0')}/${new Date().getFullYear()}`,
+    "<<data da assinatura>>": `${String(new Date().getDate()).padStart(2, '0')}/${String(new Date().getMonth() + 1).padStart(2, '0')}/${new Date().getFullYear()}`,
   };
 
   return {
@@ -423,12 +424,33 @@ export function buildDeclaracaoPobrezaPfPlaceholders(clientData: any, caseData: 
   const global = buildGlobalPlaceholders();
   const client = buildClientCommonPlaceholders(clientData);
   const casePls = buildCaseCommonPlaceholders(caseData);
+  const solved = resolvePfClientData(clientData);
   
   return {
     ...global,
     ...client,
     ...casePls,
-    "{{DECLARACAO_HIPOSSUFICIENCIA}}": "declaro, sob as penas da lei, que não possuo condições financeiras de arcar com as custas processuais e honorários advocatícios sem prejuízo do próprio sustento e de minha família."
+    "{{DECLARACAO_HIPOSSUFICIENCIA}}": "declaro, sob as penas da lei, que não possuo condições financeiras de arcar com as custas processuais e honorários advocatícios sem prejuízo do próprio sustento e de minha família.",
+
+    "{{OUTORGANTE_NOME}}": solved.nomeCompleto || client["{{NOME_COMPLETO}}"] || "",
+    "{{OUTORGANTE_NACIONALIDADE}}": solved.nacionalidade || client["{{NACIONALIDADE}}"] || "Brasileira",
+    "{{OUTORGANTE_ESTADO_CIVIL}}": solved.estadoCivil || client["{{ESTADO_CIVIL}}"] || "Solteiro(a)",
+    "{{OUTORGANTE_PROFISSAO}}": solved.profissao || client["{{PROFISSAO}}"] || "",
+    "{{OUTORGANTE_RG}}": solved.rg || client["{{RG}}"] || "",
+    "{{OUTORGANTE_CPF}}": solved.cpf || client["{{CPF}}"] || "",
+    "{{OUTORGANTE_ENDERECO}}": solved.endereco || client["{{ENDERECO_COMPLETO}}"] || "",
+    "{{OUTORGANTE_NUMERO}}": solved.numero || "",
+    "{{OUTORGANTE_COMPLEMENTO}}": solved.complemento || "",
+    "{{OUTORGANTE_BAIRRO}}": solved.bairro || "",
+    "{{OUTORGANTE_CIDADE}}": solved.cidade || "",
+    "{{OUTORGANTE_ESTADO}}": solved.estado || "",
+    "{{OUTORGANTE_CEP}}": solved.cep || "",
+    "{{OUTORGANTE_TELEFONE}}": solved.telefone || client["{{TELEFONE}}"] || "",
+    "{{OUTORGANTE_WHATSAPP}}": solved.whatsapp || client["{{WHATSAPP}}"] || "",
+    "{{OUTORGANTE_EMAIL}}": solved.email || client["{{EMAIL}}"] || "",
+    "{{LOCAL_ASSINATURA}}": global["{{CIDADE_ASSINATURA}}"] || "Viçosa, MG",
+    "{{DATA_ASSINATURA}}": `${String(new Date().getDate()).padStart(2, '0')}/${String(new Date().getMonth() + 1).padStart(2, '0')}/${new Date().getFullYear()}`,
+    "<<data da assinatura>>": `${String(new Date().getDate()).padStart(2, '0')}/${String(new Date().getMonth() + 1).padStart(2, '0')}/${new Date().getFullYear()}`,
   };
 }
 
@@ -449,9 +471,16 @@ export function buildContratoHonorariosPfPlaceholders(clientData: any, caseData:
   const global = buildGlobalPlaceholders();
   const client = buildClientCommonPlaceholders(clientData);
   const casePls = buildCaseCommonPlaceholders(caseData);
+  const solved = resolvePfClientData(clientData);
   
   const fin = financialData || caseData?.financeiro || {};
   
+  const now = new Date();
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = now.getFullYear();
+  const dataAssinaturaFormated = `${day}/${month}/${year}`;
+
   return {
     ...global,
     ...client,
@@ -462,7 +491,37 @@ export function buildContratoHonorariosPfPlaceholders(clientData: any, caseData:
     "{{ENTRADA}}": fin?.entrada || "Não aplicável",
     "{{PARCELAS}}": fin?.parcelas || "1",
     "{{VENCIMENTO}}": fin?.vencimento || fin?.vencimentoPrimeiraParcela || "A vencer",
-    "{{CLAUSULAS_ESPECIFICAS}}": fin?.clausulas || "Nenhuma cláusula especial cadastrada."
+    "{{CLAUSULAS_ESPECIFICAS}}": fin?.clausulas || "Nenhuma cláusula especial cadastrada.",
+
+    // OUTORGANTE MAPPINGS
+    "{{OUTORGANTE_NOME}}": solved.nomeCompleto || client["{{NOME_COMPLETO}}"] || "",
+    "{{OUTORGANTE_NACIONALIDADE}}": solved.nacionalidade || client["{{NACIONALIDADE}}"] || "Brasileira",
+    "{{OUTORGANTE_ESTADO_CIVIL}}": solved.estadoCivil || client["{{ESTADO_CIVIL}}"] || "Solteiro(a)",
+    "{{OUTORGANTE_PROFISSAO}}": solved.profissao || client["{{PROFISSAO}}"] || "",
+    "{{OUTORGANTE_RG}}": solved.rg || client["{{RG}}"] || "",
+    "{{OUTORGANTE_CPF}}": solved.cpf || client["{{CPF}}"] || "",
+    "{{OUTORGANTE_ENDERECO}}": solved.endereco || client["{{ENDERECO_COMPLETO}}"] || "",
+    "{{OUTORGANTE_NUMERO}}": solved.numero || "",
+    "{{OUTORGANTE_COMPLEMENTO}}": solved.complemento || "",
+    "{{OUTORGANTE_BAIRRO}}": solved.bairro || "",
+    "{{OUTORGANTE_CIDADE}}": solved.cidade || "",
+    "{{OUTORGANTE_ESTADO}}": solved.estado || "",
+    "{{OUTORGANTE_CEP}}": solved.cep || "",
+    "{{OUTORGANTE_TELEFONE}}": solved.telefone || client["{{TELEFONE}}"] || "",
+    "{{OUTORGANTE_WHATSAPP}}": solved.whatsapp || client["{{WHATSAPP}}"] || "",
+    "{{OUTORGANTE_EMAIL}}": solved.email || client["{{EMAIL}}"] || "",
+
+    // NEW FINANCIAL PLACEHOLDERS
+    "{{TIPO_SERVICO_CONTRATADO}}": fin?.tipoServicoContratado || caseData?.tipoServicoContratado || fin?.tipoServico || caseData?.tipoServico || "Serviços Advocatícios",
+    "{{HONORARIOS_PERCENTUAL}}": fin?.honorariosPercentual || caseData?.honorariosPercentual || "0%",
+    "{{HONORARIOS_VALOR_FIXO}}": fin?.honorariosValorFixo || caseData?.honorariosValorFixo || "0,00",
+    "{{BANCO_RECEBIMENTO}}": fin?.bancoRecebimento || caseData?.bancoRecebimento || "A combinar",
+    "{{AGENCIA_RECEBIMENTO}}": fin?.agenciaRecebimento || caseData?.agenciaRecebimento || "A combinar",
+    "{{CONTA_RECEBIMENTO}}": fin?.contaRecebimento || caseData?.contaRecebimento || "A combinar",
+    "{{PIX_RECEBIMENTO}}": fin?.pixRecebimento || caseData?.pixRecebimento || "A combinar",
+
+    "{{DATA_ASSINATURA}}": dataAssinaturaFormated,
+    "<<data da assinatura>>": dataAssinaturaFormated,
   };
 }
 

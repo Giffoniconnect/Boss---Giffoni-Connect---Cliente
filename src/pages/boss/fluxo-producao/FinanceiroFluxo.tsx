@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, updateDoc, collection, addDoc, getDocs, query, where, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, setDoc, collection, addDoc, getDocs, query, where, deleteDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
+import { useAuth } from '../../../contexts/AuthContext';
+import { buildContratoHonorariosPfPlaceholders } from '../../../lib/documents/placeholderBuilders';
 import FluxoStepLayout from './components/FluxoStepLayout';
 import { 
   ArrowLeft, 
@@ -77,6 +79,7 @@ interface CaseFinancial {
 export default function FinanceiroFluxo() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
+  const { googleAccessToken } = useAuth();
 
   // Screen-level loading/saving state
   const [fetching, setFetching] = useState(true);
@@ -195,6 +198,389 @@ export default function FinanceiroFluxo() {
     const currentFiles = wizardState[field] || [];
     const updatedFiles = currentFiles.filter((_: any, i: number) => i !== index);
     saveWizardStateUpdate({ [field]: updatedFiles });
+  };
+
+  const [tipoServicoContratado, setTipoServicoContratado] = useState('');
+  const [honorariosPercentual, setHonorariosPercentual] = useState('');
+  const [honorariosValorFixo, setHonorariosValorFixo] = useState('');
+  const [bancoRecebimento, setBancoRecebimento] = useState('');
+  const [agenciaRecebimento, setAgenciaRecebimento] = useState('');
+  const [contaRecebimento, setContaRecebimento] = useState('');
+  const [pixRecebimento, setPixRecebimento] = useState('');
+
+  useEffect(() => {
+    if (caseObj) {
+      setTipoServicoContratado(
+        caseObj.tipoServicoContratado || 
+        caseObj.assunto || 
+        "Serviço de Assessoria Jurídica"
+      );
+      setHonorariosPercentual(caseObj.honorariosPercentual || "30%");
+      setFormTotalAmount(caseObj.honorariosValorFixo || String(caseObj.financeiro?.totalAmount || ''));
+      setHonorariosValorFixo(caseObj.honorariosValorFixo || "R$ 0,00");
+      setBancoRecebimento(
+        caseObj.bancoRecebimento || 
+        client?.bancario_bancoPix || 
+        "A combinar"
+      );
+      setAgenciaRecebimento(caseObj.agenciaRecebimento || "A combinar");
+      setContaRecebimento(caseObj.contaRecebimento || "A combinar");
+      setPixRecebimento(
+        caseObj.pixRecebimento || 
+        client?.bancario_chavePix || 
+        "A combinar"
+      );
+    }
+  }, [caseObj, client]);
+
+  const renderStatusBadge = () => {
+    const status = caseObj?.contratoHonorariosStatus;
+    if (status === 'gerando') {
+      return (
+        <span className="flex items-center gap-1 bg-amber-50 text-amber-700 px-2.5 py-1 rounded-full text-[10px] font-black border border-amber-200 uppercase">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
+          🟡 Gerando Documento
+        </span>
+      );
+    }
+    if (status === 'criada') {
+      return (
+        <span className="flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full text-[10px] font-black border border-emerald-200 uppercase">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          🟢 Documento Gerado
+        </span>
+      );
+    }
+    if (status === 'aberto') {
+      return (
+        <span className="flex items-center gap-1 bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full text-[10px] font-black border border-blue-200 uppercase">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+          🔵 Documento Aberto
+        </span>
+      );
+    }
+    if (status === 'falha') {
+      return (
+        <span className="flex items-center gap-1 bg-red-50 text-red-700 px-2.5 py-1 rounded-full text-[10px] font-black border border-red-200 uppercase">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+          🔴 Falha GDocs
+        </span>
+      );
+    }
+    return (
+      <span className="flex items-center gap-1 bg-gray-50 text-gray-750 px-2.5 py-1 rounded-full text-[10px] font-black border border-gray-200 uppercase">
+        <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+        🔴 Não Gerado
+      </span>
+    );
+  };
+
+  const handleGenerateContratoHonorariosPf = async () => {
+    const jobId = 'job_contr_pf_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    const jobLogs: any[] = [];
+    const addClientLog = (action: string, message: string) => {
+      jobLogs.push({
+        action,
+        timestamp: new Date().toISOString(),
+        message
+      });
+    };
+
+    addClientLog("CONTRATO_PF_BUTTON_CLICKED", "O operador clicou em 'Criar Contrato de Honorários' para iniciar o fluxo de automação.");
+
+    if (!caseId) {
+      setError("Erro de validação: ID do caso (caseId) está ausente.");
+      return;
+    }
+
+    if (!caseObj) {
+      setError("Erro de validação: Dados do caso não carregados do banco de dados.");
+      return;
+    }
+
+    const targetClientId = caseObj?.clientId || client?.id;
+    if (!targetClientId) {
+      setError("Erro de validação: ID do cliente (clientId) está ausente.");
+      return;
+    }
+
+    if (!client) {
+      setError("Erro de validação: Dados do cliente não carregados do banco de dados.");
+      return;
+    }
+
+    const clientType = client?.type || client?.clientType || "PF";
+    if (clientType !== "PF") {
+      setError("Esta automação é de uso exclusivo para cliente de tipo Pessoa Física (PF).");
+      return;
+    }
+
+    addClientLog("CONTRATO_PF_CLIENT_DATA_LOADED", "Dados cadastrais do cliente e do caso carregados com sucesso do banco.");
+
+    const resolvedNomeCompleto = (
+      client?.pfData?.pf_nomeCompleto ||
+      client?.pfDadosPessoais?.pf_nomeCompleto ||
+      client?.portalMirror?.pfDadosPessoais?.nomeCompleto ||
+      client?.nomeCompleto ||
+      client?.nome ||
+      client?.name ||
+      ""
+    ).trim();
+
+    if (!resolvedNomeCompleto) {
+      addClientLog("CONTRATO_PF_REQUIRED_PLACEHOLDER_EMPTY", "Nome completo do cliente não localizado.");
+      setError("Nome completo do cliente não localizado no cadastro PF. Verifique o campo pf_nomeCompleto na Etapa 1 — Cadastro do Cliente.");
+      return;
+    }
+
+    const clientDriveFolderId = (client?.googleDriveClientFolderId || client?.gdriveFolderId || caseObj?.gdriveFolderId || '').trim();
+    const clientDriveFolderUrl = (client?.googleDriveClientFolderUrl || client?.gdriveFolderUrl || caseObj?.gdriveFolderUrl || '').trim();
+    
+    const folderIsReal = !!(
+      clientDriveFolderId && 
+      !clientDriveFolderId.toLowerCase().includes('mock') && 
+      !clientDriveFolderId.toLowerCase().includes('fake') && 
+      !clientDriveFolderId.toLowerCase().includes('teste') && 
+      !clientDriveFolderId.toLowerCase().includes('undefined') && 
+      !clientDriveFolderId.toLowerCase().includes('null') && 
+      !clientDriveFolderId.toLowerCase().includes('xxxx')
+    );
+
+    if (!folderIsReal) {
+      setError("Não há pasta real do Google Drive vinculada ao cliente. Acesse a Etapa 1 — Cadastro do Cliente e execute primeiro a Automação Google Drive — Pasta do Cliente.");
+      return;
+    }
+
+    addClientLog("CONTRATO_PF_FOLDER_FOUND", `Pasta destino no Google Drive localizada com sucesso ID: ${clientDriveFolderId}`);
+
+    const officialTemplateId = "1GJZ6LSW_szLSAA8Z3iw9jt4Q6zy5k6EuuTNhR5ooJQQ";
+    addClientLog("CONTRATO_PF_OFFICIAL_TEMPLATE_SELECTED", `Template oficial de Contrato de Honorários PF selecionado unicamente como fonte da verdade: ${officialTemplateId}`);
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    const caseDocRef = doc(db, 'cases', caseId);
+    await updateDoc(caseDocRef, {
+      contratoHonorariosStatus: "gerando",
+      contratoHonorariosLogFalha: ""
+    });
+
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = now.getFullYear();
+    const dataAssinaturaFormated = `${day}/${month}/${year}`;
+
+    const updatedFinanceData = {
+      tipoServicoContratado,
+      honorariosPercentual,
+      honorariosValorFixo,
+      bancoRecebimento,
+      agenciaRecebimento,
+      contaRecebimento,
+      pixRecebimento
+    };
+
+    await updateDoc(caseDocRef, updatedFinanceData);
+
+    let placeholders: Record<string, string>;
+    try {
+      const mockFin = { ...caseObj?.financeiro, ...updatedFinanceData };
+      placeholders = buildContratoHonorariosPfPlaceholders(client, { ...caseObj, ...updatedFinanceData }, mockFin);
+      
+      placeholders["{{DATA_ASSINATURA}}"] = dataAssinaturaFormated;
+      placeholders["<<data da assinatura>>"] = dataAssinaturaFormated;
+
+      addClientLog("CONTRATO_PF_PLACEHOLDERS_BUILT", "Todas as chaves e valores de placeholders foram processados e vinculados com sucesso.");
+    } catch (errPl: any) {
+      setError(`Erro ao construir placeholders: ${errPl.message}`);
+      setSaving(false);
+      await updateDoc(caseDocRef, {
+        contratoHonorariosStatus: "falha",
+        contratoHonorariosLogFalha: `Erro placeholders: ${errPl.message}`
+      });
+      return;
+    }
+
+    const currentGoogleAccessToken = googleAccessToken || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken') || '';
+    const localOverride = localStorage.getItem('portal_boss_gdocs_override') || '';
+
+    if (!currentGoogleAccessToken && !localOverride) {
+      setError("Faça login novamente com Google para autorizar Google Docs/Drive ou configure a Service Account na Central de Integrações.");
+      setSaving(false);
+      await updateDoc(caseDocRef, {
+        contratoHonorariosStatus: "falha",
+        contratoHonorariosLogFalha: "Falta Google Access Token"
+      });
+      return;
+    }
+
+    const initialJob = {
+      id: jobId,
+      contractVersion: "boss.placeholders.v1",
+      source: "Portal BOSS Clientes",
+      target: "Internal Generator Engine",
+      documentType: "contrato_honorarios_pf",
+      templateKey: "contrato_honorarios_pf",
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      caseId: caseId,
+      portalClientId: targetClientId,
+      clientType: "PF",
+      destinationFolderId: clientDriveFolderId,
+      destinationFolderUrl: clientDriveFolderUrl,
+      outputFileName: `Contrato de Honorários - ${resolvedNomeCompleto}`,
+      placeholders,
+      result: {
+        googleDocsId: null,
+        googleDocsUrl: null,
+        fileName: null
+      },
+      errorCode: null,
+      errorMessage: null,
+      logs: jobLogs
+    };
+
+    await setDoc(doc(db, 'googleDocsJobs', jobId), initialJob);
+
+    try {
+      const response = await fetch("/api/google-docs/generate-document", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "stateless",
+          googleAccessToken: currentGoogleAccessToken,
+          documentType: "contrato_honorarios_pf",
+          templateKey: "contrato_honorarios_pf",
+          templateId: officialTemplateId,
+          caseId,
+          clientId: targetClientId,
+          clientType: "PF",
+          destinationFolderId: clientDriveFolderId,
+          destinationFolderUrl: clientDriveFolderUrl,
+          documentName: `Contrato de Honorários - ${resolvedNomeCompleto}`,
+          placeholders,
+          metadata: {
+            source: "Portal BOSS - Contrato PF",
+            originRoute: `/boss-giffoni-clientes/fluxo-producao/${caseId}/financeiro`,
+            folderSource: "Automação Google Drive — Pasta do Cliente",
+            clientDataSource: "clients/{clientId}.pfData / clients/{clientId}.pfDadosPessoais"
+          },
+          credentialOverride: localOverride
+        })
+      });
+
+      const responseText = await response.text();
+      let responseData: any;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = { error: responseText };
+      }
+
+      if (!response.ok || !responseData.success) {
+        throw {
+          message: responseData.errorMessage || responseData.error || responseText || "Falha na geração integrada.",
+          errorCode: responseData.errorCode || "CONTRATO_PF_TEMPLATE_COPY_FAILED"
+        };
+      }
+
+      const googleDocsId = responseData.googleDocsId;
+      const googleDocsUrl = responseData.googleDocsUrl;
+
+      addClientLog("CONTRATO_PF_TEMPLATE_COPY_SUCCESS", `Clone realizado no Google Drive com o novo ID de documento: ${googleDocsId}`);
+      addClientLog("CONTRATO_PF_PLACEHOLDER_REPLACEMENT_SUCCESS", "Substituição concluída de todos os placeholders com absoluto sucesso.");
+      addClientLog("CONTRATO_PF_FLOW_COMPLETED", "Processamento terminado com 100% de conformidade operacional.");
+
+      const generatedAtISO = new Date().toISOString();
+
+      await updateDoc(caseDocRef, {
+        contratoHonorariosStatus: "criada",
+        contratoHonorariosPfId: googleDocsId,
+        contratoHonorariosPfUrl: googleDocsUrl,
+        contratoHonorariosGoogleDocsId: googleDocsId,
+        contratoHonorariosGoogleDocsUrl: googleDocsUrl,
+        contratoHonorariosGeneratedAt: generatedAtISO,
+        contratoHonorariosDestinationFolderId: clientDriveFolderId,
+        contratoHonorariosDestinationFolderUrl: clientDriveFolderUrl,
+        contratoHonorariosGoogleDocsJobId: jobId,
+        contratoHonorariosGoogleDocsJobLogs: jobLogs,
+        contratoHonorariosLogFalha: ""
+      });
+
+      try {
+        const subdocRef = doc(db, 'cases', caseId, 'generatedDocuments', 'contrato_honorarios_pf');
+        await setDoc(subdocRef, {
+          documentType: "contrato_honorarios_pf",
+          displayName: `Contrato de Honorários PF - ${resolvedNomeCompleto}`,
+          templateKey: "contrato_honorarios_pf",
+          templateId: officialTemplateId,
+          googleDocsId,
+          googleDocsUrl,
+          destinationFolderId: clientDriveFolderId,
+          destinationFolderUrl: clientDriveFolderUrl,
+          status: "success",
+          generatedAt: generatedAtISO,
+          generatedBy: "Portal BOSS Central Interna (Stateless)",
+          errorCode: null,
+          errorMessage: null,
+          logs: jobLogs
+        }, { merge: true });
+      } catch (errSub: any) {
+        console.warn("[PortalBoss] Subcollection write failed", errSub.message);
+      }
+
+      await updateDoc(doc(db, 'googleDocsJobs', jobId), {
+        status: "success",
+        updatedAt: new Date().toISOString(),
+        result: {
+          googleDocsId,
+          googleDocsUrl,
+          fileName: `Contrato de Honorários - ${resolvedNomeCompleto}`
+        },
+        logs: jobLogs
+      });
+
+      setSuccess("Contrato de Honorários PF de Geração Real gerado com sucesso!");
+      setRefreshToggle(prev => prev + 1);
+
+    } catch (err: any) {
+      console.error(err);
+      const errMsg = err.message || JSON.stringify(err);
+      setError(`Erro na geração: ${errMsg}`);
+      
+      await updateDoc(caseDocRef, {
+        contratoHonorariosStatus: "falha",
+        contratoHonorariosLogFalha: errMsg
+      });
+
+      await updateDoc(doc(db, 'googleDocsJobs', jobId), {
+        status: "failed",
+        updatedAt: new Date().toISOString(),
+        errorCode: err.errorCode || "CONTRATO_PF_GENERATION_FAILED",
+        errorMessage: errMsg,
+        logs: jobLogs
+      });
+      setRefreshToggle(prev => prev + 1);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleOpenContrato = async (url: string) => {
+    if (!url) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    try {
+      const caseDocRef = doc(db, 'cases', caseId!);
+      await updateDoc(caseDocRef, {
+        contratoHonorariosStatus: 'aberto'
+      });
+      setRefreshToggle(prev => prev + 1);
+    } catch (err) {
+      console.error('Error updating status to aberto:', err);
+    }
   };
 
   const triggerSimulation = async (
@@ -757,71 +1143,197 @@ export default function FinanceiroFluxo() {
                   
                   {/* Google Docs - Automação - Criar Contrato de Honorários da Pessoa Física Card */}
                   <div className="space-y-4 bg-white border border-gray-150 rounded-2xl p-5 shadow-3xs">
-                    <h4 className="text-xs font-black uppercase text-indigo-950 tracking-wider flex items-center gap-1.5">
-                      <FileCheck2 size={16} className="text-indigo-600 animate-pulse" /> Google Docs - Automação - Criar Contrato de Honorários da Pessoa Física
-                    </h4>
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-gray-100">
+                      <h4 className="text-xs font-black uppercase text-indigo-950 tracking-wider flex items-center gap-1.5">
+                        <FileCheck2 size={16} className="text-indigo-600 animate-pulse" /> Google Docs - Automação - Criar Contrato de Honorários da Pessoa Física
+                      </h4>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black uppercase text-gray-400 font-mono">STATUS:</span>
+                        {renderStatusBadge()}
+                      </div>
+                    </div>
                     
                     <div className="text-xs space-y-2.5 leading-relaxed text-gray-650 font-semibold">
                       <p>
-                        Esta etapa integra diretamente com o Google Drive e o Google Docs para geração automatizada da minuta contratual baseada nas informações do cadastro da pessoa jurídica/física e nos dados financeiros configurados abaixo.
+                        Esta etapa integra diretamente com o Google Drive e o Google Docs para geração real e automatizada da minuta de honorários baseada no cadastro de dados do cliente PF e nos placeholders customizados de faturamento abaixo.
                       </p>
 
-                      <div className="p-3.5 bg-gray-50 border border-gray-150 rounded-xl space-y-2">
-                        <div className="text-[10px] font-black uppercase text-gray-400 font-mono">STATUS DO DOCUMENTO</div>
-                        <div className="flex items-center gap-2 font-black text-xs">
-                          {caseObj.contratoHonorariosStatus === 'criada' ? (
-                            <>
-                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                              <span className="text-emerald-700">Documento Ativo no Google Docs</span>
-                            </>
-                          ) : caseObj.contratoHonorariosStatus === 'falha' ? (
-                            <>
-                              <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
-                              <span className="text-red-700">Falha na Automação GDocs</span>
-                            </>
-                          ) : (
-                            <>
-                              <span className="w-2.5 h-2.5 rounded-full bg-gray-400"></span>
-                              <span className="text-gray-500">Aguardando Execução GDocs</span>
-                            </>
-                          )}
+                      {caseObj?.contratoHonorariosLogFalha && (
+                        <div className="p-3 border border-rose-105 bg-rose-50/50 rounded-xl text-[11px] text-rose-750 font-medium">
+                          ⚠️ Falha na última tentativa: <code className="font-mono text-[10px] bg-white px-1 py-0.5 rounded border border-rose-100">{caseObj.contratoHonorariosLogFalha}</code>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* CONFIGURATION INPUT FIELDS */}
+                    <div className="p-4 bg-gray-50/50 border border-gray-200 rounded-2xl space-y-4 mt-2">
+                      <div className="border-b border-gray-100 pb-1.5 flex justify-between items-center">
+                        <div>
+                          <span className="text-[10px] font-black uppercase text-indigo-650 font-mono block">CONFIGURAÇÃO DE PLACEHOLDERS DE HONORÁRIOS</span>
+                          <span className="text-[9px] text-gray-400 font-bold">Esses valores serão preenchidos automaticamente na minuta oficial.</span>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                        <div className="space-y-1 md:col-span-2">
+                          <label className="text-[9px] font-black uppercase text-gray-500 tracking-wider font-mono">Duração / Objeto do Serviço ({"{{TIPO_SERVICO_CONTRATADO}}"})</label>
+                          <input
+                            type="text"
+                            value={tipoServicoContratado}
+                            onChange={(e) => setTipoServicoContratado(e.target.value)}
+                            placeholder="Serviço de Assessoria Jurídica e Patrocínio de Ação Ordinária"
+                            className="w-full px-3 py-2 bg-white border border-gray-200 hover:border-gray-300 focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                          />
                         </div>
 
-                        {caseObj.contratoHonorariosGoogleDocsUrl && (
-                          <a 
-                            href={caseObj.contratoHonorariosGoogleDocsUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="mt-2 text-indigo-600 hover:text-indigo-800 font-bold block underline flex items-center gap-1 text-[11px]"
-                          >
-                            <ExternalLink size={12} /> Abrir Minuta no Google Docs
-                          </a>
-                        )}
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black uppercase text-gray-500 tracking-wider font-mono">Percentual Honorários ({"{{HONORARIOS_PERCENTUAL}}"})</label>
+                          <input
+                            type="text"
+                            value={honorariosPercentual}
+                            onChange={(e) => setHonorariosPercentual(e.target.value)}
+                            placeholder="Ex: 30% ou 20%"
+                            className="w-full px-3 py-2 bg-white border border-gray-200 hover:border-gray-300 focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                          />
+                        </div>
 
-                        {caseObj.contratoHonorariosLogFalha && (
-                          <div className="p-2 border border-red-105 bg-red-50/50 rounded-lg text-[10px] text-red-650 font-mono">
-                            Erro retornado: {caseObj.contratoHonorariosLogFalha}
-                          </div>
-                        )}
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black uppercase text-gray-500 tracking-wider font-mono">Honorários Valor Fixo ({"{{HONORARIOS_VALOR_FIXO}}"})</label>
+                          <input
+                            type="text"
+                            value={honorariosValorFixo}
+                            onChange={(e) => setHonorariosValorFixo(e.target.value)}
+                            placeholder="Ex: R$ 3.500,00"
+                            className="w-full px-3 py-2 bg-white border border-gray-200 hover:border-gray-300 focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black uppercase text-gray-500 tracking-wider font-mono">Banco Recebimento ({"{{BANCO_RECEBIMENTO}}"})</label>
+                          <input
+                            type="text"
+                            value={bancoRecebimento}
+                            onChange={(e) => setBancoRecebimento(e.target.value)}
+                            placeholder="Ex: Banco Itaú UNIBANCO"
+                            className="w-full px-3 py-2 bg-white border border-gray-200 hover:border-gray-300 focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black uppercase text-gray-500 tracking-wider font-mono">Agência ({"{{AGENCIA_RECEBIMENTO}}"})</label>
+                          <input
+                            type="text"
+                            value={agenciaRecebimento}
+                            onChange={(e) => setAgenciaRecebimento(e.target.value)}
+                            placeholder="Ex: 0001"
+                            className="w-full px-3 py-2 bg-white border border-gray-200 hover:border-gray-300 focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black uppercase text-gray-500 tracking-wider font-mono">Conta Corrente ({"{{CONTA_RECEBIMENTO}}"})</label>
+                          <input
+                            type="text"
+                            value={contaRecebimento}
+                            onChange={(e) => setContaRecebimento(e.target.value)}
+                            placeholder="Ex: 123456-7"
+                            className="w-full px-3 py-2 bg-white border border-gray-200 hover:border-gray-300 focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black uppercase text-gray-500 tracking-wider font-mono">Chave PIX ({"{{PIX_RECEBIMENTO}}"})</label>
+                          <input
+                            type="text"
+                            value={pixRecebimento}
+                            onChange={(e) => setPixRecebimento(e.target.value)}
+                            placeholder="Ex: 12.345.678/0001-99 ou pix@giffoni.com"
+                            className="w-full px-3 py-2 bg-white border border-gray-200 hover:border-gray-300 focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                          />
+                        </div>
                       </div>
                     </div>
 
-                    <div className="pt-2 border-t border-gray-150 flex flex-wrap gap-2">
+                    {/* CARD DE RESULTADO PARA OPERAÇÃO BEM SUCEDIDA */}
+                    {caseObj?.contratoHonorariosGoogleDocsUrl && (
+                      <div className="p-4 bg-emerald-50/20 border border-emerald-150 rounded-2xl space-y-3.5 mt-3 animate-in fade-in duration-300">
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <span className="text-[10px] font-black uppercase text-emerald-600 block font-mono">Documento</span>
+                            <span className="font-extrabold text-gray-800">Contrato de Honorários PF</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-black uppercase text-emerald-600 block font-mono">Data da Geração</span>
+                            <span className="font-extrabold text-gray-850">
+                              {caseObj.contratoHonorariosGeneratedAt 
+                                ? new Date(caseObj.contratoHonorariosGeneratedAt).toLocaleDateString('pt-BR', {
+                                    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                                  })
+                                : 'Gerado recentemente'}
+                            </span>
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-[10px] font-black uppercase text-emerald-600 block font-mono">Nome do arquivo</span>
+                            <span className="font-bold text-gray-800 font-mono tracking-tight bg-white px-2 py-1 border border-emerald-100 rounded-lg block truncate max-w-full">
+                              Contrato de Honorários - {clientName}
+                            </span>
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-[10px] font-black uppercase text-emerald-600 block font-mono">Google Docs URL</span>
+                            <a 
+                              href={caseObj.contratoHonorariosGoogleDocsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-indigo-650 font-bold hover:underline font-mono truncate block text-[11px]"
+                            >
+                              {caseObj.contratoHonorariosGoogleDocsUrl}
+                            </a>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 pt-2 border-t border-emerald-100">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenContrato(caseObj.contratoHonorariosGoogleDocsUrl)}
+                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                          >
+                            <ExternalLink size={13} />
+                            Abrir Contrato
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={handleGenerateContratoHonorariosPf}
+                            className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 font-black text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                          >
+                            {saving ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={12} />}
+                            Gerar Novamente
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {!caseObj?.contratoHonorariosGoogleDocsUrl && (
                       <button 
                         type="button" 
-                        onClick={() => triggerSimulation('Contrato de Honorários', 'criada')} 
-                        className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase cursor-pointer"
+                        disabled={saving}
+                        onClick={handleGenerateContratoHonorariosPf}
+                        className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-black uppercase tracking-wider text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition shadow-xs"
                       >
-                        Simular Sucesso (GDocs)
+                        {saving ? (
+                          <>
+                            <Loader2 size={15} className="animate-spin" />
+                            Gerdando contrato real no GDocs...
+                          </>
+                        ) : (
+                          <>
+                            <FileCheck2 size={16} />
+                            Criar Contrato de Honorários
+                          </>
+                        )}
                       </button>
-                      <button 
-                        type="button" 
-                        onClick={() => triggerSimulation('Contrato de Honorários', 'falha')} 
-                        className="bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase cursor-pointer"
-                      >
-                        Simular Falha
-                      </button>
-                    </div>
+                    )}
                   </div>
 
                   {/* CHECKLIST E PERGUNTAS */}

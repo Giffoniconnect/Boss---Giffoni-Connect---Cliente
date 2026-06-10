@@ -600,8 +600,19 @@ export default function ProcuracaoPF() {
     let placeholders: Record<string, string>;
     try {
       placeholders = buildProcuracaoPfPlaceholders(client);
+
+      // Gerar data da assinatura com base no clique real (DD/MM/AAAA)
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      const dataAssinaturaFormated = `${day}/${month}/${year}`;
+      
+      placeholders["{{DATA_ASSINATURA}}"] = dataAssinaturaFormated;
+      placeholders["<<data da assinatura>>"] = dataAssinaturaFormated;
+
       // Step 5: PROC_PF_PLACEHOLDERS_BUILT
-      addClientLog("PROC_PF_PLACEHOLDERS_BUILT", "Todas as chaves e valores de placeholders foram processados e vinculados com sucesso.");
+      addClientLog("PROC_PF_PLACEHOLDERS_BUILT", "Todas as chaves e valores de placeholders foram processados e vinculados com sucesso com a data da assinatura gerada no clique.");
     } catch (err: any) {
       setError(err.message || "Erro ao calcular placeholders.");
       setShowGenerationError(true);
