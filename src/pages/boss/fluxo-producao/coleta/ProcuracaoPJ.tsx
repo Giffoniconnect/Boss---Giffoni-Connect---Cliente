@@ -141,7 +141,7 @@ export default function ProcuracaoPJ() {
                         onChange={() => saveWizardStateUpdate({ q1_1: o })} 
                         className="text-indigo-600"
                       />
-                      <span>{o}</span>
+                      <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                     </label>
                   ))}
                 </div>
@@ -176,7 +176,7 @@ export default function ProcuracaoPJ() {
                               checked={wizardState.q1_3 === o} 
                               onChange={() => saveWizardStateUpdate({ q1_3: o })} 
                             />
-                            <span>{o}</span>
+                            <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                           </label>
                         ))}
                       </div>
@@ -195,7 +195,7 @@ export default function ProcuracaoPJ() {
                               checked={wizardState.q1_4 === o} 
                               onChange={() => saveWizardStateUpdate({ q1_4: o })} 
                             />
-                            <span>{o}</span>
+                            <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                           </label>
                         ))}
                       </div>
@@ -214,7 +214,7 @@ export default function ProcuracaoPJ() {
                               checked={wizardState.q1_5 === o} 
                               onChange={() => saveWizardStateUpdate({ q1_5: o })} 
                             />
-                            <span>{o}</span>
+                            <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                           </label>
                         ))}
                       </div>
@@ -233,7 +233,7 @@ export default function ProcuracaoPJ() {
                               checked={wizardState.q1_6 === o} 
                               onChange={() => saveWizardStateUpdate({ q1_6: o })} 
                             />
-                            <span>{o}</span>
+                            <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                           </label>
                         ))}
                       </div>

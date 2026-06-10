@@ -32,6 +32,8 @@ interface EvidenceRequest {
   updatedAt: string;
 }
 
+const formatSimNao = (o: string) => o === 'sim' ? 'sim ✅' : o === 'nao' ? 'não ❌' : o;
+
 export default function SolicitacoesProvas() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
@@ -51,9 +53,9 @@ export default function SolicitacoesProvas() {
   // Wizard state structure
   const [wizardState, setWizardState] = useState<any>({
     currentStep: 1,
-    q1_1: '', q1_2: [], q1_2_outro: '', q1_3: '', q1_4: '', q1_5: '', q1_6: '', procuracaoFiles: [],
-    q2_1: '', q2_2: '', q2_3: [], q2_3_outro: '', q2_4: '', q2_5: '', q2_6: '', q2_7: '', declaracaoFiles: [],
-    q3_1: '', q3_2: '', q3_2_outro: '', q3_3: [], q3_3_outro: '', q3_4: '', q3_5: '', q3_6: '', q3_7: '', q3_8: '', contratoFiles: [],
+    q1_1: 'nao', q1_2: [], q1_2_outro: '', q1_3: 'nao', q1_4: 'nao', q1_5: 'nao', q1_6: 'nao', procuracaoFiles: [],
+    q2_1: 'nao', q2_2: 'nao', q2_3: [], q2_3_outro: '', q2_4: 'nao', q2_5: 'nao', q2_6: 'nao', q2_7: 'nao', declaracaoFiles: [],
+    q3_1: 'nao', q3_2: '', q3_2_outro: '', q3_3: [], q3_3_outro: '', q3_4: 'nao', q3_5: 'nao', q3_6: 'nao', q3_7: 'nao', q3_8: 'nao', contratoFiles: [],
     q4_rg: '', q4_cpf: '', q4_residencia: '', q4_anexar_pf: '', rgFiles: [], cpfFiles: [], residenciaFiles: [],
     q4_cnpj: '', q4_contrato_social: '', q4_endereco_sede: '', q4_rg_socio: '', q4_cpf_socio: '', q4_residencia_socio: '', q4_anexar_pj: '',
     cnpjFiles: [], contratoSocialFiles: [], enderecoSedeFiles: [], rgSocioFiles: [], cpfSocioFiles: [], residenciaSocioFiles: [],
@@ -545,7 +547,7 @@ export default function SolicitacoesProvas() {
                             onChange={() => saveWizardStateUpdate({ q1_1: o })} 
                             className="text-indigo-600 rounded-full"
                           />
-                          <span>{o}</span>
+                          <span>{formatSimNao(o)}</span>
                         </label>
                       ))}
                     </div>
@@ -591,7 +593,7 @@ export default function SolicitacoesProvas() {
                                 checked={wizardState.q1_3 === o} 
                                 onChange={() => saveWizardStateUpdate({ q1_3: o })} 
                               />
-                              <span>{o}</span>
+                              <span>{formatSimNao(o)}</span>
                             </label>
                           ))}
                         </div>
@@ -608,7 +610,7 @@ export default function SolicitacoesProvas() {
                                 checked={wizardState.q1_4 === o} 
                                 onChange={() => saveWizardStateUpdate({ q1_4: o })} 
                               />
-                              <span>{o}</span>
+                              <span>{formatSimNao(o)}</span>
                             </label>
                           ))}
                         </div>
@@ -625,7 +627,7 @@ export default function SolicitacoesProvas() {
                                 checked={wizardState.q1_5 === o} 
                                 onChange={() => saveWizardStateUpdate({ q1_5: o })} 
                               />
-                              <span>{o}</span>
+                              <span>{formatSimNao(o)}</span>
                             </label>
                           ))}
                         </div>
@@ -642,7 +644,7 @@ export default function SolicitacoesProvas() {
                                 checked={wizardState.q1_6 === o} 
                                 onChange={() => saveWizardStateUpdate({ q1_6: o })} 
                               />
-                              <span>{o}</span>
+                              <span>{formatSimNao(o)}</span>
                             </label>
                           ))}
                         </div>
@@ -702,7 +704,7 @@ export default function SolicitacoesProvas() {
                             checked={wizardState.q2_1 === o} 
                             onChange={() => saveWizardStateUpdate({ q2_1: o })} 
                           />
-                          <span>{o}</span>
+                          <span>{formatSimNao(o)}</span>
                         </label>
                       ))}
                     </div>
@@ -727,7 +729,7 @@ export default function SolicitacoesProvas() {
                                 checked={wizardState.q2_2 === o} 
                                 onChange={() => saveWizardStateUpdate({ q2_2: o })} 
                               />
-                              <span>{o}</span>
+                              <span>{formatSimNao(o)}</span>
                             </label>
                           ))}
                         </div>
@@ -771,7 +773,7 @@ export default function SolicitacoesProvas() {
                                     checked={wizardState.q2_4 === o} 
                                     onChange={() => saveWizardStateUpdate({ q2_4: o })} 
                                   />
-                                  <span>{o}</span>
+                                  <span>{formatSimNao(o)}</span>
                                 </label>
                               ))}
                             </div>
@@ -783,7 +785,7 @@ export default function SolicitacoesProvas() {
                               {['sim', 'nao'].map(o => (
                                 <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-700">
                                   <input type="radio" checked={wizardState.q2_5 === o} onChange={() => saveWizardStateUpdate({ q2_5: o })} />
-                                  <span>{o}</span>
+                                  <span>{formatSimNao(o)}</span>
                                 </label>
                               ))}
                             </div>
@@ -795,7 +797,7 @@ export default function SolicitacoesProvas() {
                               {['sim', 'nao'].map(o => (
                                 <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-700">
                                   <input type="radio" checked={wizardState.q2_6 === o} onChange={() => saveWizardStateUpdate({ q2_6: o })} />
-                                  <span>{o}</span>
+                                  <span>{formatSimNao(o)}</span>
                                 </label>
                               ))}
                             </div>
@@ -807,7 +809,7 @@ export default function SolicitacoesProvas() {
                               {['sim', 'nao'].map(o => (
                                 <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-700">
                                   <input type="radio" checked={wizardState.q2_7 === o} onChange={() => saveWizardStateUpdate({ q2_7: o })} />
-                                  <span>{o}</span>
+                                  <span>{formatSimNao(o)}</span>
                                 </label>
                               ))}
                             </div>
@@ -866,7 +868,7 @@ export default function SolicitacoesProvas() {
                       {['sim', 'nao'].map(o => (
                         <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-700">
                           <input type="radio" checked={wizardState.q3_1 === o} onChange={() => saveWizardStateUpdate({ q3_1: o })} />
-                          <span>{o}</span>
+                          <span>{formatSimNao(o)}</span>
                         </label>
                       ))}
                     </div>
@@ -940,7 +942,7 @@ export default function SolicitacoesProvas() {
                               {['sim', 'nao'].map(o => (
                                 <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-700">
                                   <input type="radio" checked={wizardState[f] === o} onChange={() => saveWizardStateUpdate({ [f]: o })} />
-                                  <span>{o}</span>
+                                  <span>{formatSimNao(o)}</span>
                                 </label>
                               ))}
                             </div>
@@ -954,7 +956,7 @@ export default function SolicitacoesProvas() {
                           {['sim', 'nao'].map(o => (
                             <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-700">
                               <input type="radio" checked={wizardState.q3_8 === o} onChange={() => saveWizardStateUpdate({ q3_8: o })} />
-                              <span>{o}</span>
+                              <span>{formatSimNao(o)}</span>
                             </label>
                           ))}
                         </div>

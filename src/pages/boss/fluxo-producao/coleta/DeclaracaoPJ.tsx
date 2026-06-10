@@ -132,7 +132,7 @@ export default function DeclaracaoPJ() {
                         onChange={() => saveWizardStateUpdate({ q2_1: o })} 
                         className="text-indigo-600"
                       />
-                      <span>{o === 'sim' ? 'Sim (Exige Declaração/Balanço PJ)' : 'Não (Custas Pagas)'}</span>
+                      <span>{o === 'sim' ? 'Sim (Exige Declaração/Balanço PJ) ✅' : 'Não (Custas Pagas) ❌'}</span>
                     </label>
                   ))}
                 </div>
@@ -167,7 +167,7 @@ export default function DeclaracaoPJ() {
                             checked={wizardState.q2_2 === o} 
                             onChange={() => saveWizardStateUpdate({ q2_2: o })} 
                           />
-                          <span>{o}</span>
+                          <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                         </label>
                       ))}
                     </div>
@@ -201,7 +201,7 @@ export default function DeclaracaoPJ() {
                                   checked={wizardState.q2_4 === o} 
                                   onChange={() => saveWizardStateUpdate({ q2_4: o })} 
                                 />
-                                <span>{o}</span>
+                                <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                               </label>
                             ))}
                           </div>
@@ -220,7 +220,7 @@ export default function DeclaracaoPJ() {
                                   checked={wizardState.q2_5 === o} 
                                   onChange={() => saveWizardStateUpdate({ q2_5: o })} 
                                 />
-                                <span>{o}</span>
+                                <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                               </label>
                             ))}
                           </div>
@@ -239,7 +239,7 @@ export default function DeclaracaoPJ() {
                                   checked={wizardState.q2_6 === o} 
                                   onChange={() => saveWizardStateUpdate({ q2_6: o })} 
                                 />
-                                <span>{o}</span>
+                                <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                               </label>
                             ))}
                           </div>
@@ -258,7 +258,7 @@ export default function DeclaracaoPJ() {
                                   checked={wizardState.q2_7 === o} 
                                   onChange={() => saveWizardStateUpdate({ q2_7: o })} 
                                 />
-                                <span>{o}</span>
+                                <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                               </label>
                             ))}
                           </div>

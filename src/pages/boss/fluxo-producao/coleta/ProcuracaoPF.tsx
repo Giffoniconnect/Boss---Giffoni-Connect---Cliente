@@ -13,7 +13,21 @@ import { db } from '../../../../lib/firebase';
 import { useAuth } from '../../../../contexts/AuthContext';
 
 export default function ProcuracaoPF() {
-  const { googleAccessToken } = useAuth();
+  const { googleAccessToken, loginWithGoogle } = useAuth();
+  const [isRenewingGoogle, setIsRenewingGoogle] = React.useState(false);
+
+  const handleRenewGoogle = async () => {
+    setIsRenewingGoogle(true);
+    try {
+      await loginWithGoogle('boss_admin');
+      setSuccess("Autenticação Google renovada com sucesso! Você já pode gerar a procuração novamente.");
+    } catch (err: any) {
+      setError(`Falha ao renovar autenticação: ${err.message || err}`);
+    } finally {
+      setIsRenewingGoogle(false);
+    }
+  };
+
   const {
     caseId,
     fetching,
@@ -1160,21 +1174,42 @@ export default function ProcuracaoPF() {
                             </div>
 
                             {showGenerationError && activeJob && activeJob.status === 'failed' && activeJob.id === currentAttemptJobId && (
-                              <div className="p-3.5 bg-rose-50 border border-rose-150 rounded-xl flex items-start gap-2.5 text-xs animate-in duration-200 fade-in zoom-in-95">
-                                <AlertCircle size={15} className="text-rose-500 mt-0.5 shrink-0 animate-bounce" />
-                                <div>
-                                  <p className="font-extrabold text-rose-950 uppercase tracking-widest text-[9px] font-mono flex items-center gap-1.5 font-bold">
-                                    <span>Erro de Geração na Tentativa Atual</span>
-                                  </p>
-                                  <p className="text-rose-900 font-medium mt-1">
-                                    Ocorreu uma falha ao gerar a procuração. Por favor, verifique os dados cadastrais do cliente e tente novamente.
-                                  </p>
-                                  {activeJob.errorMessage && (
-                                    <pre className="mt-2 p-2 bg-slate-950 border border-slate-900 rounded-lg text-rose-450 font-mono text-[10px] overflow-auto max-h-32 whitespace-pre-wrap select-all">
-                                      {activeJob.errorMessage}
-                                    </pre>
-                                  )}
+                              <div className="p-3.5 bg-rose-50 border border-rose-150 rounded-xl flex items-start gap-2.5 text-xs animate-in duration-200 fade-in zoom-in-95 flex-col md:flex-row">
+                                <div className="flex gap-2.5 items-start">
+                                  <AlertCircle size={15} className="text-rose-500 mt-0.5 shrink-0 animate-bounce" />
+                                  <div>
+                                    <p className="font-extrabold text-rose-950 uppercase tracking-widest text-[9px] font-mono flex items-center gap-1.5 font-bold">
+                                      <span>Erro de Geração na Tentativa Atual</span>
+                                    </p>
+                                    <p className="text-rose-900 font-medium mt-1">
+                                      Ocorreu uma falha ao gerar a procuração. Por favor, verifique os dados cadastrais do cliente e tente novamente.
+                                    </p>
+                                    {activeJob.errorMessage && (
+                                      <pre className="mt-2 p-2 bg-slate-950 border border-slate-900 rounded-lg text-rose-450 font-mono text-[10px] overflow-auto max-h-32 whitespace-pre-wrap select-all">
+                                        {activeJob.errorMessage}
+                                      </pre>
+                                    )}
+                                  </div>
                                 </div>
+                                {activeJob.errorMessage && (activeJob.errorMessage.toLowerCase().includes("expirou") || 
+                                  activeJob.errorMessage.toLowerCase().includes("sessão") || 
+                                  activeJob.errorMessage.toLowerCase().includes("token") || 
+                                  activeJob.errorMessage.toLowerCase().includes("autorização") || 
+                                  activeJob.errorMessage.toLowerCase().includes("credentials")) && (
+                                  <div className="pt-2 w-full border-t border-rose-150/50 md:border-t-0 md:pt-0 md:pl-2.5 flex flex-col gap-1.5 self-center">
+                                    <button
+                                      type="button"
+                                      disabled={isRenewingGoogle}
+                                      onClick={handleRenewGoogle}
+                                      className="inline-flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-2 rounded-xl text-[9px] uppercase tracking-wider transition-all cursor-pointer shadow-xs disabled:opacity-50"
+                                    >
+                                      <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M21.35 11.1H12V12.9H19.6C18.9 16.5 15.8 18.9 12 18.9C8.1 18.9 5.0 15.8 5.0 12C5.0 8.2 8.1 5.1 12 5.1C13.7 5.1 15.3 5.7 16.5 6.8L18.4 4.9C16.7 3.2 14.5 2.1 12 2.1C6.5 2.1 2 6.6 2 12.1C2 17.6 6.5 22.1 12 22.1C17.5 22.1 22 17.6 22 12.1C22 11.7 21.9 11.4 21.35 11.1H21.35Z" fill="currentColor"/>
+                                      </svg>
+                                      <span>{isRenewingGoogle ? "Conectando..." : "Conectar Google"}</span>
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             )}
 
@@ -1193,13 +1228,37 @@ export default function ProcuracaoPF() {
                                 <p className="text-gray-650 font-medium leading-relaxed">
                                   Existe um registro histórico de falha de geração associado a este caso. Você pode tentar gerar novamente a qualquer momento com o botão acima.
                                 </p>
+                                
+                                {(currentCase.procuracaoLogFalha.toLowerCase().includes("expirou") || 
+                                  currentCase.procuracaoLogFalha.toLowerCase().includes("sessão") || 
+                                  currentCase.procuracaoLogFalha.toLowerCase().includes("token") || 
+                                  currentCase.procuracaoLogFalha.toLowerCase().includes("autorização") || 
+                                  currentCase.procuracaoLogFalha.toLowerCase().includes("credentials")) && (
+                                  <div className="pt-1.5 flex flex-wrap gap-2 items-center bg-rose-50 bg-opacity-40 p-2 border border-rose-100 rounded-xl">
+                                    <button
+                                      type="button"
+                                      disabled={isRenewingGoogle}
+                                      onClick={handleRenewGoogle}
+                                      className="inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold px-2.5 py-1.5 rounded-lg text-[9px] uppercase tracking-wider transition-all cursor-pointer shadow-3xs disabled:opacity-50"
+                                    >
+                                      <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M21.35 11.1H12V12.9H19.6C18.9 16.5 15.8 18.9 12 18.9C8.1 18.9 5.0 15.8 5.0 12C5.0 8.2 8.1 5.1 12 5.1C13.7 5.1 15.3 5.7 16.5 6.8L18.4 4.9C16.7 3.2 14.5 2.1 12 2.1C6.5 2.1 2 6.6 2 12.1C2 17.6 6.5 22.1 12 22.1C17.5 22.1 22 17.6 22 12.1C22 11.7 21.9 11.4 21.35 11.1H21.35Z" fill="currentColor"/>
+                                      </svg>
+                                      <span>{isRenewingGoogle ? "Conectando..." : "Fazer Login de novo com Google"}</span>
+                                    </button>
+                                    <span className="text-[9.5px] text-rose-700 font-extrabold font-mono">
+                                      CONEXÃO EXPIRADA
+                                    </span>
+                                  </div>
+                                )}
+
                                 <details className="group border border-gray-150 rounded-lg bg-white p-2">
                                   <summary className="font-bold text-gray-500 text-[9px] uppercase tracking-wider flex items-center justify-between cursor-pointer select-none">
                                     <span>Ver detalhes do log de erro</span>
                                     <span className="text-indigo-600 font-black group-open:hidden">Exibir</span>
                                     <span className="text-indigo-600 font-black hidden group-open:inline">Ocultar</span>
                                   </summary>
-                                  <pre className="mt-2 p-2 bg-slate-950 border border-slate-900 rounded-lg text-rose-400 font-mono text-[9px] overflow-auto max-h-36 whitespace-pre-wrap leading-tight select-all">
+                                  <pre className="mt-2 p-2 bg-slate-950 border border-slate-900 rounded-lg text-rose-450 font-mono text-[9px] overflow-auto max-h-36 whitespace-pre-wrap leading-tight select-all">
                                     {currentCase.procuracaoLogFalha}
                                   </pre>
                                 </details>
@@ -1225,7 +1284,7 @@ export default function ProcuracaoPF() {
                         onChange={() => saveWizardStateUpdate({ q1_1: o })} 
                         className="text-indigo-600"
                       />
-                      <span>{o}</span>
+                      <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                     </label>
                   ))}
                 </div>
@@ -1260,7 +1319,7 @@ export default function ProcuracaoPF() {
                               checked={wizardState.q1_3 === o} 
                               onChange={() => saveWizardStateUpdate({ q1_3: o })} 
                             />
-                            <span>{o}</span>
+                            <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                           </label>
                         ))}
                       </div>
@@ -1279,7 +1338,7 @@ export default function ProcuracaoPF() {
                               checked={wizardState.q1_4 === o} 
                               onChange={() => saveWizardStateUpdate({ q1_4: o })} 
                             />
-                            <span>{o}</span>
+                            <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                           </label>
                         ))}
                       </div>
@@ -1298,7 +1357,7 @@ export default function ProcuracaoPF() {
                               checked={wizardState.q1_5 === o} 
                               onChange={() => saveWizardStateUpdate({ q1_5: o })} 
                             />
-                            <span>{o}</span>
+                            <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                           </label>
                         ))}
                       </div>
@@ -1317,7 +1376,7 @@ export default function ProcuracaoPF() {
                               checked={wizardState.q1_6 === o} 
                               onChange={() => saveWizardStateUpdate({ q1_6: o })} 
                             />
-                            <span>{o}</span>
+                            <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                           </label>
                         ))}
                       </div>

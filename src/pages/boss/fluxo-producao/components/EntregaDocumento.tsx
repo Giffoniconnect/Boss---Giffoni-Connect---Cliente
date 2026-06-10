@@ -166,7 +166,7 @@ export default function EntregaDocumento({
       {/* Selector Badges/Toggles */}
       <div className="flex flex-wrap gap-2.5">
         {[
-          { key: 'fisica', label: 'Físico (em mãos)', color: 'border-slate-200 text-slate-800 hover:border-slate-300' },
+          {key: 'fisica', label: 'Física/Impressa', color: 'border-slate-200 text-slate-800 hover:border-slate-300'},
           { key: 'whatsapp', label: 'WhatsApp', color: 'border-emerald-200 text-emerald-800 hover:border-emerald-300' },
           { key: 'email', label: 'E-mail', color: 'border-blue-200 text-blue-800 hover:border-blue-300' },
           { key: 'outro', label: 'Outro', color: 'border-purple-200 text-purple-800 hover:border-purple-300' }

@@ -1066,6 +1066,9 @@ async function getGoogleDocsCredentials(req?: any) {
 async function createGoogleDocsJwtClient(req: any) {
   const googleAccessToken = req?.body?.googleAccessToken || req?.headers?.["x-google-access-token"] || req?.body?.credentialOverride?.googleAccessToken;
   
+  let tokenWasPassedAndExpired = false;
+  let tokenErrorMessage = "";
+
   if (googleAccessToken) {
     try {
       const oauth2Client = new google.auth.OAuth2();
@@ -1081,6 +1084,8 @@ async function createGoogleDocsJwtClient(req: any) {
       };
     } catch (tokenErr: any) {
       console.warn("[GoogleDocsEngine] Passed Google OAuth token is invalid or expired. Gracefully falling back to Service Account. Error:", tokenErr.message);
+      tokenWasPassedAndExpired = true;
+      tokenErrorMessage = tokenErr.message || "token_expired_or_invalid";
     }
   }
 
@@ -1092,7 +1097,12 @@ async function createGoogleDocsJwtClient(req: any) {
     const isAiStudioPreview = (host && (host.includes("ais-dev") || host.includes("ais-pre") || host.includes("localhost") || host.includes("127.0.0.1"))) || process.env.DISABLE_HMR === "true" || process.env.NODE_ENV !== "production";
 
     if (isAiStudioPreview) {
-      const err = new Error("Sua sessão do Google Docs não possui autorização fática ativa ou suas credenciais de Service Account estão ausentes. Para corrigir: \n1. Clique em 'Sair / trocar conta' e faça logon novamente usando 'Entrar com Google' para autorizar a integração e criar seu token ativo (Google OAuth);\nOU\n2. Cole as chaves JSON PEM de sua Conta de Serviço (Service Account) própria do seu projeto Google Cloud na Central de Integrações do BOSS.") as any;
+      if (tokenWasPassedAndExpired) {
+        const err = new Error(`Sua sessão do Google Docs expirou ou é inválida (${tokenErrorMessage}). Por favor, clique em 'Conectar com Google' ou 'Renovar Google Token' para reautorizar a integração de forma rápida em 1-clique sem sair do sistema.`) as any;
+        err.errorCode = "GOOGLE_DOCS_TOKEN_EXPIRED";
+        throw err;
+      }
+      const err = new Error("Sua sessão do Google Docs não possui autorização fática ativa ou suas credenciais de Service Account estão ausentes. Para corrigir: \n1. Clique em 'Conectar com Google' para autorizar a integração fática e criar seu token ativo (Google OAuth);\nOU\n2. Cole as chaves JSON PEM de sua Conta de Serviço (Service Account) própria do seu projeto Google Cloud na Central de Integrações do BOSS.") as any;
       err.errorCode = "GOOGLE_DOCS_CREDENTIALS_MISSING";
       throw err;
     }

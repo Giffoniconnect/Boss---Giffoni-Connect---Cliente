@@ -791,7 +791,7 @@ export default function ContratoHonorariosPF() {
                           onChange={() => saveWizardStateUpdate({ q3_1: o })} 
                           className="text-indigo-600"
                         />
-                        <span>{o}</span>
+                        <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                       </label>
                     ))}
                   </div>
@@ -859,7 +859,7 @@ export default function ContratoHonorariosPF() {
                                 checked={wizardState.q3_4 === o} 
                                 onChange={() => saveWizardStateUpdate({ q3_4: o })} 
                               />
-                              <span>{o}</span>
+                              <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                             </label>
                           ))}
                         </div>
@@ -879,7 +879,7 @@ export default function ContratoHonorariosPF() {
                                 checked={wizardState.q3_5 === o} 
                                 onChange={() => saveWizardStateUpdate({ q3_5: o })} 
                               />
-                              <span>{o}</span>
+                              <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                             </label>
                           ))}
                         </div>
@@ -899,7 +899,7 @@ export default function ContratoHonorariosPF() {
                                 checked={wizardState.q3_6 === o} 
                                 onChange={() => saveWizardStateUpdate({ q3_6: o })} 
                               />
-                              <span>{o}</span>
+                              <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                             </label>
                           ))}
                         </div>
@@ -919,7 +919,7 @@ export default function ContratoHonorariosPF() {
                                 checked={wizardState.q3_7 === o} 
                                 onChange={() => saveWizardStateUpdate({ q3_7: o })} 
                               />
-                              <span>{o === 'sim' ? 'Sim' : 'Não'}</span>
+                              <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                             </label>
                           ))}
                           {wizardState.q3_7 !== 'sim' && wizardState.q3_4 === 'sim' && (
@@ -952,7 +952,7 @@ export default function ContratoHonorariosPF() {
                                 checked={wizardState.q3_8 === o} 
                                 onChange={() => saveWizardStateUpdate({ q3_8: o })} 
                               />
-                              <span>{o}</span>
+                              <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                             </label>
                           ))}
                         </div>

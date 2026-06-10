@@ -1,24 +1,39 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, updateDoc, setDoc, collection, addDoc, getDocs, query, where, deleteDoc } from 'firebase/firestore';
-import { db } from '../../../lib/firebase';
-import { useAuth } from '../../../contexts/AuthContext';
-import { buildContratoHonorariosPfPlaceholders, buildContratoHonorariosPjPlaceholders } from '../../../lib/documents/placeholderBuilders';
-import FluxoStepLayout from './components/FluxoStepLayout';
-import { 
-  ArrowLeft, 
-  ArrowRight, 
-  Save, 
-  Info, 
-  Plus, 
-  Edit2, 
-  Check, 
-  AlertTriangle, 
-  Clock, 
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import {
+  doc,
+  getDoc,
+  updateDoc,
+  setDoc,
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
+  deleteDoc,
+} from "firebase/firestore";
+import { db } from "../../../lib/firebase";
+import { useAuth } from "../../../contexts/AuthContext";
+import {
+  buildContratoHonorariosPfPlaceholders,
+  buildContratoHonorariosPjPlaceholders,
+} from "../../../lib/documents/placeholderBuilders";
+import FluxoStepLayout from "./components/FluxoStepLayout";
+import EntregaDocumento from "./components/EntregaDocumento";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Save,
+  Info,
+  Plus,
+  Edit2,
+  Check,
+  AlertTriangle,
+  Clock,
   Calendar,
-  FileText, 
-  Loader2, 
-  AlertCircle, 
+  FileText,
+  Loader2,
+  AlertCircle,
   Archive,
   RefreshCw,
   CreditCard,
@@ -29,12 +44,13 @@ import {
   Trash2,
   FileCheck2,
   CheckCircle2,
+  TrendingUp,
   Eye,
   EyeOff,
   ChevronRight,
-  UploadCloud
-} from 'lucide-react';
-import { flowRoutes } from './utils/flowRoutes';
+  UploadCloud,
+} from "lucide-react";
+import { flowRoutes } from "./utils/flowRoutes";
 
 interface CaseFinancial {
   id?: string;
@@ -47,7 +63,16 @@ interface CaseFinancial {
   paymentMethod: string;
   installments: number;
   firstDueDate: string;
-  financialStatus: 'pendente' | 'aguardando_pagamento' | 'pago' | 'parcialmente_pago' | 'em_atraso' | 'cancelado' | 'renegociado' | 'aguardando_webhook' | 'erro_webhook';
+  financialStatus:
+    | "pendente"
+    | "aguardando_pagamento"
+    | "pago"
+    | "parcialmente_pago"
+    | "em_atraso"
+    | "cancelado"
+    | "renegociado"
+    | "aguardando_webhook"
+    | "erro_webhook";
   visibleToClient: boolean;
   publicFinancialMessage?: string;
 
@@ -56,7 +81,7 @@ interface CaseFinancial {
   contractUrl: string;
   contractVisibleToClient: boolean;
 
-  paymentProvider: 'manual_temporario' | 'stripe' | 'asaas';
+  paymentProvider: "manual_temporario" | "stripe" | "asaas";
   paymentStatus: string;
   paymentLink: string;
   externalPaymentId: string;
@@ -79,13 +104,27 @@ interface CaseFinancial {
 export default function FinanceiroFluxo() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
-  const { googleAccessToken } = useAuth();
+  const { googleAccessToken, loginWithGoogle } = useAuth();
 
   // Screen-level loading/saving state
   const [fetching, setFetching] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isRenewingGoogle, setIsRenewingGoogle] = useState(false);
+
+  const handleRenewGoogle = async () => {
+    setIsRenewingGoogle(true);
+    try {
+      await loginWithGoogle('boss_admin');
+      setSuccess("Autenticação Google renovada com sucesso! Você já pode gerar o contrato de honorários novamente.");
+      setRefreshToggle(prev => prev + 1);
+    } catch (err: any) {
+      setError(`Falha ao renovar autenticação: ${err.message || err}`);
+    } finally {
+      setIsRenewingGoogle(false);
+    }
+  };
 
   // Loaded database references
   const [caseObj, setCaseObj] = useState<any>(null);
@@ -93,17 +132,114 @@ export default function FinanceiroFluxo() {
   const [financials, setFinancials] = useState<CaseFinancial[]>([]);
   const [loadingList, setLoadingList] = useState(false);
 
+  // Installment Analytical Table states
+  const [tabelaAnalitica, setTabelaAnalitica] = useState<any[]>([]);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [editingRowVal, setEditingRowVal] = useState("");
+  const [editingRowDate, setEditingRowDate] = useState("");
+  const [editingRowPago, setEditingRowPago] = useState(false);
+  const [editingRowStatus, setEditingRowStatus] = useState<"pago" | "pendente" | "atrasado">("pendente");
+  const [editingRowForma, setEditingRowForma] = useState("");
+
+  const handleSaveTabelaAnalitica = async (novaTabela: any[]) => {
+    try {
+      const caseDocRef = doc(db, "cases", caseId!);
+      await updateDoc(caseDocRef, {
+        tabelaAnalitica: novaTabela,
+        updatedAt: new Date().toISOString(),
+      });
+      setTabelaAnalitica(novaTabela);
+      setSuccess("Tabela analítica de honorários salva com sucesso!");
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      console.error(err);
+      setError(`Erro ao salvar tabela analítica: ${err.message || err}`);
+    }
+  };
+
+  const handleGerarTabelaAutomatica = async () => {
+    const list: any[] = [];
+    let currentId = 1;
+
+    // 1. Check entry payment
+    const entradaLimpa = (valorEntradaForm || "0,00").replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
+    const entryVal = parseFloat(entradaLimpa);
+    if (!isNaN(entryVal) && entryVal > 0) {
+      list.push({
+        id: String(currentId++),
+        numero: "Entrada",
+        valor: `R$ ${valorEntradaForm.replace("R$", "").trim()}`,
+        dataVencimento: dataPrimeiroVencimentoForm || new Date().toISOString().split("T")[0],
+        pago: false,
+        status: "pendente",
+        formaRecebimento: tipoRecebimentoForm || "PIX"
+      });
+    }
+
+    // 2. Installments
+    const nParcelas = Math.max(1, Number(quantidadeParcelasForm) || 1);
+    const parcelaLimpa = (valorParcelaForm || "0,00").replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
+    const pVal = parseFloat(parcelaLimpa);
+    
+    // Base date for increments
+    const baseDate = dataPrimeiroVencimentoForm 
+      ? new Date(dataPrimeiroVencimentoForm + "T12:00:00") 
+      : new Date();
+
+    for (let i = 0; i < nParcelas; i++) {
+      const dueDate = new Date(baseDate);
+      dueDate.setMonth(baseDate.getMonth() + i);
+      const isDateValid = !isNaN(dueDate.getTime());
+      const dateStr = isDateValid ? dueDate.toISOString().split("T")[0] : "";
+
+      list.push({
+        id: String(currentId++),
+        numero: `Parcela ${i + 1}/${nParcelas}`,
+        valor: `R$ ${valorParcelaForm.replace("R$", "").trim()}`,
+        dataVencimento: dateStr,
+        pago: false,
+        status: "pendente",
+        formaRecebimento: tipoRecebimentoForm || "PIX"
+      });
+    }
+
+    await handleSaveTabelaAnalitica(list);
+  };
+
+  const handleAddParcelaManual = async () => {
+    const nextId = String(Date.now());
+    const novaParcela = {
+      id: nextId,
+      numero: `Parcela ${tabelaAnalitica.length + 1}`,
+      valor: valorParcelaForm !== "0,00" ? `R$ ${valorParcelaForm}` : "R$ 1.500,00",
+      dataVencimento: new Date().toISOString().split("T")[0],
+      pago: false,
+      status: "pendente",
+      formaRecebimento: tipoRecebimentoForm || "PIX"
+    };
+    const novaTabela = [...tabelaAnalitica, novaParcela];
+    await handleSaveTabelaAnalitica(novaTabela);
+  };
+
+  const handleDeletarParcela = async (idOfDeleted: string) => {
+    const novaTabela = tabelaAnalitica.filter(item => item.id !== idOfDeleted);
+    await handleSaveTabelaAnalitica(novaTabela);
+  };
+
   // Form state
   const [editingId, setEditingId] = useState<string | null>(null); // null means "New Financial Record"
-  const [formChargeType, setFormChargeType] = useState('Honorários fixos');
-  const [customChargeType, setCustomChargeType] = useState('');
-  const [formTotalAmount, setFormTotalAmount] = useState<string>('0');
-  const [formPaymentMethod, setFormPaymentMethod] = useState('Cartão de Crédito');
+  const [formChargeType, setFormChargeType] = useState("Honorários fixos");
+  const [customChargeType, setCustomChargeType] = useState("");
+  const [formTotalAmount, setFormTotalAmount] = useState<string>("0");
+  const [formPaymentMethod, setFormPaymentMethod] =
+    useState("Cartão de Crédito");
   const [formInstallments, setFormInstallments] = useState<number>(1);
-  const [formFirstDueDate, setFormFirstDueDate] = useState('');
-  const [formFinancialStatus, setFormFinancialStatus] = useState<CaseFinancial['financialStatus']>('aguardando_pagamento');
+  const [formFirstDueDate, setFormFirstDueDate] = useState("");
+  const [formFinancialStatus, setFormFinancialStatus] = useState<
+    CaseFinancial["financialStatus"]
+  >("aguardando_pagamento");
   const [formVisibleToClient, setFormVisibleToClient] = useState(true);
-  const [formPublicMessage, setFormPublicMessage] = useState('');
+  const [formPublicMessage, setFormPublicMessage] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const handleDeleteFinancial = async (id: string) => {
@@ -117,8 +253,8 @@ export default function FinanceiroFluxo() {
     setSuccess(null);
     setConfirmDeleteId(null);
     try {
-      await deleteDoc(doc(db, 'caseFinancials', id));
-      setSuccess('Lançamento financeiro deletado permanentemente!');
+      await deleteDoc(doc(db, "caseFinancials", id));
+      setSuccess("Lançamento financeiro deletado permanentemente!");
       setRefreshToggle((prev) => prev + 1);
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
@@ -129,28 +265,31 @@ export default function FinanceiroFluxo() {
 
   // Contract referencing
   const [formContractLinked, setFormContractLinked] = useState(false);
-  const [formContractName, setFormContractName] = useState('Contrato de Prestação de Serviços Jurídicos');
-  const [formContractUrl, setFormContractUrl] = useState('');
+  const [formContractName, setFormContractName] = useState(
+    "Contrato de Prestação de Serviços Jurídicos",
+  );
+  const [formContractUrl, setFormContractUrl] = useState("");
   const [formContractVisible, setFormContractVisible] = useState(true);
 
   // Integrations parameterization
-  const [formPaymentProvider, setFormPaymentProvider] = useState<CaseFinancial['paymentProvider']>('manual_temporario');
-  const [formPaymentStatus, setFormPaymentStatus] = useState('');
-  const [formPaymentLink, setFormPaymentLink] = useState('');
-  const [formExternalPaymentId, setFormExternalPaymentId] = useState('');
-  const [formWebhookStatus, setFormWebhookStatus] = useState('');
-  const [formLastWebhookAt, setFormLastWebhookAt] = useState('');
+  const [formPaymentProvider, setFormPaymentProvider] =
+    useState<CaseFinancial["paymentProvider"]>("manual_temporario");
+  const [formPaymentStatus, setFormPaymentStatus] = useState("");
+  const [formPaymentLink, setFormPaymentLink] = useState("");
+  const [formExternalPaymentId, setFormExternalPaymentId] = useState("");
+  const [formWebhookStatus, setFormWebhookStatus] = useState("");
+  const [formLastWebhookAt, setFormLastWebhookAt] = useState("");
 
   // Stripe explicit placeholders
-  const [formStripeCustomerId, setFormStripeCustomerId] = useState('');
-  const [formStripeCheckoutId, setFormStripeCheckoutId] = useState('');
-  const [formStripeIntentId, setFormStripeIntentId] = useState('');
+  const [formStripeCustomerId, setFormStripeCustomerId] = useState("");
+  const [formStripeCheckoutId, setFormStripeCheckoutId] = useState("");
+  const [formStripeIntentId, setFormStripeIntentId] = useState("");
 
   // Asaas explicit placeholders
-  const [formAsaasCustomerId, setFormAsaasCustomerId] = useState('');
-  const [formAsaasPaymentId, setFormAsaasPaymentId] = useState('');
+  const [formAsaasCustomerId, setFormAsaasCustomerId] = useState("");
+  const [formAsaasPaymentId, setFormAsaasPaymentId] = useState("");
 
-  const [formNotes, setFormNotes] = useState('');
+  const [formNotes, setFormNotes] = useState("");
 
   // Sinc refresh trigger
   const [refreshToggle, setRefreshToggle] = useState(0);
@@ -161,15 +300,70 @@ export default function FinanceiroFluxo() {
   // Step 3 Contract state integration
   const [wizardState, setWizardState] = useState<any>({
     currentStep: 1,
-    q1_1: '', q1_2: [], q1_2_outro: '', q1_3: '', q1_4: '', q1_5: '', q1_6: '', procuracaoFiles: [],
-    q2_1: '', q2_2: '', q2_3: [], q2_3_outro: '', q2_4: '', q2_5: '', q2_6: '', q2_7: '', declaracaoFiles: [],
-    q3_1: '', q3_2: '', q3_2_outro: '', q3_3: [], q3_3_outro: '', q3_4: '', q3_5: '', q3_6: '', q3_7: '', q3_8: '', contratoFiles: [],
-    q4_rg: '', q4_cpf: '', q4_residencia: '', q4_anexar_pf: '', rgFiles: [], cpfFiles: [], residenciaFiles: [],
-    q4_cnpj: '', q4_contrato_social: '', q4_endereco_sede: '', q4_rg_socio: '', q4_cpf_socio: '', q4_residencia_socio: '', q4_anexar_pj: '',
-    cnpjFiles: [], contratoSocialFiles: [], enderecoSedeFiles: [], rgSocioFiles: [], cpfSocioFiles: [], residenciaSocioFiles: [],
-    q5_1: '', q5_provas: {}, q5_y_pendentes: '', q5_z_solicitacao_automatica: '', q5_z_channels: [],
-    q6_7_1: '', q6_7_2: '', q6_7_3: '', q6_7_4: '', q6_8_channels: [],
-    step1_completed: false, step2_completed: false, step3_completed: false, step4_completed: false, step5_completed: false, step6_completed: false
+    q1_1: "nao",
+    q1_2: [],
+    q1_2_outro: "",
+    q1_3: "nao",
+    q1_4: "nao",
+    q1_5: "nao",
+    q1_6: "nao",
+    procuracaoFiles: [],
+    q2_1: "nao",
+    q2_2: "nao",
+    q2_3: [],
+    q2_3_outro: "",
+    q2_4: "nao",
+    q2_5: "nao",
+    q2_6: "nao",
+    q2_7: "nao",
+    declaracaoFiles: [],
+    q3_1: "nao",
+    q3_2: "",
+    q3_2_outro: "",
+    q3_3: [],
+    q3_3_outro: "",
+    q3_4: "nao",
+    q3_5: "nao",
+    q3_6: "nao",
+    q3_7: "nao",
+    q3_8: "nao",
+    contratoFiles: [],
+    q4_rg: "",
+    q4_cpf: "",
+    q4_residencia: "",
+    q4_anexar_pf: "",
+    rgFiles: [],
+    cpfFiles: [],
+    residenciaFiles: [],
+    q4_cnpj: "",
+    q4_contrato_social: "",
+    q4_endereco_sede: "",
+    q4_rg_socio: "",
+    q4_cpf_socio: "",
+    q4_residencia_socio: "",
+    q4_anexar_pj: "",
+    cnpjFiles: [],
+    contratoSocialFiles: [],
+    enderecoSedeFiles: [],
+    rgSocioFiles: [],
+    cpfSocioFiles: [],
+    residenciaSocioFiles: [],
+    q5_1: "",
+    q5_provas: {},
+    q5_y_pendentes: "",
+    q5_z_solicitacao_automatica: "",
+    q5_z_channels: [],
+    q6_7_1: "",
+    q6_7_2: "",
+    q6_7_3: "",
+    q6_7_4: "",
+    q6_8_channels: [],
+    step1_completed: false,
+    step2_completed: false,
+    step3_completed: false,
+    step4_completed: false,
+    step5_completed: false,
+    step6_completed: false,
   });
   const [contractPanelOpen, setContractPanelOpen] = useState(true);
 
@@ -177,110 +371,156 @@ export default function FinanceiroFluxo() {
     const nextState = { ...wizardState, ...updates };
     setWizardState(nextState);
     try {
-      await updateDoc(doc(db, 'cases', caseId!), { 
+      await updateDoc(doc(db, "cases", caseId!), {
         solicitacoesProvasWizardState: nextState,
-        contratoHonorariosStatus: nextState.q3_4 === 'sim' ? 'criada' : 'pendente'
+        contratoHonorariosStatus:
+          nextState.q3_4 === "sim" ? "criada" : "pendente",
       });
-      setSuccess('Estado do contrato atualizado com sucesso!');
+      setSuccess("Estado do contrato atualizado com sucesso!");
       setTimeout(() => setSuccess(null), 2500);
     } catch (err) {
-      console.error('Error saving contract wizard state in finance:', err);
+      console.error("Error saving contract wizard state in finance:", err);
     }
   };
 
   const addWizardFile = (field: string, name: string, size: string) => {
     const currentFiles = wizardState[field] || [];
-    const updatedFiles = [...currentFiles, { name, size, uploadedAt: new Date().toISOString() }];
+    const updatedFiles = [
+      ...currentFiles,
+      { name, size, uploadedAt: new Date().toISOString() },
+    ];
     saveWizardStateUpdate({ [field]: updatedFiles });
   };
 
   const removeWizardFile = (field: string, index: number) => {
     const currentFiles = wizardState[field] || [];
-    const updatedFiles = currentFiles.filter((_: any, i: number) => i !== index);
+    const updatedFiles = currentFiles.filter(
+      (_: any, i: number) => i !== index,
+    );
     saveWizardStateUpdate({ [field]: updatedFiles });
   };
 
-  const [tipoServicoContratado, setTipoServicoContratado] = useState('');
-  const [honorariosPercentual, setHonorariosPercentual] = useState('');
-  const [honorariosValorFixo, setHonorariosValorFixo] = useState('');
-  const [bancoRecebimento, setBancoRecebimento] = useState('');
-  const [agenciaRecebimento, setAgenciaRecebimento] = useState('');
-  const [contaRecebimento, setContaRecebimento] = useState('');
-  const [pixRecebimento, setPixRecebimento] = useState('');
+  const [tipoServicoContratado, setTipoServicoContratado] = useState("");
+  const [honorariosPercentual, setHonorariosPercentual] = useState("");
+  const [honorariosValorFixo, setHonorariosValorFixo] = useState("");
+  const [bancoRecebimento, setBancoRecebimento] = useState("");
+  const [agenciaRecebimento, setAgenciaRecebimento] = useState("");
+  const [contaRecebimento, setContaRecebimento] = useState("");
+  const [pixRecebimento, setPixRecebimento] = useState("");
 
   // 12 Unified Financial Fields
-  const [tipoServicoContratadoForm, setTipoServicoContratadoForm] = useState('');
-  const [tipoHonorarioForm, setTipoHonorarioForm] = useState('Honorários Fixos');
-  const [honorarioExitoPercentualForm, setHonorarioExitoPercentualForm] = useState('30%');
-  const [honorarioFixoValorForm, setHonorarioFixoValorForm] = useState('0,00');
-  const [formaPagamentoForm, setFormaPagamentoForm] = useState('À vista');
-  const [tipoRecebimentoForm, setTipoRecebimentoForm] = useState('PIX');
-  const [pixBancoForm, setPixBancoForm] = useState('Nubank');
-  const [pixChaveForm, setPixChaveForm] = useState('');
+  const [tipoServicoContratadoForm, setTipoServicoContratadoForm] =
+    useState("");
+  const [tipoHonorarioForm, setTipoHonorarioForm] =
+    useState("Honorários Fixos");
+  const [honorarioExitoPercentualForm, setHonorarioExitoPercentualForm] =
+    useState("30%");
+  const [honorarioFixoValorForm, setHonorarioFixoValorForm] = useState("0,00");
+  const [formaPagamentoForm, setFormaPagamentoForm] = useState("À vista");
+  const [tipoRecebimentoForm, setTipoRecebimentoForm] = useState("PIX");
+  const [pixBancoForm, setPixBancoForm] = useState("Nubank");
+  const [pixChaveForm, setPixChaveForm] = useState("");
   const [quantidadeParcelasForm, setQuantidadeParcelasForm] = useState(1);
-  const [valorParcelaForm, setValorParcelaForm] = useState('0,00');
-  const [diaVencimentoForm, setDiaVencimentoForm] = useState('10');
-  const [valorEntradaForm, setValorEntradaForm] = useState('0,00');
-  const [dataPrimeiroVencimentoForm, setDataPrimeiroVencimentoForm] = useState('');
-  const [cobrancaAutomaticaIntegForm, setCobrancaAutomaticaIntegForm] = useState('Não');
+  const [valorParcelaForm, setValorParcelaForm] = useState("0,00");
+  const [diaVencimentoForm, setDiaVencimentoForm] = useState("10");
+  const [valorEntradaForm, setValorEntradaForm] = useState("0,00");
+  const [dataPrimeiroVencimentoForm, setDataPrimeiroVencimentoForm] =
+    useState("");
+  const [cobrancaAutomaticaIntegForm, setCobrancaAutomaticaIntegForm] =
+    useState("Não");
 
   useEffect(() => {
     if (caseObj) {
       setTipoServicoContratadoForm(
-        caseObj.tipoServicoContratado || 
-        caseObj.assunto || 
-        "Serviço de Assessoria Jurídica"
+        caseObj.tipoServicoContratado ||
+          caseObj.assunto ||
+          "Serviço de Assessoria Jurídica",
       );
-      setTipoHonorarioForm(caseObj.tipoHonorario || 'Honorários Fixos');
-      setHonorarioExitoPercentualForm(caseObj.honorarioExitoPercentual || '30%');
-      setHonorarioFixoValorForm(caseObj.honorarioFixoValor || '0,00');
-      setFormaPagamentoForm(caseObj.formaPagamento || 'À vista');
-      setTipoRecebimentoForm(caseObj.tipoRecebimento || 'PIX');
+      setTipoHonorarioForm(caseObj.tipoHonorario || "Honorários Fixos");
+      setHonorarioExitoPercentualForm(
+        caseObj.honorarioExitoPercentual || "30%",
+      );
+      setHonorarioFixoValorForm(caseObj.honorarioFixoValor || "0,00");
+      setFormaPagamentoForm(caseObj.formaPagamento || "À vista");
+      setTipoRecebimentoForm(caseObj.tipoRecebimento || "PIX");
       setPixBancoForm(
-        caseObj.pixBanco || 
-        client?.bancario_bancoPix || 
-        "Nubank"
+        caseObj.pixBanco || client?.bancario_bancoPix || "Nubank",
       );
-      setPixChaveForm(
-        caseObj.pixChave || 
-        client?.bancario_chavePix || 
-        ""
-      );
+      setPixChaveForm(caseObj.pixChave || client?.bancario_chavePix || "");
       setQuantidadeParcelasForm(Number(caseObj.quantidadeParcelas) || 1);
-      setValorParcelaForm(caseObj.valorParcela || '0,00');
-      setDiaVencimentoForm(caseObj.diaVencimento || '10');
-      setValorEntradaForm(caseObj.valorEntrada || '0,00');
-      setDataPrimeiroVencimentoForm(caseObj.dataPrimeiroVencimento || '');
-      setCobrancaAutomaticaIntegForm(caseObj.cobrancaAutomaticaInteg || 'Não');
+      setValorParcelaForm(caseObj.valorParcela || "0,00");
+      setDiaVencimentoForm(caseObj.diaVencimento || "10");
+      setValorEntradaForm(caseObj.valorEntrada || "0,00");
+      setDataPrimeiroVencimentoForm(caseObj.dataPrimeiroVencimento || "");
+      setCobrancaAutomaticaIntegForm(caseObj.cobrancaAutomaticaInteg || "Não");
 
       // Sync back legacy/backward compatibility variables
       setTipoServicoContratado(
-        caseObj.tipoServicoContratado || 
-        caseObj.assunto || 
-        "Serviço de Assessoria Jurídica"
+        caseObj.tipoServicoContratado ||
+          caseObj.assunto ||
+          "Serviço de Assessoria Jurídica",
       );
-      setHonorariosPercentual(caseObj.honorariosPercentual || caseObj.honorarioExitoPercentual || "30%");
-      setHonorariosValorFixo(caseObj.honorariosValorFixo || caseObj.honorarioFixoValor || "0,00");
+      setHonorariosPercentual(
+        caseObj.honorariosPercentual ||
+          caseObj.honorarioExitoPercentual ||
+          "30%",
+      );
+      setHonorariosValorFixo(
+        caseObj.honorariosValorFixo || caseObj.honorarioFixoValor || "0,00",
+      );
       setBancoRecebimento(
-        caseObj.bancoRecebimento || 
-        caseObj.pixBanco ||
-        client?.bancario_bancoPix || 
-        "Nubank"
+        caseObj.bancoRecebimento ||
+          caseObj.pixBanco ||
+          client?.bancario_bancoPix ||
+          "Nubank",
       );
       setAgenciaRecebimento(caseObj.agenciaRecebimento || "A combinar");
       setContaRecebimento(caseObj.contaRecebimento || "A combinar");
       setPixRecebimento(
-        caseObj.pixRecebimento || 
-        caseObj.pixChave ||
-        client?.bancario_chavePix || 
-        ""
+        caseObj.pixRecebimento ||
+          caseObj.pixChave ||
+          client?.bancario_chavePix ||
+          "",
       );
     }
   }, [caseObj, client]);
 
+  // Automatic Parcel Calculation Logic based on fixed honoraries and installments
+  useEffect(() => {
+    const parseCurrency = (valStr: string) => {
+      if (!valStr) return 0;
+      // Remove symbols, spaces, dots, and convert commas to dots
+      const clean = valStr.replace(/[R$\s\.]/g, "").replace(",", ".");
+      const parsed = parseFloat(clean);
+      return isNaN(parsed) ? 0 : parsed;
+    };
+
+    const totalVal = parseCurrency(honorarioFixoValorForm);
+    const entradaVal =
+      formaPagamentoForm === "Entrada + Parcelado"
+        ? parseCurrency(valorEntradaForm)
+        : 0;
+    const remaining = Math.max(0, totalVal - entradaVal);
+    const installments = Math.max(1, Number(quantidadeParcelasForm) || 1);
+
+    const calculatedParcela = remaining / installments;
+
+    // Format back to decimal string formatted like BRL
+    const formatted = calculatedParcela.toLocaleString("pt-BR", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    setValorParcelaForm(formatted);
+  }, [
+    honorarioFixoValorForm,
+    valorEntradaForm,
+    quantidadeParcelasForm,
+    formaPagamentoForm,
+  ]);
+
   const renderStatusBadge = () => {
     const status = caseObj?.contratoHonorariosStatus;
-    if (status === 'gerando') {
+    if (status === "gerando") {
       return (
         <span className="flex items-center gap-1 bg-amber-50 text-amber-700 px-2.5 py-1 rounded-full text-[10px] font-black border border-amber-200 uppercase">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
@@ -288,7 +528,7 @@ export default function FinanceiroFluxo() {
         </span>
       );
     }
-    if (status === 'criada') {
+    if (status === "criada") {
       return (
         <span className="flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full text-[10px] font-black border border-emerald-200 uppercase">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -296,7 +536,7 @@ export default function FinanceiroFluxo() {
         </span>
       );
     }
-    if (status === 'aberto') {
+    if (status === "aberto") {
       return (
         <span className="flex items-center gap-1 bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full text-[10px] font-black border border-blue-200 uppercase">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
@@ -304,7 +544,7 @@ export default function FinanceiroFluxo() {
         </span>
       );
     }
-    if (status === 'falha') {
+    if (status === "falha") {
       return (
         <span className="flex items-center gap-1 bg-red-50 text-red-700 px-2.5 py-1 rounded-full text-[10px] font-black border border-red-200 uppercase">
           <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
@@ -321,18 +561,25 @@ export default function FinanceiroFluxo() {
   };
 
   const handleGenerateContratoHonorarios = async () => {
-    const isPf = client?.type === 'PF';
-    const jobId = 'job_contr_gdocs_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    const isPf = client?.type === "PF";
+    const jobId =
+      "job_contr_gdocs_" +
+      Date.now() +
+      "_" +
+      Math.random().toString(36).substring(2, 9);
     const jobLogs: any[] = [];
     const addClientLog = (action: string, message: string) => {
       jobLogs.push({
         action,
         timestamp: new Date().toISOString(),
-        message
+        message,
       });
     };
 
-    addClientLog("CONTRATO_BUTTON_CLICKED", `O operador clicou em 'Criar Contrato de Honorários' (${isPf ? 'PF' : 'PJ'}) para iniciar o fluxo de automação.`);
+    addClientLog(
+      "CONTRATO_BUTTON_CLICKED",
+      `O operador clicou em 'Criar Contrato de Honorários' (${isPf ? "PF" : "PJ"}) para iniciar o fluxo de automação.`,
+    );
 
     if (!caseId) {
       setError("Erro de validação: ID do caso (caseId) está ausente.");
@@ -340,7 +587,9 @@ export default function FinanceiroFluxo() {
     }
 
     if (!caseObj) {
-      setError("Erro de validação: Dados do caso não carregados do banco de dados.");
+      setError(
+        "Erro de validação: Dados do caso não carregados do banco de dados.",
+      );
       return;
     }
 
@@ -351,11 +600,16 @@ export default function FinanceiroFluxo() {
     }
 
     if (!client) {
-      setError("Erro de validação: Dados do cliente não carregados do banco de dados.");
+      setError(
+        "Erro de validação: Dados do cliente não carregados do banco de dados.",
+      );
       return;
     }
 
-    addClientLog("CONTRATO_CLIENT_DATA_LOADED", "Dados cadastrais do cliente e do caso carregados com sucesso do banco.");
+    addClientLog(
+      "CONTRATO_CLIENT_DATA_LOADED",
+      "Dados cadastrais do cliente e do caso carregados com sucesso do banco.",
+    );
 
     const resolvedNomeCompleto = (
       client?.pfData?.pf_nomeCompleto ||
@@ -368,40 +622,63 @@ export default function FinanceiroFluxo() {
     ).trim();
 
     if (!resolvedNomeCompleto) {
-      addClientLog("CONTRATO_REQUIRED_PLACEHOLDER_EMPTY", "Nome do cliente não localizado.");
-      setError("Nome completo ou razão social do cliente não localizado no cadastro. Verifique a Etapa 1 — Cadastro do Cliente.");
+      addClientLog(
+        "CONTRATO_REQUIRED_PLACEHOLDER_EMPTY",
+        "Nome do cliente não localizado.",
+      );
+      setError(
+        "Nome completo ou razão social do cliente não localizado no cadastro. Verifique a Etapa 1 — Cadastro do Cliente.",
+      );
       return;
     }
 
-    const clientDriveFolderId = (client?.googleDriveClientFolderId || client?.gdriveFolderId || caseObj?.gdriveFolderId || '').trim();
-    const clientDriveFolderUrl = (client?.googleDriveClientFolderUrl || client?.gdriveFolderUrl || caseObj?.gdriveFolderUrl || '').trim();
-    
+    const clientDriveFolderId = (
+      client?.googleDriveClientFolderId ||
+      client?.gdriveFolderId ||
+      caseObj?.gdriveFolderId ||
+      ""
+    ).trim();
+    const clientDriveFolderUrl = (
+      client?.googleDriveClientFolderUrl ||
+      client?.gdriveFolderUrl ||
+      caseObj?.gdriveFolderUrl ||
+      ""
+    ).trim();
+
     const folderIsReal = !!(
-      clientDriveFolderId && 
-      !clientDriveFolderId.toLowerCase().includes('mock') && 
-      !clientDriveFolderId.toLowerCase().includes('fake') && 
-      !clientDriveFolderId.toLowerCase().includes('teste') && 
-      !clientDriveFolderId.toLowerCase().includes('undefined') && 
-      !clientDriveFolderId.toLowerCase().includes('null') && 
-      !clientDriveFolderId.toLowerCase().includes('xxxx')
+      clientDriveFolderId &&
+      !clientDriveFolderId.toLowerCase().includes("mock") &&
+      !clientDriveFolderId.toLowerCase().includes("fake") &&
+      !clientDriveFolderId.toLowerCase().includes("teste") &&
+      !clientDriveFolderId.toLowerCase().includes("undefined") &&
+      !clientDriveFolderId.toLowerCase().includes("null") &&
+      !clientDriveFolderId.toLowerCase().includes("xxxx")
     );
 
     if (!folderIsReal) {
-      setError("Não há pasta real do Google Drive vinculada ao cliente. Acesse a Etapa 1 — Cadastro do Cliente e execute primeiro a Automação Google Drive — Pasta do Cliente.");
+      setError(
+        "Não há pasta real do Google Drive vinculada ao cliente. Acesse a Etapa 1 — Cadastro do Cliente e execute primeiro a Automação Google Drive — Pasta do Cliente.",
+      );
       return;
     }
 
-    addClientLog("CONTRATO_FOLDER_FOUND", `Pasta destino no Google Drive localizada com sucesso ID: ${clientDriveFolderId}`);
+    addClientLog(
+      "CONTRATO_FOLDER_FOUND",
+      `Pasta destino no Google Drive localizada com sucesso ID: ${clientDriveFolderId}`,
+    );
 
     const officialTemplateId = "1GJZ6LSW_szLSAA8Z3iw9jt4Q6zy5k6EuuTNhR5ooJQQ";
-    addClientLog("CONTRATO_OFFICIAL_TEMPLATE_SELECTED", `Template oficial de Contrato de Honorários selecionado unicamente como fonte da verdade: ${officialTemplateId}`);
+    addClientLog(
+      "CONTRATO_OFFICIAL_TEMPLATE_SELECTED",
+      `Template oficial de Contrato de Honorários selecionado unicamente como fonte da verdade: ${officialTemplateId}`,
+    );
 
     setSaving(true);
     setError(null);
     setSuccess(null);
 
-    const caseDocRef = doc(db, 'cases', caseId);
-    
+    const caseDocRef = doc(db, "cases", caseId);
+
     // First save the current form values in Firestore under the case document as requested!
     const updatedFinanceData = {
       tipoServicoContratado: tipoServicoContratadoForm,
@@ -424,14 +701,14 @@ export default function FinanceiroFluxo() {
       bancoRecebimento: pixBancoForm,
       pixRecebimento: pixChaveForm,
       contratoHonorariosStatus: "gerando",
-      contratoHonorariosLogFalha: ""
+      contratoHonorariosLogFalha: "",
     };
 
     await updateDoc(caseDocRef, updatedFinanceData);
 
     const now = new Date();
-    const day = String(now.getDate()).padStart(2, '0');
-    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, "0");
+    const month = String(now.getMonth() + 1).padStart(2, "0");
     const year = now.getFullYear();
     const dataAssinaturaFormated = `${day}/${month}/${year}`;
 
@@ -439,34 +716,52 @@ export default function FinanceiroFluxo() {
     try {
       const parentCaseObj = { ...caseObj, ...updatedFinanceData };
       if (isPf) {
-        placeholders = buildContratoHonorariosPfPlaceholders(client, parentCaseObj, updatedFinanceData);
+        placeholders = buildContratoHonorariosPfPlaceholders(
+          client,
+          parentCaseObj,
+          updatedFinanceData,
+        );
       } else {
-        placeholders = buildContratoHonorariosPjPlaceholders(client, parentCaseObj, updatedFinanceData);
+        placeholders = buildContratoHonorariosPjPlaceholders(
+          client,
+          parentCaseObj,
+          updatedFinanceData,
+        );
       }
-      
+
       placeholders["{{DATA_ASSINATURA}}"] = dataAssinaturaFormated;
       placeholders["<<data da assinatura>>"] = dataAssinaturaFormated;
 
-      addClientLog("CONTRATO_PLACEHOLDERS_BUILT", "Todas as chaves e valores de placeholders foram processados e vinculados com sucesso.");
+      addClientLog(
+        "CONTRATO_PLACEHOLDERS_BUILT",
+        "Todas as chaves e valores de placeholders foram processados e vinculados com sucesso.",
+      );
     } catch (errPl: any) {
       setError(`Erro ao construir placeholders: ${errPl.message}`);
       setSaving(false);
       await updateDoc(caseDocRef, {
         contratoHonorariosStatus: "falha",
-        contratoHonorariosLogFalha: `Erro placeholders: ${errPl.message}`
+        contratoHonorariosLogFalha: `Erro placeholders: ${errPl.message}`,
       });
       return;
     }
 
-    const currentGoogleAccessToken = googleAccessToken || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken') || '';
-    const localOverride = localStorage.getItem('portal_boss_gdocs_override') || '';
+    const currentGoogleAccessToken =
+      googleAccessToken ||
+      localStorage.getItem("oauth_google_access_token") ||
+      localStorage.getItem("portal_boss_google_accessToken") ||
+      "";
+    const localOverride =
+      localStorage.getItem("portal_boss_gdocs_override") || "";
 
     if (!currentGoogleAccessToken && !localOverride) {
-      setError("Faça login novamente com Google para autorizar Google Docs/Drive ou configure a Central de Integrações.");
+      setError(
+        "Faça login novamente com Google para autorizar Google Docs/Drive ou configure a Central de Integrações.",
+      );
       setSaving(false);
       await updateDoc(caseDocRef, {
         contratoHonorariosStatus: "falha",
-        contratoHonorariosLogFalha: "Falta Google Access Token"
+        contratoHonorariosLogFalha: "Falta Google Access Token",
       });
       return;
     }
@@ -491,14 +786,14 @@ export default function FinanceiroFluxo() {
       result: {
         googleDocsId: null,
         googleDocsUrl: null,
-        fileName: null
+        fileName: null,
       },
       errorCode: null,
       errorMessage: null,
-      logs: jobLogs
+      logs: jobLogs,
     };
 
-    await setDoc(doc(db, 'googleDocsJobs', jobId), initialJob);
+    await setDoc(doc(db, "googleDocsJobs", jobId), initialJob);
 
     try {
       const response = await fetch("/api/google-docs/generate-document", {
@@ -507,8 +802,12 @@ export default function FinanceiroFluxo() {
         body: JSON.stringify({
           mode: "stateless",
           googleAccessToken: currentGoogleAccessToken,
-          documentType: isPf ? "contrato_honorarios_pf" : "contrato_honorarios_pj",
-          templateKey: isPf ? "contrato_honorarios_pf" : "contrato_honorarios_pj",
+          documentType: isPf
+            ? "contrato_honorarios_pf"
+            : "contrato_honorarios_pj",
+          templateKey: isPf
+            ? "contrato_honorarios_pf"
+            : "contrato_honorarios_pj",
           templateId: officialTemplateId,
           caseId,
           clientId: targetClientId,
@@ -518,12 +817,12 @@ export default function FinanceiroFluxo() {
           documentName: `Contrato de Honorários - ${resolvedNomeCompleto}`,
           placeholders,
           metadata: {
-            source: `Portal BOSS - Contrato ${isPf ? 'PF' : 'PJ'}`,
+            source: `Portal BOSS - Contrato ${isPf ? "PF" : "PJ"}`,
             originRoute: `/boss-giffoni-clientes/fluxo-producao/${caseId}/financeiro`,
-            folderSource: "Automação Google Drive — Pasta do Cliente"
+            folderSource: "Automação Google Drive — Pasta do Cliente",
           },
-          credentialOverride: localOverride
-        })
+          credentialOverride: localOverride,
+        }),
       });
 
       const responseText = await response.text();
@@ -536,17 +835,30 @@ export default function FinanceiroFluxo() {
 
       if (!response.ok || !responseData.success) {
         throw {
-          message: responseData.errorMessage || responseData.error || responseText || "Falha na geração integrada.",
-          errorCode: responseData.errorCode || "CONTRATO_TEMPLATE_COPY_FAILED"
+          message:
+            responseData.errorMessage ||
+            responseData.error ||
+            responseText ||
+            "Falha na geração integrada.",
+          errorCode: responseData.errorCode || "CONTRATO_TEMPLATE_COPY_FAILED",
         };
       }
 
       const googleDocsId = responseData.googleDocsId;
       const googleDocsUrl = responseData.googleDocsUrl;
 
-      addClientLog("CONTRATO_TEMPLATE_COPY_SUCCESS", `Clone realizado no Google Drive com o novo ID de documento: ${googleDocsId}`);
-      addClientLog("CONTRATO_PLACEHOLDER_REPLACEMENT_SUCCESS", "Substituição concluída de todos os placeholders com absoluto sucesso.");
-      addClientLog("CONTRATO_FLOW_COMPLETED", "Processamento terminado com 100% de conformidade operacional.");
+      addClientLog(
+        "CONTRATO_TEMPLATE_COPY_SUCCESS",
+        `Clone realizado no Google Drive com o novo ID de documento: ${googleDocsId}`,
+      );
+      addClientLog(
+        "CONTRATO_PLACEHOLDER_REPLACEMENT_SUCCESS",
+        "Substituição concluída de todos os placeholders com absoluto sucesso.",
+      );
+      addClientLog(
+        "CONTRATO_FLOW_COMPLETED",
+        "Processamento terminado com 100% de conformidade operacional.",
+      );
 
       const generatedAtISO = new Date().toISOString();
 
@@ -561,63 +873,78 @@ export default function FinanceiroFluxo() {
         contratoHonorariosDestinationFolderUrl: clientDriveFolderUrl,
         contratoHonorariosGoogleDocsJobId: jobId,
         contratoHonorariosGoogleDocsJobLogs: jobLogs,
-        contratoHonorariosLogFalha: ""
+        contratoHonorariosLogFalha: "",
       });
 
       try {
-        const subdocRef = doc(db, 'cases', caseId, 'generatedDocuments', isPf ? 'contrato_honorarios_pf' : 'contrato_honorarios_pj');
-        await setDoc(subdocRef, {
-          documentType: isPf ? "contrato_honorarios_pf" : "contrato_honorarios_pj",
-          displayName: `Contrato de Honorários ${isPf ? 'PF' : 'PJ'} - ${resolvedNomeCompleto}`,
-          templateKey: isPf ? "contrato_honorarios_pf" : "contrato_honorarios_pj",
-          templateId: officialTemplateId,
-          googleDocsId,
-          googleDocsUrl,
-          destinationFolderId: clientDriveFolderId,
-          destinationFolderUrl: clientDriveFolderUrl,
-          status: "success",
-          generatedAt: generatedAtISO,
-          generatedBy: "Portal BOSS Central Interna (Stateless)",
-          errorCode: null,
-          errorMessage: null,
-          logs: jobLogs
-        }, { merge: true });
+        const subdocRef = doc(
+          db,
+          "cases",
+          caseId,
+          "generatedDocuments",
+          isPf ? "contrato_honorarios_pf" : "contrato_honorarios_pj",
+        );
+        await setDoc(
+          subdocRef,
+          {
+            documentType: isPf
+              ? "contrato_honorarios_pf"
+              : "contrato_honorarios_pj",
+            displayName: `Contrato de Honorários ${isPf ? "PF" : "PJ"} - ${resolvedNomeCompleto}`,
+            templateKey: isPf
+              ? "contrato_honorarios_pf"
+              : "contrato_honorarios_pj",
+            templateId: officialTemplateId,
+            googleDocsId,
+            googleDocsUrl,
+            destinationFolderId: clientDriveFolderId,
+            destinationFolderUrl: clientDriveFolderUrl,
+            status: "success",
+            generatedAt: generatedAtISO,
+            generatedBy: "Portal BOSS Central Interna (Stateless)",
+            errorCode: null,
+            errorMessage: null,
+            logs: jobLogs,
+          },
+          { merge: true },
+        );
       } catch (errSub: any) {
         console.warn("[PortalBoss] Subcollection write failed", errSub.message);
       }
 
-      await updateDoc(doc(db, 'googleDocsJobs', jobId), {
+      await updateDoc(doc(db, "googleDocsJobs", jobId), {
         status: "success",
         updatedAt: new Date().toISOString(),
         result: {
           googleDocsId,
           googleDocsUrl,
-          fileName: `Contrato de Honorários - ${resolvedNomeCompleto}`
+          fileName: `Contrato de Honorários - ${resolvedNomeCompleto}`,
         },
-        logs: jobLogs
+        logs: jobLogs,
       });
 
-      setSuccess(`Contrato de Honorários ${isPf ? 'PF' : 'PJ'} de Geração Real gerado com sucesso!`);
-      setRefreshToggle(prev => prev + 1);
-
+      setSuccess(
+        `Contrato de Honorários ${isPf ? "PF" : "PJ"} de Geração Real gerado com sucesso!`,
+      );
+      setRefreshToggle((prev) => prev + 1);
     } catch (err: any) {
       console.error(err);
       const errMsg = err.message || JSON.stringify(err);
       setError(`Erro na geração: ${errMsg}`);
-      
+
       await updateDoc(caseDocRef, {
         contratoHonorariosStatus: "falha",
-        contratoHonorariosLogFalha: errMsg
+        contratoHonorariosLogFalha: errMsg,
       });
 
-      await updateDoc(doc(db, 'googleDocsJobs', jobId), {
+      await updateDoc(doc(db, "googleDocsJobs", jobId), {
         status: "failed",
         updatedAt: new Date().toISOString(),
         errorCode: err.errorCode || "CONTRATO_GENERATION_FAILED",
         errorMessage: errMsg,
-        logs: jobLogs
+        logs: jobLogs,
       });
-      setRefreshToggle(prev => prev + 1);
+      setRefreshToggle((prev) => prev + 1);
     } finally {
       setSaving(false);
     }
@@ -629,7 +956,7 @@ export default function FinanceiroFluxo() {
     setSuccess(null);
     setSaving(true);
     try {
-      const caseDocRef = doc(db, 'cases', caseId!);
+      const caseDocRef = doc(db, "cases", caseId!);
       const updatedFinanceData = {
         tipoServicoContratado: tipoServicoContratadoForm,
         tipoHonorario: tipoHonorarioForm,
@@ -650,11 +977,11 @@ export default function FinanceiroFluxo() {
         honorariosValorFixo: honorarioFixoValorForm,
         bancoRecebimento: pixBancoForm,
         pixRecebimento: pixChaveForm,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       };
       await updateDoc(caseDocRef, updatedFinanceData);
-      setSuccess('Condições financeiras gravadas com sucesso no caso!');
-      setRefreshToggle(prev => prev + 1);
+      setSuccess("Condições financeiras gravadas com sucesso no caso!");
+      setRefreshToggle((prev) => prev + 1);
       setTimeout(() => setSuccess(null), 3050);
     } catch (err: any) {
       console.error(err);
@@ -666,47 +993,54 @@ export default function FinanceiroFluxo() {
 
   const handleOpenContrato = async (url: string) => {
     if (!url) return;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.open(url, "_blank", "noopener,noreferrer");
     try {
-      const caseDocRef = doc(db, 'cases', caseId!);
+      const caseDocRef = doc(db, "cases", caseId!);
       await updateDoc(caseDocRef, {
-        contratoHonorariosStatus: 'aberto'
+        contratoHonorariosStatus: "aberto",
       });
-      setRefreshToggle(prev => prev + 1);
+      setRefreshToggle((prev) => prev + 1);
     } catch (err) {
-      console.error('Error updating status to aberto:', err);
+      console.error("Error updating status to aberto:", err);
     }
   };
 
   const triggerSimulation = async (
-    type: 'Procuração' | 'Declaração de Pobreza' | 'Contrato de Honorários' | 'Checklist de Provas',
-    status: 'criada' | 'falha'
+    type:
+      | "Procuração"
+      | "Declaração de Pobreza"
+      | "Contrato de Honorários"
+      | "Checklist de Provas",
+    status: "criada" | "falha",
   ) => {
     setError(null);
     setSaving(true);
     try {
-      const mockUrl = `https://docs.google.com/document/d/mock-${type.toLowerCase().replace(/[^a-z]/g, '')}-${caseId}`;
-      const mockId = `mock-id-${type.slice(0,3).toLowerCase()}-${caseId!.slice(0,5)}`;
+      const mockUrl = `https://docs.google.com/document/d/mock-${type.toLowerCase().replace(/[^a-z]/g, "")}-${caseId}`;
+      const mockId = `mock-id-${type.slice(0, 3).toLowerCase()}-${caseId!.slice(0, 5)}`;
 
-      if (type === 'Contrato de Honorários') {
+      if (type === "Contrato de Honorários") {
         const nextState = {
           ...wizardState,
-          q3_1: 'sim',
-          q3_4: status === 'criada' ? 'sim' : 'nao',
-          q3_5: status === 'criada' ? 'sim' : 'nao',
-          q3_6: status === 'criada' ? 'sim' : 'nao',
-          step3_completed: status === 'criada'
+          q3_1: "sim",
+          q3_4: status === "criada" ? "sim" : "nao",
+          q3_5: status === "criada" ? "sim" : "nao",
+          q3_6: status === "criada" ? "sim" : "nao",
+          step3_completed: status === "criada",
         };
         setWizardState(nextState);
-        await updateDoc(doc(db, 'cases', caseId!), {
+        await updateDoc(doc(db, "cases", caseId!), {
           solicitacoesProvasWizardState: nextState,
           contratoHonorariosStatus: status,
-          contratoHonorariosGoogleDocsUrl: status === 'criada' ? mockUrl : '',
-          contratoHonorariosGoogleDocsId: status === 'criada' ? mockId : '',
-          contratoHonorariosLogFalha: status === 'falha' ? 'Limite quota de API excedido' : ''
+          contratoHonorariosGoogleDocsUrl: status === "criada" ? mockUrl : "",
+          contratoHonorariosGoogleDocsId: status === "criada" ? mockId : "",
+          contratoHonorariosLogFalha:
+            status === "falha" ? "Limite quota de API excedido" : "",
         });
       }
-      setSuccess(`Automação de ${type} executada de forma simulada: ${status.toUpperCase()}`);
+      setSuccess(
+        `Automação de ${type} executada de forma simulada: ${status.toUpperCase()}`,
+      );
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: any) {
       setError(`Erro na simulação: ${err.message}`);
@@ -731,15 +1065,21 @@ export default function FinanceiroFluxo() {
     return (
       <div className="space-y-2 mt-1">
         <label className="group flex flex-col items-center justify-center border border-dashed border-gray-300 hover:border-indigo-500 rounded-xl p-3 bg-gray-50/50 hover:bg-gray-50 transition-all cursor-pointer">
-          <UploadCloud className="text-gray-400 group-hover:text-indigo-600 mb-1" size={20} />
-          <span className="text-[11px] font-bold text-gray-750 font-sans">Anexar Contrato de Honorários Assinado (PDF)</span>
-          <input 
-            type="file" 
-            className="hidden" 
+          <UploadCloud
+            className="text-gray-400 group-hover:text-indigo-600 mb-1"
+            size={20}
+          />
+          <span className="text-[11px] font-bold text-gray-750 font-sans">
+            Anexar Contrato de Honorários Assinado (PDF)
+          </span>
+          <input
+            type="file"
+            className="hidden"
             onChange={(e) => {
               if (e.target.files && e.target.files.length > 0) {
                 const name = e.target.files[0].name;
-                const size = (e.target.files[0].size / 1024 / 1024).toFixed(2) + ' MB';
+                const size =
+                  (e.target.files[0].size / 1024 / 1024).toFixed(2) + " MB";
                 addWizardFile(field, name, size);
               }
             }}
@@ -748,11 +1088,21 @@ export default function FinanceiroFluxo() {
         {files.length > 0 && (
           <div className="space-y-1">
             {files.map((f: any, idx: number) => (
-              <div key={idx} className="flex items-center justify-between p-2 bg-indigo-50 border border-indigo-150 rounded-xl text-xs">
+              <div
+                key={idx}
+                className="flex items-center justify-between p-2 bg-indigo-50 border border-indigo-150 rounded-xl text-xs"
+              >
                 <span className="truncate font-semibold text-indigo-900 flex items-center gap-1 font-mono">
-                  <FileText size={12} /> {f.name} <span className="text-[10px] text-indigo-400 font-normal">({f.size})</span>
+                  <FileText size={12} /> {f.name}{" "}
+                  <span className="text-[10px] text-indigo-400 font-normal">
+                    ({f.size})
+                  </span>
                 </span>
-                <button type="button" onClick={() => removeWizardFile(field, idx)} className="text-rose-600 hover:bg-rose-105 p-1 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => removeWizardFile(field, idx)}
+                  className="text-rose-600 hover:bg-rose-105 p-1 rounded-lg"
+                >
                   <Trash2 size={12} />
                 </button>
               </div>
@@ -764,33 +1114,40 @@ export default function FinanceiroFluxo() {
   };
 
   // Client display format properties
-  const clientName = client 
-    ? (client.type === 'PF' 
-        ? (client.pfDadosPessoais?.pf_nomeCompleto || client.pfData?.pf_nomeCompleto || 'Sem Nome') 
-        : (client.pjDadosEmpresa?.pj_razaoSocial || client.pjData?.pj_razaoSocial || 'Sem Razão Social'))
-    : '';
-  const clientSlug = client?.slug || '';
+  const clientName = client
+    ? client.type === "PF"
+      ? client.pfDadosPessoais?.pf_nomeCompleto ||
+        client.pfData?.pf_nomeCompleto ||
+        "Sem Nome"
+      : client.pjDadosEmpresa?.pj_razaoSocial ||
+        client.pjData?.pj_razaoSocial ||
+        "Sem Razão Social"
+    : "";
+  const clientSlug = client?.slug || "";
 
   // Options lists
   const chargeTypeOptions = [
-    'Honorários fixos',
-    'Honorários de êxito',
-    'Honorários Fixos + êxito'
+    "Honorários fixos",
+    "Honorários de êxito",
+    "Honorários Fixos + êxito",
   ];
 
-  const financialStatusOptions: { value: CaseFinancial['financialStatus']; label: string }[] = [
-    { value: 'aguardando_pagamento', label: 'Aguardando pagamento' },
-    { value: 'pago', label: 'Pago' },
-    { value: 'em_atraso', label: 'Em atraso' },
-    { value: 'cancelado', label: 'Cancelado' },
-    { value: 'renegociado', label: 'Renegociado' },
-    { value: 'aguardando_webhook', label: 'Aguardando validação webhook' },
-    { value: 'erro_webhook', label: 'Erro de sincronização Webhook' }
+  const financialStatusOptions: {
+    value: CaseFinancial["financialStatus"];
+    label: string;
+  }[] = [
+    { value: "aguardando_pagamento", label: "Aguardando pagamento" },
+    { value: "pago", label: "Pago" },
+    { value: "em_atraso", label: "Em atraso" },
+    { value: "cancelado", label: "Cancelado" },
+    { value: "renegociado", label: "Renegociado" },
+    { value: "aguardando_webhook", label: "Aguardando validação webhook" },
+    { value: "erro_webhook", label: "Erro de sincronização Webhook" },
   ];
 
   useEffect(() => {
     if (!caseId) {
-      setError('Indexador de caso inexistente na URL técnica.');
+      setError("Indexador de caso inexistente na URL técnica.");
       setFetching(false);
       return;
     }
@@ -799,25 +1156,28 @@ export default function FinanceiroFluxo() {
       try {
         setLoadingList(true);
         // 1. Fetch case record
-        const caseSnap = await getDoc(doc(db, 'cases', caseId!));
+        const caseSnap = await getDoc(doc(db, "cases", caseId!));
         if (!caseSnap.exists()) {
-          setError(`Caso referenciado por ID [${caseId}] não existe no banco de dados.`);
+          setError(
+            `Caso referenciado por ID [${caseId}] não existe no banco de dados.`,
+          );
           setFetching(false);
           setLoadingList(false);
           return;
         }
         const cData = caseSnap.data();
         setCaseObj(cData);
+        setTabelaAnalitica(cData.tabelaAnalitica || []);
         if (cData.solicitacoesProvasWizardState) {
           setWizardState((prev: any) => ({
             ...prev,
-            ...cData.solicitacoesProvasWizardState
+            ...cData.solicitacoesProvasWizardState,
           }));
         }
 
         // 2. Fetch Client record if available
         if (cData.clientId) {
-          const clientSnap = await getDoc(doc(db, 'clients', cData.clientId));
+          const clientSnap = await getDoc(doc(db, "clients", cData.clientId));
           if (clientSnap.exists()) {
             setClient(clientSnap.data());
           }
@@ -825,26 +1185,30 @@ export default function FinanceiroFluxo() {
 
         // 3. Fetch Case Financial records
         const q = query(
-          collection(db, 'caseFinancials'),
-          where('caseId', '==', caseId),
-          where('archived', '==', false)
+          collection(db, "caseFinancials"),
+          where("caseId", "==", caseId),
+          where("archived", "==", false),
         );
         const querySnap = await getDocs(q);
         const financialList: CaseFinancial[] = [];
         querySnap.forEach((docSnap) => {
           financialList.push({
             id: docSnap.id,
-            ...docSnap.data()
+            ...docSnap.data(),
           } as CaseFinancial);
         });
 
         // Sorted newest first
-        financialList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        financialList.sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
         setFinancials(financialList);
-
       } catch (err: any) {
         console.error(err);
-        setError(`Erro crítico ao buscar registros financeiros: ${err.message || err}`);
+        setError(
+          `Erro crítico ao buscar registros financeiros: ${err.message || err}`,
+        );
       } finally {
         setFetching(false);
         setLoadingList(false);
@@ -859,15 +1223,18 @@ export default function FinanceiroFluxo() {
     setError(null);
     setSuccess(null);
 
-    const resolvedChargeType = formChargeType === 'Outro' ? customChargeType.trim() : formChargeType;
+    const resolvedChargeType =
+      formChargeType === "Outro" ? customChargeType.trim() : formChargeType;
     if (!resolvedChargeType) {
-      setError('Por favor defina o tipo de cobrança.');
+      setError("Por favor defina o tipo de cobrança.");
       return;
     }
 
     const parsedAmount = parseFloat(formTotalAmount);
     if (isNaN(parsedAmount) || parsedAmount < 0) {
-      setError('O valor total do faturamento deve ser um número válido superior ou igual a zero BRL.');
+      setError(
+        "O valor total do faturamento deve ser um número válido superior ou igual a zero BRL.",
+      );
       return;
     }
 
@@ -875,10 +1242,10 @@ export default function FinanceiroFluxo() {
     const nowISO = new Date().toISOString();
 
     try {
-      const payload: Omit<CaseFinancial, 'id'> = {
+      const payload: Omit<CaseFinancial, "id"> = {
         caseId: caseId!,
-        clientId: caseObj?.clientId || '',
-        clientSlug: clientSlug || '',
+        clientId: caseObj?.clientId || "",
+        clientSlug: clientSlug || "",
 
         chargeType: resolvedChargeType,
         totalAmount: parsedAmount,
@@ -911,36 +1278,36 @@ export default function FinanceiroFluxo() {
         notes: formNotes.trim(),
         archived: false,
         updatedAt: nowISO,
-        createdAt: nowISO // overwrite below if editing
+        createdAt: nowISO, // overwrite below if editing
       };
 
       if (editingId) {
         // Retrieve creation date first or use fallback to preserve chronology
-        const existingRef = financials.find(f => f.id === editingId);
+        const existingRef = financials.find((f) => f.id === editingId);
         payload.createdAt = existingRef?.createdAt || nowISO;
 
-        await updateDoc(doc(db, 'caseFinancials', editingId), payload as any);
-        setSuccess('Cobrança jurídica atualizada com sucesso!');
+        await updateDoc(doc(db, "caseFinancials", editingId), payload as any);
+        setSuccess("Cobrança jurídica atualizada com sucesso!");
       } else {
-        await addDoc(collection(db, 'caseFinancials'), payload as any);
-        setSuccess('Cobrança fática cadastrada com sucesso!');
+        await addDoc(collection(db, "caseFinancials"), payload as any);
+        setSuccess("Cobrança fática cadastrada com sucesso!");
       }
 
       // REGRA DE CRIAÇÃO / ATUALIZAÇÃO VISÍVEL AO CLIENTE:
       // "Ao criar registro financeiro visível ao cliente: Atualizar cases/{caseId}"
       if (formVisibleToClient) {
-        await updateDoc(doc(db, 'cases', caseId!), {
+        await updateDoc(doc(db, "cases", caseId!), {
           financialStatus: formFinancialStatus,
           hasFinancialRecord: true,
-          statusPublicoCliente: caseObj?.statusPublicoCliente || 'Aguardando documentos',
-          updatedAt: nowISO
+          statusPublicoCliente:
+            caseObj?.statusPublicoCliente || "Aguardando documentos",
+          updatedAt: nowISO,
         });
       }
 
       resetForm();
       setRefreshToggle((prev) => prev + 1);
       setActiveSubStep(3);
-
     } catch (err: any) {
       console.error(err);
       setError(`Erro fático ao persistir cobrança: ${err.message || err}`);
@@ -956,45 +1323,51 @@ export default function FinanceiroFluxo() {
 
     if (chargeTypeOptions.includes(fee.chargeType)) {
       setFormChargeType(fee.chargeType);
-      setCustomChargeType('');
+      setCustomChargeType("");
     } else {
-      setFormChargeType('Outro');
+      setFormChargeType("Outro");
       setCustomChargeType(fee.chargeType);
     }
 
     setFormTotalAmount(String(fee.totalAmount || 0));
-    setFormPaymentMethod(fee.paymentMethod || 'Cartão de Crédito');
+    setFormPaymentMethod(fee.paymentMethod || "Cartão de Crédito");
     setFormInstallments(fee.installments || 1);
-    setFormFirstDueDate(fee.firstDueDate || '');
-    setFormFinancialStatus(fee.financialStatus || 'pendente');
+    setFormFirstDueDate(fee.firstDueDate || "");
+    setFormFinancialStatus(fee.financialStatus || "pendente");
     setFormVisibleToClient(fee.visibleToClient !== false);
-    setFormPublicMessage(fee.publicFinancialMessage || '');
+    setFormPublicMessage(fee.publicFinancialMessage || "");
 
     setFormContractLinked(fee.contractLinked === true);
-    setFormContractName(fee.contractName || 'Contrato de Prestação de Serviços Jurídicos');
-    setFormContractUrl(fee.contractUrl || '');
+    setFormContractName(
+      fee.contractName || "Contrato de Prestação de Serviços Jurídicos",
+    );
+    setFormContractUrl(fee.contractUrl || "");
     setFormContractVisible(fee.contractVisibleToClient !== false);
 
-    setFormPaymentProvider(fee.paymentProvider || 'manual_temporario');
-    setFormPaymentStatus(fee.paymentStatus || '');
-    setFormPaymentLink(fee.paymentLink || '');
-    setFormExternalPaymentId(fee.externalPaymentId || '');
-    setFormWebhookStatus(fee.webhookStatus || '');
-    setFormLastWebhookAt(fee.lastWebhookAt || '');
+    setFormPaymentProvider(fee.paymentProvider || "manual_temporario");
+    setFormPaymentStatus(fee.paymentStatus || "");
+    setFormPaymentLink(fee.paymentLink || "");
+    setFormExternalPaymentId(fee.externalPaymentId || "");
+    setFormWebhookStatus(fee.webhookStatus || "");
+    setFormLastWebhookAt(fee.lastWebhookAt || "");
 
-    setFormStripeCustomerId(fee.stripeCustomerId || '');
-    setFormStripeCheckoutId(fee.stripeCheckoutSessionId || '');
-    setFormStripeIntentId(fee.stripePaymentIntentId || '');
+    setFormStripeCustomerId(fee.stripeCustomerId || "");
+    setFormStripeCheckoutId(fee.stripeCheckoutSessionId || "");
+    setFormStripeIntentId(fee.stripePaymentIntentId || "");
 
-    setFormAsaasCustomerId(fee.asaasCustomerId || '');
-    setFormAsaasPaymentId(fee.asaasPaymentId || '');
+    setFormAsaasCustomerId(fee.asaasCustomerId || "");
+    setFormAsaasPaymentId(fee.asaasPaymentId || "");
 
-    setFormNotes(fee.notes || '');
+    setFormNotes(fee.notes || "");
     setActiveSubStep(1);
   };
 
   const handleArchive = async (id: string) => {
-    if (!window.confirm('Tem certeza que deseja arquivar este faturamento? O registro continuará no banco de dados com a flag correspondente.')) {
+    if (
+      !window.confirm(
+        "Tem certeza que deseja arquivar este faturamento? O registro continuará no banco de dados com a flag correspondente.",
+      )
+    ) {
       return;
     }
     setError(null);
@@ -1003,11 +1376,11 @@ export default function FinanceiroFluxo() {
     const nowISO = new Date().toISOString();
 
     try {
-      await updateDoc(doc(db, 'caseFinancials', id), {
+      await updateDoc(doc(db, "caseFinancials", id), {
         archived: true,
-        updatedAt: nowISO
+        updatedAt: nowISO,
       });
-      setSuccess('Faturamento arquivado com êxito.');
+      setSuccess("Faturamento arquivado com êxito.");
       setRefreshToggle((p) => p + 1);
     } catch (err: any) {
       console.error(err);
@@ -1019,36 +1392,36 @@ export default function FinanceiroFluxo() {
 
   const resetForm = () => {
     setEditingId(null);
-    setFormChargeType('Honorários fixos');
-    setCustomChargeType('');
-    setFormTotalAmount('0');
-    setFormPaymentMethod('Cartão de Crédito');
+    setFormChargeType("Honorários fixos");
+    setCustomChargeType("");
+    setFormTotalAmount("0");
+    setFormPaymentMethod("Cartão de Crédito");
     setFormInstallments(1);
-    setFormFirstDueDate('');
-    setFormFinancialStatus('pendente');
+    setFormFirstDueDate("");
+    setFormFinancialStatus("pendente");
     setFormVisibleToClient(true);
-    setFormPublicMessage('');
+    setFormPublicMessage("");
 
     setFormContractLinked(false);
-    setFormContractName('Contrato de Prestação de Serviços Jurídicos');
-    setFormContractUrl('');
+    setFormContractName("Contrato de Prestação de Serviços Jurídicos");
+    setFormContractUrl("");
     setFormContractVisible(true);
 
-    setFormPaymentProvider('manual_temporario');
-    setFormPaymentStatus('');
-    setFormPaymentLink('');
-    setFormExternalPaymentId('');
-    setFormWebhookStatus('');
-    setFormLastWebhookAt('');
+    setFormPaymentProvider("manual_temporario");
+    setFormPaymentStatus("");
+    setFormPaymentLink("");
+    setFormExternalPaymentId("");
+    setFormWebhookStatus("");
+    setFormLastWebhookAt("");
 
-    setFormStripeCustomerId('');
-    setFormStripeCheckoutId('');
-    setFormStripeIntentId('');
+    setFormStripeCustomerId("");
+    setFormStripeCheckoutId("");
+    setFormStripeIntentId("");
 
-    setFormAsaasCustomerId('');
-    setFormAsaasPaymentId('');
+    setFormAsaasCustomerId("");
+    setFormAsaasPaymentId("");
 
-    setFormNotes('');
+    setFormNotes("");
   };
 
   const handleSaveAndAdvance = async () => {
@@ -1056,62 +1429,75 @@ export default function FinanceiroFluxo() {
     setError(null);
     const nowISO = new Date().toISOString();
 
+    if (activeSubStep === 1) {
+      setActiveSubStep(2);
+      setSaving(false);
+      return;
+    }
+
     try {
-      await updateDoc(doc(db, 'cases', caseId!), {
+      await updateDoc(doc(db, "cases", caseId!), {
         productionStage: "edrp",
-        updatedAt: nowISO
+        updatedAt: nowISO,
       });
       navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId!}/edrp`);
     } catch (err: any) {
       console.error(err);
-      setError(`Erro ao atualizar etapa de produção para avanço: ${err.message}`);
+      setError(
+        `Erro ao atualizar etapa de produção para avanço: ${err.message}`,
+      );
     } finally {
       setSaving(false);
     }
   };
 
   const handleSaveAndExit = async () => {
-    navigate('/boss-giffoni-clientes/fluxo-producao');
+    navigate("/boss-giffoni-clientes/fluxo-producao");
   };
 
-  const getStatusBadgeStyles = (status: CaseFinancial['financialStatus']) => {
+  const getStatusBadgeStyles = (status: CaseFinancial["financialStatus"]) => {
     switch (status) {
-      case 'pago':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-250';
-      case 'parcialmente_pago':
-        return 'bg-teal-50 text-teal-800 border-teal-200';
-      case 'aguardando_pagamento':
-        return 'bg-blue-50 text-blue-750 border-blue-200';
-      case 'em_atraso':
-        return 'bg-rose-50 text-rose-750 border-rose-250 font-bold';
-      case 'cancelado':
-        return 'bg-gray-100 text-gray-550 border-gray-250';
-      case 'renegociado':
-        return 'bg-purple-50 text-purple-750 border-purple-200';
-      case 'aguardando_webhook':
-        return 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse';
-      case 'erro_webhook':
-        return 'bg-red-50 text-red-750 border-red-250';
+      case "pago":
+        return "bg-emerald-50 text-emerald-700 border-emerald-250";
+      case "parcialmente_pago":
+        return "bg-teal-50 text-teal-800 border-teal-200";
+      case "aguardando_pagamento":
+        return "bg-blue-50 text-blue-750 border-blue-200";
+      case "em_atraso":
+        return "bg-rose-50 text-rose-750 border-rose-250 font-bold";
+      case "cancelado":
+        return "bg-gray-100 text-gray-550 border-gray-250";
+      case "renegociado":
+        return "bg-purple-50 text-purple-750 border-purple-200";
+      case "aguardando_webhook":
+        return "bg-amber-50 text-amber-700 border-amber-200 animate-pulse";
+      case "erro_webhook":
+        return "bg-red-50 text-red-750 border-red-250";
       default:
-        return 'bg-gray-55/60 text-gray-700 border-gray-200';
+        return "bg-gray-55/60 text-gray-700 border-gray-200";
     }
   };
 
   const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(val);
   };
 
   if (!caseId) {
     return (
       <div className="p-8 max-w-xl mx-auto mt-20 bg-white border border-red-200 rounded-3xl shadow-sm text-center">
         <AlertCircle size={48} className="text-red-500 mx-auto mb-4" />
-        <h3 className="text-lg font-black text-gray-900 uppercase">Acesso Bloqueado</h3>
+        <h3 className="text-lg font-black text-gray-900 uppercase">
+          Acesso Bloqueado
+        </h3>
         <p className="text-xs text-gray-500 mt-2">
           Não há indexador fático associado a essa rota em paralelo.
         </p>
         <button
           type="button"
-          onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao')}
+          onClick={() => navigate("/boss-giffoni-clientes/fluxo-producao")}
           className="mt-6 inline-flex bg-gray-900 hover:bg-black text-white text-xs font-bold px-6 py-2.5 rounded-xl cursor-pointer"
         >
           Retornar ao Painel
@@ -1121,9 +1507,12 @@ export default function FinanceiroFluxo() {
   }
 
   return (
-    <FluxoStepLayout stepName="Financeiro" caseId={caseId} statusText={caseObj?.status === 'rascunho' ? 'Rascunho' : 'Ativo'}>
+    <FluxoStepLayout
+      stepName="Financeiro"
+      caseId={caseId}
+      statusText={caseObj?.status === "rascunho" ? "Rascunho" : "Ativo"}
+    >
       <div className="space-y-6">
-
         {/* FEEDBACK LABELS */}
         {error && (
           <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-900 text-xs flex gap-3 items-center animate-fadeIn">
@@ -1139,525 +1528,737 @@ export default function FinanceiroFluxo() {
           </div>
         )}
 
-         {/* METADATA ACCORDING TO UX REQS & REGRA 2 */}
-         {!fetching && caseObj && (
-           <div className="bg-gray-50/75 border border-gray-150 rounded-2xl p-5 mb-4">
-             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
-               <div className="space-y-1 pb-4 sm:pb-0">
-                 <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">Cliente Titular</span>
-                 <h4 className="text-sm font-bold text-gray-950 break-words block whitespace-normal pr-4">
-                   {clientName || 'Carregando...'}
-                 </h4>
-               </div>
-               <div className="space-y-1 sm:pl-4 pb-4 sm:pb-0">
-                 <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">Modalidade</span>
-                 <h4 className="text-sm font-bold text-gray-900 break-words uppercase tracking-tight">{caseObj.registrationType}</h4>
-                 <span className="inline-block text-xs font-bold px-2 py-0.5 bg-blue-50 text-blue-750 rounded-md font-mono mt-0.5">
-                   {caseObj.registrationTypeKey || 'Ajuizado'}
-                 </span>
-               </div>
-               <div className="space-y-1 sm:pl-4">
-                 <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">Controle Operacional</span>
-                 <div className="text-xs text-gray-600 space-y-1">
-                   <div>Interno: <span className="font-bold text-gray-700">{caseObj.statusInterno || 'Em produção'}</span></div>
-                   <div>Público: <span className="font-bold text-indigo-750 whitespace-normal break-all">{caseObj.statusPublicoCliente || 'Aguardando...'}</span></div>
-                 </div>
-               </div>
-             </div>
-           </div>
-         )}
- 
-         {/* SUB-STEP NAVIGATION SHARDS - REGRA 6 */}
-         {!fetching && caseObj && (
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border-b border-gray-150 pb-4 mb-4">
-             {[
-               { id: 1 as const, title: 'SubEtapa 01', label: 'CONDIÇÕES FINANCEIRAS E CONTRATO', icon: FileText },
-               { id: 2 as const, title: 'SubEtapa 02', label: `Lista de Cobranças Ativas (${financials.length})`, icon: Coins }
-             ].map((sub) => {
-               const Icon = sub.icon;
-               const isSelected = activeSubStep === sub.id;
-               return (
-                 <button
-                   key={sub.id}
-                   type="button"
-                   onClick={() => {
-                     setActiveSubStep(sub.id);
-                     resetForm();
-                   }}
-                   className={`flex items-center gap-3 text-left p-4 border rounded-2xl transition duration-150 hover:bg-gray-50/50 cursor-pointer ${
-                     isSelected
-                       ? 'bg-indigo-50 border-indigo-500 text-indigo-950 shadow-3xs ring-1'
-                       : 'bg-white border-gray-200 text-gray-500'
-                   }`}
-                 >
-                   <div className={`p-2 rounded-xl shrink-0 ${isSelected ? 'bg-indigo-100 text-indigo-705' : 'bg-gray-50 text-gray-400'}`}>
-                     <Icon size={18} />
-                   </div>
-                   <div className="min-w-0">
-                     <span className={`block text-[9px] font-extrabold uppercase tracking-widest font-mono ${isSelected ? 'text-indigo-650' : 'text-gray-400'}`}>
-                       {sub.title}
-                     </span>
-                     <span className="text-xs font-black leading-tight mt-0.5 block truncate">
-                       {sub.id === 1 ? `Contrato: ${client?.type === 'PF' ? 'PF' : 'PJ'}` : sub.label}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
+        {/* METADATA ACCORDING TO UX REQS & REGRA 2 */}
+        {!fetching && caseObj && (
+          <div className="bg-gray-50/75 border border-gray-150 rounded-2xl p-5 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
+              <div className="space-y-1 pb-4 sm:pb-0">
+                <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">
+                  Cliente Titular
+                </span>
+                <h4 className="text-sm font-bold text-gray-950 break-words block whitespace-normal pr-4">
+                  {clientName || "Carregando..."}
+                </h4>
+              </div>
+              <div className="space-y-1 sm:pl-4 pb-4 sm:pb-0">
+                <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">
+                  Modalidade
+                </span>
+                <h4 className="text-sm font-bold text-gray-900 break-words uppercase tracking-tight">
+                  {caseObj.registrationType}
+                </h4>
+                <span className="inline-block text-xs font-bold px-2 py-0.5 bg-blue-50 text-blue-750 rounded-md font-mono mt-0.5">
+                  {caseObj.registrationTypeKey || "Ajuizado"}
+                </span>
+              </div>
+              <div className="space-y-1 sm:pl-4">
+                <span className="text-[9px] font-black tracking-wider text-gray-400 uppercase">
+                  Controle Operacional
+                </span>
+                <div className="text-xs text-gray-600 space-y-1">
+                  <div>
+                    Interno:{" "}
+                    <span className="font-bold text-gray-700">
+                      {caseObj.statusInterno || "Em produção"}
+                    </span>
+                  </div>
+                  <div>
+                    Público:{" "}
+                    <span className="font-bold text-indigo-750 whitespace-normal break-all">
+                      {caseObj.statusPublicoCliente || "Aguardando..."}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* ETAPA 1 CONTRATO E CONDICOES FINANCEIRAS */}
-         {!fetching && caseObj && activeSubStep === 1 && (
-           <div className="space-y-6 animate-fadeIn">
-             <div className="max-w-4xl mx-auto space-y-6">
-                  
-               {/* CARD 1: CONDIÇÕES OPERACIONAIS DO CONTRATO */}
-               <form onSubmit={handleSaveFinanceiroCondicoes} className="bg-white border border-gray-150 rounded-2xl p-6 space-y-4 shadow-3xs">
-                 <div className="flex justify-between items-center pb-2 border-b border-gray-100">
-                   <h4 className="text-xs font-black uppercase text-indigo-950 tracking-wider">
-                     Condições Operacionais do Contrato
-                   </h4>
-                   <span className="inline-flex bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-md text-[10px] uppercase font-black font-mono">
-                     {client?.type === 'PF' ? 'Contrato PF' : 'Contrato PJ'}
-                   </span>
-                 </div>
-                 <p className="text-[11px] text-gray-500 leading-relaxed font-medium">
-                   Insira os parâmetros oficiais acordados com o cliente. Após gravar, execute o assistente de Automação do Google Docs logo abaixo para gerar a minuta de honorários real e dinâmica no Google Docs.
-                 </p>
+        {/* SUB-STEP NAVIGATION SHARDS - REGRA 6 */}
+        {!fetching && caseObj && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 border-b border-gray-150 pb-4 mb-4">
+            {[
+              {
+                id: 1 as const,
+                title: "SubEtapa 01",
+                label: "CONDIÇÕES FINANCEIRAS E CONTRATO",
+                icon: FileText,
+              },
+              {
+                id: 2 as const,
+                title: "SubEtapa 02",
+                label: "Ver detalhes do Contrato financeiro",
+                icon: Coins,
+              },
+            ].map((sub) => {
+              const Icon = sub.icon;
+              const isSelected = activeSubStep === sub.id;
+              return (
+                <button
+                  key={sub.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveSubStep(sub.id);
+                    resetForm();
+                  }}
+                  className={`flex items-center gap-3 text-left p-4 border rounded-2xl transition duration-150 hover:bg-gray-50/50 cursor-pointer ${
+                    isSelected
+                      ? "bg-indigo-50 border-indigo-500 text-indigo-950 shadow-3xs ring-1"
+                      : "bg-white border-gray-200 text-gray-500"
+                  }`}
+                >
+                  <div
+                    className={`p-2 rounded-xl shrink-0 ${isSelected ? "bg-indigo-100 text-indigo-705" : "bg-gray-50 text-gray-400"}`}
+                  >
+                    <Icon size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <span
+                      className={`block text-[9px] font-extrabold uppercase tracking-widest font-mono ${isSelected ? "text-indigo-650" : "text-gray-400"}`}
+                    >
+                      {sub.title}
+                    </span>
+                    <span className="text-xs font-black leading-tight mt-0.5 block truncate">
+                      {sub.id === 1
+                        ? `Contrato: ${client?.type === "PF" ? "PF" : "PJ"}`
+                        : sub.label}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   {/* 1. Tipo de Serviço Contratado */}
-                   <div className="md:col-span-2 space-y-1">
-                     <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">1. Tipo de Serviço Contratado ({"{{TIPO_SERVICO_CONTRATADO}}"})</label>
-                     <input 
-                       type="text" 
-                       value={tipoServicoContratadoForm} 
-                       onChange={(e) => setTipoServicoContratadoForm(e.target.value)} 
-                       className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                       placeholder="Assessoria Jurídica e Patrocínio de Ação Ordinária"
-                       required
-                     />
-                   </div>
+        {/* ETAPA 1 CONTRATO E CONDICOES FINANCEIRAS */}
+        {!fetching && caseObj && activeSubStep === 1 && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="max-w-4xl mx-auto space-y-6">
+              {/* CARD 1: CONDIÇÕES OPERACIONAIS DO CONTRATO */}
+              <form
+                onSubmit={handleSaveFinanceiroCondicoes}
+                className="bg-white border border-gray-150 rounded-2xl p-6 space-y-4 shadow-3xs"
+              >
+                <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                  <h4 className="text-xs font-black uppercase text-indigo-950 tracking-wider">
+                    Condições Operacionais do Contrato
+                  </h4>
+                  <span className="inline-flex bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-md text-[10px] uppercase font-black font-mono">
+                    {client?.type === "PF" ? "Contrato PF" : "Contrato PJ"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-500 leading-relaxed font-medium">
+                  Insira os parâmetros oficiais acordados com o cliente. Após
+                  gravar, execute o assistente de Automação do Google Docs logo
+                  abaixo para gerar a minuta de honorários real e dinâmica no
+                  Google Docs.
+                </p>
 
-                   {/* 2. Tipo de Honorário */}
-                   <div className="space-y-1">
-                     <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">2. Tipo de Honorários</label>
-                     <select 
-                       value={tipoHonorarioForm} 
-                       onChange={(e) => setTipoHonorarioForm(e.target.value)} 
-                       className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                     >
-                       <option value="Honorários Fixos">Honorários Fixos</option>
-                       <option value="Êxito">Êxito</option>
-                       <option value="Misto (Fixo + Êxito)">Misto (Fixo + Êxito)</option>
-                     </select>
-                   </div>
+                <div className="grid grid-cols-1 gap-5">
+                  {/* 1. Tipo de Serviço */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
+                      1. Tipo de Serviço
+                    </label>
+                    <input
+                      type="text"
+                      value={tipoServicoContratadoForm}
+                      onChange={(e) =>
+                        setTipoServicoContratadoForm(e.target.value)
+                      }
+                      className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                      placeholder="Assessoria Jurídica e Patrocínio de Ação Ordinária"
+                      required
+                    />
+                  </div>
 
-                   {/* 3. Honorários Êxito Percentual */}
-                   {(tipoHonorarioForm === 'Êxito' || tipoHonorarioForm === 'Misto (Fixo + Êxito)') ? (
-                     <div className="space-y-1 animate-fadeIn">
-                       <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">3. Êxito Percentual ({"{{HONORARIO_EXITO_PERCENTUAL}}"})</label>
-                       <input 
-                         type="text" 
-                         value={honorarioExitoPercentualForm} 
-                         onChange={(e) => setHonorarioExitoPercentualForm(e.target.value)} 
-                         className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                         placeholder="Ex: 30%"
-                       />
-                     </div>
-                   ) : (
-                     <div className="bg-gray-50/30 border border-dashed border-gray-150 p-2.5 rounded-xl flex items-center justify-center text-center text-gray-400 text-[10px] leading-snug font-mono">
-                       Parâmetro 3. Êxito Desativado
-                     </div>
-                   )}
+                  {/* 2. Tipo de Honorários */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
+                      2. Tipo de Honorários
+                    </label>
+                    <select
+                      value={tipoHonorarioForm}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setTipoHonorarioForm(val);
+                        let mappedQ32 = "";
+                        if (val === "Honorários Fixos") {
+                          mappedQ32 = "fixo";
+                        } else if (val === "Êxito") {
+                          mappedQ32 = "exito";
+                        } else if (val === "Misto (Fixo + Êxito)") {
+                          mappedQ32 = "exito_fixo";
+                        }
+                        if (mappedQ32) {
+                          saveWizardStateUpdate({ q3_1: "sim", q3_2: mappedQ32 });
+                        }
+                      }}
+                      className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                    >
+                      <option value="Honorários Fixos">Honorários Fixos</option>
+                      <option value="Êxito">Êxito</option>
+                      <option value="Misto (Fixo + Êxito)">
+                        Misto (Fixo + Êxito)
+                      </option>
+                    </select>
+                  </div>
 
-                   {/* 4. Honorários Fixo Valor */}
-                   {(tipoHonorarioForm === 'Honorários Fixos' || tipoHonorarioForm === 'Misto (Fixo + Êxito)') ? (
-                     <div className="space-y-1 animate-fadeIn">
-                       <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">4. Valor Fixo Total ({"{{HONORARIO_FIXO_VALOR}}"})</label>
-                       <input 
-                         type="text" 
-                         value={honorarioFixoValorForm} 
-                         onChange={(e) => setHonorarioFixoValorForm(e.target.value)} 
-                         className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                         placeholder="Ex: R$ 3.500,00"
-                       />
-                     </div>
-                   ) : (
-                     <div className="bg-gray-50/30 border border-dashed border-gray-150 p-2.5 rounded-xl flex items-center justify-center text-center text-gray-400 text-[10px] leading-snug font-mono">
-                       Parâmetro 4. Valor Fixo Desativado
-                     </div>
-                   )}
+                  {/* 3. Êxito Percentual */}
+                  {tipoHonorarioForm === "Êxito" ||
+                  tipoHonorarioForm === "Misto (Fixo + Êxito)" ? (
+                    <div className="space-y-1 animate-fadeIn">
+                      <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
+                        3. Êxito Percentual
+                      </label>
+                      <input
+                        type="text"
+                        value={honorarioExitoPercentualForm}
+                        onChange={(e) =>
+                          setHonorarioExitoPercentualForm(e.target.value)
+                        }
+                        onFocus={() => setHonorarioExitoPercentualForm("")}
+                        className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                        placeholder="Ex: 30%"
+                      />
+                    </div>
+                  ) : null}
 
-                   {/* 5. Forma de Pagamento */}
-                   {(tipoHonorarioForm === 'Honorários Fixos' || tipoHonorarioForm === 'Misto (Fixo + Êxito)') ? (
-                     <div className="space-y-1 animate-fadeIn">
-                       <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">5. Forma de Pagamento ({"{{FORMA_PAGAMENTO}}"})</label>
-                       <select 
-                         value={formaPagamentoForm} 
-                         onChange={(e) => setFormaPagamentoForm(e.target.value)} 
-                         className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                       >
-                         <option value="À vista">À vista</option>
-                         <option value="Parcelado">Parcelado</option>
-                         <option value="Entrada + Parcelado">Entrada + Parcelado</option>
-                       </select>
-                     </div>
-                   ) : (
-                     <div className="bg-gray-50/30 border border-dashed border-gray-150 p-2.5 rounded-xl flex items-center justify-center text-center text-gray-400 text-[10px] leading-snug font-mono">
-                       Parâmetro 5. Pagamento Desativado
-                     </div>
-                   )}
+                  {/* 4. Valor Fixo Total */}
+                  {tipoHonorarioForm === "Honorários Fixos" ||
+                  tipoHonorarioForm === "Misto (Fixo + Êxito)" ? (
+                    <div className="space-y-1 animate-fadeIn">
+                      <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
+                        4. Valor Fixo Total
+                      </label>
+                      <input
+                        type="text"
+                        value={honorarioFixoValorForm}
+                        onChange={(e) =>
+                          setHonorarioFixoValorForm(e.target.value)
+                        }
+                        onFocus={() => setHonorarioFixoValorForm("")}
+                        className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                        placeholder="Ex: R$ 3.500,00"
+                      />
+                    </div>
+                  ) : null}
 
-                   {/* 6. Tipo de Recebimento */}
-                   <div className="space-y-1">
-                     <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">6. Tipo de Recebimento ({"{{TIPO_RECEBIMENTO}}"})</label>
-                     <select 
-                       value={tipoRecebimentoForm} 
-                       onChange={(e) => setTipoRecebimentoForm(e.target.value)} 
-                       className="w-full px-3 py-1.5 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                     >
-                       <option value="PIX">PIX (Chave Automática)</option>
-                       <option value="Dinheiro">Dinheiro</option>
-                       <option value="Transferência Bancária">Transferência Bancária</option>
-                       <option value="Stripe">Stripe Gateway</option>
-                       <option value="ASAAS">ASAAS Gateway</option>
-                       <option value="InfinitePay">InfinitePay</option>
-                       <option value="Cartão de Crédito - Maquininha PagSeguro">Cartão de Crédito - Maquininha PagSeguro</option>
-                     </select>
-                   </div>
+                  {/* 5. Forma de Pagamento */}
+                  {tipoHonorarioForm === "Honorários Fixos" ||
+                  tipoHonorarioForm === "Misto (Fixo + Êxito)" ? (
+                    <div className="space-y-1 animate-fadeIn">
+                      <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
+                        5. Forma de Pagamento
+                      </label>
+                      <select
+                        value={formaPagamentoForm}
+                        onChange={(e) => setFormaPagamentoForm(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                      >
+                        <option value="À vista">À vista</option>
+                        <option value="Parcelado">Parcelado</option>
+                        <option value="Entrada + Parcelado">
+                          Entrada + Parcelado
+                        </option>
+                      </select>
+                    </div>
+                  ) : null}
 
-                   {/* PIX Fields */}
-                   {tipoRecebimentoForm === 'PIX' ? (
-                     <>
-                       <div className="space-y-1 animate-fadeIn">
-                         <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">7. Banco do PIX ({"{{PIX_BANCO}}"})</label>
-                         <input 
-                           type="text" 
-                           value={pixBancoForm} 
-                           onChange={(e) => setPixBancoForm(e.target.value)} 
-                           className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                           placeholder="Ex: Banco Itaú"
-                         />
-                       </div>
-                       <div className="space-y-1 animate-fadeIn">
-                         <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">8. Chave PIX ({"{{PIX_CHAVE}}"})</label>
-                         <input 
-                           type="text" 
-                           value={pixChaveForm} 
-                           onChange={(e) => setPixChaveForm(e.target.value)} 
-                           className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                           placeholder="E-mail, CNPJ, CPF..."
-                         />
-                       </div>
-                     </>
-                   ) : null}
+                  {/* 6. Valor Entrada */}
+                  {tipoHonorarioForm !== "Êxito" &&
+                  formaPagamentoForm === "Entrada + Parcelado" ? (
+                    <div className="space-y-1 animate-fadeIn">
+                      <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">
+                        6. Valor Entrada
+                      </label>
+                      <input
+                        type="text"
+                        value={valorEntradaForm}
+                        onChange={(e) => setValorEntradaForm(e.target.value)}
+                        onFocus={() => setValorEntradaForm("")}
+                        className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                        placeholder="Ex: R$ 1.500,00"
+                      />
+                    </div>
+                  ) : null}
 
-                   {/* Parcelas Fields */}
-                   {(tipoHonorarioForm !== 'Êxito' && (formaPagamentoForm === 'Parcelado' || formaPagamentoForm === 'Entrada + Parcelado')) ? (
-                     <>
-                       <div className="space-y-1 animate-fadeIn font-mono">
-                         <label className="text-[9px] font-bold uppercase text-gray-445 tracking-wide">9. Parcelas ({"{{QUANTIDADE_PARCELAS}}"})</label>
-                         <input 
-                           type="number" 
-                           min="1"
-                           value={quantidadeParcelasForm} 
-                           onChange={(e) => setQuantidadeParcelasForm(Number(e.target.value))} 
-                           className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                         />
-                       </div>
-                       <div className="space-y-1 animate-fadeIn">
-                         <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">10. Valor Parcela ({"{{VALOR_PARCELA}}"})</label>
-                         <input 
-                           type="text" 
-                           value={valorParcelaForm} 
-                           onChange={(e) => setValorParcelaForm(e.target.value)} 
-                           className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                           placeholder="Ex: R$ 500,00"
-                         />
-                       </div>
-                       <div className="space-y-1 animate-fadeIn font-mono">
-                         <label className="text-[9px] font-bold uppercase text-gray-445 tracking-wide">11. Dia Vencimento ({"{{DIA_VENCIMENTO}}"})</label>
-                         <input 
-                           type="text" 
-                           value={diaVencimentoForm} 
-                           onChange={(e) => setDiaVencimentoForm(e.target.value)} 
-                           className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                           placeholder="Ex: 10"
-                         />
-                       </div>
-                       <div className="space-y-1 animate-fadeIn font-mono">
-                         <label className="text-[9px] font-bold uppercase text-gray-445 tracking-wide">13. 1º Vencimento ({"{{DATA_PRIMEIRO_VENCIMENTO}}"})</label>
-                         <input 
-                           type="date" 
-                           value={dataPrimeiroVencimentoForm} 
-                           onChange={(e) => setDataPrimeiroVencimentoForm(e.target.value)} 
-                           className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-855 outline-none transition font-sans"
-                         />
-                       </div>
-                     </>
-                   ) : null}
+                  {/* 7. Quantidade de Parcelas (Dropdown cascading up to 60x) */}
+                  {tipoHonorarioForm !== "Êxito" &&
+                  (formaPagamentoForm === "Parcelado" ||
+                    formaPagamentoForm === "Entrada + Parcelado") ? (
+                    <div className="space-y-1 animate-fadeIn font-mono">
+                      <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
+                        7. Quantidade de Parcelas (Escolha até 60x)
+                      </label>
+                      <select
+                        value={quantidadeParcelasForm}
+                        onChange={(e) =>
+                          setQuantidadeParcelasForm(Number(e.target.value))
+                        }
+                        className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition font-sans"
+                      >
+                        {Array.from({ length: 60 }, (_, idx) => idx + 1).map(
+                          (n) => (
+                            <option key={n} value={n}>
+                              {n}x
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </div>
+                  ) : null}
 
-                   {/* 12. Valor Entrada */}
-                   {(tipoHonorarioForm !== 'Êxito' && formaPagamentoForm === 'Entrada + Parcelado') ? (
-                     <div className="space-y-1 animate-fadeIn">
-                       <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">12. Valor Entrada ({"{{VALOR_ENTRADA}}"})</label>
-                       <input 
-                         type="text" 
-                         value={valorEntradaForm} 
-                         onChange={(e) => setValorEntradaForm(e.target.value)} 
-                         className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                         placeholder="Ex: R$ 1.500,00"
-                       />
-                     </div>
-                   ) : null}
+                  {/* 8. Valor da parcela (Calculado automaticamente e read-only) */}
+                  {tipoHonorarioForm !== "Êxito" &&
+                  (formaPagamentoForm === "Parcelado" ||
+                    formaPagamentoForm === "Entrada + Parcelado") ? (
+                    <div className="space-y-1 animate-fadeIn">
+                      <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
+                        8. Valor da parcela (Calculado Automaticamente)
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          readOnly
+                          disabled
+                          value={`R$ ${valorParcelaForm}`}
+                          className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 cursor-not-allowed outline-none select-all font-sans"
+                        />
+                        <span className="absolute right-3 top-2.5 text-[8px] font-black uppercase tracking-wider text-indigo-650 bg-indigo-50 px-1.5 py-0.5 rounded font-mono">
+                          Auto
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
 
-                   {/* 14. Cobrança Automática */}
-                   <div className="space-y-1">
-                     <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">14. Geração em Lote?</label>
-                     <select 
-                       value={cobrancaAutomaticaIntegForm} 
-                       onChange={(e) => setCobrancaAutomaticaIntegForm(e.target.value)} 
-                       className="w-full px-3 py-1.5 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                     >
-                       <option value="Não">Não (Faturado Manualmente)</option>
-                       <option value="Sim">Sim (Sincronização Ativa Integrada)</option>
-                     </select>
-                   </div>
+                  {/* 9. Data de vencimento das parcelas */}
+                  {tipoHonorarioForm !== "Êxito" &&
+                  (formaPagamentoForm === "Parcelado" ||
+                    formaPagamentoForm === "Entrada + Parcelado") ? (
+                    <div className="space-y-1 animate-fadeIn font-mono">
+                      <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
+                        9. Data de Vencimento das Parcelas
+                      </label>
+                      <input
+                        type="date"
+                        value={dataPrimeiroVencimentoForm}
+                        onChange={(e) =>
+                          setDataPrimeiroVencimentoForm(e.target.value)
+                        }
+                        className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition font-sans"
+                      />
+                    </div>
+                  ) : null}
 
-                 </div>
+                  {/* 10. Tipo de recebimento */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
+                      10. Tipo de Recebimento
+                    </label>
+                    <select
+                      value={tipoRecebimentoForm}
+                      onChange={(e) => setTipoRecebimentoForm(e.target.value)}
+                      className="w-full px-3 py-1.5 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                    >
+                      <option value="PIX">PIX (Chave Automática)</option>
+                      <option value="Dinheiro">Dinheiro</option>
+                      <option value="Transferência Bancária">
+                        Transferência Bancária
+                      </option>
+                      <option value="Stripe">Stripe Gateway</option>
+                      <option value="ASAAS">ASAAS Gateway</option>
+                      <option value="InfinitePay">InfinitePay</option>
+                      <option value="Cartão de Crédito - Maquininha PagSeguro">
+                        Cartão de Crédito - Maquininha PagSeguro
+                      </option>
+                    </select>
+                  </div>
 
-                 <div className="pt-2 flex justify-end">
-                   <button
-                     type="submit"
-                     disabled={saving}
-                     className="px-5 py-2.5 hover:bg-indigo-700 bg-indigo-600 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-all shadow-3xs cursor-pointer disabled:opacity-50"
-                   >
-                     {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-                     Gravar Condições Operacionais
-                   </button>
-                 </div>
-               </form>
+                  {/* PIX Fields */}
+                  {tipoRecebimentoForm === "PIX" ? (
+                    <>
+                      {/* 11. Banco do PIX */}
+                      <div className="space-y-1 animate-fadeIn">
+                        <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">
+                          11. Banco do PIX
+                        </label>
+                        <input
+                          type="text"
+                          value={pixBancoForm}
+                          onChange={(e) => setPixBancoForm(e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                          placeholder="Ex: Banco Itaú"
+                        />
+                      </div>
+                      {/* 12. Chave PIX */}
+                      <div className="space-y-1 animate-fadeIn">
+                        <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">
+                          12. Chave PIX
+                        </label>
+                        <input
+                          type="text"
+                          value={pixChaveForm}
+                          onChange={(e) => setPixChaveForm(e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                          placeholder="E-mail, CNPJ, CPF..."
+                        />
+                      </div>
+                    </>
+                  ) : null}
 
-               {/* CARD 2: GOOGLE DOCS AUTOMATION IN BLUE */}
-               <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 space-y-4 shadow-xs">
-                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-blue-150">
-                   <h4 className="text-xs font-black uppercase text-blue-950 tracking-wider flex items-center gap-1.5">
-                     <FileCheck2 size={16} className="text-blue-600 animate-pulse" /> Googlde Docs Integração - Gerar Automaticamente Contrato de Honorários - Pessoa Física
-                   </h4>
-                   <div className="flex items-center gap-2">
-                     <span className="text-[10px] font-black uppercase text-blue-400 font-mono">STATUS:</span>
-                     {renderStatusBadge()}
-                   </div>
-                 </div>
+                  {/* 13. Geração em lote */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">
+                      13. Geração em Lote
+                    </label>
+                    <select
+                      value={cobrancaAutomaticaIntegForm}
+                      onChange={(e) =>
+                        setCobrancaAutomaticaIntegForm(e.target.value)
+                      }
+                      className="w-full px-3 py-1.5 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                    >
+                      <option value="Não">Não (Faturado Manualmente)</option>
+                      <option value="Sim">
+                        Sim (Sincronização Ativa Integrada)
+                      </option>
+                    </select>
+                  </div>
+                </div>
 
-                 {caseObj?.contratoHonorariosLogFalha && (
-                   <div className="p-3 border border-rose-100 bg-rose-50/50 rounded-xl text-[11px] text-rose-750 font-medium leading-relaxed">
-                     ⚠️ Falha na última tentativa: <code className="font-mono text-[10px] bg-white px-1 py-0.5 rounded border border-rose-100">{caseObj.contratoHonorariosLogFalha}</code>
-                   </div>
-                 )}
+                <div className="pt-2 flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="px-5 py-2.5 hover:bg-indigo-700 bg-indigo-600 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-all shadow-3xs cursor-pointer disabled:opacity-50"
+                  >
+                    {saving ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Save size={13} />
+                    )}
+                    Gravar Condições Operacionais
+                  </button>
+                </div>
+              </form>
 
-                 {caseObj?.contratoHonorariosGoogleDocsUrl && (
-                   <div className="p-4 bg-blue-100/50 border border-blue-200 rounded-2xl space-y-3.5 animate-in fade-in duration-300">
-                     <div className="grid grid-cols-2 gap-3 text-xs">
-                       <div>
-                         <span className="text-[10px] font-black uppercase text-blue-600 block font-mono">Documento</span>
-                         <span className="font-extrabold text-blue-900">Contrato de Honorários {client?.type || 'PF'}</span>
-                       </div>
-                       <div>
-                         <span className="text-[10px] font-black uppercase text-blue-600 block font-mono">Data Geração</span>
-                         <span className="font-extrabold text-blue-900">
-                           {caseObj.contratoHonorariosGeneratedAt 
-                             ? new Date(caseObj.contratoHonorariosGeneratedAt).toLocaleDateString('pt-BR', {
-                                 day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                               })
-                             : 'Gerado recentemente'}
-                         </span>
-                       </div>
-                       <div className="col-span-2">
-                         <span className="text-[10px] font-black uppercase text-blue-600 block font-mono">Nome do arquivo</span>
-                         <span className="font-bold text-blue-900 font-mono tracking-tight bg-white px-2 py-1 border border-blue-200 rounded-lg block truncate font-semibold">
-                           Contrato de Honorários - {clientName}
-                         </span>
-                       </div>
-                       <div className="col-span-2">
-                         <span className="text-[10px] font-black uppercase text-blue-600 block font-mono">Link de Acesso</span>
-                         <a 
-                           href={caseObj.contratoHonorariosGoogleDocsUrl}
-                           target="_blank"
-                           rel="noopener noreferrer"
-                           className="text-blue-750 font-bold hover:underline font-mono truncate block text-[11px]"
-                         >
-                           {caseObj.contratoHonorariosGoogleDocsUrl}
-                         </a>
-                       </div>
-                     </div>
+              {/* CARD 2: GOOGLE DOCS AUTOMATION IN BLUE */}
+              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 space-y-4 shadow-xs">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-blue-150">
+                  <h4 className="text-xs font-black uppercase text-blue-950 tracking-wider flex items-center gap-1.5">
+                    <FileCheck2
+                      size={16}
+                      className="text-blue-600 animate-pulse"
+                    />{" "}
+                    Google Docs Integração - Gerar Automaticamente Contrato de
+                    Honorários - Pessoa Física
+                  </h4>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase text-blue-400 font-mono">
+                      STATUS:
+                    </span>
+                    {renderStatusBadge()}
+                  </div>
+                </div>
 
-                     <div className="flex gap-2 pt-2 border-t border-blue-200">
-                       <button
-                         type="button"
-                         onClick={() => handleOpenContrato(caseObj.contratoHonorariosGoogleDocsUrl)}
-                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer font-semibold"
-                       >
-                         <ExternalLink size={13} />
-                         Abrir Contrato
-                       </button>
+                {caseObj?.contratoHonorariosLogFalha && (
+                  <div className="p-3.5 border border-rose-100 bg-rose-50/50 rounded-xl text-[11px] text-rose-750 font-medium leading-relaxed space-y-3">
+                    <div>
+                      ⚠️ Falha na última tentativa:{" "}
+                      <code className="font-mono text-[10px] bg-white px-1 py-0.5 rounded border border-rose-105 block mt-1 break-words select-all">
+                        {caseObj.contratoHonorariosLogFalha}
+                      </code>
+                    </div>
 
-                       <button
-                         type="button"
-                         disabled={saving}
-                         onClick={handleGenerateContratoHonorarios}
-                         className="px-4 py-2 bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
-                       >
-                         {saving ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={12} />}
-                         Gerar Novamente
-                       </button>
-                     </div>
-                   </div>
-                 )}
+                    {(caseObj.contratoHonorariosLogFalha.toLowerCase().includes("expirou") ||
+                      caseObj.contratoHonorariosLogFalha.toLowerCase().includes("sessão") ||
+                      caseObj.contratoHonorariosLogFalha.toLowerCase().includes("token") ||
+                      caseObj.contratoHonorariosLogFalha.toLowerCase().includes("autorização") ||
+                      caseObj.contratoHonorariosLogFalha.toLowerCase().includes("credentials")) && (
+                      <div className="pt-1.5 flex flex-wrap gap-2.5 items-center">
+                        <button
+                          type="button"
+                          disabled={isRenewingGoogle}
+                          onClick={handleRenewGoogle}
+                          className="inline-flex items-center gap-1.5 bg-rose-650 hover:bg-rose-700 text-white font-bold px-3 py-2 rounded-xl text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                        >
+                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M21.35 11.1H12V12.9H19.6C18.9 16.5 15.8 18.9 12 18.9C8.1 18.9 5.0 15.8 5.0 12C5.0 8.2 8.1 5.1 12 5.1C13.7 5.1 15.3 5.7 16.5 6.8L18.4 4.9C16.7 3.2 14.5 2.1 12 2.1C6.5 2.1 2 6.6 2 12.1C2 17.6 6.5 22.1 12 22.1C17.5 22.1 22 17.6 22 12.1C22 11.7 21.9 11.4 21.35 11.1H21.35Z" fill="currentColor"/>
+                          </svg>
+                          {isRenewingGoogle ? "Conectando..." : "Conectar / Renovar Conta Google em 1-Clique"}
+                        </button>
+                        <span className="text-[10px] text-rose-600 font-extrabold">
+                          Renove o seu acesso seguro sem deslogar!
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                 {!caseObj?.contratoHonorariosGoogleDocsUrl && (
-                   <button 
-                     type="button" 
-                     disabled={saving}
-                     onClick={handleGenerateContratoHonorarios}
-                     className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-black uppercase tracking-wider text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition shadow-xs"
-                   >
-                     {saving ? (
-                       <>
-                         <Loader2 size={15} className="animate-spin" />
-                         Gerando minuta oficial no GDocs...
-                       </>
-                     ) : (
-                       <>
-                         <FileCheck2 size={16} />
-                         Criar Contrato de Honorários
-                       </>
-                     )}
-                   </button>
-                 )}
-               </div>
+                {caseObj?.contratoHonorariosGoogleDocsUrl && (
+                  <div className="p-4 bg-blue-100/50 border border-blue-200 rounded-2xl space-y-3.5 animate-in fade-in duration-300">
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-[10px] font-black uppercase text-blue-600 block font-mono">
+                          Documento
+                        </span>
+                        <span className="font-extrabold text-blue-900">
+                          Contrato de Honorários {client?.type || "PF"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-black uppercase text-blue-600 block font-mono">
+                          Data Geração
+                        </span>
+                        <span className="font-extrabold text-blue-900">
+                          {caseObj.contratoHonorariosGeneratedAt
+                            ? new Date(
+                                caseObj.contratoHonorariosGeneratedAt,
+                              ).toLocaleDateString("pt-BR", {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "Gerado recentemente"}
+                        </span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-[10px] font-black uppercase text-blue-600 block font-mono">
+                          Nome do arquivo
+                        </span>
+                        <span className="font-bold text-blue-900 font-mono tracking-tight bg-white px-2 py-1 border border-blue-200 rounded-lg block truncate font-semibold">
+                          Contrato de Honorários - {clientName}
+                        </span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-[10px] font-black uppercase text-blue-600 block font-mono">
+                          Link de Acesso
+                        </span>
+                        <a
+                          href={caseObj.contratoHonorariosGoogleDocsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-750 font-bold hover:underline font-mono truncate block text-[11px]"
+                        >
+                          {caseObj.contratoHonorariosGoogleDocsUrl}
+                        </a>
+                      </div>
+                    </div>
 
-               {/* CARD 3: CHECKLIST E PERGUNTAS */}
-               <div className="space-y-4 bg-white border border-gray-150 rounded-2xl p-6 shadow-xs">
-                 <div className="space-y-1">
-                   <p className="text-xs font-extrabold text-gray-850">3.1 Você gerou o contrato de honorários?</p>
-                   <div className="flex gap-4">
-                     {['sim', 'nao'].map(o => (
-                       <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-750">
-                         <input 
-                           type="radio" 
-                           checked={wizardState.q3_1 === o} 
-                           onChange={() => {
-                             saveWizardStateUpdate({ q3_1: o, q3_4: o === 'nao' ? 'nao' : wizardState.q3_4 });
-                           }} 
-                         />
-                         <span>{o}</span>
-                       </label>
-                     ))}
-                   </div>
-                 </div>
+                    <div className="flex gap-2 pt-2 border-t border-blue-200">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleOpenContrato(
+                            caseObj.contratoHonorariosGoogleDocsUrl,
+                          )
+                        }
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer font-semibold"
+                      >
+                        <ExternalLink size={13} />
+                        Abrir Contrato
+                      </button>
 
-                 {wizardState.q3_1 === 'sim' && (
-                   <div className="space-y-4 border-l-2 border-indigo-200 pl-4 animate-in fade-in duration-200">
-                     
-                     <div className="space-y-1">
-                       <p className="text-xs font-extrabold text-gray-850">3.2 Qual o modelo de contratação?</p>
-                       <div className="grid grid-cols-2 p-3 bg-gray-50/55 border border-gray-100 rounded-xl gap-2">
-                         {['exito', 'entrada_exito', 'mensalidade', 'administrativo', 'outro'].map(m => (
-                           <label key={m} className="flex items-center gap-1.5 cursor-pointer text-[11px] text-gray-750 font-bold capitalize">
-                             <input 
-                               type="radio" 
-                               name="f_q3_2" 
-                               checked={wizardState.q3_2 === m} 
-                               onChange={() => saveWizardStateUpdate({ q3_2: m })} 
-                             />
-                             <span>{m.replace('_', ' ')}</span>
-                           </label>
-                         ))}
-                       </div>
-                       {wizardState.q3_2 === 'outro' && (
-                         <input 
-                           type="text" 
-                           placeholder="Descreva o modelo acordado" 
-                           value={wizardState.q3_2_outro || ''}
-                           onChange={(e) => saveWizardStateUpdate({ q3_2_outro: e.target.value })}
-                           className="mt-1 w-full max-w-sm px-3 py-1.5 bg-white border border-gray-150 rounded-xl text-xs font-semibold outline-none focus:ring-1 focus:ring-indigo-500"
-                         />
-                       )}
-                     </div>
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={handleGenerateContratoHonorarios}
+                        className="px-4 py-2 bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        {saving ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : (
+                          <RefreshCw size={12} />
+                        )}
+                        Gerar Novamente
+                      </button>
+                    </div>
+                  </div>
+                )}
 
-                     <div className="space-y-1">
-                       <p className="text-xs font-extrabold text-gray-850">3.3 Você enviou o contrato ao cliente?</p>
-                       <div className="flex flex-wrap gap-3">
-                         {['whatsapp', 'email', 'fisica', 'outro'].map(ch => (
-                           <label key={ch} className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-gray-750">
-                             <input 
-                               type="checkbox"
-                               checked={wizardState.q3_3?.includes(ch)}
-                               onChange={() => handleCheckboxToggle('q3_3', ch)}
-                             />
-                             <span className="capitalize">{ch === 'fisica' ? 'Física/Impressa' : ch}</span>
-                           </label>
-                         ))}
-                       </div>
-                       {wizardState.q3_3?.includes('outro') && (
-                         <input 
-                           type="text" 
-                           placeholder="Modo alternativo de envio" 
-                           value={wizardState.q3_3_outro || ''}
-                           onChange={(e) => saveWizardStateUpdate({ q3_3_outro: e.target.value })}
-                           className="mt-1 w-full max-w-sm px-3 py-1.5 bg-white border border-gray-150 rounded-xl text-xs font-semibold focus:ring-1 focus:ring-indigo-500"
-                         />
-                       )}
-                     </div>
+                {!caseObj?.contratoHonorariosGoogleDocsUrl && (
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={handleGenerateContratoHonorarios}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-black uppercase tracking-wider text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition shadow-xs"
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 size={15} className="animate-spin" />
+                        Gerando minuta oficial no GDocs...
+                      </>
+                    ) : (
+                      <>
+                        <FileCheck2 size={16} />
+                        Criar Contrato de Honorários
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
 
-                     {['q3_4', 'q3_5', 'q3_6', 'q3_7'].map((f, i) => {
-                       const labels = [
-                         '3.4 O cliente assinou o contrato?',
-                         '3.5 Você solicitou a digitalização do contrato?',
-                         '3.6 Você recebeu o contrato digitalizado?',
-                         '3.7 O financeiro foi informado?'
-                       ];
-                       return (
-                         <div key={f} className="space-y-1">
-                           <p className="text-xs font-extrabold text-gray-850">{labels[i]}</p>
-                           <div className="flex gap-4">
-                             {['sim', 'nao'].map(o => (
-                               <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-750">
-                                 <input 
-                                   type="radio" 
-                                   name={`f_${f}`}
-                                   checked={wizardState[f] === o} 
-                                   onChange={() => saveWizardStateUpdate({ [f]: o })} 
-                                 />
-                                 <span>{o}</span>
-                               </label>
-                             ))}
-                           </div>
-                         </div>
-                       );
-                     })}
+              {/* CARD 3: AUDITORIA DO CONTRATO PF */}
+              <div className="space-y-4 bg-white border border-gray-150 rounded-2xl p-6 shadow-xs">
+                <div className="pb-3 border-b border-gray-100 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-indigo-600 animate-pulse"></span>
+                  <h4 className="text-xs font-black uppercase text-gray-800 tracking-wider">
+                    Auditoria da Etapa de Contrato de Honorários da Pessoa
+                    Física.
+                  </h4>
+                </div>
 
-                   </div>
-                 )}
-               </div>
+                <div className="space-y-1 pt-1">
+                  <p className="text-xs font-extrabold text-gray-850">
+                    3.1 Você gerou o contrato de honorários?
+                  </p>
+                  <div className="flex gap-4">
+                    {["sim", "nao"].map((o) => (
+                      <label
+                        key={o}
+                        className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-750"
+                      >
+                        <input
+                          type="radio"
+                          checked={wizardState.q3_1 === o}
+                          onChange={() => {
+                            saveWizardStateUpdate({
+                              q3_1: o,
+                              q3_4: o === "nao" ? "nao" : wizardState.q3_4,
+                            });
+                          }}
+                        />
+                        <span>{o === "sim" ? "sim ✅" : "não ❌"}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
 
-             </div>
-           </div>
-         )}
+                {wizardState.q3_1 === "sim" && (
+                  <div className="space-y-4 border-l-2 border-indigo-200 pl-4 animate-in fade-in duration-200">
+                    <div className="space-y-1">
+                      <p className="text-xs font-extrabold text-gray-855">
+                        3.2 Qual o modelo de contratação?
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 p-3 bg-gray-50/55 border border-gray-100 rounded-xl gap-2">
+                        {[
+                          { key: "exito", label: "Êxito" },
+                          { key: "fixo", label: "Fixo" },
+                          { key: "exito_fixo", label: "Êxito + Fixo" },
+                        ].map((m) => (
+                          <label
+                            key={m.key}
+                            className="flex items-center gap-1.5 cursor-pointer text-[11px] text-gray-750 font-bold"
+                          >
+                            <input
+                              type="radio"
+                              name="f_q3_2"
+                              checked={wizardState.q3_2 === m.key}
+                              onChange={() =>
+                                saveWizardStateUpdate({ q3_2: m.key })
+                              }
+                            />
+                            <span>{m.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
 
+                    <EntregaDocumento
+                      tipoDocumento="contrato"
+                      tipoPessoa={client?.type === "PJ" ? "PJ" : "PF"}
+                      googleDocsUrl={
+                        caseObj?.contratoHonorariosGoogleDocsUrl || ""
+                      }
+                      whatsappCliente={
+                        client?.type === "PF"
+                          ? client?.pfDadosPessoais?.pf_whatsapp ||
+                            client?.pfDadosPessoais?.pf_telefone ||
+                            client?.pfData?.pf_whatsapp ||
+                            client?.pfData?.pf_telefone ||
+                            ""
+                          : client?.pjContatoEmpresa?.pj_whatsappEmpresa ||
+                            client?.pjContatoEmpresa?.pj_telefoneEmpresa ||
+                            client?.pjData?.pj_whatsappEmpresa ||
+                            client?.pjData?.pj_telefoneEmpresa ||
+                            ""
+                      }
+                      emailCliente={
+                        client?.type === "PF"
+                          ? client?.pfDadosPessoais?.pf_email ||
+                            client?.pfData?.pf_email ||
+                            ""
+                          : client?.pjContatoEmpresa?.pj_emailEmpresa ||
+                            client?.pjData?.pj_emailEmpresa ||
+                            ""
+                      }
+                      nomeCliente={clientName}
+                      selectedMethods={wizardState.q3_3 || []}
+                      onMethodsChange={(newMethods: string[]) =>
+                        saveWizardStateUpdate({ q3_3: newMethods })
+                      }
+                      outroValue={wizardState.q3_3_outro || ""}
+                      onOutroChange={(val: string) =>
+                        saveWizardStateUpdate({ q3_3_outro: val })
+                      }
+                      questionNumber="3.3"
+                    />
+
+                    {["q3_4", "q3_5", "q3_6", "q3_7"].map((f, i) => {
+                      const labels = [
+                        "3.4 O cliente assinou o contrato?",
+                        "3.5 Você solicitou a digitalização do contrato?",
+                        "3.6 Você recebeu o contrato digitalizado?",
+                        "3.7 O financeiro foi informado?",
+                      ];
+                      return (
+                        <div key={f} className="space-y-1">
+                          <p className="text-xs font-extrabold text-gray-850">
+                            {labels[i]}
+                          </p>
+                          <div className="flex gap-4">
+                            {["sim", "nao"].map((o) => (
+                              <label
+                                key={o}
+                                className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-750"
+                              >
+                                <input
+                                  type="radio"
+                                  name={`f_${f}`}
+                                  checked={wizardState[f] === o}
+                                  onChange={() =>
+                                    saveWizardStateUpdate({ [f]: o })
+                                  }
+                                />
+                                <span>{o === "sim" ? "sim ✅" : "não ❌"}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ALERTA DE VAZIO: INTEGRITY INTEGRITY ALERTS COVERS LACK OF FINANCIAL RECORDS */}
         {!fetching && financials.length === 0 && (
           <div className="p-4 bg-amber-50 border border-amber-205 rounded-2xl text-amber-900 text-xs space-y-1 animate-fadeIn">
             <div className="flex gap-2 items-center">
               <AlertTriangle size={16} className="text-amber-600" />
-              <h5 className="font-bold uppercase tracking-wider text-xs">Alerta do Relatório de Integridade</h5>
+              <h5 className="font-bold uppercase tracking-wider text-xs">
+                Alerta do Relatório de Integridade
+              </h5>
             </div>
             <p className="font-medium leading-relaxed">
-              Nenhum registro financeiro vinculado a este caso. O relatório de integridade apontará atenção.
+              Nenhum registro financeiro vinculado a este caso. O relatório de
+              integridade apontará atenção.
             </p>
           </div>
         )}
@@ -1665,543 +2266,1047 @@ export default function FinanceiroFluxo() {
         {fetching ? (
           <div className="p-16 text-center text-gray-400 flex flex-col items-center justify-center gap-3">
             <Loader2 className="animate-spin text-gray-500" size={28} />
-            <span className="text-xs font-bold font-mono uppercase tracking-widest text-gray-500">Sincronizando faturamento de honorários...</span>
+            <span className="text-xs font-bold font-mono uppercase tracking-widest text-gray-500">
+              Sincronizando faturamento de honorários...
+            </span>
           </div>
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-            
-            {/* LEFT SIDE: LIST OF CONTRACT DETAILS (7 COLUMNS) */}
+            {/* SUBETAPA 02 - VER DETALHES DO CONTRATO FINANCEIRO */}
             {activeSubStep === 2 && (
-              <div className="xl:col-span-12 max-w-4xl mx-auto w-full space-y-4">
-              <div className="flex justify-between items-center">
-                <h4 className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
-                  Lista de Cobranças Ativas ({financials.length})
-                </h4>
-                <button
-                  type="button"
-                  onClick={() => setRefreshToggle((prev) => prev + 1)}
-                  className="p-1 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-900 transition-colors cursor-pointer"
-                  title="Recarregar"
-                >
-                  <RefreshCw size={14} className={loadingList ? 'animate-spin' : ''} />
-                </button>
-              </div>
-
-              {financials.length === 0 ? (
-                <div className="p-10 border-2 border-dashed border-gray-150 rounded-2xl text-center text-gray-400 flex flex-col items-center justify-center gap-2">
-                  <Coins size={32} className="text-gray-300" />
-                  <span className="text-xs font-semibold">Sem registros financeiros estruturados</span>
-                  <p className="text-xs text-gray-550 max-w-xs leading-relaxed">Adicione cobranças, parcelas de honorários, ou custas administrativas para guiar o portal do cliente.</p>
-                </div>
-              ) : (
-                <div className="space-y-3.5">
-                  {financials.map((fee) => (
-                    <div 
-                      key={fee.id}
-                      className={`p-5 bg-white border rounded-2xl transition-all shadow-xs space-y-4 ${
-                        editingId === fee.id 
-                          ? 'border-indigo-500 ring-1 ring-indigo-500' 
-                          : 'border-gray-150 hover:border-gray-250'
-                      }`}
-                    >
-                      <div className="flex justify-between items-start gap-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-extrabold text-gray-900">{fee.chargeType}</span>
-                            <span className={`inline-flex items-center px-1.5 py-0.5 border text-xs font-extrabold uppercase rounded tracking-wider ${getStatusBadgeStyles(fee.financialStatus)}`}>
-                              {fee.financialStatus.replace('_', ' ')}
-                            </span>
-                          </div>
-                          
-                          <div className="text-lg font-black text-gray-900">
-                            {formatCurrency(fee.totalAmount)}
-                          </div>
-
-                          <div className="text-xs text-gray-500 space-y-0.5">
-                            <div>Meio: <span className="font-semibold text-gray-700">{fee.paymentMethod}</span> ({fee.installments}x)</div>
-                            {fee.firstDueDate && <div>Vencimento: <span className="font-semibold text-gray-705 font-mono">{new Date(fee.firstDueDate).toLocaleDateString('pt-BR')}</span></div>}
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col items-end gap-1.5 shrink-0">
-                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 border text-xs font-black uppercase rounded tracking-wider ${
-                            fee.visibleToClient 
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-150' 
-                              : 'bg-amber-50 text-amber-700 border-amber-200'
-                          }`}>
-                            {fee.visibleToClient ? <Eye size={10} /> : <EyeOff size={10} />}
-                            <span>{fee.visibleToClient ? 'Público' : 'Rascunho'}</span>
-                          </span>
-
-                          <span className="text-xs font-black uppercase text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-150 font-mono">
-                            {fee.paymentProvider}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Display warning or linking if Contract Reference is on */}
-                      {fee.contractLinked && (
-                        <div className="p-3 bg-gray-50 border border-gray-150 rounded-xl space-y-1.5">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-bold text-gray-700 font-mono flex items-center gap-1.5">
-                              <FileText size={14} className="text-blue-500" />
-                              <span>{fee.contractName || 'Contrato não nomeado'}</span>
-                            </span>
-                            {fee.contractUrl ? (
-                              <a 
-                                href={fee.contractUrl} 
-                                target="_blank" 
-                                rel="noreferrer" 
-                                className="text-indigo-655 hover:underline font-bold flex items-center gap-0.5"
-                              >
-                                <span>Acessar</span>
-                                <ExternalLink size={11} />
-                              </a>
-                            ) : (
-                              <span className="text-red-700 font-bold flex items-center gap-1 text-xs bg-red-50 px-1.5 py-0.5 rounded border border-red-100">
-                                <AlertTriangle size={11} className="text-red-500" />
-                                <span>URL DO CONTRATO VAZIA</span>
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Specific provider metadata highlights */}
-                      {fee.paymentProvider !== 'manual_temporario' && (
-                        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs text-slate-700 font-mono">
-                          <span className="font-sans font-black text-xs text-slate-500 uppercase tracking-widest block mb-0.5">PROVER PROTOCOLS</span>
-                          {fee.paymentProvider === 'stripe' ? (
-                            <>
-                              <div>Customer ID: <span className="font-medium text-slate-900">{fee.stripeCustomerId || '—'}</span></div>
-                              <div>Checkout Session: <span className="font-medium text-slate-900 truncate select-all">{fee.stripeCheckoutSessionId || '—'}</span></div>
-                            </>
-                          ) : (
-                            <>
-                              <div>Asaas Cust ID: <span className="font-medium text-slate-900">{fee.asaasCustomerId || '—'}</span></div>
-                              <div>Asaas Payment ID: <span className="font-medium text-slate-900 truncate select-all">{fee.asaasPaymentId || '—'}</span></div>
-                            </>
-                          )}
-                          {fee.paymentLink && (
-                            <div className="truncate mt-1 text-indigo-650 font-semibold flex items-center gap-1">
-                              Link: <a href={fee.paymentLink} target="_blank" rel="noreferrer" className="underline font-sans">{fee.paymentLink}</a>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Notes / Admin view remarks */}
-                      {fee.notes && (
-                        <p className="text-xs text-gray-500 italic bg-gray-50 p-3 rounded-lg border border-gray-100">
-                          “{fee.notes}”
-                        </p>
-                      )}
-
-                      {/* Bottom actions */}
-                      <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                        <span className="text-xs text-gray-400 font-mono">
-                          Criado em: {new Date(fee.createdAt).toLocaleString('pt-BR')}
-                        </span>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleEditInit(fee)}
-                            className="px-3.5 py-1.5 hover:bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-700 cursor-pointer flex items-center gap-1 transition-colors"
-                          >
-                            <Edit2 size={11} />
-                            <span>Editar</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleArchive(fee.id!)}
-                            className="px-3.5 py-1.5 hover:bg-red-50 text-red-600 border border-transparent hover:border-red-100 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1 transition-colors"
-                          >
-                            <Archive size={11} />
-                            <span>Arquivar</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteFinancial(fee.id!)}
-                            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer flex items-center gap-1 transition-all duration-300 border ${
-                              confirmDeleteId === fee.id
-                                ? 'bg-red-600 hover:bg-red-700 text-white border-transparent'
-                                : 'hover:bg-red-50 text-red-650 border-transparent hover:border-red-105'
-                            }`}
-                            title="Excluir faturamento permanentemente"
-                          >
-                            <Trash2 size={11} />
-                            <span>{confirmDeleteId === fee.id ? 'Confirma?' : 'Excluir'}</span>
-                          </button>
-                        </div>
-                      </div>
-
+              <div className="xl:col-span-12 max-w-4xl mx-auto w-full space-y-6">
+                {/* CARD: Ver detalhes do contrato */}
+                <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-6">
+                  {/* Header */}
+                  <div className="pb-4 border-b border-gray-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileText className="text-indigo-650" size={20} />
+                      <h3 className="text-sm font-black uppercase text-gray-900 tracking-wider">
+                        Ver detalhes do contrato
+                      </h3>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            )}
-
-            {/* RIGHT SIDE: CREATE / EDIT TRANSACTION FORM (5 COLUMNS) */}
-            {activeSubStep === 2 && (
-            <form onSubmit={handleSubmitForm} className="xl:col-span-12 max-w-3xl mx-auto w-full bg-white border border-gray-150 rounded-2xl p-6 space-y-4 shadow-sm animate-fadeIn">
-              <div className="flex justify-between items-center border-b border-gray-100 pb-3">
-                <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono">
-                  {editingId ? 'Editar Contrato de Honorários' : 'Criar Novo Contrato de Honorários'}
-                </h4>
-                {editingId && (
-                  <button 
-                    type="button" 
-                    onClick={resetForm}
-                    className="text-[9px] font-black uppercase tracking-wider text-rose-500 hover:underline cursor-pointer"
-                  >
-                    Novo Faturamento
-                  </button>
-                )}
-              </div>
-
-              {/* Charge Type selector */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Tipo da Cobrança *</label>
-                <select
-                  value={formChargeType}
-                  onChange={(e) => setFormChargeType(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 focus:bg-white focus:ring-1 focus:ring-gray-950 rounded-xl text-xs font-bold text-gray-850 outline-none cursor-pointer"
-                >
-                  {chargeTypeOptions.map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-              </div>
-
-              {formChargeType === 'Outro' && (
-                <div className="space-y-1 animate-fadeIn">
-                  <label className="text-[9px] font-bold uppercase text-gray-500">Escreva o Tipo Customizado *</label>
-                  <input
-                    type="text"
-                    required
-                    value={customChargeType}
-                    onChange={(e) => setCustomChargeType(e.target.value)}
-                    placeholder="Ex: Custos de Correios e Diligência"
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 focus:bg-white rounded-xl text-xs font-semibold text-gray-800 outline-none"
-                  />
-                </div>
-              )}
-
-              {/* Total Amount & Installments */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Valor total (BRL) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={formTotalAmount}
-                    onChange={(e) => setFormTotalAmount(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 focus:bg-white rounded-xl text-xs font-bold text-gray-800 outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Parcelas</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="120"
-                    value={formInstallments}
-                    onChange={(e) => setFormInstallments(Number(e.target.value) || 1)}
-                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 focus:bg-white rounded-xl text-xs font-bold font-mono text-gray-800 outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Method & First Due Date */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Meio de Recebimento</label>
-                  <select
-                    value={formPaymentMethod}
-                    onChange={(e) => setFormPaymentMethod(e.target.value)}
-                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 focus:bg-white rounded-xl text-xs font-semibold text-gray-800 outline-none cursor-pointer"
-                  >
-                    <option value="Cartão de Crédito">Cartão de Crédito</option>
-                    <option value="Boleto Bancário">Boleto Bancário</option>
-                    <option value="PIX Direto">PIX Direto</option>
-                    <option value="Transferência (TED/DOC)">Transferência (TED/DOC)</option>
-                    <option value="Dinheiro físico">Dinheiro físico</option>
-                    <option value="Outro meio">Outro meio</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Primeiro Vencimento</label>
-                  <input
-                    type="date"
-                    value={formFirstDueDate}
-                    onChange={(e) => setFormFirstDueDate(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 focus:bg-white rounded-xl text-xs font-semibold text-gray-800 outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* Financial Status */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Status Financeiro Geral *</label>
-                <select
-                  value={formFinancialStatus}
-                  onChange={(e) => setFormFinancialStatus(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 focus:bg-white rounded-xl text-xs font-bold text-gray-850 outline-none cursor-pointer"
-                >
-                  {financialStatusOptions.map((sts) => (
-                    <option key={sts.value} value={sts.value}>{sts.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* VISIBILITY CONTROLS TO COMPLY WITH BUILD 5 */}
-              <div className="p-3 bg-gray-50 hover:bg-gray-100 rounded-xl border border-gray-150 space-y-3 transition-colors">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <span className="text-[10px] font-black uppercase text-gray-600 tracking-wider">Exibir no Portal do Cliente?</span>
-                    <p className="text-[9px] text-gray-400 leading-normal">Se inativo, mostrará um aviso fático de atualização no fluxo.</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setFormVisibleToClient(!formVisibleToClient)}
-                    className={`w-10 h-5.5 flex items-center rounded-full p-0.5 transition-all outline-none duration-150 cursor-pointer ${
-                      formVisibleToClient ? 'bg-indigo-600 justify-end' : 'bg-gray-200 justify-start'
-                    }`}
-                  >
-                    <div className="w-4 h-4 bg-white rounded-full shadow-xs" />
-                  </button>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[9px] font-bold uppercase text-gray-500 font-mono">Mensagem Auxiliar ao Cliente no Portal</label>
-                  <input
-                    type="text"
-                    value={formPublicMessage}
-                    onChange={(e) => setFormPublicMessage(e.target.value)}
-                    placeholder="Ex: Nota Fiscal liberada em até 2 dias úteis..."
-                    className="w-full px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-850 outline-none"
-                  />
-                </div>
-              </div>
-
-              {/* ADVISORY CONTRACT REFERENCE BLOCK (Honarários) */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <span className="text-[10px] font-extrabold uppercase text-slate-800 tracking-wider">Contrato de Honorários Vinculado</span>
-                    <p className="text-[9px] text-slate-500">Mapear referência de contrato assinado ao faturamento.</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setFormContractLinked(!formContractLinked)}
-                    className={`w-10 h-5.5 flex items-center rounded-full p-0.5 transition-all outline-none duration-155 cursor-pointer ${
-                      formContractLinked ? 'bg-indigo-600 justify-end' : 'bg-slate-205 bg-gray-200 justify-start'
-                    }`}
-                  >
-                    <div className="w-4 h-4 bg-white rounded-full shadow-xs" />
-                  </button>
-                </div>
-
-                {formContractLinked && (
-                  <div className="space-y-2.5 pt-1.5 border-t border-slate-200 animate-fadeIn">
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold uppercase text-slate-500">Nome do Contrato</label>
-                      <input
-                        type="text"
-                        value={formContractName}
-                        onChange={(e) => setFormContractName(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none"
-                      />
-                    </div>
-
-                    <div className="space-y-1 bg-white border border-gray-155 p-3.5 rounded-xl">
-                      <FileUploadBox field="contratoFiles" />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold uppercase text-slate-500">Link de Verificação (Ex: DocuSign/Adimplência)</label>
-                      <input
-                        type="url"
-                        value={formContractUrl}
-                        onChange={(e) => setFormContractUrl(e.target.value)}
-                        placeholder="https://assinatura.com/v/..."
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-700 focus:outline-none"
-                      />
-                    </div>
-
-                    {/* ATTENTION WARNING IF contractLinked = true and url = empty */}
-                    {!formContractUrl && (
-                      <div className="p-2.5 bg-amber-50 border border-amber-205 rounded-lg text-amber-900 text-[10px] flex gap-1.5 items-start">
-                        <AlertTriangle size={12} className="text-amber-600 shrink-0 mt-0.5" />
-                        <span className="font-semibold leading-relaxed">
-                          <strong>Atenção:</strong> O contrato está habilitado mas a URL se encontra vazia. O cliente não conseguirá visualizá-lo.
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* PAYMENT PROVIDER SPECIFICS */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-extrabold uppercase text-slate-800 tracking-wider block">Provedor de Pagamento</label>
-                  <select
-                    value={formPaymentProvider}
-                    onChange={(e) => setFormPaymentProvider(e.target.value as any)}
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-850 outline-none cursor-pointer"
-                  >
-                    <option value="manual_temporario">Modo Manual Temporário</option>
-                    <option value="stripe">Stripe Payments S.A.</option>
-                    <option value="asaas">Asaas Boletos/PIX</option>
-                  </select>
-                </div>
-
-                {formPaymentProvider === 'manual_temporario' ? (
-                  <div className="p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl flex gap-2 items-start text-indigo-900">
-                    <Info size={14} className="text-indigo-600 shrink-0 mt-0.5" />
-                    <span className="text-[10px] font-semibold leading-relaxed">
-                      <strong>Aviso Técnico:</strong> Modo manual temporário. Não é fonte final de verdade. Integração por webhook será necessária para produção.
+                    <span className="text-[10px] font-black uppercase tracking-wider text-green-700 bg-green-50 px-2.5 py-1 border border-green-200 rounded-full font-mono">
+                      SubEtapa 02 Ativa
                     </span>
                   </div>
-                ) : (
-                  <div className="space-y-2.5 pt-1 border-t border-slate-200 animate-fadeIn">
-                    <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl flex gap-2 items-start text-amber-900 text-[9px] font-semibold leading-relaxed">
-                      <Shield size={14} className="text-amber-500 shrink-0" />
-                      <div>
-                        <strong>Segurança Geral:</strong> Tokens e chaves não serão armazenados no front. Dados abaixo simulam transações seguras enviando apenas IDs identificadores públicos.
+
+                  {/* Body Content: Two main columns */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Column 1: Condições Operacionais */}
+                    <div className="space-y-4">
+                      <h4 className="text-xs font-black uppercase text-indigo-950 tracking-wider flex items-center gap-1.5 pb-2 border-b border-gray-100/50">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
+                        Condições Operacionais do Contrato
+                      </h4>
+
+                      <div className="space-y-3.5 text-xs">
+                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                          <span className="text-gray-500 font-bold">
+                            Serviço Contratado:
+                          </span>
+                          <span className="font-extrabold text-gray-900 text-right">
+                            {tipoServicoContratadoForm || "—"}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                          <span className="text-gray-500 font-bold">
+                            Tipo de Honorários:
+                          </span>
+                          <span className="font-extrabold text-gray-950">
+                            {tipoHonorarioForm || "—"}
+                          </span>
+                        </div>
+
+                        {tipoHonorarioForm?.includes("Êxito") && (
+                          <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                            <span className="text-gray-500 font-bold">
+                              Percentual de Êxito:
+                            </span>
+                            <span className="font-extrabold text-indigo-700">
+                              {honorarioExitoPercentualForm || "—"}
+                            </span>
+                          </div>
+                        )}
+
+                        {(tipoHonorarioForm?.includes("Fixo") ||
+                          tipoHonorarioForm?.includes("Fixos")) && (
+                          <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                            <span className="text-gray-500 font-bold">
+                              Valor de Honorários Fixos:
+                            </span>
+                            <span className="font-extrabold text-gray-900">
+                              R$ {honorarioFixoValorForm || "0,00"}
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                          <span className="text-gray-500 font-bold">
+                            Forma de Pagamento:
+                          </span>
+                          <span className="font-semibold text-gray-850">
+                            {formaPagamentoForm || "—"}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                          <span className="text-gray-500 font-bold">
+                            Meio de Recebimento:
+                          </span>
+                          <span className="font-semibold text-gray-850">
+                            {tipoRecebimentoForm || "—"}
+                          </span>
+                        </div>
+
+                        {tipoRecebimentoForm === "PIX" && (
+                          <>
+                            <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                              <span className="text-gray-500 font-bold">
+                                Banco Recebimento:
+                              </span>
+                              <span className="font-semibold text-gray-850">
+                                {pixBancoForm || "—"}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center py-1.5 border-b border-gray-50 border-dashed">
+                              <span className="text-gray-500 font-bold">
+                                Chave PIX:
+                              </span>
+                              <span className="font-semibold text-gray-850 font-mono text-[11px] select-all bg-gray-55/75 px-1.5 py-0.5 rounded">
+                                {pixChaveForm || "—"}
+                              </span>
+                            </div>
+                          </>
+                        )}
+
+                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                          <span className="text-gray-500 font-bold">
+                            Quantidade de Parcelas:
+                          </span>
+                          <span className="font-extrabold text-gray-900">
+                            {quantidadeParcelasForm}x
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                          <span className="text-gray-500 font-bold">
+                            Valor da Parcela:
+                          </span>
+                          <span className="font-extrabold text-gray-900">
+                            R$ {valorParcelaForm || "0,00"}
+                          </span>
+                        </div>
+
+
+
+                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                          <span className="text-gray-500 font-bold">
+                            Valor de Entrada:
+                          </span>
+                          <span className="font-extrabold text-gray-900">
+                            R$ {valorEntradaForm || "0,00"}
+                          </span>
+                        </div>
+
+                        {dataPrimeiroVencimentoForm && (
+                          <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                            <span className="text-gray-500 font-bold">
+                              Primeiro Vencimento:
+                            </span>
+                            <span className="font-mono text-gray-800">
+                              {new Date(
+                                dataPrimeiroVencimentoForm,
+                              ).toLocaleDateString("pt-BR")}
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="flex justify-between items-center py-1.5">
+                          <span className="text-gray-500 font-bold">
+                            Cobrança Automática Ativa:
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                              cobrancaAutomaticaIntegForm === "Sim"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-rose-50 text-rose-700 border border-rose-200"
+                            }`}
+                          >
+                            {cobrancaAutomaticaIntegForm || "Não"}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-bold uppercase text-slate-500">Checkout Link (Nuvem)</label>
-                      <input
-                        type="url"
-                        value={formPaymentLink}
-                        onChange={(e) => setFormPaymentLink(e.target.value)}
-                        placeholder="https://checkout.stripe.com/pay/..."
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 outline-none"
-                      />
-                    </div>
+                    {/* Column 2: Checklist e Auditoria */}
+                    <div className="space-y-4">
+                      <h4 className="text-xs font-black uppercase text-indigo-950 tracking-wider flex items-center gap-1.5 pb-2 border-b border-gray-100/50">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
+                        Histórico e Auditoria do Contrato
+                      </h4>
 
-                    {formPaymentProvider === 'stripe' ? (
-                      <div className="grid grid-cols-1 gap-2.5">
-                        <div className="p-3 bg-[#635BFF]/10 border border-[#635BFF]/25 rounded-xl flex gap-2.5 items-start text-[#635BFF] animate-fadeIn">
-                          <CreditCard size={15} className="shrink-0 mt-0.5" />
-                          <div className="text-[11px] leading-relaxed">
-                            <span className="font-extrabold block uppercase tracking-wider mb-0.5">Futura Integração Stripe</span>
-                            Estabilidade, alta conversão de cartão de crédito e checkout global de honorários sincronizados diretamente no ato do envio.
+                      <div className="space-y-3.5 text-xs">
+                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                          <span className="text-gray-500 font-bold">
+                            3.1 Contrato Gerado?
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                              wizardState.q3_1 === "sim"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-amber-50 text-amber-700 border border-amber-200"
+                            }`}
+                          >
+                            {wizardState.q3_1 || "não preenchido"}
+                          </span>
+                        </div>
+
+                        {wizardState.q3_1 === "sim" && (
+                          <>
+                            <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                              <span className="text-gray-500 font-bold">
+                                3.2 Modelo Contratual:
+                              </span>
+                              <span className="font-semibold text-gray-805">
+                                {wizardState.q3_2 === "exito" && "Êxito"}
+                                {wizardState.q3_2 === "fixo" && "Fixo"}
+                                {wizardState.q3_2 === "exito_fixo" &&
+                                  "Êxito + Fixo"}
+                                {!wizardState.q3_2 && "—"}
+                              </span>
+                            </div>
+
+                            <div className="flex flex-col gap-1 py-1.5 border-b border-gray-50">
+                              <span className="text-gray-500 font-bold">
+                                3.3 Meio(s) de Entrega Utilizados:
+                              </span>
+                              <div className="flex flex-wrap gap-1.5 mt-1">
+                                {Array.isArray(wizardState.q3_3) &&
+                                wizardState.q3_3.length > 0 ? (
+                                  wizardState.q3_3.map((method: string) => {
+                                    let label = method;
+                                    if (method === "fisica")
+                                      label = "Física/Impressa";
+                                    if (method === "whatsapp")
+                                      label = "WhatsApp";
+                                    if (method === "email") label = "E-mail";
+                                    if (method === "outro")
+                                      label = `Outro (${wizardState.q3_3_outro || "—"})`;
+                                    return (
+                                      <span
+                                        key={method}
+                                        className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-150 rounded text-[10px] font-bold"
+                                      >
+                                        {label}
+                                      </span>
+                                    );
+                                  })
+                                ) : (
+                                  <span className="text-gray-400 italic">
+                                    Nenhum selecionado
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                              <span className="text-gray-500 font-bold">
+                                3.4 Assinado pelo Cliente?
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                                  wizardState.q3_4 === "sim"
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    : "bg-rose-50 text-rose-700 border border-rose-200"
+                                }`}
+                              >
+                                {wizardState.q3_4 || "não preenchido"}
+                              </span>
+                            </div>
+
+                            <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                              <span className="text-gray-500 font-bold">
+                                3.5 Solicitou Digitalização?
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                                  wizardState.q3_5 === "sim"
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    : "bg-rose-50 text-rose-700 border border-rose-200"
+                                }`}
+                              >
+                                {wizardState.q3_5 || "não preenchido"}
+                              </span>
+                            </div>
+
+                            <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                              <span className="text-gray-500 font-bold">
+                                3.6 Recebeu o Contrato Digitalizado?
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                                  wizardState.q3_6 === "sim"
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    : "bg-rose-50 text-rose-700 border border-rose-200"
+                                }`}
+                              >
+                                {wizardState.q3_6 || "não preenchido"}
+                              </span>
+                            </div>
+
+                            <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                              <span className="text-gray-500 font-bold">
+                                3.7 Financeiro Informado?
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                                  wizardState.q3_7 === "sim"
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    : "bg-rose-50 text-rose-700 border border-rose-200"
+                                }`}
+                              >
+                                {wizardState.q3_7 || "não preenchido"}
+                              </span>
+                            </div>
+                          </>
+                        )}
+
+                        {/* Google Docs Url */}
+                        {caseObj?.contratoHonorariosGoogleDocsUrl && (
+                          <div className="pt-1.5">
+                            <span className="text-gray-500 font-bold block mb-1.5">
+                              Link do Modelo de Contrato Gerado:
+                            </span>
+                            <div className="space-y-2">
+                              <a
+                                href={caseObj.contratoHonorariosGoogleDocsUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs text-indigo-650 hover:underline font-semibold flex items-center gap-1 select-all truncate bg-gray-55/75 p-2.5 rounded-xl border border-gray-150"
+                              >
+                                <FileText
+                                  size={14}
+                                  className="text-indigo-600 shrink-0"
+                                />
+                                <span className="truncate">
+                                  {caseObj.contratoHonorariosGoogleDocsUrl}
+                                </span>
+                                <ExternalLink size={12} className="shrink-0" />
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleOpenContrato(
+                                    caseObj.contratoHonorariosGoogleDocsUrl,
+                                  )
+                                }
+                                className="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-sm"
+                              >
+                                <FileText size={14} />
+                                <span>Ver contrato de honorários gerado</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Uploaded Contract Files list */}
+                        {wizardState.contratoFiles &&
+                          wizardState.contratoFiles.length > 0 && (
+                            <div className="pt-1">
+                              <span className="text-gray-500 font-bold block mb-1.5">
+                                Anexo(s) do Contrato Assinado:
+                              </span>
+                              <div className="space-y-1.5">
+                                {wizardState.contratoFiles.map(
+                                  (f: any, idx: number) => (
+                                    <div
+                                      key={idx}
+                                      className="flex items-center gap-1.5 p-2 bg-indigo-50 border border-indigo-150 rounded-xl text-xs"
+                                    >
+                                      <FileText
+                                        size={12}
+                                        className="text-indigo-605 shrink-0"
+                                      />
+                                      <span className="truncate font-semibold text-indigo-900 font-mono flex-11 font-bold">
+                                        {f.name}{" "}
+                                        <span className="text-[10px] text-indigo-400 font-normal">
+                                          ({f.size})
+                                        </span>
+                                      </span>
+                                    </div>
+                                  ),
+                                )}
+                              </div>
+                            </div>
+                          )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* CARD: Tabela analítica do contrato de honorários */}
+                <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-6">
+                  {/* Header */}
+                  <div className="pb-4 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-2">
+                      <Coins className="text-emerald-650 animate-bounce" size={20} />
+                      <h3 className="text-sm font-black uppercase text-gray-900 tracking-wider">
+                        Tabela analítica do contrato de honorários
+                      </h3>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleGerarTabelaAutomatica}
+                        className="inline-flex items-center gap-1.5 bg-gray-55 hover:bg-gray-100 text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer"
+                        title="Sincroniza/Gera parcelas sugeridas com base nas configurações acima"
+                      >
+                        <RefreshCw size={12} className="text-gray-500 shrink-0" />
+                        <span>Gerar / Sincronizar Parcelas</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAddParcelaManual}
+                        className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-3xs"
+                      >
+                        <Plus size={12} />
+                        <span>Adicionar Parcela</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Summary grid values ("Dados do contrato") */}
+                  <div className="bg-slate-50/50 rounded-xl p-4 border border-slate-100 text-xs grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+                    <div>
+                      <span className="text-[10px] uppercase font-black tracking-widest text-gray-400 block mb-0.5 font-sans">Serviço</span>
+                      <span className="font-extrabold text-slate-800 break-words font-sans">{tipoServicoContratadoForm || "Não definido"}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-black tracking-widest text-gray-400 block mb-0.5 font-sans">Tipo Honorários</span>
+                      <span className="font-extrabold text-slate-800 font-sans">{tipoHonorarioForm || "Não definido"}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-black tracking-widest text-gray-400 block mb-0.5 font-sans">Valor Fixo</span>
+                      <span className="font-mono font-extrabold text-slate-900">R$ {honorarioFixoValorForm || "0,00"}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-black tracking-widest text-gray-400 block mb-0.5 font-sans">Pagamento</span>
+                      <span className="font-semibold text-slate-700 font-sans">{formaPagamentoForm || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-black tracking-widest text-gray-400 block mb-0.5 font-sans">Recebimento Padrão</span>
+                      <span className="font-bold text-indigo-700 font-sans">{tipoRecebimentoForm || "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-black tracking-widest text-gray-400 block mb-0.5 font-sans">Configuração</span>
+                      <span className="font-bold text-slate-800 font-sans">{quantidadeParcelasForm}x + Entrada (R$ {valorEntradaForm || "0,00"})</span>
+                    </div>
+                  </div>
+
+                  {/* Table area */}
+                  {tabelaAnalitica.length === 0 ? (
+                    <div className="p-8 border border-dashed border-gray-200 rounded-xl text-center bg-gray-50/20 space-y-3">
+                      <p className="text-gray-500 font-medium text-xs font-sans">
+                        Nenhuma parcela analítica está cadastrada ainda para este contrato.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleGerarTabelaAutomatica}
+                        className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition-all shadow-xs cursor-pointer font-sans"
+                      >
+                        <RefreshCw size={12} />
+                        Gerar sugerido com base no Contrato
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto border border-gray-150 rounded-xl bg-white shadow-3xs max-w-full">
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="bg-gray-50 text-gray-500 uppercase text-[9px] tracking-wider font-extrabold border-b border-gray-150 font-mono">
+                            <th className="py-3 px-4 font-black">Nº de Parcelas</th>
+                            <th className="py-3 px-4 font-black">Valor Parcela</th>
+                            <th className="py-3 px-4 font-black">Vencimento</th>
+                            <th className="py-3 px-4 font-black">Forma de Recebimento</th>
+                            <th className="py-3 px-4 font-black">Status</th>
+                            <th className="py-3 px-4 text-center font-black">Ações</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 font-sans">
+                          {tabelaAnalitica.map((row) => {
+                            const isEditing = editingRowId === row.id;
+
+                            return (
+                              <tr key={row.id} className="hover:bg-gray-50/50 transition-all">
+                                {/* Nº de Parcelas */}
+                                <td className="py-3.5 px-4 font-bold text-gray-900 font-mono">
+                                  {row.numero}
+                                </td>
+
+                                {/* Valor Parcela */}
+                                <td className="py-3.5 px-4 font-extrabold text-gray-950 font-mono">
+                                  {isEditing ? (
+                                    <input
+                                      type="text"
+                                      value={editingRowVal}
+                                      onChange={(e) => setEditingRowVal(e.target.value)}
+                                      className="border border-gray-300 rounded px-2 py-1 w-28 bg-white font-mono font-bold text-xs"
+                                    />
+                                  ) : (
+                                    row.valor
+                                  )}
+                                </td>
+
+                                {/* Vencimento */}
+                                <td className="py-3.5 px-4 text-gray-700 font-mono">
+                                  {isEditing ? (
+                                    <input
+                                      type="date"
+                                      value={editingRowDate}
+                                      onChange={(e) => setEditingRowDate(e.target.value)}
+                                      className="border border-gray-300 rounded px-2 py-1 bg-white font-mono text-xs"
+                                    />
+                                  ) : (
+                                    row.dataVencimento ? new Date(row.dataVencimento + "T12:00:00").toLocaleDateString("pt-BR") : "—"
+                                  )}
+                                </td>
+
+                                {/* Forma de Recebimento */}
+                                <td className="py-3.5 px-4 font-sans">
+                                  {isEditing ? (
+                                    <select
+                                      value={editingRowForma}
+                                      onChange={(e) => setEditingRowForma(e.target.value)}
+                                      className="border border-gray-300 rounded px-2 py-1 bg-white text-xs font-semibold text-slate-800 font-sans"
+                                    >
+                                      <option value="PIX">PIX</option>
+                                      <option value="Boleto">Boleto Bancário</option>
+                                      <option value="Cartão de Crédito">Cartão de Crédito</option>
+                                      <option value="TED / Transferência">TED / Transferência</option>
+                                      <option value="Dinheiro">Dinheiro</option>
+                                      <option value="Depósito">Depósito</option>
+                                    </select>
+                                  ) : (
+                                    <span className="font-semibold text-slate-705">{row.formaRecebimento || "—"}</span>
+                                  )}
+                                </td>
+
+                                {/* Status */}
+                                <td className="py-3.5 px-4 font-sans max-w-28">
+                                  {isEditing ? (
+                                    <select
+                                      value={editingRowStatus}
+                                      onChange={(e) => {
+                                        const s = e.target.value as "pago" | "pendente" | "atrasado";
+                                        setEditingRowStatus(s);
+                                        setEditingRowPago(s === "pago");
+                                      }}
+                                      className={`px-2.5 py-1 rounded-xl text-[10px] uppercase font-black tracking-wider transition-all border font-mono bg-white cursor-pointer ${
+                                        editingRowStatus === "pago"
+                                          ? "bg-blue-50 text-blue-700 border-blue-300"
+                                          : editingRowStatus === "atrasado"
+                                          ? "bg-rose-50 text-rose-700 border-rose-300"
+                                          : "bg-amber-50 text-amber-700 border-amber-300"
+                                      }`}
+                                    >
+                                      <option value="pendente">Pendente</option>
+                                      <option value="pago">Pago</option>
+                                      <option value="atrasado">Atrasado</option>
+                                    </select>
+                                  ) : (
+                                    (() => {
+                                      const s = row.status || (row.pago ? "pago" : "pendente");
+                                      if (s === "pago") {
+                                        return (
+                                          <span className="px-2.5 py-1 rounded-full text-[9px] uppercase font-black tracking-wider border font-mono bg-blue-50 text-blue-700 border-blue-200">
+                                            Pago
+                                          </span>
+                                        );
+                                      } else if (s === "atrasado") {
+                                        return (
+                                          <span className="px-2.5 py-1 rounded-full text-[9px] uppercase font-black tracking-wider border font-mono bg-rose-50 text-rose-700 border-rose-200 animate-pulse">
+                                            Atrasado
+                                          </span>
+                                        );
+                                      } else {
+                                        return (
+                                          <span className="px-2.5 py-1 rounded-full text-[9px] uppercase font-black tracking-wider border font-mono bg-amber-50 text-amber-700 border-amber-200">
+                                            Pendente
+                                          </span>
+                                        );
+                                      }
+                                    })()
+                                  )}
+                                </td>
+
+                                {/* Ações */}
+                                <td className="py-3.5 px-4 text-center font-sans">
+                                  {isEditing ? (
+                                    <div className="flex items-center justify-center gap-2 font-sans">
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          const refreshedTable = tabelaAnalitica.map(item => {
+                                            if (item.id === row.id) {
+                                              return {
+                                                ...item,
+                                                valor: editingRowVal,
+                                                dataVencimento: editingRowDate,
+                                                pago: editingRowStatus === "pago",
+                                                status: editingRowStatus,
+                                                formaRecebimento: editingRowForma,
+                                              };
+                                            }
+                                            return item;
+                                          });
+                                          await handleSaveTabelaAnalitica(refreshedTable);
+                                          setEditingRowId(null);
+                                        }}
+                                        className="inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold px-2.5 py-1.5 rounded-lg text-[10px] transition-all cursor-pointer shadow-3xs"
+                                      >
+                                        <Check size={11} />
+                                        <span>Confirmar</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingRowId(null);
+                                        }}
+                                        className="bg-gray-150 hover:bg-gray-200 text-gray-700 font-bold px-2 py-1.5 rounded-lg text-[10px] transition-all cursor-pointer"
+                                      >
+                                        Cancelar
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-center gap-1.5 font-sans">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingRowId(row.id);
+                                          setEditingRowVal(row.valor || "");
+                                          setEditingRowDate(row.dataVencimento || "");
+                                          setEditingRowPago(!!row.pago);
+                                          setEditingRowStatus(row.status || (row.pago ? "pago" : "pendente"));
+                                          setEditingRowForma(row.formaRecebimento || "PIX");
+                                        }}
+                                        className="inline-flex items-center gap-1 text-gray-500 hover:text-indigo-650 bg-gray-55 hover:bg-indigo-50 border border-transparent hover:border-indigo-150 px-2 py-1.5 rounded-lg transition-all cursor-pointer text-[10px] font-bold"
+                                        title="Editar parcela"
+                                      >
+                                        <Edit2 size={11} />
+                                        <span>Editar</span>
+                                      </button>
+
+                                      {/* Brand social shortcut action icons */}
+                                      <div className="flex items-center gap-1.5 pl-1.5 border-l border-gray-200">
+                                        {/* WhatsApp Shortcut */}
+                                        {(() => {
+                                          const rawPhone = client?.phone || 
+                                                           client?.pfDadosPessoais?.pf_telefone || 
+                                                           client?.pfContato?.pf_telefone || 
+                                                           client?.pfData?.pf_telefone || 
+                                                           client?.pjDadosEmpresa?.pj_telefoneEmpresa || 
+                                                           client?.pjContatoEmpresa?.pj_telefoneEmpresa || 
+                                                           client?.pjData?.pj_telefoneEmpresa || "";
+                                          const cleanPhone = rawPhone.replace(/\D/g, "");
+                                          const resolvedPhone = cleanPhone ? (cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`) : "";
+                                          const formattedDate = row.dataVencimento ? new Date(row.dataVencimento + "T12:00:00").toLocaleDateString("pt-BR") : "—";
+                                          const currentS = row.status || (row.pago ? "pago" : "pendente");
+                                          const resolvedSLabel = currentS === "pago" ? "PAGO (Agradecemos o pagamento!)" : currentS === "atrasado" ? "ATRASADO" : "PENDENTE";
+                                          const templateMsg = `Olá, somos do financeiro BOSS. Gostaríamos de conversar sobre a sua parcela do contrato de honorários: *${row.numero}*, com vencimento em *${formattedDate}*, que consta atualmente como *${resolvedSLabel}*.`;
+                                          
+                                          return (
+                                            <a
+                                              href={`https://web.whatsapp.com/send?phone=${resolvedPhone}&text=${encodeURIComponent(templateMsg)}`}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              title="Enviar lembrete pelo WhatsApp Web"
+                                              className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg border border-transparent hover:border-emerald-200 transition-all cursor-pointer"
+                                            >
+                                              <svg className="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.063 5.448 5.513 0 12.21 0c3.243.001 6.293 1.264 8.588 3.562C23.093 5.86 24.354 8.911 24.353 12.15c-.004 6.759-5.454 12.21-12.155 12.21-1.999-.001-3.959-.496-5.713-1.439L0 24zm6.59-4.846c1.6.95 3.1 1.4 4.8 1.4 5.3 0 9.7-4.4 9.7-9.7 0-2.6-1-5-2.9-6.8-1.9-1.9-4.4-2.9-6.8-2.9-5.3 0-9.7 4.4-9.7 9.7-.001 1.9.5 3.7 1.4 5.3l-.9 3.4 3.4-.9zm11.448-6.1c-.244-.122-1.445-.714-1.668-.795-.223-.081-.386-.122-.549.122-.163.244-.63.795-.772.956-.143.161-.285.181-.529.06-2.455-1.228-4.048-2.615-4.783-3.876-.194-.336-.02-.519.148-.687.151-.148.337-.393.506-.59.168-.196.223-.336.335-.559.112-.224.056-.419-.028-.581-.084-.162-.733-1.764-.997-2.427-.268-.673-.54-.58-.733-.58-.19-.001-.407-.001-.624-.001-.217 0-.57.081-.868.407-.298.326-1.138 1.112-1.138 2.71 0 1.597 1.164 3.136 1.326 3.359.163.223 2.291 3.511 5.55 4.914.776.334 1.38.533 1.85.682.78.246 1.49.213 2.05.129.626-.093 1.445-.59 1.648-1.16.203-.57.203-1.057.142-1.158-.06-.101-.223-.162-.467-.282z"/>
+                                              </svg>
+                                            </a>
+                                          );
+                                        })()}
+
+                                        {/* Facebook Shortcut */}
+                                        <a
+                                          href={`https://www.facebook.com/search/top?q=${encodeURIComponent(client?.nomeCompleto || client?.razaoSocial || "")}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title="Buscar cliente no Facebook"
+                                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg border border-transparent hover:border-blue-200 transition-all cursor-pointer"
+                                        >
+                                          <svg className="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                                          </svg>
+                                        </a>
+
+                                        {/* Instagram Shortcut */}
+                                        <a
+                                          href={`https://www.instagram.com/explore/tags/${encodeURIComponent((client?.nomeCompleto || client?.razaoSocial || "").replace(/\s+/g, "").toLowerCase())}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          title="Buscar tags/cliente no Instagram"
+                                          className="p-1.5 text-pink-600 hover:bg-pink-50 rounded-lg border border-transparent hover:border-pink-200 transition-all cursor-pointer"
+                                        >
+                                          <svg className="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.051.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/>
+                                          </svg>
+                                        </a>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (confirm(`Tem certeza que gostaria de excluir a ${row.numero}?`)) {
+                                            handleDeletarParcela(row.id);
+                                          }
+                                        }}
+                                        className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer border border-transparent hover:border-rose-100 ml-1"
+                                        title="Excluir parcela"
+                                      >
+                                        <Trash2 size={12} />
+                                      </button>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* CARD: Relatório global do contrato */}
+                {tabelaAnalitica.length > 0 && (() => {
+                  const parseCurrencySum = (valStr: string): number => {
+                    if (!valStr) return 0;
+                    const clean = valStr
+                      .replace("R$", "")
+                      .replace(/\./g, "")
+                      .replace(",", ".")
+                      .replace(/\s/g, "")
+                      .trim();
+                    const num = parseFloat(clean);
+                    return isNaN(num) ? 0 : num;
+                  };
+
+                  const formatCurrencySum = (val: number): string => {
+                    return val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+                  };
+
+                  let totalContrato = 0;
+                  let totalPago = 0;
+                  let totalAtrasado = 0;
+                  let totalPendente = 0;
+
+                  const todayStr = new Date().toISOString().split("T")[0];
+
+                  tabelaAnalitica.forEach((row) => {
+                    const status = row.status || (row.pago ? "pago" : "pendente");
+                    const val = parseCurrencySum(row.valor);
+                    totalContrato += val;
+
+                    if (status === "pago") {
+                      totalPago += val;
+                    } else if (status === "atrasado" || (status === "pendente" && row.dataVencimento && row.dataVencimento < todayStr)) {
+                      totalAtrasado += val;
+                    } else {
+                      totalPendente += val;
+                    }
+                  });
+
+                  const totalFaltaPagar = totalContrato - totalPago;
+                  const porcEfetivado = totalContrato > 0 ? (totalPago / totalContrato) * 100 : 0;
+                  const porcAtrasado = totalContrato > 0 ? (totalAtrasado / totalContrato) * 100 : 0;
+                  const porcPendente = totalContrato > 0 ? (totalPendente / totalContrato) * 100 : 0;
+
+                  return (
+                    <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-5 animate-in fade-in duration-300">
+                      {/* Header */}
+                      <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
+                        <TrendingUp className="text-indigo-600" size={18} />
+                        <h3 className="text-sm font-black uppercase text-gray-900 tracking-wider">
+                          Relatório Global do Contrato de Honorários
+                        </h3>
+                      </div>
+
+                      {/* Stat Cards Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {/* Valor Total */}
+                        <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 space-y-1">
+                          <span className="text-[10px] uppercase font-black tracking-widest text-gray-400 block font-sans">Valor Total Contratado</span>
+                          <span className="text-base font-black text-slate-900 font-mono">{formatCurrencySum(totalContrato)}</span>
+                          <div className="text-[10px] text-zinc-500 font-sans">Soma de todas as parcelas analíticas</div>
+                        </div>
+
+                        {/* Total Pago */}
+                        <div className="bg-blue-50/30 p-4 rounded-xl border border-blue-100 space-y-1">
+                          <span className="text-[10px] uppercase font-black tracking-widest text-blue-500 block font-sans font-sans">Total Recebido (Pago)</span>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-base font-black text-blue-700 font-mono">{formatCurrencySum(totalPago)}</span>
+                            <span className="text-xs font-bold text-blue-600 font-mono">({porcEfetivado.toFixed(1)}%)</span>
+                          </div>
+                          <div className="text-[10px] text-zinc-500 font-sans">
+                            {tabelaAnalitica.filter(r => (r.status || (r.pago ? "pago" : "pendente")) === "pago").length} parcelas quitadas
                           </div>
                         </div>
 
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-bold uppercase text-slate-500">Stripe Customer ID (cus_...)</label>
-                          <input
-                            type="text"
-                            value={formStripeCustomerId}
-                            onChange={(e) => setFormStripeCustomerId(e.target.value)}
-                            placeholder="cus_H19s..."
-                            className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 outline-none"
+                        {/* Total Pendente */}
+                        <div className="bg-amber-50/30 p-4 rounded-xl border border-amber-100 space-y-1">
+                          <span className="text-[10px] uppercase font-black tracking-widest text-amber-600 block font-sans font-sans">Total Pendente (A Vencer)</span>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-base font-black text-amber-700 font-mono">{formatCurrencySum(totalPendente)}</span>
+                            <span className="text-xs font-bold text-amber-600 font-mono">({porcPendente.toFixed(1)}%)</span>
+                          </div>
+                          <div className="text-[10px] text-zinc-500 font-sans">
+                            {tabelaAnalitica.filter(r => {
+                              const s = r.status || (r.pago ? "pago" : "pendente");
+                              return s === "pendente" && !(r.dataVencimento && r.dataVencimento < todayStr);
+                            }).length} parcelas a vencer
+                          </div>
+                        </div>
+
+                        {/* Total Atrasado */}
+                        <div className="bg-rose-50/30 p-4 rounded-xl border border-rose-100 space-y-1">
+                          <span className="text-[10px] uppercase font-black tracking-widest text-rose-600 block font-sans font-sans">Total em Atraso</span>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-base font-black text-rose-700 font-mono">{formatCurrencySum(totalAtrasado)}</span>
+                            <span className="text-xs font-bold text-rose-600 font-mono">({porcAtrasado.toFixed(1)}%)</span>
+                          </div>
+                          <div className="text-[10px] text-zinc-500 font-sans flex items-center gap-1">
+                            {totalAtrasado > 0 ? (
+                              <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                            ) : null}
+                            {tabelaAnalitica.filter(r => {
+                              const s = r.status || (r.pago ? "pago" : "pendente");
+                              return s === "atrasado" || (s === "pendente" && r.dataVencimento && r.dataVencimento < todayStr);
+                            }).length} parcelas vencidas
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Visual Progress Bar */}
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex justify-between items-center text-[10px] font-extrabold uppercase tracking-wider text-gray-500 font-mono">
+                          <span>Progresso de Amortização Financeira</span>
+                          <span className="text-blue-700">{porcEfetivado.toFixed(1)}% Amortizado</span>
+                        </div>
+                        <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden flex shadow-inner">
+                          <div
+                            style={{ width: `${porcEfetivado}%` }}
+                            className="bg-blue-600 h-full transition-all duration-500"
+                            title={`Recebido: ${porcEfetivado.toFixed(1)}%`}
+                          />
+                          <div
+                            style={{ width: `${porcPendente}%` }}
+                            className="bg-amber-400 h-full transition-all duration-500"
+                            title={`Pendente: ${porcPendente.toFixed(1)}%`}
+                          />
+                          <div
+                            style={{ width: `${porcAtrasado}%` }}
+                            className="bg-rose-500 h-full transition-all duration-500"
+                            title={`Atrasado: ${porcAtrasado.toFixed(1)}%`}
                           />
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-bold uppercase text-slate-500">Session ID (cs_...)</label>
-                            <input
-                              type="text"
-                              value={formStripeCheckoutId}
-                              onChange={(e) => setFormStripeCheckoutId(e.target.value)}
-                              placeholder="cs_live_..."
-                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-mono text-slate-800 outline-none"
-                            />
+                        <div className="flex items-center gap-4 text-[9px] text-gray-400 font-bold font-mono">
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded bg-blue-600 block" /> Recebido ({porcEfetivado.toFixed(0)}%)
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded bg-amber-400 block" /> A Vencer ({porcPendente.toFixed(0)}%)
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded bg-rose-500 block" /> Atrasado ({porcAtrasado.toFixed(0)}%)
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Remaining Audit summary */}
+                      <div className="bg-slate-50 border border-slate-100 p-3.5 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-2 text-xs">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="text-indigo-600" size={15} />
+                          <span className="font-sans font-semibold text-slate-700">
+                            Falta arrecadar para quitação integral:
+                          </span>
+                          <span className="font-mono font-black text-slate-900 bg-white border border-slate-200 px-2.5 py-0.5 rounded shadow-3xs text-[13px]">
+                            {formatCurrencySum(totalFaltaPagar)}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono">
+                          Atualizado em tempo real com base no demonstrativo de parcelas
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Overdue/Late billing options panel */}
+                {(() => {
+                  const todayStr = new Date().toISOString().split("T")[0];
+                  const temCobrançasEmAtraso = tabelaAnalitica.some(row => {
+                    const s = row.status || (row.pago ? "pago" : "pendente");
+                    if (s === "atrasado") return true;
+                    if (s === "pendente" && row.dataVencimento && row.dataVencimento < todayStr) return true;
+                    return false;
+                  });
+
+                  if (!temCobrançasEmAtraso) return null;
+
+                  const rawPhone = client?.phone || 
+                                   client?.pfDadosPessoais?.pf_telefone || 
+                                   client?.pfContato?.pf_telefone || 
+                                   client?.pfData?.pf_telefone || 
+                                   client?.pjDadosEmpresa?.pj_telefoneEmpresa || 
+                                   client?.pjContatoEmpresa?.pj_telefoneEmpresa || 
+                                   client?.pjData?.pj_telefoneEmpresa || "";
+                  const cleanPhone = rawPhone.replace(/\D/g, "");
+                  const resolvedPhone = cleanPhone ? (cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`) : "";
+                  const clientName = client?.nomeCompleto || client?.razaoSocial || "Cliente";
+
+                  const whatsappBaseUrl = `https://web.whatsapp.com/send?phone=${resolvedPhone}&text=${encodeURIComponent(
+                    `Olá, ${clientName}. Constatamos parcelas em atraso referente ao seu contrato de honorários advocatícios em nosso sistema. Por favor, entre em contato para regularizarmos.`
+                  )}`;
+
+                  return (
+                    <div className="bg-white border border-rose-150 rounded-2xl p-6 shadow-sm space-y-6 animate-in fade-in duration-300">
+                      <div className="flex items-center gap-2 pb-3 border-b border-rose-100">
+                        <AlertTriangle className="text-rose-600 animate-pulse" size={20} />
+                        <h3 className="text-sm font-black uppercase text-rose-950 tracking-wider">
+                          Como deseja fazer a cobrança dos honorários em atraso?
+                        </h3>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                        {/* WhatsApp Option */}
+                        <a
+                          href={whatsappBaseUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="relative group p-4 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-100 hover:border-emerald-200 rounded-xl transition-all cursor-pointer text-left block space-y-2 select-none"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="p-2 bg-emerald-600 text-white rounded-lg group-hover:scale-110 transition-transform">
+                              <svg className="h-5 w-5 fill-current" viewBox="0 0 24 24">
+                                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.063 5.448 5.513 0 12.21 0c3.243.001 6.293 1.264 8.588 3.562C23.093 5.86 24.354 8.911 24.353 12.15c-.004 6.759-5.454 12.21-12.155 12.21-1.999-.001-3.959-.496-5.713-1.439L0 24zm6.59-4.846c1.6.95 3.1 1.4 4.8 1.4 5.3 0 9.7-4.4 9.7-9.7 0-2.6-1-5-2.9-6.8-1.9-1.9-4.4-2.9-6.8-2.9-5.3 0-9.7 4.4-9.7 9.7-.001 1.9.5 3.7 1.4 5.3l-.9 3.4 3.4-.9zm11.448-6.1c-.244-.122-1.445-.714-1.668-.795-.223-.081-.386-.122-.549.122-.163.244-.63.795-.772.956-.143.161-.285.181-.529.06-2.455-1.228-4.048-2.615-4.783-3.876-.194-.336-.02-.519.148-.687.151-.148.337-.393.506-.59.168-.196.223-.336.335-.559.112-.224.056-.419-.028-.581-.084-.162-.733-1.764-.997-2.427-.268-.673-.54-.58-.733-.58-.19-.001-.407-.001-.624-.001-.217 0-.57.081-.868.407-.298.326-1.138 1.112-1.138 2.71 0 1.597 1.164 3.136 1.326 3.359.163.223 2.291 3.511 5.55 4.914.776.334 1.38.533 1.85.682.78.246 1.49.213 2.05.129.626-.093 1.445-.59 1.648-1.16.203-.57.203-1.057.142-1.158-.06-.101-.223-.162-.467-.282z"/>
+                              </svg>
+                            </div>
+                            <span className="bg-emerald-700/10 text-emerald-850 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded tracking-wider font-mono">
+                              W.A Speed
+                            </span>
                           </div>
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-bold uppercase text-slate-500">Intent ID (pi_...)</label>
-                            <input
-                              type="text"
-                              value={formStripeIntentId}
-                              onChange={(e) => setFormStripeIntentId(e.target.value)}
-                              placeholder="pi_3M..."
-                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-mono text-slate-800 outline-none"
-                            />
+                          <p className="font-sans font-bold text-slate-800 text-xs">WhatsApp</p>
+                          <p className="text-[10px] text-zinc-500 leading-tight">
+                            Envie cobrança no WhatsApp do cliente com 1 clique (lembrete automático).
+                          </p>
+                          <div className="pt-1 text-[8.5px] font-mono font-bold text-emerald-700 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-100 mt-1">
+                            ⚡ FUTURA INTEGRAÇÃO W.A SPEED
+                          </div>
+                        </a>
+
+                        {/* Facebook Option */}
+                        <a
+                          href={`https://www.facebook.com/search/top?q=${encodeURIComponent(clientName)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="relative group p-4 bg-blue-50 hover:bg-blue-100/80 border border-blue-100 hover:border-blue-200 rounded-xl transition-all cursor-pointer text-left block space-y-2 select-none"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="p-2 bg-blue-600 text-white rounded-lg group-hover:scale-110 transition-transform">
+                              <svg className="h-5 w-5 fill-current" viewBox="0 0 24 24">
+                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                              </svg>
+                            </div>
+                            <span className="bg-blue-100 text-blue-800 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded tracking-wider font-mono">
+                              Messenger
+                            </span>
+                          </div>
+                          <p className="font-sans font-bold text-slate-800 text-xs">Facebook</p>
+                          <p className="text-[10px] text-zinc-500 leading-tight">
+                            Busque o perfil social do cliente para comunicação privada institucional.
+                          </p>
+                        </a>
+
+                        {/* Instagram Option */}
+                        <a
+                          href={`https://www.instagram.com/explore/tags/${encodeURIComponent(clientName.replace(/\s+/g, "").toLowerCase())}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="relative group p-4 bg-pink-50 hover:bg-pink-100/80 border border-pink-100 hover:border-pink-200 rounded-xl transition-all cursor-pointer text-left block space-y-2 select-none"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="p-2 bg-gradient-to-tr from-yellow-500 via-pink-600 to-purple-600 text-white rounded-lg group-hover:scale-110 transition-transform">
+                              <svg className="h-5 w-5 fill-current" viewBox="0 0 24 24">
+                                <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.051.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/>
+                              </svg>
+                            </div>
+                            <span className="bg-pink-150 text-pink-700 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded tracking-wider font-mono">
+                              Direct
+                            </span>
+                          </div>
+                          <p className="font-sans font-bold text-slate-800 text-xs">Instagram</p>
+                          <p className="text-[10px] text-zinc-500 leading-tight">
+                            Acione o cliente de forma reservada pelos canais oficiais integrados.
+                          </p>
+                        </a>
+
+                        {/* Gmail Option */}
+                        <a
+                          href={`mailto:${client?.email || ""}?subject=${encodeURIComponent("Notificação BOSS: Parcelas de Honorários em Atraso")}&body=${encodeURIComponent(
+                            `Prezado(a) ${clientName},\n\nVerificamos em nosso sistema que há pendências no pagamento de suas parcelas do contrato de honorários advocatícios.\nPor favor, entre em contato conosco para providenciarmos uma nova via do boleto ou chave PIX de pagamento.\n\nAtenciosamente,\nFinanceiro BOSS.`
+                          )}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="relative group p-4 bg-red-50 hover:bg-red-100/80 border border-red-100 hover:border-red-200 rounded-xl transition-all cursor-pointer text-left block space-y-2 select-none"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="p-2 bg-red-600 text-white rounded-lg group-hover:scale-110 transition-transform">
+                              <svg className="h-5 w-5 fill-none stroke-current" strokeWidth="2" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                              </svg>
+                            </div>
+                            <span className="bg-red-100 text-red-800 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded tracking-wider font-mono">
+                              Gmail
+                            </span>
+                          </div>
+                          <p className="font-sans font-bold text-slate-800 text-xs">Gmail / E-mail</p>
+                          <p className="text-[10px] text-zinc-500 leading-tight">
+                            Envie uma notificação formal eletrônica detalhada das cobranças em atraso.
+                          </p>
+                        </a>
+
+                        {/* Envio de Carta Option */}
+                        <div
+                          onClick={() => alert("Simulando geração da Carta de Cobrança GDI. Integração ativa em ambiente de homologação!")}
+                          className="relative group p-4 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-100 hover:border-indigo-200 rounded-xl transition-all cursor-pointer text-left block space-y-2 select-none"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="p-2 bg-indigo-650 text-white rounded-lg group-hover:scale-110 transition-transform">
+                              <svg className="h-5 w-5 fill-none stroke-current" strokeWidth="2" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 19v-8.93a2 2 0 01.89-1.664l8-5.333a2 2 0 012.22 0l8 5.333A2 2 0 0121 10.07V19M3 19a2 2 0 002 2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5" />
+                              </svg>
+                            </div>
+                            <span className="bg-indigo-100 text-indigo-800 text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded tracking-wider font-mono">
+                              Carta GDI
+                            </span>
+                          </div>
+                          <p className="font-sans font-bold text-slate-800 text-xs">Envio de Carta</p>
+                          <p className="text-[10px] text-zinc-500 leading-tight">
+                            Emissão de carta física automática registrada postal para regularização financeira.
+                          </p>
+                          <div className="pt-1 text-[8.5px] font-mono font-bold text-indigo-700 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-100 mt-1">
+                            📨 FUTURA INTEGRAÇÃO GDI
                           </div>
                         </div>
                       </div>
-                    ) : (
-                      <div className="grid grid-cols-1 gap-2.5">
-                        <div className="p-3 bg-[#0066FF]/10 border border-[#0066FF]/25 rounded-xl flex gap-2.5 items-start text-[#0066FF] animate-fadeIn">
-                          <Coins size={15} className="shrink-0 mt-0.5" />
-                          <div className="text-[11px] leading-relaxed">
-                            <span className="font-extrabold block uppercase tracking-wider mb-0.5">Futura Integração ASAAS</span>
-                            Sincronização robusta de cobranças Pix e boletos do ecossistema Giffoni com atualizações instantâneas de liquidação de honorários.
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-bold uppercase text-slate-500">Asaas Customer ID</label>
-                            <input
-                              type="text"
-                              value={formAsaasCustomerId}
-                              onChange={(e) => setFormAsaasCustomerId(e.target.value)}
-                              placeholder="cus_00000..."
-                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-mono text-slate-800 outline-none"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[9px] font-bold uppercase text-slate-500">Asaas Payment ID</label>
-                            <input
-                              type="text"
-                              value={formAsaasPaymentId}
-                              onChange={(e) => setFormAsaasPaymentId(e.target.value)}
-                              placeholder="pay_0099..."
-                              className="w-full px-2 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-mono text-slate-800 outline-none"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  );
+                })()}
               </div>
-
-              {/* Internal Notes */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Anotações Internas de Auditoria</label>
-                <textarea
-                  rows={2}
-                  value={formNotes}
-                  onChange={(e) => setFormNotes(e.target.value)}
-                  placeholder="Insira detalhes adicionais visíveis apenas ao conselho BOSS..."
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 focus:bg-white rounded-xl text-xs font-semibold text-gray-800 outline-none resize-none"
-                />
-              </div>
-
-              {/* Save trigger */}
-              <button
-                type="submit"
-                disabled={saving}
-                className="w-full py-3 bg-gray-950 hover:bg-black text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-sm transition-all"
-              >
-                {saving ? (
-                  <Loader2 size={13} className="animate-spin" />
-                ) : (
-                  <>
-                    <FileCheck2 size={14} />
-                    <span>{editingId ? 'Salvar Edição do Contrato' : 'Criar Contrato de Honorários'}</span>
-                  </>
-                )}
-              </button>
-            </form>
             )}
-
           </div>
         )}
 
@@ -2225,7 +3330,7 @@ export default function FinanceiroFluxo() {
               <Save size={14} />
               Salvar e Sair
             </button>
-            
+
             <button
               type="button"
               disabled={saving}
@@ -2243,7 +3348,6 @@ export default function FinanceiroFluxo() {
             </button>
           </div>
         </div>
-
       </div>
     </FluxoStepLayout>
   );

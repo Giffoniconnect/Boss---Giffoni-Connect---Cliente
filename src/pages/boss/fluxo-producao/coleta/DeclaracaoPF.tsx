@@ -12,7 +12,21 @@ import { useAuth } from '../../../../contexts/AuthContext';
 import { buildDeclaracaoPobrezaPfPlaceholders } from '../../../../lib/documents/placeholderBuilders';
 
 export default function DeclaracaoPF() {
-  const { googleAccessToken } = useAuth();
+  const { googleAccessToken, loginWithGoogle } = useAuth();
+  const [isRenewingGoogle, setIsRenewingGoogle] = React.useState(false);
+
+  const handleRenewGoogle = async () => {
+    setIsRenewingGoogle(true);
+    try {
+      await loginWithGoogle('boss_admin');
+      setSuccess("Autenticação Google renovada com sucesso! Você já pode gerar a declaração novamente.");
+    } catch (err: any) {
+      setError(`Falha ao renovar autenticação: ${err.message || err}`);
+    } finally {
+      setIsRenewingGoogle(false);
+    }
+  };
+
   const {
     caseId,
     fetching,
@@ -540,9 +554,33 @@ export default function DeclaracaoPF() {
             
             {/* NOTIFICATION TOASTS */}
             {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-900 text-xs font-semibold flex gap-2 items-center">
-                <AlertCircle size={14} className="text-red-600 shrink-0" />
-                <span>{error}</span>
+              <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-900 text-xs font-semibold space-y-2 flex flex-col justify-start">
+                <div className="flex gap-2 items-center">
+                  <AlertCircle size={14} className="text-red-600 shrink-0" />
+                  <span>{error}</span>
+                </div>
+                {(error.toLowerCase().includes("expirou") ||
+                  error.toLowerCase().includes("sessão") ||
+                  error.toLowerCase().includes("token") ||
+                  error.toLowerCase().includes("autorização") ||
+                  error.toLowerCase().includes("credentials")) && (
+                  <div className="pt-1.5 flex flex-wrap gap-2 items-center">
+                    <button
+                      type="button"
+                      disabled={isRenewingGoogle}
+                      onClick={handleRenewGoogle}
+                      className="inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold px-2.5 py-1.5 rounded-lg text-[9px] uppercase tracking-wider transition-all cursor-pointer shadow-3xs disabled:opacity-50"
+                    >
+                      <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M21.35 11.1H12V12.9H19.6C18.9 16.5 15.8 18.9 12 18.9C8.1 18.9 5.0 15.8 5.0 12C5.0 8.2 8.1 5.1 12 5.1C13.7 5.1 15.3 5.7 16.5 6.8L18.4 4.9C16.7 3.2 14.5 2.1 12 2.1C6.5 2.1 2 6.6 2 12.1C2 17.6 6.5 22.1 12 22.1C17.5 22.1 22 17.6 22 12.1C22 11.7 21.9 11.4 21.35 11.1H21.35Z" fill="currentColor"/>
+                      </svg>
+                      {isRenewingGoogle ? "Conectando..." : "Conectar / Renovar Conta Google em 1-Clique"}
+                    </button>
+                    <span className="text-[9.5px] text-rose-700 font-extrabold font-mono">
+                      CONEXÃO EXPIRADA
+                    </span>
+                  </div>
+                )}
               </div>
             )}
             {success && (
@@ -567,7 +605,7 @@ export default function DeclaracaoPF() {
                         onChange={() => saveWizardStateUpdate({ q2_1: o })} 
                         className="text-indigo-600"
                       />
-                      <span>{o === 'sim' ? 'Sim (Exige Declaração)' : 'Não (Custas Pagas)'}</span>
+                      <span>{o === 'sim' ? 'Sim (Exige Declaração) ✅' : 'Não (Custas Pagas) ❌'}</span>
                     </label>
                   ))}
                 </div>
@@ -708,7 +746,7 @@ export default function DeclaracaoPF() {
                             checked={wizardState.q2_2 === o} 
                             onChange={() => saveWizardStateUpdate({ q2_2: o })} 
                           />
-                          <span>{o}</span>
+                          <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                         </label>
                       ))}
                     </div>
@@ -742,7 +780,7 @@ export default function DeclaracaoPF() {
                                   checked={wizardState.q2_4 === o} 
                                   onChange={() => saveWizardStateUpdate({ q2_4: o })} 
                                 />
-                                <span>{o}</span>
+                                <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                               </label>
                             ))}
                           </div>
@@ -761,7 +799,7 @@ export default function DeclaracaoPF() {
                                   checked={wizardState.q2_5 === o} 
                                   onChange={() => saveWizardStateUpdate({ q2_5: o })} 
                                 />
-                                <span>{o}</span>
+                                <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                               </label>
                             ))}
                           </div>
@@ -780,7 +818,7 @@ export default function DeclaracaoPF() {
                                   checked={wizardState.q2_6 === o} 
                                   onChange={() => saveWizardStateUpdate({ q2_6: o })} 
                                 />
-                                <span>{o}</span>
+                                <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                               </label>
                             ))}
                           </div>
@@ -799,7 +837,7 @@ export default function DeclaracaoPF() {
                                   checked={wizardState.q2_7 === o} 
                                   onChange={() => saveWizardStateUpdate({ q2_7: o })} 
                                 />
-                                <span>{o}</span>
+                                <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                               </label>
                             ))}
                           </div>

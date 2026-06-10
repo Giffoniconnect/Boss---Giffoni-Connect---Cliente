@@ -39,9 +39,9 @@ export function useColetaState() {
 
   const [wizardState, setWizardState] = useState<any>({
     currentStep: 1,
-    q1_1: '', q1_2: [], q1_2_outro: '', q1_3: '', q1_4: '', q1_5: '', q1_6: '', procuracaoFiles: [],
-    q2_1: '', q2_2: '', q2_3: [], q2_3_outro: '', q2_4: '', q2_5: '', q2_6: '', q2_7: '', declaracaoFiles: [],
-    q3_1: '', q3_2: '', q3_2_outro: '', q3_3: [], q3_3_outro: '', q3_4: '', q3_5: '', q3_6: '', q3_7: '', q3_8: '', contratoFiles: [],
+    q1_1: 'nao', q1_2: [], q1_2_outro: '', q1_3: 'nao', q1_4: 'nao', q1_5: 'nao', q1_6: 'nao', procuracaoFiles: [],
+    q2_1: 'nao', q2_2: 'nao', q2_3: [], q2_3_outro: '', q2_4: 'nao', q2_5: 'nao', q2_6: 'nao', q2_7: 'nao', declaracaoFiles: [],
+    q3_1: 'nao', q3_2: '', q3_2_outro: '', q3_3: [], q3_3_outro: '', q3_4: 'nao', q3_5: 'nao', q3_6: 'nao', q3_7: 'nao', q3_8: 'nao', contratoFiles: [],
     q4_rg: '', q4_cpf: '', q4_residencia: '', q4_anexar_pf: '', rgFiles: [], cpfFiles: [], residenciaFiles: [],
     q4_cnpj: '', q4_contrato_social: '', q4_endereco_sede: '', q4_rg_socio: '', q4_cpf_socio: '', q4_residencia_socio: '', q4_anexar_pj: '',
     cnpjFiles: [], contratoSocialFiles: [], enderecoSedeFiles: [], rgSocioFiles: [], cpfSocioFiles: [], residenciaSocioFiles: [],
