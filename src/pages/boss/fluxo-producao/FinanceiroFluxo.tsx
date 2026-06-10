@@ -1199,461 +1199,455 @@ export default function FinanceiroFluxo() {
                      </span>
                      <span className="text-xs font-black leading-tight mt-0.5 block truncate">
                        {sub.id === 1 ? `Contrato: ${client?.type === 'PF' ? 'PF' : 'PJ'}` : sub.label}
-                     </span>
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ETAPA 1 CONTRATO E CONDICOES FINANCEIRAS */}
+         {!fetching && caseObj && activeSubStep === 1 && (
+           <div className="space-y-6 animate-fadeIn">
+             <div className="max-w-4xl mx-auto space-y-6">
+                  
+               {/* CARD 1: CONDIÇÕES OPERACIONAIS DO CONTRATO */}
+               <form onSubmit={handleSaveFinanceiroCondicoes} className="bg-white border border-gray-150 rounded-2xl p-6 space-y-4 shadow-3xs">
+                 <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                   <h4 className="text-xs font-black uppercase text-indigo-950 tracking-wider">
+                     Condições Operacionais do Contrato
+                   </h4>
+                   <span className="inline-flex bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-md text-[10px] uppercase font-black font-mono">
+                     {client?.type === 'PF' ? 'Contrato PF' : 'Contrato PJ'}
+                   </span>
+                 </div>
+                 <p className="text-[11px] text-gray-500 leading-relaxed font-medium">
+                   Insira os parâmetros oficiais acordados com o cliente. Após gravar, execute o assistente de Automação do Google Docs logo abaixo para gerar a minuta de honorários real e dinâmica no Google Docs.
+                 </p>
+
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   {/* 1. Tipo de Serviço Contratado */}
+                   <div className="md:col-span-2 space-y-1">
+                     <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">1. Tipo de Serviço Contratado ({"{{TIPO_SERVICO_CONTRATADO}}"})</label>
+                     <input 
+                       type="text" 
+                       value={tipoServicoContratadoForm} 
+                       onChange={(e) => setTipoServicoContratadoForm(e.target.value)} 
+                       className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                       placeholder="Assessoria Jurídica e Patrocínio de Ação Ordinária"
+                       required
+                     />
                    </div>
-                 </button>
-               );
-             })}
+
+                   {/* 2. Tipo de Honorário */}
+                   <div className="space-y-1">
+                     <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">2. Tipo de Honorários</label>
+                     <select 
+                       value={tipoHonorarioForm} 
+                       onChange={(e) => setTipoHonorarioForm(e.target.value)} 
+                       className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                     >
+                       <option value="Honorários Fixos">Honorários Fixos</option>
+                       <option value="Êxito">Êxito</option>
+                       <option value="Misto (Fixo + Êxito)">Misto (Fixo + Êxito)</option>
+                     </select>
+                   </div>
+
+                   {/* 3. Honorários Êxito Percentual */}
+                   {(tipoHonorarioForm === 'Êxito' || tipoHonorarioForm === 'Misto (Fixo + Êxito)') ? (
+                     <div className="space-y-1 animate-fadeIn">
+                       <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">3. Êxito Percentual ({"{{HONORARIO_EXITO_PERCENTUAL}}"})</label>
+                       <input 
+                         type="text" 
+                         value={honorarioExitoPercentualForm} 
+                         onChange={(e) => setHonorarioExitoPercentualForm(e.target.value)} 
+                         className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                         placeholder="Ex: 30%"
+                       />
+                     </div>
+                   ) : (
+                     <div className="bg-gray-50/30 border border-dashed border-gray-150 p-2.5 rounded-xl flex items-center justify-center text-center text-gray-400 text-[10px] leading-snug font-mono">
+                       Parâmetro 3. Êxito Desativado
+                     </div>
+                   )}
+
+                   {/* 4. Honorários Fixo Valor */}
+                   {(tipoHonorarioForm === 'Honorários Fixos' || tipoHonorarioForm === 'Misto (Fixo + Êxito)') ? (
+                     <div className="space-y-1 animate-fadeIn">
+                       <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">4. Valor Fixo Total ({"{{HONORARIO_FIXO_VALOR}}"})</label>
+                       <input 
+                         type="text" 
+                         value={honorarioFixoValorForm} 
+                         onChange={(e) => setHonorarioFixoValorForm(e.target.value)} 
+                         className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                         placeholder="Ex: R$ 3.500,00"
+                       />
+                     </div>
+                   ) : (
+                     <div className="bg-gray-50/30 border border-dashed border-gray-150 p-2.5 rounded-xl flex items-center justify-center text-center text-gray-400 text-[10px] leading-snug font-mono">
+                       Parâmetro 4. Valor Fixo Desativado
+                     </div>
+                   )}
+
+                   {/* 5. Forma de Pagamento */}
+                   {(tipoHonorarioForm === 'Honorários Fixos' || tipoHonorarioForm === 'Misto (Fixo + Êxito)') ? (
+                     <div className="space-y-1 animate-fadeIn">
+                       <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">5. Forma de Pagamento ({"{{FORMA_PAGAMENTO}}"})</label>
+                       <select 
+                         value={formaPagamentoForm} 
+                         onChange={(e) => setFormaPagamentoForm(e.target.value)} 
+                         className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                       >
+                         <option value="À vista">À vista</option>
+                         <option value="Parcelado">Parcelado</option>
+                         <option value="Entrada + Parcelado">Entrada + Parcelado</option>
+                       </select>
+                     </div>
+                   ) : (
+                     <div className="bg-gray-50/30 border border-dashed border-gray-150 p-2.5 rounded-xl flex items-center justify-center text-center text-gray-400 text-[10px] leading-snug font-mono">
+                       Parâmetro 5. Pagamento Desativado
+                     </div>
+                   )}
+
+                   {/* 6. Tipo de Recebimento */}
+                   <div className="space-y-1">
+                     <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">6. Tipo de Recebimento ({"{{TIPO_RECEBIMENTO}}"})</label>
+                     <select 
+                       value={tipoRecebimentoForm} 
+                       onChange={(e) => setTipoRecebimentoForm(e.target.value)} 
+                       className="w-full px-3 py-1.5 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                     >
+                       <option value="PIX">PIX (Chave Automática)</option>
+                       <option value="Dinheiro">Dinheiro</option>
+                       <option value="Transferência Bancária">Transferência Bancária</option>
+                       <option value="Stripe">Stripe Gateway</option>
+                       <option value="ASAAS">ASAAS Gateway</option>
+                       <option value="InfinitePay">InfinitePay</option>
+                       <option value="Cartão de Crédito - Maquininha PagSeguro">Cartão de Crédito - Maquininha PagSeguro</option>
+                     </select>
+                   </div>
+
+                   {/* PIX Fields */}
+                   {tipoRecebimentoForm === 'PIX' ? (
+                     <>
+                       <div className="space-y-1 animate-fadeIn">
+                         <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">7. Banco do PIX ({"{{PIX_BANCO}}"})</label>
+                         <input 
+                           type="text" 
+                           value={pixBancoForm} 
+                           onChange={(e) => setPixBancoForm(e.target.value)} 
+                           className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                           placeholder="Ex: Banco Itaú"
+                         />
+                       </div>
+                       <div className="space-y-1 animate-fadeIn">
+                         <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">8. Chave PIX ({"{{PIX_CHAVE}}"})</label>
+                         <input 
+                           type="text" 
+                           value={pixChaveForm} 
+                           onChange={(e) => setPixChaveForm(e.target.value)} 
+                           className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                           placeholder="E-mail, CNPJ, CPF..."
+                         />
+                       </div>
+                     </>
+                   ) : null}
+
+                   {/* Parcelas Fields */}
+                   {(tipoHonorarioForm !== 'Êxito' && (formaPagamentoForm === 'Parcelado' || formaPagamentoForm === 'Entrada + Parcelado')) ? (
+                     <>
+                       <div className="space-y-1 animate-fadeIn font-mono">
+                         <label className="text-[9px] font-bold uppercase text-gray-445 tracking-wide">9. Parcelas ({"{{QUANTIDADE_PARCELAS}}"})</label>
+                         <input 
+                           type="number" 
+                           min="1"
+                           value={quantidadeParcelasForm} 
+                           onChange={(e) => setQuantidadeParcelasForm(Number(e.target.value))} 
+                           className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                         />
+                       </div>
+                       <div className="space-y-1 animate-fadeIn">
+                         <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">10. Valor Parcela ({"{{VALOR_PARCELA}}"})</label>
+                         <input 
+                           type="text" 
+                           value={valorParcelaForm} 
+                           onChange={(e) => setValorParcelaForm(e.target.value)} 
+                           className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                           placeholder="Ex: R$ 500,00"
+                         />
+                       </div>
+                       <div className="space-y-1 animate-fadeIn font-mono">
+                         <label className="text-[9px] font-bold uppercase text-gray-445 tracking-wide">11. Dia Vencimento ({"{{DIA_VENCIMENTO}}"})</label>
+                         <input 
+                           type="text" 
+                           value={diaVencimentoForm} 
+                           onChange={(e) => setDiaVencimentoForm(e.target.value)} 
+                           className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                           placeholder="Ex: 10"
+                         />
+                       </div>
+                       <div className="space-y-1 animate-fadeIn font-mono">
+                         <label className="text-[9px] font-bold uppercase text-gray-445 tracking-wide">13. 1º Vencimento ({"{{DATA_PRIMEIRO_VENCIMENTO}}"})</label>
+                         <input 
+                           type="date" 
+                           value={dataPrimeiroVencimentoForm} 
+                           onChange={(e) => setDataPrimeiroVencimentoForm(e.target.value)} 
+                           className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-855 outline-none transition font-sans"
+                         />
+                       </div>
+                     </>
+                   ) : null}
+
+                   {/* 12. Valor Entrada */}
+                   {(tipoHonorarioForm !== 'Êxito' && formaPagamentoForm === 'Entrada + Parcelado') ? (
+                     <div className="space-y-1 animate-fadeIn">
+                       <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">12. Valor Entrada ({"{{VALOR_ENTRADA}}"})</label>
+                       <input 
+                         type="text" 
+                         value={valorEntradaForm} 
+                         onChange={(e) => setValorEntradaForm(e.target.value)} 
+                         className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                         placeholder="Ex: R$ 1.500,00"
+                       />
+                     </div>
+                   ) : null}
+
+                   {/* 14. Cobrança Automática */}
+                   <div className="space-y-1">
+                     <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">14. Geração em Lote?</label>
+                     <select 
+                       value={cobrancaAutomaticaIntegForm} 
+                       onChange={(e) => setCobrancaAutomaticaIntegForm(e.target.value)} 
+                       className="w-full px-3 py-1.5 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                     >
+                       <option value="Não">Não (Faturado Manualmente)</option>
+                       <option value="Sim">Sim (Sincronização Ativa Integrada)</option>
+                     </select>
+                   </div>
+
+                 </div>
+
+                 <div className="pt-2 flex justify-end">
+                   <button
+                     type="submit"
+                     disabled={saving}
+                     className="px-5 py-2.5 hover:bg-indigo-700 bg-indigo-600 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-all shadow-3xs cursor-pointer disabled:opacity-50"
+                   >
+                     {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+                     Gravar Condições Operacionais
+                   </button>
+                 </div>
+               </form>
+
+               {/* CARD 2: GOOGLE DOCS AUTOMATION IN BLUE */}
+               <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 space-y-4 shadow-xs">
+                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-blue-150">
+                   <h4 className="text-xs font-black uppercase text-blue-950 tracking-wider flex items-center gap-1.5">
+                     <FileCheck2 size={16} className="text-blue-600 animate-pulse" /> Googlde Docs Integração - Gerar Automaticamente Contrato de Honorários - Pessoa Física
+                   </h4>
+                   <div className="flex items-center gap-2">
+                     <span className="text-[10px] font-black uppercase text-blue-400 font-mono">STATUS:</span>
+                     {renderStatusBadge()}
+                   </div>
+                 </div>
+
+                 {caseObj?.contratoHonorariosLogFalha && (
+                   <div className="p-3 border border-rose-100 bg-rose-50/50 rounded-xl text-[11px] text-rose-750 font-medium leading-relaxed">
+                     ⚠️ Falha na última tentativa: <code className="font-mono text-[10px] bg-white px-1 py-0.5 rounded border border-rose-100">{caseObj.contratoHonorariosLogFalha}</code>
+                   </div>
+                 )}
+
+                 {caseObj?.contratoHonorariosGoogleDocsUrl && (
+                   <div className="p-4 bg-blue-100/50 border border-blue-200 rounded-2xl space-y-3.5 animate-in fade-in duration-300">
+                     <div className="grid grid-cols-2 gap-3 text-xs">
+                       <div>
+                         <span className="text-[10px] font-black uppercase text-blue-600 block font-mono">Documento</span>
+                         <span className="font-extrabold text-blue-900">Contrato de Honorários {client?.type || 'PF'}</span>
+                       </div>
+                       <div>
+                         <span className="text-[10px] font-black uppercase text-blue-600 block font-mono">Data Geração</span>
+                         <span className="font-extrabold text-blue-900">
+                           {caseObj.contratoHonorariosGeneratedAt 
+                             ? new Date(caseObj.contratoHonorariosGeneratedAt).toLocaleDateString('pt-BR', {
+                                 day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                               })
+                             : 'Gerado recentemente'}
+                         </span>
+                       </div>
+                       <div className="col-span-2">
+                         <span className="text-[10px] font-black uppercase text-blue-600 block font-mono">Nome do arquivo</span>
+                         <span className="font-bold text-blue-900 font-mono tracking-tight bg-white px-2 py-1 border border-blue-200 rounded-lg block truncate font-semibold">
+                           Contrato de Honorários - {clientName}
+                         </span>
+                       </div>
+                       <div className="col-span-2">
+                         <span className="text-[10px] font-black uppercase text-blue-600 block font-mono">Link de Acesso</span>
+                         <a 
+                           href={caseObj.contratoHonorariosGoogleDocsUrl}
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           className="text-blue-750 font-bold hover:underline font-mono truncate block text-[11px]"
+                         >
+                           {caseObj.contratoHonorariosGoogleDocsUrl}
+                         </a>
+                       </div>
+                     </div>
+
+                     <div className="flex gap-2 pt-2 border-t border-blue-200">
+                       <button
+                         type="button"
+                         onClick={() => handleOpenContrato(caseObj.contratoHonorariosGoogleDocsUrl)}
+                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer font-semibold"
+                       >
+                         <ExternalLink size={13} />
+                         Abrir Contrato
+                       </button>
+
+                       <button
+                         type="button"
+                         disabled={saving}
+                         onClick={handleGenerateContratoHonorarios}
+                         className="px-4 py-2 bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+                       >
+                         {saving ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={12} />}
+                         Gerar Novamente
+                       </button>
+                     </div>
+                   </div>
+                 )}
+
+                 {!caseObj?.contratoHonorariosGoogleDocsUrl && (
+                   <button 
+                     type="button" 
+                     disabled={saving}
+                     onClick={handleGenerateContratoHonorarios}
+                     className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-black uppercase tracking-wider text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition shadow-xs"
+                   >
+                     {saving ? (
+                       <>
+                         <Loader2 size={15} className="animate-spin" />
+                         Gerando minuta oficial no GDocs...
+                       </>
+                     ) : (
+                       <>
+                         <FileCheck2 size={16} />
+                         Criar Contrato de Honorários
+                       </>
+                     )}
+                   </button>
+                 )}
+               </div>
+
+               {/* CARD 3: CHECKLIST E PERGUNTAS */}
+               <div className="space-y-4 bg-white border border-gray-150 rounded-2xl p-6 shadow-xs">
+                 <div className="space-y-1">
+                   <p className="text-xs font-extrabold text-gray-850">3.1 Você gerou o contrato de honorários?</p>
+                   <div className="flex gap-4">
+                     {['sim', 'nao'].map(o => (
+                       <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-750">
+                         <input 
+                           type="radio" 
+                           checked={wizardState.q3_1 === o} 
+                           onChange={() => {
+                             saveWizardStateUpdate({ q3_1: o, q3_4: o === 'nao' ? 'nao' : wizardState.q3_4 });
+                           }} 
+                         />
+                         <span>{o}</span>
+                       </label>
+                     ))}
+                   </div>
+                 </div>
+
+                 {wizardState.q3_1 === 'sim' && (
+                   <div className="space-y-4 border-l-2 border-indigo-200 pl-4 animate-in fade-in duration-200">
+                     
+                     <div className="space-y-1">
+                       <p className="text-xs font-extrabold text-gray-850">3.2 Qual o modelo de contratação?</p>
+                       <div className="grid grid-cols-2 p-3 bg-gray-50/55 border border-gray-100 rounded-xl gap-2">
+                         {['exito', 'entrada_exito', 'mensalidade', 'administrativo', 'outro'].map(m => (
+                           <label key={m} className="flex items-center gap-1.5 cursor-pointer text-[11px] text-gray-750 font-bold capitalize">
+                             <input 
+                               type="radio" 
+                               name="f_q3_2" 
+                               checked={wizardState.q3_2 === m} 
+                               onChange={() => saveWizardStateUpdate({ q3_2: m })} 
+                             />
+                             <span>{m.replace('_', ' ')}</span>
+                           </label>
+                         ))}
+                       </div>
+                       {wizardState.q3_2 === 'outro' && (
+                         <input 
+                           type="text" 
+                           placeholder="Descreva o modelo acordado" 
+                           value={wizardState.q3_2_outro || ''}
+                           onChange={(e) => saveWizardStateUpdate({ q3_2_outro: e.target.value })}
+                           className="mt-1 w-full max-w-sm px-3 py-1.5 bg-white border border-gray-150 rounded-xl text-xs font-semibold outline-none focus:ring-1 focus:ring-indigo-500"
+                         />
+                       )}
+                     </div>
+
+                     <div className="space-y-1">
+                       <p className="text-xs font-extrabold text-gray-850">3.3 Você enviou o contrato ao cliente?</p>
+                       <div className="flex flex-wrap gap-3">
+                         {['whatsapp', 'email', 'fisica', 'outro'].map(ch => (
+                           <label key={ch} className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-gray-750">
+                             <input 
+                               type="checkbox"
+                               checked={wizardState.q3_3?.includes(ch)}
+                               onChange={() => handleCheckboxToggle('q3_3', ch)}
+                             />
+                             <span className="capitalize">{ch === 'fisica' ? 'Física/Impressa' : ch}</span>
+                           </label>
+                         ))}
+                       </div>
+                       {wizardState.q3_3?.includes('outro') && (
+                         <input 
+                           type="text" 
+                           placeholder="Modo alternativo de envio" 
+                           value={wizardState.q3_3_outro || ''}
+                           onChange={(e) => saveWizardStateUpdate({ q3_3_outro: e.target.value })}
+                           className="mt-1 w-full max-w-sm px-3 py-1.5 bg-white border border-gray-150 rounded-xl text-xs font-semibold focus:ring-1 focus:ring-indigo-500"
+                         />
+                       )}
+                     </div>
+
+                     {['q3_4', 'q3_5', 'q3_6', 'q3_7'].map((f, i) => {
+                       const labels = [
+                         '3.4 O cliente assinou o contrato?',
+                         '3.5 Você solicitou a digitalização do contrato?',
+                         '3.6 Você recebeu o contrato digitalizado?',
+                         '3.7 O financeiro foi informado?'
+                       ];
+                       return (
+                         <div key={f} className="space-y-1">
+                           <p className="text-xs font-extrabold text-gray-850">{labels[i]}</p>
+                           <div className="flex gap-4">
+                             {['sim', 'nao'].map(o => (
+                               <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-750">
+                                 <input 
+                                   type="radio" 
+                                   name={`f_${f}`}
+                                   checked={wizardState[f] === o} 
+                                   onChange={() => saveWizardStateUpdate({ [f]: o })} 
+                                 />
+                                 <span>{o}</span>
+                               </label>
+                             ))}
+                           </div>
+                         </div>
+                       );
+                     })}
+
+                   </div>
+                 )}
+               </div>
+
+             </div>
            </div>
          )}
 
-        {/* ETAPA 1 CONTRATO E CONDICOES FINANCEIRAS */}
-        {!fetching && caseObj && activeSubStep === 1 && (
-          <div className="space-y-6 animate-fadeIn">
-            <div>
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                  
-                  {/* LEFT COLUMN: 12 CONDICOES FINANCEIRAS FORM */}
-                  <div className="lg:col-span-12 xl:col-span-7 space-y-4">
-                    <form onSubmit={handleSaveFinanceiroCondicoes} className="bg-white border border-gray-150 rounded-2xl p-6 space-y-4 shadow-3xs">
-                      <div className="flex justify-between items-center pb-2 border-b border-gray-100">
-                        <h4 className="text-xs font-black uppercase text-indigo-950 tracking-wider">
-                          Condições Operacionais do Contrato
-                        </h4>
-                        <span className="inline-flex bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-md text-[10px] uppercase font-black font-mono">
-                          {client?.type === 'PF' ? 'Contrato PF' : 'Contrato PJ'}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-gray-500 leading-relaxed font-medium">
-                        Insira os parâmetros oficiais acordados com o cliente. Após gravar, clique em "Criar Contrato" ao lado para gerar a minuta real e dinâmica no Google Docs.
-                      </p>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* 1. Tipo de Serviço Contratado */}
-                        <div className="md:col-span-2 space-y-1">
-                          <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">1. Tipo de Serviço Contratado ({"{{TIPO_SERVICO_CONTRATADO}}"})</label>
-                          <input 
-                            type="text" 
-                            value={tipoServicoContratadoForm} 
-                            onChange={(e) => setTipoServicoContratadoForm(e.target.value)} 
-                            className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                            placeholder="Assessoria Jurídica e Patrocínio de Ação Ordinária"
-                            required
-                          />
-                        </div>
-
-                        {/* 2. Tipo de Honorário */}
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">2. Tipo de Honorários</label>
-                          <select 
-                            value={tipoHonorarioForm} 
-                            onChange={(e) => setTipoHonorarioForm(e.target.value)} 
-                            className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                          >
-                            <option value="Honorários Fixos">Honorários Fixos</option>
-                            <option value="Êxito">Êxito</option>
-                            <option value="Misto (Fixo + Êxito)">Misto (Fixo + Êxito)</option>
-                          </select>
-                        </div>
-
-                        {/* 3. Honorários Êxito Percentual */}
-                        {(tipoHonorarioForm === 'Êxito' || tipoHonorarioForm === 'Misto (Fixo + Êxito)') ? (
-                          <div className="space-y-1 animate-fadeIn">
-                            <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">3. Êxito Percentual ({"{{HONORARIO_EXITO_PERCENTUAL}}"})</label>
-                            <input 
-                              type="text" 
-                              value={honorarioExitoPercentualForm} 
-                              onChange={(e) => setHonorarioExitoPercentualForm(e.target.value)} 
-                              className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                              placeholder="Ex: 30%"
-                            />
-                          </div>
-                        ) : (
-                          <div className="bg-gray-50/30 border border-dashed border-gray-150 p-2.5 rounded-xl flex items-center justify-center text-center text-gray-400 text-[10px] leading-snug font-mono">
-                            Parâmetro 3. Êxito Desativado
-                          </div>
-                        )}
-
-                        {/* 4. Honorários Fixo Valor */}
-                        {(tipoHonorarioForm === 'Honorários Fixos' || tipoHonorarioForm === 'Misto (Fixo + Êxito)') ? (
-                          <div className="space-y-1 animate-fadeIn">
-                            <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">4. Valor Fixo Total ({"{{HONORARIO_FIXO_VALOR}}"})</label>
-                            <input 
-                              type="text" 
-                              value={honorarioFixoValorForm} 
-                              onChange={(e) => setHonorarioFixoValorForm(e.target.value)} 
-                              className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                              placeholder="Ex: R$ 3.500,00"
-                            />
-                          </div>
-                        ) : (
-                          <div className="bg-gray-50/30 border border-dashed border-gray-150 p-2.5 rounded-xl flex items-center justify-center text-center text-gray-400 text-[10px] leading-snug font-mono">
-                            Parâmetro 4. Valor Fixo Desativado
-                          </div>
-                        )}
-
-                        {/* 5. Forma de Pagamento */}
-                        {(tipoHonorarioForm === 'Honorários Fixos' || tipoHonorarioForm === 'Misto (Fixo + Êxito)') ? (
-                          <div className="space-y-1 animate-fadeIn">
-                            <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">5. Forma de Pagamento ({"{{FORMA_PAGAMENTO}}"})</label>
-                            <select 
-                              value={formaPagamentoForm} 
-                              onChange={(e) => setFormaPagamentoForm(e.target.value)} 
-                              className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                            >
-                              <option value="À vista">À vista</option>
-                              <option value="Parcelado">Parcelado</option>
-                              <option value="Entrada + Parcelado">Entrada + Parcelado</option>
-                            </select>
-                          </div>
-                        ) : (
-                          <div className="bg-gray-50/30 border border-dashed border-gray-150 p-2.5 rounded-xl flex items-center justify-center text-center text-gray-400 text-[10px] leading-snug font-mono">
-                            Parâmetro 5. Pagamento Desativado
-                          </div>
-                        )}
-
-                        {/* 6. Tipo de Recebimento */}
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">6. Tipo de Recebimento ({"{{TIPO_RECEBIMENTO}}"})</label>
-                          <select 
-                            value={tipoRecebimentoForm} 
-                            onChange={(e) => setTipoRecebimentoForm(e.target.value)} 
-                            className="w-full px-3 py-1.5 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                          >
-                            <option value="PIX">PIX (Chave Automática)</option>
-                            <option value="Dinheiro">Dinheiro</option>
-                            <option value="Transferência Bancária">Transferência Bancária</option>
-                            <option value="Stripe">Stripe Gateway</option>
-                            <option value="ASAAS">ASAAS Gateway</option>
-                            <option value="InfinitePay">InfinitePay</option>
-                            <option value="Cartão de Crédito - Maquininha PagSeguro">Cartão de Crédito - Maquininha PagSeguro</option>
-                          </select>
-                        </div>
-
-                        {/* PIX Fields */}
-                        {tipoRecebimentoForm === 'PIX' ? (
-                          <>
-                            <div className="space-y-1 animate-fadeIn">
-                              <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">7. Banco do PIX ({"{{PIX_BANCO}}"})</label>
-                              <input 
-                                type="text" 
-                                value={pixBancoForm} 
-                                onChange={(e) => setPixBancoForm(e.target.value)} 
-                                className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                                placeholder="Ex: Banco Itaú"
-                              />
-                            </div>
-                            <div className="space-y-1 animate-fadeIn">
-                              <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">8. Chave PIX ({"{{PIX_CHAVE}}"})</label>
-                              <input 
-                                type="text" 
-                                value={pixChaveForm} 
-                                onChange={(e) => setPixChaveForm(e.target.value)} 
-                                className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                                placeholder="E-mail, CNPJ, CPF..."
-                              />
-                            </div>
-                          </>
-                        ) : null}
-
-                        {/* Parcelas Fields */}
-                        {(tipoHonorarioForm !== 'Êxito' && (formaPagamentoForm === 'Parcelado' || formaPagamentoForm === 'Entrada + Parcelado')) ? (
-                          <>
-                            <div className="space-y-1 animate-fadeIn font-mono">
-                              <label className="text-[9px] font-bold uppercase text-gray-445 tracking-wide">9. Parcelas ({"{{QUANTIDADE_PARCELAS}}"})</label>
-                              <input 
-                                type="number" 
-                                min="1"
-                                value={quantidadeParcelasForm} 
-                                onChange={(e) => setQuantidadeParcelasForm(Number(e.target.value))} 
-                                className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                              />
-                            </div>
-                            <div className="space-y-1 animate-fadeIn">
-                              <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">10. Valor Parcela ({"{{VALOR_PARCELA}}"})</label>
-                              <input 
-                                type="text" 
-                                value={valorParcelaForm} 
-                                onChange={(e) => setValorParcelaForm(e.target.value)} 
-                                className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                                placeholder="Ex: R$ 500,00"
-                              />
-                            </div>
-                            <div className="space-y-1 animate-fadeIn font-mono">
-                              <label className="text-[9px] font-bold uppercase text-gray-445 tracking-wide">11. Dia Vencimento ({"{{DIA_VENCIMENTO}}"})</label>
-                              <input 
-                                type="text" 
-                                value={diaVencimentoForm} 
-                                onChange={(e) => setDiaVencimentoForm(e.target.value)} 
-                                className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                                placeholder="Ex: 10"
-                              />
-                            </div>
-                            <div className="space-y-1 animate-fadeIn font-mono">
-                              <label className="text-[9px] font-bold uppercase text-gray-445 tracking-wide">13. 1º Vencimento ({"{{DATA_PRIMEIRO_VENCIMENTO}}"})</label>
-                              <input 
-                                type="date" 
-                                value={dataPrimeiroVencimentoForm} 
-                                onChange={(e) => setDataPrimeiroVencimentoForm(e.target.value)} 
-                                className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-850 outline-none transition font-sans"
-                              />
-                            </div>
-                          </>
-                        ) : null}
-
-                        {/* 12. Valor Entrada */}
-                        {(tipoHonorarioForm !== 'Êxito' && formaPagamentoForm === 'Entrada + Parcelado') ? (
-                          <div className="space-y-1 animate-fadeIn">
-                            <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">12. Valor Entrada ({"{{VALOR_ENTRADA}}"})</label>
-                            <input 
-                              type="text" 
-                              value={valorEntradaForm} 
-                              onChange={(e) => setValorEntradaForm(e.target.value)} 
-                              className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                              placeholder="Ex: R$ 1.500,00"
-                            />
-                          </div>
-                        ) : null}
-
-                        {/* 14. Cobrança Automática */}
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">14. Geração em Lote?</label>
-                          <select 
-                            value={cobrancaAutomaticaIntegForm} 
-                            onChange={(e) => setCobrancaAutomaticaIntegForm(e.target.value)} 
-                            className="w-full px-3 py-1.5 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                          >
-                            <option value="Não">Não (Faturado Manualmente)</option>
-                            <option value="Sim">Sim (Sincronização Ativa Integrada)</option>
-                          </select>
-                        </div>
-
-                      </div>
-
-                      <div className="pt-2 flex justify-end">
-                        <button
-                          type="submit"
-                          disabled={saving}
-                          className="px-5 py-2.5 hover:bg-indigo-700 bg-indigo-600 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-all shadow-3xs cursor-pointer disabled:opacity-50"
-                        >
-                          {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-                          Gravar Condições Operacionais
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-
-                  {/* RIGHT COLUMN: GDocs Card & Checklist */}
-                  <div className="lg:col-span-12 xl:col-span-5 space-y-4">
-                    <div className="bg-white border border-gray-150 rounded-2xl p-5 space-y-4 shadow-xs">
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-gray-100">
-                        <h4 className="text-xs font-black uppercase text-indigo-950 tracking-wider flex items-center gap-1.5">
-                          <FileCheck2 size={16} className="text-indigo-600 animate-pulse" /> Google Docs — Automação
-                        </h4>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-black uppercase text-gray-400 font-mono">STATUS:</span>
-                          {renderStatusBadge()}
-                        </div>
-                      </div>
-
-                      {caseObj?.contratoHonorariosLogFalha && (
-                        <div className="p-3 border border-rose-100 bg-rose-50/50 rounded-xl text-[11px] text-rose-750 font-medium leading-relaxed">
-                          ⚠️ Falha na última tentativa: <code className="font-mono text-[10px] bg-white px-1 py-0.5 rounded border border-rose-100">{caseObj.contratoHonorariosLogFalha}</code>
-                        </div>
-                      )}
-
-                      {caseObj?.contratoHonorariosGoogleDocsUrl && (
-                        <div className="p-4 bg-emerald-50/20 border border-emerald-150 rounded-2xl space-y-3.5 animate-in fade-in duration-300">
-                          <div className="grid grid-cols-2 gap-3 text-xs">
-                            <div>
-                              <span className="text-[10px] font-black uppercase text-emerald-600 block font-mono">Documento</span>
-                              <span className="font-extrabold text-gray-850">Contrato de Honorários {client?.type || 'PF'}</span>
-                            </div>
-                            <div>
-                              <span className="text-[10px] font-black uppercase text-emerald-600 block font-mono">Data Geração</span>
-                              <span className="font-extrabold text-gray-855">
-                                {caseObj.contratoHonorariosGeneratedAt 
-                                  ? new Date(caseObj.contratoHonorariosGeneratedAt).toLocaleDateString('pt-BR', {
-                                      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                                    })
-                                  : 'Gerado recentemente'}
-                              </span>
-                            </div>
-                            <div className="col-span-2">
-                              <span className="text-[10px] font-black uppercase text-emerald-600 block font-mono">Nome do arquivo</span>
-                              <span className="font-bold text-gray-800 font-mono tracking-tight bg-white px-2 py-1 border border-emerald-100 rounded-lg block truncate">
-                                Contrato de Honorários - {clientName}
-                              </span>
-                            </div>
-                            <div className="col-span-2">
-                              <span className="text-[10px] font-black uppercase text-emerald-600 block font-mono">Link de Acesso</span>
-                              <a 
-                                href={caseObj.contratoHonorariosGoogleDocsUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-indigo-650 font-bold hover:underline font-mono truncate block text-[11px]"
-                              >
-                                {caseObj.contratoHonorariosGoogleDocsUrl}
-                              </a>
-                            </div>
-                          </div>
-
-                          <div className="flex gap-2 pt-2 border-t border-emerald-100">
-                            <button
-                              type="button"
-                              onClick={() => handleOpenContrato(caseObj.contratoHonorariosGoogleDocsUrl)}
-                              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer font-semibold"
-                            >
-                              <ExternalLink size={13} />
-                              Abrir Contrato
-                            </button>
-
-                            <button
-                              type="button"
-                              disabled={saving}
-                              onClick={handleGenerateContratoHonorarios}
-                              className="px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-200 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
-                            >
-                              {saving ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={12} />}
-                              Gerar Novamente
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {!caseObj?.contratoHonorariosGoogleDocsUrl && (
-                        <button 
-                          type="button" 
-                          disabled={saving}
-                          onClick={handleGenerateContratoHonorarios}
-                          className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-black uppercase tracking-wider text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition shadow-xs"
-                        >
-                          {saving ? (
-                            <>
-                              <Loader2 size={15} className="animate-spin" />
-                              Gerando minuta oficial no GDocs...
-                            </>
-                          ) : (
-                            <>
-                              <FileCheck2 size={16} />
-                              Criar Contrato de Honorários
-                            </>
-                          )}
-                        </button>
-                      )}
-                    </div>
-
-                    {/* CHECKLIST E PERGUNTAS */}
-                    <div className="space-y-4 bg-white border border-gray-150 rounded-2xl p-6 shadow-xs">
-                      <div className="space-y-1">
-                        <p className="text-xs font-extrabold text-gray-850">3.1 Você gerou o contrato de honorários?</p>
-                        <div className="flex gap-4">
-                          {['sim', 'nao'].map(o => (
-                            <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-750">
-                              <input 
-                                type="radio" 
-                                checked={wizardState.q3_1 === o} 
-                                onChange={() => {
-                                  saveWizardStateUpdate({ q3_1: o, q3_4: o === 'nao' ? 'nao' : wizardState.q3_4 });
-                                }} 
-                              />
-                              <span>{o}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-
-                      {wizardState.q3_1 === 'sim' && (
-                        <div className="space-y-4 border-l-2 border-indigo-200 pl-4 animate-in fade-in duration-200">
-                          
-                          <div className="space-y-1">
-                            <p className="text-xs font-extrabold text-gray-850">3.2 Qual o modelo de contratação?</p>
-                            <div className="grid grid-cols-2 p-3 bg-gray-50/55 border border-gray-100 rounded-xl gap-2">
-                              {['exito', 'entrada_exito', 'mensalidade', 'administrativo', 'outro'].map(m => (
-                                <label key={m} className="flex items-center gap-1.5 cursor-pointer text-[11px] text-gray-750 font-bold capitalize">
-                                  <input 
-                                    type="radio" 
-                                    name="f_q3_2" 
-                                    checked={wizardState.q3_2 === m} 
-                                    onChange={() => saveWizardStateUpdate({ q3_2: m })} 
-                                  />
-                                  <span>{m.replace('_', ' ')}</span>
-                                </label>
-                              ))}
-                            </div>
-                            {wizardState.q3_2 === 'outro' && (
-                              <input 
-                                type="text" 
-                                placeholder="Descreva o modelo acordado" 
-                                value={wizardState.q3_2_outro || ''}
-                                onChange={(e) => saveWizardStateUpdate({ q3_2_outro: e.target.value })}
-                                className="mt-1 w-full max-w-sm px-3 py-1.5 bg-white border border-gray-150 rounded-xl text-xs font-semibold outline-none focus:ring-1 focus:ring-indigo-500"
-                              />
-                            )}
-                          </div>
-
-                          <div className="space-y-1">
-                            <p className="text-xs font-extrabold text-gray-850">3.3 Você enviou o contrato ao cliente?</p>
-                            <div className="flex flex-wrap gap-3">
-                              {['whatsapp', 'email', 'fisica', 'outro'].map(ch => (
-                                <label key={ch} className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-gray-750">
-                                  <input 
-                                    type="checkbox"
-                                    checked={wizardState.q3_3?.includes(ch)}
-                                    onChange={() => handleCheckboxToggle('q3_3', ch)}
-                                  />
-                                  <span className="capitalize">{ch === 'fisica' ? 'Física/Impressa' : ch}</span>
-                                </label>
-                              ))}
-                            </div>
-                            {wizardState.q3_3?.includes('outro') && (
-                              <input 
-                                type="text" 
-                                placeholder="Modo alternativo de envio" 
-                                value={wizardState.q3_3_outro || ''}
-                                onChange={(e) => saveWizardStateUpdate({ q3_3_outro: e.target.value })}
-                                className="mt-1 w-full max-w-sm px-3 py-1.5 bg-white border border-gray-150 rounded-xl text-xs font-semibold focus:ring-1 focus:ring-indigo-500"
-                              />
-                            )}
-                          </div>
-
-                          {['q3_4', 'q3_5', 'q3_6', 'q3_7'].map((f, i) => {
-                            const labels = [
-                              '3.4 O cliente assinou o contrato?',
-                              '3.5 Você solicitou a digitalização do contrato?',
-                              '3.6 Você recebeu o contrato digitalizado?',
-                              '3.7 O financeiro foi informado?'
-                            ];
-                            return (
-                              <div key={f} className="space-y-1">
-                                <p className="text-xs font-extrabold text-gray-850">{labels[i]}</p>
-                                <div className="flex gap-4">
-                                  {['sim', 'nao'].map(o => (
-                                    <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-750">
-                                      <input 
-                                        type="radio" 
-                                        name={`f_${f}`}
-                                        checked={wizardState[f] === o} 
-                                        onChange={() => saveWizardStateUpdate({ [f]: o })} 
-                                      />
-                                      <span>{o}</span>
-                                    </label>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })}
-
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* ALERTA DE VAZIO: INTEGRITY INTEGRITY ALERTS COVERS LACK OF FINANCIAL RECORDS */}
         {!fetching && financials.length === 0 && (
