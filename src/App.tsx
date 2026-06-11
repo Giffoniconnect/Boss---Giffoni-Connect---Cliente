@@ -69,6 +69,8 @@ import EditarPortalCliente from './pages/boss/fluxo-producao/EditarPortalCliente
 import CentralAtalhos from './pages/boss/giffoni-connect/CentralAtalhos';
 import BossLeadsPrivate from './pages/boss/leads/BossLeadsPrivate';
 import CadastrarLeadsPrivate from './pages/boss/leads/CadastrarLeadsPrivate';
+import CadastrarLeadsPF from './pages/boss/leads/CadastrarLeadsPF';
+import CadastrarLeadsPJ from './pages/boss/leads/CadastrarLeadsPJ';
 
 
 
@@ -115,6 +117,22 @@ const router = createBrowserRouter(
         element={
           <ProtectedRoute role="boss_admin">
             <CadastrarLeadsPrivate />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss/cadastrar.leads/private/lead-pf" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <CadastrarLeadsPF />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss/cadastrar.leads/private/lead-pj" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <CadastrarLeadsPJ />
           </ProtectedRoute>
         } 
       />

@@ -378,6 +378,25 @@
         "version": { "type": "number" }
       },
       "required": ["status", "clientType", "portalClientId", "caseId", "documentType", "createdAt"]
+    },
+    "MarketingLead": {
+      "title": "Marketing Lead",
+      "description": "Prospect lead captured from marketing sources.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "origemLead": { "type": "string" },
+        "areaJuridica": { "type": "string" },
+        "assunto": { "type": "string" },
+        "dorPrincipal": { "type": "string" },
+        "urgencia": { "type": "string" },
+        "statusFunil": { "type": "string" },
+        "convertidoEmCliente": { "type": "boolean" },
+        "tipoPessoa": { "type": "string", "enum": ["PF", "PJ"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["origemLead", "statusFunil", "tipoPessoa"]
     }
   },
   "firestore": {
@@ -444,6 +463,10 @@
     "googleDocsJobs": {
       "schema": "GoogleDocsJob",
       "description": "Fila de processamento de geração automatizada de documentos no Google Docs/Drive."
+    },
+    "marketingLeads": {
+      "schema": "MarketingLead",
+      "description": "Leads collected and managed by the marketing sector."
     }
   }
 }

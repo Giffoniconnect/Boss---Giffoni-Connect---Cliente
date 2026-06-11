@@ -300,5 +300,12 @@ service cloud.firestore {
     match /googleDocsJobs/{jobId} {
       allow read, write: if isSignedIn();
     }
+
+    // -------------------------------------------------------------------------
+    // MARKETING LEADS COLLECTION
+    // -------------------------------------------------------------------------
+    match /marketingLeads/{leadId} {
+      allow read, write: if isAdmin() && isValidId(leadId);
+    }
   }
 }

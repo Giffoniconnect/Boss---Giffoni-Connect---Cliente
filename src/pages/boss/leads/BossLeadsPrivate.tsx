@@ -35,7 +35,12 @@ import {
   Calendar,
   Briefcase,
   Phone,
-  ArrowLeftRight
+  ArrowLeftRight,
+  Facebook,
+  Instagram,
+  Share2,
+  Sparkles,
+  UserCheck
 } from 'lucide-react';
 
 const FUNNEL_STATUSES = [
@@ -191,6 +196,26 @@ export default function BossLeadsPrivate() {
       return isNaN(val) ? sum : sum + val;
     }, 0);
 
+    const indicacaoCount = leads.filter(l => {
+      const src = (l.origemLead || '').toLowerCase();
+      return src.includes('indica') || src.includes('indicacao');
+    }).length;
+    
+    const facebookCount = leads.filter(l => {
+      const src = (l.origemLead || '').toLowerCase();
+      return src.includes('facebook') || src === 'fb';
+    }).length;
+
+    const instagramCount = leads.filter(l => {
+      const src = (l.origemLead || '').toLowerCase();
+      return src.includes('instagram') || src.includes('insta') || src === 'ig';
+    }).length;
+
+    const tiktokCount = leads.filter(l => {
+      const src = (l.origemLead || '').toLowerCase();
+      return src.includes('tiktok') || src.includes('tik tok') || src.includes('tik-tok');
+    }).length;
+
     return {
       totalLeads,
       pfLeads,
@@ -201,7 +226,11 @@ export default function BossLeadsPrivate() {
       convertedLeads,
       lostLeads,
       conversionRate,
-      estimatedPotential
+      estimatedPotential,
+      indicacaoCount,
+      facebookCount,
+      instagramCount,
+      tiktokCount
     };
   }, [leads]);
 
@@ -520,6 +549,121 @@ export default function BossLeadsPrivate() {
             <div className="text-[9px] text-gray-400 font-bold mt-2.5 pt-2 border-t border-gray-100 flex items-center gap-1">
               <Coins size={10} className="text-yellow-600" />
               <span>Valor total estimado</span>
+            </div>
+          </div>
+        </div>
+
+        {/* FONTES DE CAPTAÇÃO / ORIGENS DOS LEADS */}
+        <div className="bg-slate-50/50 border border-gray-150 rounded-3xl p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 bg-indigo-50 border border-indigo-100/65 rounded-xl text-indigo-650 flex items-center justify-center">
+                <Sparkles size={14} />
+              </span>
+              <div>
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-755">
+                  Fontes de Captação dos Leads
+                </h4>
+                <p className="text-[10px] text-gray-450 font-bold">Distribuição de origem e canais de prospecção do Marketing</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Indicação Card */}
+            <div className="bg-white border border-gray-150 rounded-2xl p-4.5 shadow-[0_1.5px_4px_rgb(0,0,0,0.015)] flex flex-col justify-between gap-3 group hover:border-blue-300 hover:shadow-xs transition-all duration-300">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="block text-[9px] uppercase tracking-wider font-extrabold text-blue-600 mb-1">Indicação</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-black text-gray-950 font-mono tracking-tight">{stats.indicacaoCount}</span>
+                    <span className="text-[10px] text-gray-400 font-bold font-mono">
+                      ({stats.totalLeads > 0 ? Math.round((stats.indicacaoCount / stats.totalLeads) * 100) : 0}%)
+                    </span>
+                  </div>
+                </div>
+                <div className="w-10 h-10 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-center text-blue-600 group-hover:bg-blue-100 group-hover:text-blue-700 transition">
+                  <UserCheck size={18} />
+                </div>
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+                <div 
+                  className="bg-blue-500 h-full rounded-full transition-all duration-500" 
+                  style={{ width: `${stats.totalLeads > 0 ? (stats.indicacaoCount / stats.totalLeads) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Facebook Card */}
+            <div className="bg-white border border-gray-150 rounded-2xl p-4.5 shadow-[0_1.5px_4px_rgb(0,0,0,0.015)] flex flex-col justify-between gap-3 group hover:border-indigo-300 hover:shadow-xs transition-all duration-300">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="block text-[9px] uppercase tracking-wider font-extrabold text-indigo-600 mb-1">Facebook</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-black text-gray-950 font-mono tracking-tight">{stats.facebookCount}</span>
+                    <span className="text-[10px] text-gray-400 font-bold font-mono">
+                      ({stats.totalLeads > 0 ? Math.round((stats.facebookCount / stats.totalLeads) * 100) : 0}%)
+                    </span>
+                  </div>
+                </div>
+                <div className="w-10 h-10 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-center text-indigo-600 group-hover:bg-indigo-100 group-hover:text-indigo-700 transition">
+                  <Facebook size={18} />
+                </div>
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+                <div 
+                  className="bg-indigo-500 h-full rounded-full transition-all duration-500" 
+                  style={{ width: `${stats.totalLeads > 0 ? (stats.facebookCount / stats.totalLeads) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Instagram Card */}
+            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-4.5 shadow-[0_1.5px_4px_rgb(0,0,0,0.015)] flex flex-col justify-between gap-3 group hover:border-pink-300 hover:shadow-xs transition-all duration-300">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="block text-[9px] uppercase tracking-wider font-extrabold text-pink-600 mb-1">Instagram</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-black text-gray-950 font-mono tracking-tight">{stats.instagramCount}</span>
+                    <span className="text-[10px] text-gray-400 font-bold font-mono">
+                      ({stats.totalLeads > 0 ? Math.round((stats.instagramCount / stats.totalLeads) * 100) : 0}%)
+                    </span>
+                  </div>
+                </div>
+                <div className="w-10 h-10 bg-pink-50 border border-pink-100 rounded-xl flex items-center justify-center text-pink-600 group-hover:bg-pink-100 group-hover:text-pink-700 transition">
+                  <Instagram size={18} />
+                </div>
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+                <div 
+                  className="bg-pink-500 h-full rounded-full transition-all duration-500" 
+                  style={{ width: `${stats.totalLeads > 0 ? (stats.instagramCount / stats.totalLeads) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+
+            {/* TikTok Card */}
+            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-4.5 shadow-[0_1.5px_4px_rgb(0,0,0,0.015)] flex flex-col justify-between gap-3 group hover:border-slate-800 hover:shadow-xs transition-all duration-300">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="block text-[9px] uppercase tracking-wider font-extrabold text-slate-800 mb-1">Tik Tok</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-black text-gray-950 font-mono tracking-tight">{stats.tiktokCount}</span>
+                    <span className="text-[10px] text-gray-400 font-bold font-mono">
+                      ({stats.totalLeads > 0 ? Math.round((stats.tiktokCount / stats.totalLeads) * 100) : 0}%)
+                    </span>
+                  </div>
+                </div>
+                <div className="w-10 h-10 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-center text-slate-900 group-hover:bg-slate-200 transition">
+                  <Share2 size={18} />
+                </div>
+              </div>
+              <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+                <div 
+                  className="bg-slate-800 h-full rounded-full transition-all duration-500" 
+                  style={{ width: `${stats.totalLeads > 0 ? (stats.tiktokCount / stats.totalLeads) * 100 : 0}%` }}
+                />
+              </div>
             </div>
           </div>
         </div>
