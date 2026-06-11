@@ -18,14 +18,16 @@ export default function CadastrarLeadsPrivate() {
         {/* HEADER */}
         <div className="border-b border-gray-150 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <span className="text-[10px] uppercase font-black tracking-widest text-indigo-650 font-mono">Cadastrar Leads Particulares</span>
-            <h1 className="text-2xl font-black text-gray-900 tracking-tight">Novo Cadastro de Lead</h1>
+            <span className="text-[10px] uppercase font-black tracking-widest text-indigo-650 font-mono">Etapa 01 — Identificação do Cliente em Potencial</span>
+            <h1 className="text-xl font-black text-gray-900 tracking-tight leading-snug">
+              Funil de Vendas de Serviços Jurídicos da Giffoni Advogados Associados - Identificação do Cliente em Potencial - Novo Cadastro de Lead
+            </h1>
           </div>
           
           <button
             type="button"
             onClick={() => navigate('/boss/leads/private/dashboard')}
-            className="text-xs font-bold text-gray-650 bg-white border border-gray-200 px-4 py-2.5 rounded-xl shadow-4xs transition hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+            className="text-xs font-bold text-gray-650 bg-white border border-gray-200 px-4 py-2.5 rounded-xl shadow-4xs transition hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto shrink-0"
           >
             <ArrowLeft size={14} />
             <span>Ver Dashboard de Leads</span>

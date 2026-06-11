@@ -72,7 +72,7 @@ export default function DocumentosMinimosPF() {
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
-                Etapa 4 — Pessoa Física (PF)
+                Subetapa 04 — Pessoa Física (PF)
               </span>
               <span className="text-xs text-gray-400">Cliente: <strong>{clientName}</strong></span>
             </div>
@@ -253,7 +253,6 @@ export default function DocumentosMinimosPF() {
               <div className="pt-4 border-t border-gray-100 flex justify-end">
                 <button
                   type="button"
-                  disabled={!wizardState.q4_rg || !wizardState.q4_solicitar_digitalizacao_rg || !wizardState.q4_cpf || !wizardState.q4_solicitar_digitalizacao_residencia || !wizardState.q4_residencia}
                   onClick={handleNextPhase}
                   className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
                 >

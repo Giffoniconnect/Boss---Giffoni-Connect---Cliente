@@ -91,12 +91,12 @@ export default function DocumentosAuditoriaPF() {
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
-                Etapa 6 — Pessoa Física (PF)
+                Subetapa 06 — Auditoria da Coleta de Provas — Pessoa Física (PF)
               </span>
               <span className="text-xs text-gray-400">Cliente: <strong>{clientName}</strong></span>
             </div>
             <h1 className="text-lg font-black text-gray-900 tracking-tight leading-none pt-1">
-              Auditoria Final & Encerramento do Fluxo
+              Subetapa 06 — Auditoria da Coleta de Provas
             </h1>
           </div>
           <button

@@ -126,12 +126,12 @@ export default function DocumentosNecessidadePF() {
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
-                Etapa 5 — Pessoa Física (PF)
+                Subetapa 05 — Outras Provas do Cliente — Pessoa Física (PF)
               </span>
               <span className="text-xs text-gray-400">Cliente: <strong>{client?.pfDadosPessoais?.pf_nomeCompleto || 'PF'}</strong></span>
             </div>
             <h1 className="text-lg font-black text-gray-900 tracking-tight leading-none pt-1">
-              Outros Documentos e Provas Específicas
+              Subetapa 05 — Outras Provas do Cliente
             </h1>
           </div>
           <button
@@ -404,7 +404,6 @@ export default function DocumentosNecessidadePF() {
               <div className="pt-4 border-t border-gray-100 flex justify-end">
                 <button
                   type="button"
-                  disabled={!wizardState.q5_1 || (wizardState.q5_1 === 'sim' && requests.length === 0)}
                   onClick={handleNextPhase}
                   className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
                 >

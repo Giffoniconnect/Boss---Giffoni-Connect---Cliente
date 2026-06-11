@@ -8,7 +8,8 @@ import {
   ArrowLeft, 
   CheckCircle2, 
   AlertCircle, 
-  Save
+  Save,
+  Sparkles
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -17,6 +18,7 @@ export default function CadastrarLeadsPJ() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [createdLeadId, setCreatedLeadId] = useState<string | null>(null);
 
   // Form Fields State for PJ
   const initialFormData = {
@@ -98,7 +100,7 @@ export default function CadastrarLeadsPJ() {
       }
 
       setSuccess(`Lead Pessoa Jurídica cadastrado com sucesso!`);
-      setLeadFormData(initialFormData);
+      setCreatedLeadId(newId);
     } catch (e: any) {
       console.error(e);
       setError('Erro ao salvar o LEAD no banco de dados. Por favor tente novamente.');
@@ -114,14 +116,16 @@ export default function CadastrarLeadsPJ() {
         {/* HEADER */}
         <div className="border-b border-gray-150 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <span className="text-[10px] uppercase font-black tracking-widest text-purple-600 font-mono">Cadastrar Leads Especializados</span>
-            <h1 className="text-2xl font-black text-gray-900 tracking-tight">Ficha de Inscrição: LEAD PJ</h1>
+            <span className="text-[10px] uppercase font-black tracking-widest text-purple-600 font-mono">Etapa 01 — Identificação do Cliente em Potencial</span>
+            <h1 className="text-xl font-black text-gray-900 tracking-tight leading-snug">
+              Funil de Vendas de Serviços Jurídicos da Giffoni Advogados Associados - Identificação do Cliente em Potencial - Ficha LEAD PJ
+            </h1>
           </div>
           
           <button
             type="button"
             onClick={() => navigate('/boss/cadastrar.leads/private')}
-            className="text-xs font-bold text-gray-650 bg-white border border-gray-200 px-4 py-2.5 rounded-xl shadow-4xs transition hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+            className="text-xs font-bold text-gray-650 bg-white border border-gray-200 px-4 py-2.5 rounded-xl shadow-4xs transition hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto shrink-0"
           >
             <ArrowLeft size={14} />
             <span>Voltar à Seleção</span>
@@ -137,29 +141,36 @@ export default function CadastrarLeadsPJ() {
         )}
 
         {success && (
-          <div className="bg-emerald-50 border border-emerald-150 rounded-2xl p-5 flex flex-col sm:flex-row items-center gap-4 justify-between">
+          <div className="bg-emerald-50 border border-emerald-150 rounded-2xl p-5 flex flex-col md:flex-row items-center gap-4 justify-between shadow-2xs">
             <div className="flex items-start gap-3">
-              <CheckCircle2 className="text-emerald-600 shrink-0 mt-0.5" size={20} />
+              <CheckCircle2 className="text-emerald-600 shrink-0 mt-0.5" size={24} />
               <div>
-                <strong className="text-emerald-950 text-sm block">Sucesso!</strong>
-                <span className="text-xs text-emerald-850 font-medium">{success}</span>
+                <strong className="text-emerald-950 text-sm block font-black">Lead Cadastrado com Sucesso! (Conclusão da Etapa 01)</strong>
+                <span className="text-xs text-emerald-850 font-bold">O lead de Pessoa Jurídica foi criado e identificado no sistema. Seus dados já estão consolidados.</span>
               </div>
             </div>
-            <div className="flex gap-2.5 w-full sm:w-auto">
+            <div className="flex flex-wrap gap-2 w-full md:w-auto">
               <button
                 type="button"
-                onClick={() => setSuccess(null)}
-                className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider"
+                onClick={() => {
+                  setSuccess(null);
+                  setCreatedLeadId(null);
+                  setLeadFormData(initialFormData);
+                }}
+                className="px-3.5 py-2 bg-white border border-emerald-250 text-emerald-800 hover:bg-emerald-100/50 rounded-xl text-[10px] font-black uppercase tracking-wider transition cursor-pointer"
               >
                 Cadastrar Outro
               </button>
-              <button
-                type="button"
-                onClick={() => navigate('/boss/leads/private/dashboard')}
-                className="w-full sm:w-auto px-4 py-2 bg-white border border-emerald-250 text-emerald-800 hover:bg-emerald-100/50 rounded-xl text-xs font-black uppercase tracking-wider"
-              >
-                Voltar ao Dashboard
-              </button>
+              {createdLeadId && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/boss/cadastrar.leads/private/etapa02/${createdLeadId}`)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1 transition cursor-pointer shadow-sm animate-pulse"
+                >
+                  <span>Ir para Etapa 02 (Relacionamento)</span>
+                  <Sparkles size={12} />
+                </button>
+              )}
             </div>
           </div>
         )}

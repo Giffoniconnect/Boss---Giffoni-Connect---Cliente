@@ -71,6 +71,7 @@ import BossLeadsPrivate from './pages/boss/leads/BossLeadsPrivate';
 import CadastrarLeadsPrivate from './pages/boss/leads/CadastrarLeadsPrivate';
 import CadastrarLeadsPF from './pages/boss/leads/CadastrarLeadsPF';
 import CadastrarLeadsPJ from './pages/boss/leads/CadastrarLeadsPJ';
+import CadastrarLeadsEtapa2 from './pages/boss/leads/CadastrarLeadsEtapa2';
 
 
 
@@ -133,6 +134,14 @@ const router = createBrowserRouter(
         element={
           <ProtectedRoute role="boss_admin">
             <CadastrarLeadsPJ />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/boss/cadastrar.leads/private/etapa02/:leadId" 
+        element={
+          <ProtectedRoute role="boss_admin">
+            <CadastrarLeadsEtapa2 />
           </ProtectedRoute>
         } 
       />

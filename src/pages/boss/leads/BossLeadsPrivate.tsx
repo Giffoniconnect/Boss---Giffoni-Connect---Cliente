@@ -1404,6 +1404,16 @@ export default function BossLeadsPrivate() {
                               <span>Ver</span>
                             </button>
 
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/boss/cadastrar.leads/private/etapa02/${lead.id}`)}
+                              className="p-1 px-2 bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100/70 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                              title="Progredir para Etapa 02: Relacionamento"
+                            >
+                              <Sparkles size={11} className="text-indigo-650" />
+                              <span>Etapa 02</span>
+                            </button>
+
                             {!lead.convertidoEmCliente && lead.statusFunil !== 'Convertido em Cliente' && (
                               <button
                                 type="button"
@@ -1473,13 +1483,22 @@ export default function BossLeadsPrivate() {
                   </button>
                 )}
                 {!selectedLeadForDetail.convertidoEmCliente && (
-                  <button 
-                    onClick={() => handleConvertLead(selectedLeadForDetail)}
-                    className="px-3.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-black uppercase tracking-wider shadow-4xs hover:bg-emerald-700 transition flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <ArrowLeftRight size={13} />
-                    <span>Converter em Cliente</span>
-                  </button>
+                  <>
+                    <button 
+                      onClick={() => navigate(`/boss/cadastrar.leads/private/etapa02/${selectedLeadForDetail.id}`)}
+                      className="px-3.5 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-black uppercase tracking-wider shadow-4xs hover:bg-indigo-700 transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Sparkles size={13} />
+                      <span>Acessar Etapa 02 (Relacionamento)</span>
+                    </button>
+                    <button 
+                      onClick={() => handleConvertLead(selectedLeadForDetail)}
+                      className="px-3.5 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-black uppercase tracking-wider shadow-4xs hover:bg-emerald-700 transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <ArrowLeftRight size={13} />
+                      <span>Converter em Cliente</span>
+                    </button>
+                  </>
                 )}
               </div>
             </div>
