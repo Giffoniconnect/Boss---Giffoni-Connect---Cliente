@@ -3377,6 +3377,115 @@ app.post("/api/validate-build-url", async (req, res) => {
   }
 });
 
+// --- TODOIST BACKEND INTEGRATION BRIDGE ---
+
+interface TodoistTaskPayload {
+  title: string;
+  description?: string;
+  projectId?: string;
+  sectionId?: string;
+  labels?: string[];
+  dueString?: string;
+  priority?: number;
+}
+
+// 1. Backend helper function for communicating with Todoist REST API v2
+async function createTodoistTask(payload: TodoistTaskPayload) {
+  const token = process.env.TODOIST_API_TOKEN;
+  if (!token || !token.trim()) {
+    throw new Error("TODOIST_SECRET_MISSING");
+  }
+
+  // Map input params to safe Todoist REST API v2 parameters (content, description, etc.)
+  const body: any = {
+    content: payload.title || "Nova Tarefa do Caso"
+  };
+
+  if (payload.description) body.description = payload.description;
+  if (payload.projectId) body.project_id = payload.projectId;
+  if (payload.sectionId) body.section_id = payload.sectionId;
+  if (payload.labels) body.labels = payload.labels;
+  if (payload.dueString) body.due_string = payload.dueString;
+  if (payload.priority) body.priority = payload.priority;
+
+  const url = "https://api.todoist.com/rest/v2/tasks";
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`[Todoist Integration Error] HTTP Status: ${response.status}. Payload attempted (excluding auth). Raw error text:`, errorText);
+    throw new Error(`Erro retornado pela API do Todoist (HTTP ${response.status})`);
+  }
+
+  const data = await response.json();
+  return {
+    todoistTaskId: data.id,
+    todoistUrl: data.url,
+    data
+  };
+}
+
+// 2. Internal secure API endpoint to receive task specifications and request Todoist API v2
+app.post("/api/todoist/create-task", async (req, res) => {
+  try {
+    const token = process.env.TODOIST_API_TOKEN;
+    if (!token || !token.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: "TODOIST_SECRET_MISSING",
+        message: "O token de API do Todoist (TODOIST_API_TOKEN) não foi configurado."
+      });
+    }
+
+    const { title, description, projectId, sectionId, labels, dueString, priority } = req.body;
+    if (!title) {
+      return res.status(400).json({
+        success: false,
+        error: "TITLE_REQUIRED",
+        message: "O título da tarefa (title) é obrigatório."
+      });
+    }
+
+    const result = await createTodoistTask({
+      title,
+      description,
+      projectId,
+      sectionId,
+      labels,
+      dueString,
+      priority
+    });
+
+    return res.status(200).json({
+      success: true,
+      todoistTaskId: result.todoistTaskId,
+      todoistUrl: result.todoistUrl,
+      message: "Tarefa criada no Todoist com sucesso."
+    });
+  } catch (err: any) {
+    console.error("[Todoist API Route Exception]:", err.message || err);
+    if (err.message === "TODOIST_SECRET_MISSING") {
+      return res.status(400).json({
+        success: false,
+        error: "TODOIST_SECRET_MISSING",
+        message: "O token de API do Todoist (TODOIST_API_TOKEN) não foi configurado."
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      error: "TODOIST_API_ERROR",
+      message: "Erro ao processar criação de tarefa de forma segura. Certifique-se de que os dados e a chave estejam corretificados."
+    });
+  }
+});
+
 async function startServer() {
   // Integrate Vite middleware in development mode
   if (process.env.NODE_ENV !== "production") {

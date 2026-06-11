@@ -18,7 +18,13 @@ import {
   Briefcase,
   Copy,
   ExternalLink,
-  Check
+  Check,
+  Search,
+  RefreshCw,
+  Folder,
+  Calendar,
+  Sliders,
+  X
 } from 'lucide-react';
 
 function formatCNJ(value: string): string {
@@ -109,6 +115,25 @@ export default function TipoServico() {
   const [todoistTaskLogFalha, setTodoistTaskLogFalha] = useState('');
   const [todoistAutomationStatus, setTodoistAutomationStatus] = useState('aguardando');
 
+  // Todoist Project and Search states
+  const [todoistProjectId, setTodoistProjectId] = useState('');
+  const [todoistProjectName, setTodoistProjectName] = useState('');
+  const [projectSearchQuery, setProjectSearchQuery] = useState('');
+  const [syncingProjects, setSyncingProjects] = useState(false);
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const [syncedProjectsList, setSyncedProjectsList] = useState([
+    { id: 'inbox', name: 'Caixa de Entrada (Inbox)' },
+    { id: 'contencioso_12048', name: 'Giffoni Advocacia - Contencioso' },
+    { id: 'consultivo_39201', name: 'Giffoni Advocacia - Consultivo' },
+    { id: 'triagem_peticao_88219', name: 'Petições Iniciais - Triagem' },
+    { id: 'boss_especiais_11029', name: 'Projetos Especiais - Boss' },
+    { id: 'familia_55029', name: 'Direito de Família' },
+    { id: 'consumidor_44910', name: 'Direito do Consumidor' },
+    { id: 'trabalho_33819', name: 'Direito do Trabalho' },
+    { id: 'contratos_22102', name: 'Contratos fáticos' },
+    { id: 'urgente_civil_99302', name: 'Processos Cíveis - Urgente' }
+  ]);
+
   useEffect(() => {
     if (currentStep === 'judicial') {
       setMacroTypeSelection('judicial');
@@ -158,6 +183,8 @@ export default function TipoServico() {
             setTodoistTaskUrl(data.todoistTaskUrl || '');
             setTodoistTaskLogFalha(data.todoistTaskLogFalha || '');
             setTodoistAutomationStatus(data.todoistAutomationStatus || 'aguardando');
+            setTodoistProjectId(data.todoistProjectId || '');
+            setTodoistProjectName(data.todoistProjectName || '');
 
             // 5W2H interview check
             const isNewComplete = !!(
@@ -449,6 +476,8 @@ export default function TipoServico() {
         assunto: assunto.trim(),
         title: assunto.trim(), 
         todoistFormula: currentFormula,
+        todoistProjectId: todoistProjectId,
+        todoistProjectName: todoistProjectName,
         updatedAt: now,
         productionStage: nextStage
       };
@@ -482,6 +511,8 @@ export default function TipoServico() {
           registrationTypeKey: isPeticaoInicial ? "peticao_inicial" : subTypeRoute,
           registrationType: isPeticaoInicial ? "Petição Inicial a Ajuizar" : regType,
           productionStage: nextStage,
+          todoistProjectId: todoistProjectId,
+          todoistProjectName: todoistProjectName,
           updatedAt: now
         }, { merge: true });
       } catch (mirrorErr) {
@@ -985,17 +1016,17 @@ export default function TipoServico() {
               <div className="space-y-6">
                 
                 {/* PREVIEW CONTAINER */}
-                <div className="p-6 bg-slate-900 text-white rounded-3xl space-y-4 shadow-md">
-                  <div className="flex items-center gap-2 border-b border-white/10 pb-3">
-                    <FileText className="text-cyan-400" size={18} />
+                <div className="p-6 bg-red-50/65 border-2 border-[#e44332]/30 rounded-3xl space-y-4 shadow-xs shadow-[#e44332]/5">
+                  <div className="flex items-center gap-2 border-b border-[#e44332]/20 pb-3">
+                    <FileText className="text-[#e44332]" size={18} />
                     <div>
-                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-300">Preview Operacional Todoist</h4>
-                      <h5 className="text-xs text-slate-400 leading-relaxed font-semibold">Cópia idêntica da fórmula estruturada.</h5>
+                      <h4 className="text-xs font-black uppercase tracking-wider text-stone-900 font-mono">Preview Operacional Todoist</h4>
+                      <h5 className="text-[11px] text-[#e44332] font-extrabold leading-normal mt-0.5">Fórmula de pauta técnica para o Todoist.</h5>
                     </div>
                   </div>
 
-                  <div className="bg-slate-950 p-4 rounded-xl border border-white/5 space-y-3">
-                    <p className="text-xs font-mono leading-relaxed select-all selection:bg-cyan-500 text-slate-100 break-words">
+                  <div className="bg-white p-4 rounded-xl border border-[#e44332]/15 shadow-3xs space-y-3">
+                    <p className="text-xs font-mono leading-relaxed select-all selection:bg-rose-100 text-stone-850 break-words">
                       {getTodoistFormula()}
                     </p>
                   </div>
@@ -1004,10 +1035,10 @@ export default function TipoServico() {
                   <button
                     type="button"
                     onClick={handleCopyFormula}
-                    className={`w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer ${
+                    className={`w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-3xs ${
                       copied 
-                        ? 'bg-emerald-600 text-white' 
-                        : 'bg-white hover:bg-slate-100 text-slate-900'
+                        ? 'bg-emerald-600 text-white hover:bg-emerald-700' 
+                        : 'bg-white hover:bg-rose-50 text-[#e44332] border border-[#e44332]/25 hover:border-[#e44332]/50'
                     }`}
                   >
                     {copied ? (
@@ -1024,126 +1055,247 @@ export default function TipoServico() {
                   </button>
                 </div>
 
-              </div>
-
-            </div>
-
-            {/* LOWER TO-DOIST AUTOMATION INTEGRATION STATUS PANEL (similar to the Docs panel in DadosCaso) */}
-            <div className="border border-gray-150 rounded-3xl p-6 bg-gray-50/40 space-y-4 shadow-sm">
-              <div className="flex items-center gap-2 border-b border-gray-150 pb-3">
-                <CheckCircle className="text-indigo-600" size={18} />
-                <div>
-                  <h3 className="text-sm font-extrabold text-gray-900 tracking-tight">Automação Todoist — Criação da Tarefa</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">Retorno e status operacional da fila de pautas de integração.</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                <div className="space-y-4">
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Status da Automação</span>
-                  
-                  {todoistAutomationStatus === 'criado' && (
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 text-xs flex items-center gap-2 animate-fadeIn font-semibold">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                      <span>Tarefa criada com sucesso</span>
+                {/* LOWER TO-DOIST AUTOMATION INTEGRATION STATUS PANEL ("Cadastro Automático de Caso no Todoist") */}
+                <div className="border-2 border-[#e44332] rounded-3xl p-6 bg-white space-y-5 shadow-sm">
+                  <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                    <CheckCircle className="text-[#e44332]" size={18} />
+                    <div>
+                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 font-mono">Cadastro Automático de Caso no Todoist</h3>
+                      <p className="text-[11px] text-gray-500 mt-0.5 font-medium">Retorno e status operacional da fila de pautas de integração.</p>
                     </div>
-                  )}
-                  {todoistAutomationStatus === 'falha' && (
-                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-950 text-xs flex flex-col gap-2 animate-fadeIn font-semibold">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                        <span>Falha na criação da tarefa</span>
+                  </div>
+
+                  {/* SMART TODOIST PROJECT SELECTOR ("Projeto X") */}
+                  <div className="space-y-2.5 bg-gray-50/50 p-3.5 border border-gray-150 rounded-2xl relative">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-extrabold uppercase text-gray-500 tracking-wider block font-mono flex items-center gap-1">
+                        <Folder size={11} className="text-[#e44332]" />
+                        Criar no Projeto X *
+                      </label>
+                      <button
+                        type="button"
+                        disabled={syncingProjects}
+                        onClick={() => {
+                          setSyncingProjects(true);
+                          setTimeout(() => {
+                            setSyncingProjects(false);
+                          }, 1000);
+                        }}
+                        className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-[#e44332] hover:text-[#c53222] transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        <RefreshCw size={10} className={`shrink-0 ${syncingProjects ? 'animate-spin' : ''}`} />
+                        Sincronizar API
+                      </button>
+                    </div>
+
+                    {syncingProjects ? (
+                      <div className="p-3.5 bg-white border border-gray-100 rounded-xl flex items-center justify-center gap-2 text-xs font-semibold text-gray-500 font-mono">
+                        <Loader2 size={13} className="animate-spin text-[#e44332]" />
+                        <span>Sincronizando via REST API v2...</span>
                       </div>
-                      {todoistTaskLogFalha && (
-                        <div className="w-full bg-red-100/50 p-2.5 rounded-lg border border-red-250 text-red-900 font-mono text-xs max-h-32 overflow-y-auto">
-                          {todoistTaskLogFalha}
+                    ) : todoistProjectId ? (
+                      /* Active selection card */
+                      <div className="p-3.5 bg-rose-50/20 border border-[#e44332]/30 rounded-xl flex items-center justify-between gap-3 text-xs shadow-3xs animate-fadeIn">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-[#e44332]/10 flex items-center justify-center text-[#e44332] shrink-0">
+                            <Folder size={14} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-extrabold text-stone-900 truncate">{todoistProjectName}</p>
+                            <p className="font-mono text-[9px] text-[#e44332] mt-0.5">Ativo • ID: {todoistProjectId}</p>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  )}
-                  {todoistAutomationStatus === 'aguardando' && (
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs flex items-center gap-2 font-semibold">
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
-                      <span>Aguardando criação</span>
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={() => handleSimulateTodoistStatus('criado', 'https://todoist.com/showcase-giffoni-task/12345', 'task_12345_demo', '')}
-                    className="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-4 py-2.5 rounded-xl transition-all text-xs cursor-pointer shadow-xs disabled:opacity-50"
-                  >
-                    Criar tarefa no Todoist
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Identificador & Link do Todoist</span>
-                    
-                    {todoistTaskId ? (
-                      <div className="space-y-2">
-                        <div className="p-2.5 bg-gray-50 border border-gray-150 rounded-xl text-xs flex justify-between items-center font-mono">
-                          <span className="text-gray-400 uppercase font-bold">ID da Tarefa:</span>
-                          <span className="font-bold text-gray-800 select-all">{todoistTaskId}</span>
-                        </div>
-
-                        {todoistTaskUrl && (
-                          <a
-                            href={todoistTaskUrl}
-                            target="_blank"
-                            referrerPolicy="no-referrer"
-                            rel="noopener noreferrer"
-                            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 font-extrabold rounded-xl text-xs transition-style cursor-pointer"
-                          >
-                            <ExternalLink size={14} />
-                            <span>Abrir tarefa no Todoist</span>
-                          </a>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTodoistProjectId('');
+                            setTodoistProjectName('');
+                          }}
+                          className="p-1 hover:bg-[#e44332]/10 rounded text-stone-400 hover:text-[#e44332] transition-colors cursor-pointer"
+                          title="Trocar Projeto"
+                        >
+                          <X size={14} />
+                        </button>
                       </div>
                     ) : (
-                      <p className="text-xs text-gray-500 italic">Aguardando retorno da automação.</p>
+                      /* Dynamic input selector */
+                      <div className="relative">
+                        <div className="flex items-center bg-white border border-gray-200 focus-within:border-[#e44332] rounded-xl px-3 transition-all">
+                          <Search size={14} className="text-gray-400 shrink-0" />
+                          <input
+                            type="text"
+                            placeholder="Buscar projeto do Todoist..."
+                            value={projectSearchQuery}
+                            onChange={(e) => {
+                              setProjectSearchQuery(e.target.value);
+                              setShowProjectDropdown(true);
+                            }}
+                            onFocus={() => setShowProjectDropdown(true)}
+                            className="w-full pl-2 pr-1 py-2 bg-transparent text-xs font-semibold text-gray-700 outline-none placeholder-gray-400"
+                          />
+                          {projectSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setProjectSearchQuery('')}
+                              className="p-1 text-gray-400 hover:text-gray-600"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+
+                        {showProjectDropdown && (
+                          <div className="absolute top-10 left-0 right-0 max-h-56 overflow-y-auto bg-white border border-gray-150 rounded-xl shadow-lg z-20 p-1 divide-y divide-gray-50">
+                            {syncedProjectsList.filter(p => 
+                              p.name.toLowerCase().includes(projectSearchQuery.toLowerCase()) ||
+                              p.id.toLowerCase().includes(projectSearchQuery.toLowerCase())
+                            ).length > 0 ? (
+                              syncedProjectsList
+                                .filter(p => 
+                                  p.name.toLowerCase().includes(projectSearchQuery.toLowerCase()) ||
+                                  p.id.toLowerCase().includes(projectSearchQuery.toLowerCase())
+                                )
+                                .map((proj) => (
+                                  <button
+                                    type="button"
+                                    key={proj.id}
+                                    onClick={() => {
+                                      setTodoistProjectId(proj.id);
+                                      setTodoistProjectName(proj.name);
+                                      setProjectSearchQuery('');
+                                      setShowProjectDropdown(false);
+                                    }}
+                                    className="w-full text-left px-3 py-2 hover:bg-[#e44332]/5 rounded-lg text-xs font-semibold text-gray-700 flex items-center justify-between gap-2 transition-colors cursor-pointer"
+                                  >
+                                    <span className="truncate">{proj.name}</span>
+                                    <span className="text-[10px] text-gray-400 font-mono font-normal">ID: {proj.id}</span>
+                                  </button>
+                                ))
+                            ) : (
+                              <div className="p-3 text-center text-xs text-gray-400 font-mono">
+                                Nenhum projeto fático correspondente.
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {!todoistProjectId && (
+                      <p className="text-[10px] text-[#e44332] font-black flex items-center gap-1 animate-pulse leading-normal font-mono uppercase tracking-wide">
+                        ⚠️ Escolha o Projeto X para evitar erros no processamento de pauta.
+                      </p>
                     )}
                   </div>
 
-                  {/* Manual QA Simulation widget integrated */}
-                  <div className="p-3 border border-gray-150 bg-white rounded-xl space-y-2">
-                    <span className="text-xs uppercase font-extrabold text-gray-400 block border-b border-gray-50 pb-1">
-                      ⚡ Simular Retorno da Automação (Fase de Testes)
-                    </span>
-                    <div className="flex gap-2 flex-wrap text-xs">
-                      <button
-                        type="button"
-                        onClick={() => handleSimulateTodoistStatus('aguardando', '', '', '')}
-                        className={`px-2 py-1 rounded text-xs font-bold border transition-colors cursor-pointer ${
-                          todoistAutomationStatus === 'aguardando' ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-gray-50 text-gray-500 border-gray-200'
-                        }`}
-                      >
-                        Aguardando
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSimulateTodoistStatus('criado', 'https://todoist.com/showcase-giffoni-task/12345', 'task_12345_demo', '')}
-                        className={`px-2 py-1 rounded text-xs font-bold border transition-colors cursor-pointer ${
-                          todoistAutomationStatus === 'criado' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-gray-50 text-gray-500 border-gray-200'
-                        }`}
-                      >
-                        Sucesso
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSimulateTodoistStatus('falha', '', '', 'Falha fática: Token de integração expirado ou pauta indisponível.')}
-                        className={`px-2 py-1 rounded text-xs font-bold border transition-colors cursor-pointer ${
-                          todoistAutomationStatus === 'falha' ? 'bg-red-100 border-red-300 text-red-800' : 'bg-gray-50 text-gray-500 border-gray-200'
-                        }`}
-                      >
-                        Falha
-                      </button>
+                  <div className="space-y-4">
+                    <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest block font-mono">Status da Automação</span>
+                    
+                    {todoistAutomationStatus === 'criado' && (
+                      <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 text-xs flex items-center gap-2 animate-fadeIn font-semibold">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>Tarefa criada com sucesso</span>
+                      </div>
+                    )}
+                    {todoistAutomationStatus === 'falha' && (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-950 text-xs flex flex-col gap-2 animate-fadeIn font-semibold">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                          <span>Falha na criação da tarefa</span>
+                        </div>
+                        {todoistTaskLogFalha && (
+                          <div className="w-full bg-red-100/50 p-2.5 rounded-lg border border-red-250 text-red-900 font-mono text-[11px] max-h-32 overflow-y-auto">
+                            {todoistTaskLogFalha}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {todoistAutomationStatus === 'aguardando' && (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 text-xs flex items-center gap-2 font-semibold">
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                        <span>Aguardando criação</span>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => handleSimulateTodoistStatus('criado', 'https://todoist.com/showcase-giffoni-task/12345', 'task_12345_demo', '')}
+                      className="w-full inline-flex items-center justify-center gap-2 bg-[#e44332] hover:bg-[#c53222] text-white font-extrabold px-4 py-2.5 rounded-xl transition-all text-xs cursor-pointer shadow-xs disabled:opacity-50"
+                    >
+                      Criar tarefa no Todoist
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest block font-mono">Identificador & Link do Todoist</span>
+                      
+                      {todoistTaskId ? (
+                        <div className="space-y-2">
+                          <div className="p-2.5 bg-gray-50 border border-gray-150 rounded-xl text-xs flex justify-between items-center font-mono">
+                            <span className="text-gray-400 uppercase font-bold">ID da Tarefa:</span>
+                            <span className="font-bold text-gray-800 select-all">{todoistTaskId}</span>
+                          </div>
+
+                          {todoistTaskUrl && (
+                            <a
+                              href={todoistTaskUrl}
+                              target="_blank"
+                              referrerPolicy="no-referrer"
+                              rel="noopener noreferrer"
+                              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-red-50 hover:bg-red-100 border border-[#e44332]/25 text-[#e44332] font-black rounded-xl text-xs transition-style cursor-pointer"
+                            >
+                              <ExternalLink size={14} />
+                              <span>Abrir tarefa no Todoist</span>
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-550 italic">Aguardando retorno da automação.</p>
+                      )}
+                    </div>
+
+                    {/* Manual QA Simulation widget integrated */}
+                    <div className="p-3 border border-gray-150 bg-white rounded-xl space-y-2">
+                      <span className="text-[9.5px] uppercase font-black text-gray-400 block border-b border-gray-50 pb-1">
+                        ⚡ Simular Retorno da Automação (Fase de Testes)
+                      </span>
+                      <div className="flex gap-2 flex-wrap text-xs">
+                        <button
+                          type="button"
+                          onClick={() => handleSimulateTodoistStatus('aguardando', '', '', '')}
+                          className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                            todoistAutomationStatus === 'aguardando' ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-gray-50 text-gray-505 border-gray-200'
+                          }`}
+                        >
+                          Aguardando
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSimulateTodoistStatus('criado', 'https://todoist.com/showcase-giffoni-task/12345', 'task_12345_demo', '')}
+                          className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                            todoistAutomationStatus === 'criado' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-gray-50 text-gray-505 border-gray-200'
+                          }`}
+                        >
+                          Sucesso
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSimulateTodoistStatus('falha', '', '', 'Falha fática: Token de integração expirado ou projeto destino indisponível.')}
+                          className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                            todoistAutomationStatus === 'falha' ? 'bg-red-100 border-red-300 text-red-800' : 'bg-gray-50 text-gray-505 border-gray-200'
+                          }`}
+                        >
+                          Falha
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
+
               </div>
+
             </div>
 
           </div>
