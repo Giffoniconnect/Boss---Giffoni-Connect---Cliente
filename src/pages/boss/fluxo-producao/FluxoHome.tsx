@@ -88,14 +88,14 @@ export default function FluxoHome() {
     loadActiveCase();
   }, [caseIdParam]);
 
-  // Define the 6 Main Entry Cards
+  // Define the Main Entry Cards
   const entryCards = [
     {
-      title: 'Cadastrar Novo LEAD',
+      title: 'Cadastrar LEAD',
       description: 'Crie um lead no sistema para iniciar a prospecção técnica e o primeiro atendimento rápido de novos contatos.',
       icon: UserPlus,
       color: 'red',
-      action: () => navigate('/boss-giffoni-clientes/fluxo-producao/cadastro?path=novo-cliente&isLead=true'),
+      action: () => navigate('/boss/cadastrar.leads/private'),
       actionLabel: 'Cadastrar Lead'
     },
     {

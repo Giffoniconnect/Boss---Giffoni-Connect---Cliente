@@ -135,9 +135,28 @@ export default function DocumentosMinimosPF() {
                   </div>
                 </div>
 
+                {/* Solicitar Digitalização do RG */}
+                <div className="p-4 bg-gray-50/50 rounded-2xl border border-gray-100 space-y-1">
+                  <p className="text-xs font-extrabold text-gray-800">4.2 Solicitar Digitalização do RG?</p>
+                  <div className="flex gap-4 mt-1">
+                    {['sim', 'nao'].map(o => (
+                      <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs font-bold uppercase text-gray-700">
+                        <input 
+                          type="radio" 
+                          name="q4_solicitar_digitalizacao_rg" 
+                          checked={wizardState.q4_solicitar_digitalizacao_rg === o} 
+                          onChange={() => saveWizardStateUpdate({ q4_solicitar_digitalizacao_rg: o })} 
+                          className="text-indigo-600"
+                        />
+                        <span>{o}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
                 {/* CPF */}
                 <div className="p-4 bg-gray-50/50 rounded-2xl border border-gray-100 space-y-1">
-                  <p className="text-xs font-extrabold text-gray-800">4.2 CPF / CNH do cliente recebido?</p>
+                  <p className="text-xs font-extrabold text-gray-800">4.3 CPF / CNH do cliente recebido?</p>
                   <div className="flex gap-4 mt-1">
                     {['sim', 'nao'].map(o => (
                       <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs font-bold uppercase text-gray-700">
@@ -154,9 +173,28 @@ export default function DocumentosMinimosPF() {
                   </div>
                 </div>
 
+                {/* Solicitar Digitalização do Comprovante de Residência */}
+                <div className="p-4 bg-gray-50/50 rounded-2xl border border-gray-100 space-y-1">
+                   <p className="text-xs font-extrabold text-gray-800">4.4 Solicitar digitalização do comprovante de residência?</p>
+                   <div className="flex gap-4 mt-1">
+                     {['sim', 'nao'].map(o => (
+                       <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs font-bold uppercase text-gray-700">
+                         <input 
+                           type="radio" 
+                           name="q4_solicitar_digitalizacao_residencia" 
+                           checked={wizardState.q4_solicitar_digitalizacao_residencia === o} 
+                           onChange={() => saveWizardStateUpdate({ q4_solicitar_digitalizacao_residencia: o })} 
+                           className="text-indigo-600"
+                         />
+                         <span>{o}</span>
+                       </label>
+                     ))}
+                   </div>
+                </div>
+
                 {/* COMPROVANTE RESIDENCIA */}
                 <div className="p-4 bg-gray-50/50 rounded-2xl border border-gray-100 space-y-1">
-                  <p className="text-xs font-extrabold text-gray-800">4.3 Comprovante de residência atualizado do cliente recebido?</p>
+                  <p className="text-xs font-extrabold text-gray-800">4.5 Comprovante de residência atualizado do cliente recebido?</p>
                   <div className="flex gap-4 mt-1">
                     {['sim', 'nao'].map(o => (
                       <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs font-bold uppercase text-gray-700">
@@ -175,7 +213,7 @@ export default function DocumentosMinimosPF() {
 
                 {/* ANEXAR OBJETOS */}
                 <div className="p-4 bg-indigo-50/20 border border-indigo-100/70 rounded-2xl space-y-3">
-                  <p className="text-xs font-extrabold text-gray-900">4.4 Deseja anexar os documentos físicos escaneados agora?</p>
+                  <p className="text-xs font-extrabold text-gray-900">4.6 Deseja anexar os documentos físicos escaneados agora?</p>
                   <div className="flex gap-4">
                     {['sim', 'nao'].map(o => (
                       <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-750">
@@ -215,7 +253,7 @@ export default function DocumentosMinimosPF() {
               <div className="pt-4 border-t border-gray-100 flex justify-end">
                 <button
                   type="button"
-                  disabled={!wizardState.q4_rg || !wizardState.q4_cpf || !wizardState.q4_residencia}
+                  disabled={!wizardState.q4_rg || !wizardState.q4_solicitar_digitalizacao_rg || !wizardState.q4_cpf || !wizardState.q4_solicitar_digitalizacao_residencia || !wizardState.q4_residencia}
                   onClick={handleNextPhase}
                   className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
                 >

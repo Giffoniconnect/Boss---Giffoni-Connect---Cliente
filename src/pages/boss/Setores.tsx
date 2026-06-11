@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BossLayout } from '../../components/Layout';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
@@ -94,6 +95,7 @@ const SECTORS: SectorInfo[] = [
 ];
 
 export default function Setores() {
+  const navigate = useNavigate();
   const [links, setLinks] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
@@ -173,7 +175,11 @@ export default function Setores() {
                   </h3>
 
                   <div className="mb-6 flex items-center gap-1.5">
-                    {hasLink ? (
+                    {sector.id === 'marketing' ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-purple-600 bg-purple-50 px-2.5 py-0.5 rounded-md">
+                        <CheckCircle2 size={12} /> Sistema Interno Integrado
+                      </span>
+                    ) : hasLink ? (
                       <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
                         <CheckCircle2 size={12} /> Link Configurado
                       </span>
@@ -186,14 +192,22 @@ export default function Setores() {
                 </div>
 
                 <div className="border-t border-gray-50 pt-4 flex flex-col gap-2">
-                  {!hasLink && (
+                  {sector.id !== 'marketing' && !hasLink && (
                     <div className="flex items-center gap-1.5 text-xs text-amber-600 font-medium">
                       <AlertCircle size={14} className="shrink-0" />
                       <span>Link ainda não configurado</span>
                     </div>
                   )}
 
-                  {hasLink ? (
+                  {sector.id === 'marketing' ? (
+                    <button
+                      onClick={() => navigate('/boss/leads/private/dashboard')}
+                      className="w-full py-3.5 bg-purple-600 hover:bg-purple-700 text-white hover:shadow-lg rounded-2xl font-bold text-sm text-center transition-all inline-flex items-center justify-center gap-2 group cursor-pointer"
+                    >
+                      <span>Ver Dashboard do Setor de Marketing</span>
+                      <ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
+                    </button>
+                  ) : hasLink ? (
                     <a
                       href={link}
                       target="_blank"
@@ -208,7 +222,7 @@ export default function Setores() {
                       disabled
                       className="w-full py-3.5 bg-gray-100 text-gray-400 rounded-2xl font-bold text-sm text-center cursor-not-allowed inline-flex items-center justify-center gap-2 border border-gray-200/50"
                     >
-                      <span>Indisponível</span>
+                      <span>Dashboard do Setor {sector.name}</span>
                       <ArrowRight size={15} />
                     </button>
                   )}

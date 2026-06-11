@@ -1521,9 +1521,15 @@ export default function SolicitacoesProvas() {
                     <div className="text-xs font-semibold space-y-1">
                       {!isPJ ? (
                         <>
-                          <div className="flex items-center gap-1.5"><span>{wizardState.q4_rg === 'sim' ? '✅' : '❌'}</span> <span>RG recebido</span></div>
+                          <div className="flex items-center gap-1.55"><span>{wizardState.q4_rg === 'sim' ? '✅' : '❌'}</span> <span>RG recebido</span></div>
+                          <div className="flex items-center gap-1.5 ml-4 text-[11px] text-gray-500">
+                            <span>{wizardState.q4_solicitar_digitalizacao_rg === 'sim' ? '📲 Solicitar digitalização do RG: SIM' : '📲 Solicitar digitalização do RG: NÃO'}</span>
+                          </div>
                           <div className="flex items-center gap-1.5"><span>{wizardState.q4_cpf === 'sim' ? '✅' : '❌'}</span> <span>CPF recebido</span></div>
                           <div className="flex items-center gap-1.5"><span>{wizardState.q4_residencia === 'sim' ? '✅' : '❌'}</span> <span>Comprovante de residência recebido</span></div>
+                          <div className="flex items-center gap-1.5 ml-4 text-[11px] text-gray-500">
+                            <span>{wizardState.q4_solicitar_digitalizacao_residencia === 'sim' ? '📲 Solicitar digitalização do Comprovante de Residência: SIM' : '📲 Solicitar digitalização do Comprovante de Residência: NÃO'}</span>
+                          </div>
                         </>
                       ) : (
                         <>

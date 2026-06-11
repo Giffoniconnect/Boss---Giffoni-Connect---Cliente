@@ -305,6 +305,59 @@ export default function CadastroFluxo() {
     }
   }, []);
 
+  // Check for prefilled lead conversion data in localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('temp_lead_data');
+      if (stored) {
+        const leadObj = JSON.parse(stored);
+        localStorage.removeItem('temp_lead_data'); // Clear it immediately to avoid reloading next time
+        
+        if (leadObj.tipoPessoa === 'PF') {
+          setClientType('PF');
+          setFormData((prev: any) => ({
+            ...prev,
+            pf_nomeCompleto: leadObj.pessoaFisica?.nomeCompleto || '',
+            pf_cpf: leadObj.pessoaFisica?.cpf || '',
+            pf_rg: leadObj.pessoaFisica?.rg || '',
+            pf_nascimento: leadObj.pessoaFisica?.dataNascimento || '',
+            pf_estadoCivil: leadObj.pessoaFisica?.estadoCivil || '',
+            pf_profissao: leadObj.pessoaFisica?.profissao || '',
+            pf_telefone: leadObj.pessoaFisica?.telefone || '',
+            pf_whatsapp: leadObj.pessoaFisica?.whatsapp || '',
+            pf_email: leadObj.pessoaFisica?.email || '',
+            pf_cep: leadObj.pessoaFisica?.cep || '',
+            pf_endereco: leadObj.pessoaFisica?.endereco || '',
+            pf_cidade: leadObj.pessoaFisica?.cidade || '',
+            pf_estado: leadObj.pessoaFisica?.uf || '',
+          }));
+        } else if (leadObj.tipoPessoa === 'PJ') {
+          setClientType('PJ');
+          setFormData((prev: any) => ({
+            ...prev,
+            pj_razaoSocial: leadObj.pessoaJuridica?.razaoSocial || '',
+            pj_nomeFantasia: leadObj.pessoaJuridica?.nomeFantasia || '',
+            pj_cnpj: leadObj.pessoaJuridica?.cnpj || '',
+            pj_inscricaoEstadual: leadObj.pessoaJuridica?.inscricaoEstadual || '',
+            pj_telefoneEmpresa: leadObj.pessoaJuridica?.telefone || '',
+            pj_whatsappEmpresa: leadObj.pessoaJuridica?.whatsapp || '',
+            pj_emailEmpresa: leadObj.pessoaJuridica?.email || '',
+            pj_cepEmpresa: leadObj.pessoaJuridica?.cep || '',
+            pj_enderecoEmpresa: leadObj.pessoaJuridica?.endereco || '',
+            pj_cidadeEmpresa: leadObj.pessoaJuridica?.cidade || '',
+            pj_estadoEmpresa: leadObj.pessoaJuridica?.uf || '',
+            
+            socio_nomeCompleto: leadObj.pessoaJuridica?.representanteLegal || '',
+            socio_cpf: leadObj.pessoaJuridica?.cpfRepresentante || '',
+            socio_profissao: leadObj.pessoaJuridica?.cargoRepresentante || '',
+          }));
+        }
+      }
+    } catch (e) {
+      console.error('Error recovering temp lead data:', e);
+    }
+  }, []);
+
   const hasUnsavedChanges = initialFormData 
     ? Object.keys(formData).some(key => {
         const val1 = formData[key];

@@ -221,8 +221,14 @@ export default function DocumentosAuditoriaPF() {
                 <h4 className="text-xs font-black text-indigo-950 uppercase font-mono border-b pb-1 font-semibold">6.4 — Documentos Mínimos PF</h4>
                 <div className="text-xs font-semibold space-y-1">
                   <div className="flex items-center gap-1.5"><span>{wizardState.q4_rg === 'sim' ? '✅' : '❌'}</span> <span>RG recebido</span></div>
+                  <div className="flex items-center gap-1.5 ml-4 text-[11px] text-gray-500">
+                    <span>{wizardState.q4_solicitar_digitalizacao_rg === 'sim' ? '📲 Solicitar digitalização do RG: SIM' : '📲 Solicitar digitalização do RG: NÃO'}</span>
+                  </div>
                   <div className="flex items-center gap-1.5"><span>{wizardState.q4_cpf === 'sim' ? '✅' : '❌'}</span> <span>CPF recebido</span></div>
                   <div className="flex items-center gap-1.5"><span>{wizardState.q4_residencia === 'sim' ? '✅' : '❌'}</span> <span>Residência recebido</span></div>
+                  <div className="flex items-center gap-1.5 ml-4 text-[11px] text-gray-500">
+                    <span>{wizardState.q4_solicitar_digitalizacao_residencia === 'sim' ? '📲 Solicitar digitalização do Comprovante de Residência: SIM' : '📲 Solicitar digitalização do Comprovante de Residência: NÃO'}</span>
+                  </div>
                 </div>
               </div>
 
