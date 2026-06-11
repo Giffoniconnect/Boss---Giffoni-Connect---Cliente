@@ -108,7 +108,7 @@ export default function EditarPortalCliente() {
   const [allClientFinancials, setAllClientFinancials] = useState<any[]>([]);
   const [loadingDashboard, setLoadingDashboard] = useState(false);
 
-  const [activeSidebarSection, setActiveSidebarSection] = useState<'painel_geral' | 'dados_cadastrais' | 'relacao_casos' | 'audiencias' | 'pericias' | 'reunioes' | 'financeiro'>('painel_geral');
+  const [activeSidebarSection, setActiveSidebarSection] = useState<'painel_geral' | 'dados_cadastrais' | 'relacao_casos' | 'audiencias' | 'pericias' | 'reunioes' | 'solicitacao_provas' | 'solicitacao_informacoes' | 'financeiro'>('painel_geral');
 
   // Event creation form local states
   const [addingEvent, setAddingEvent] = useState(false);
@@ -707,6 +707,8 @@ export default function EditarPortalCliente() {
                     { id: 'audiencias', label: 'Audiências do Cliente', icon: Calendar, desc: 'Gestão de sessões e audiências' },
                     { id: 'pericias', label: 'Perícias do Cliente', icon: UserCheck, desc: 'Gestão de exames e perícias técnicas' },
                     { id: 'reunioes', label: 'Reuniões com o Cliente', icon: Clock, desc: 'Controle de agendamentos fáticos' },
+                    { id: 'solicitacao_provas', label: 'Solicitação de Provas', icon: FileBadge, desc: 'Checklist de coletas de documentos adicionais' },
+                    { id: 'solicitacao_informacoes', label: 'Solicitação de Informações', icon: HelpCircle, desc: 'Perguntas fáticas complementares pendentes' },
                     { id: 'financeiro', label: 'Financeiro e Faturamento', icon: CreditCard, desc: 'Consolidado financeiro e cobranças' }
                   ].map((item) => {
                     const Icon = item.icon;
@@ -898,6 +900,325 @@ export default function EditarPortalCliente() {
                   handleMarkFinancialPaid={handleMarkFinancialPaid}
                   handleDeleteFinancial={handleDeleteFinancial}
                 />
+              )}
+
+              {/* VIEW 8: SOLICITAÇÃO DE PROVAS (STANDALONE SECTION) */}
+              {activeSidebarSection === 'solicitacao_provas' && (
+                <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-xs text-left space-y-6 animate-fade-in">
+                  <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-11 h-11 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center shadow-xs">
+                        <FileBadge size={18} />
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-mono font-black text-gray-400 uppercase tracking-widest block">COLETA DE DOCUMENTOS</span>
+                        <h3 className="text-lg font-black text-gray-900 tracking-tight">Solicitação de Provas</h3>
+                      </div>
+                    </div>
+
+                    {/* Integrated Case Selector if multiple cases exist */}
+                    {clientCases.length > 1 && (
+                      <div className="flex items-center gap-2">
+                        <label className="text-[10px] uppercase font-mono font-black text-gray-400 tracking-wider">Caso Ativo:</label>
+                        <select
+                          value={selectedCase?.id || ''}
+                          onChange={(e) => {
+                            const found = clientCases.find(c => c.id === e.target.value);
+                            if (found) handleSelectCase(found);
+                          }}
+                          className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs focus:ring-1 focus:ring-emerald-500 font-sans outline-none font-semibold text-gray-700"
+                        >
+                          {clientCases.map(c => (
+                            <option key={c.id} value={c.id}>
+                              {c.registrationType || 'Sem tipo'} (ID: {c.id.substring(0, 8)})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {!selectedCase ? (
+                    <div className="border border-dashed rounded-2xl p-8 text-center text-xs text-gray-400 leading-normal">
+                      Este cliente não possui nenhum caso ativo selecionado. Crie ou selecione um caso na aba "Relação de Casos".
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* Active Case display if only 1 case or for reference */}
+                      {clientCases.length <= 1 && (
+                        <div className="p-3 bg-gray-50 border border-gray-150 rounded-2xl flex items-center justify-between">
+                          <span className="text-xs font-mono font-black text-gray-400 uppercase">Estudo de Caso Vinculado:</span>
+                          <span className="text-xs font-black text-gray-800 uppercase">{selectedCase.registrationType || 'Dados Gerais'} ({selectedCase.id})</span>
+                        </div>
+                      )}
+
+                      <div className="p-4 bg-emerald-50/75 border border-emerald-100/50 rounded-2xl">
+                        <h5 className="font-extrabold text-xs text-emerald-955 flex items-center gap-1.5 uppercase tracking-wide">
+                          <FileBadge size={14} className="text-emerald-600" />
+                          Checklist de Coleta de Provas
+                        </h5>
+                        <p className="text-[11px] text-emerald-900 mt-1 leading-relaxed">
+                          Adicione solicitações de documentos e provas para o cliente. O cliente poderá anexar os documentos diretamente pelo portal de coletas.
+                        </p>
+                      </div>
+
+                      {/* LIST OF PROOFS */}
+                      <div className="space-y-3">
+                        <h6 className="text-[10.5px] font-black uppercase text-gray-400 tracking-wider">Histórico de Provas Solicitadas</h6>
+                        {evidenceRequests.length === 0 ? (
+                          <p className="text-xs text-gray-400 italic">Nenhuma prova complementar solicitada até o momento.</p>
+                        ) : (
+                          <div className="space-y-2.5">
+                            {evidenceRequests.map((req) => (
+                              <div key={req.id} className="p-4 bg-gray-50 border border-gray-150 rounded-2xl flex items-center justify-between gap-4">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap text-left">
+                                    <span className={`text-[8.5px] font-black font-mono uppercase px-1.5 py-0.5 rounded-md ${
+                                      req.status === 'aprovado' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                                    }`}>
+                                      {req.status === 'aprovado' ? 'Aprovado' : 'Pendente'}
+                                    </span>
+                                    <h5 className="font-extrabold text-xs text-gray-950">{req.title}</h5>
+                                  </div>
+                                  {req.description && (
+                                    <p className="text-[11px] text-gray-400 mt-1 leading-normal text-left">{req.description}</p>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-2.5 shrink-0">
+                                  <button
+                                    onClick={() => handleToggleProofStatus(req)}
+                                    type="button"
+                                    className={`p-2.5 rounded-xl border text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                                      req.status === 'aprovado'
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                        : 'bg-white text-gray-600 border-gray-150 hover:bg-gray-50'
+                                    }`}
+                                  >
+                                    <CheckCircle2 size={13} />
+                                    {req.status === 'aprovado' ? 'Aprovada' : 'Aprovar'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteProof(req.id)}
+                                    type="button"
+                                    className="p-2.5 text-rose-600 hover:text-rose-750 hover:bg-rose-50 border border-transparent hover:border-rose-150 rounded-xl transition cursor-pointer"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* ADD NEW PROOF FORM */}
+                      <form onSubmit={handleCreateProof} className="border-t border-gray-100 pt-6 space-y-4">
+                        <h6 className="text-[10.5px] font-black uppercase text-gray-400 tracking-wider">Nova Solicitação de Documento/Prova</h6>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] uppercase font-bold text-gray-500">Título do Documento *</label>
+                            <input
+                              type="text"
+                              placeholder="Ex: Comprovante de Residência Atualizado"
+                              value={newProofTitle}
+                              onChange={(e) => setNewProofTitle(e.target.value)}
+                              required
+                              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] uppercase font-bold text-gray-500">Orientações Fáticas da Prova</label>
+                            <input
+                              type="text"
+                              placeholder="Ex: Deve estar em formato PDF legível e com data recente"
+                              value={newProofDesc}
+                              onChange={(e) => setNewProofDesc(e.target.value)}
+                              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-6">
+                          <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={newProofVisible}
+                              onChange={(e) => setNewProofVisible(e.target.checked)}
+                              className="rounded text-emerald-600 focus:ring-emerald-500"
+                            />
+                            Visível no Portal do Cliente
+                          </label>
+                          <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={newProofUpload}
+                              onChange={(e) => setNewProofUpload(e.target.checked)}
+                              className="rounded text-emerald-600 focus:ring-emerald-500"
+                            />
+                            Permitir Upload do Cliente
+                          </label>
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={addingProof}
+                          className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition font-mono cursor-pointer"
+                        >
+                          {addingProof ? <RefreshCw size={12} className="animate-spin" /> : <Plus size={12} />}
+                          Adicionar Prova
+                        </button>
+                      </form>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* VIEW 9: SOLICITAÇÃO DE INFORMAÇÕES (STANDALONE SECTION) */}
+              {activeSidebarSection === 'solicitacao_informacoes' && (
+                <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-xs text-left space-y-6 animate-fade-in">
+                  <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-11 h-11 bg-amber-50 border border-amber-100 text-amber-600 rounded-2xl flex items-center justify-center shadow-xs">
+                        <HelpCircle size={18} />
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-mono font-black text-gray-400 uppercase tracking-widest block font-bold">PERGUNTAS COMPLEMENTARES</span>
+                        <h3 className="text-lg font-black text-gray-900 tracking-tight">Solicitação de Informações</h3>
+                      </div>
+                    </div>
+
+                    {/* Integrated Case Selector if multiple cases exist */}
+                    {clientCases.length > 1 && (
+                      <div className="flex items-center gap-2">
+                        <label className="text-[10px] uppercase font-mono font-black text-gray-400 tracking-wider">Caso Ativo:</label>
+                        <select
+                          value={selectedCase?.id || ''}
+                          onChange={(e) => {
+                            const found = clientCases.find(c => c.id === e.target.value);
+                            if (found) handleSelectCase(found);
+                          }}
+                          className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs focus:ring-1 focus:ring-amber-500 font-sans outline-none font-semibold text-gray-700"
+                        >
+                          {clientCases.map(c => (
+                            <option key={c.id} value={c.id}>
+                              {c.registrationType || 'Sem tipo'} (ID: {c.id.substring(0, 8)})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {!selectedCase ? (
+                    <div className="border border-dashed rounded-2xl p-8 text-center text-xs text-gray-400 leading-normal">
+                      Este cliente não possui nenhum caso ativo selecionado. Crie ou selecione um caso na aba "Relação de Casos".
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* Active Case display if only 1 case or for reference */}
+                      {clientCases.length <= 1 && (
+                        <div className="p-3 bg-gray-50 border border-gray-150 rounded-2xl flex items-center justify-between">
+                          <span className="text-xs font-mono font-black text-gray-400 uppercase">Estudo de Caso Vinculado:</span>
+                          <span className="text-xs font-black text-gray-800 uppercase">{selectedCase.registrationType || 'Dados Gerais'} ({selectedCase.id})</span>
+                        </div>
+                      )}
+
+                      <div className="p-4 bg-amber-50/75 border border-amber-100/50 rounded-2xl">
+                        <h5 className="font-extrabold text-xs text-amber-955 flex items-center gap-1.5 uppercase tracking-wide">
+                          <HelpCircle size={14} className="text-amber-600" />
+                          Informações Complementares do Caso
+                        </h5>
+                        <p className="text-[11px] text-amber-900 mt-1 leading-relaxed">
+                          Formule perguntas fáticas complementares específicas que o cliente deve responder para viabilizar o andamento técnico da causa.
+                        </p>
+                      </div>
+
+                      {/* HISTÓRICO DE PERGUNTAS */}
+                      <div className="space-y-4">
+                        <h6 className="text-[10.5px] font-black uppercase text-gray-400 tracking-wider">Histórico de Respostas e Perguntas</h6>
+                        {informationRequests.length === 0 ? (
+                          <p className="text-xs text-gray-400 italic">Nenhuma pergunta complementar registrada ainda.</p>
+                        ) : (
+                          <div className="space-y-4">
+                            {informationRequests.map((q) => (
+                              <div key={q.id} className="p-4 bg-gray-50 border border-gray-150 rounded-2xl space-y-3.5">
+                                <div className="flex items-center justify-between gap-4">
+                                  <div className="flex items-start gap-2">
+                                    <span className={`text-[8px] font-black font-mono uppercase px-1.5 py-0.5 rounded-md shrink-0 mt-0.5 ${
+                                      q.status === 'revisado' ? 'bg-emerald-100 text-emerald-800' :
+                                      q.status === 'respondido' ? 'bg-blue-100 text-blue-800' : 'bg-gray-150 text-gray-600'
+                                    }`}>
+                                      {q.status || 'Pendente'}
+                                    </span>
+                                    <h5 className="font-extrabold text-xs text-gray-905 leading-normal">{q.question}</h5>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                  <label className="text-[9.5px] uppercase font-black text-gray-400 tracking-widest font-mono">Resposta do Cliente (Editável)</label>
+                                  <textarea
+                                    value={q.answer || ''}
+                                    onChange={(e) => {
+                                      const updatedVal = e.target.value;
+                                      setInformationRequests((prev) =>
+                                        prev.map((item) => (item.id === q.id ? { ...item, answer: updatedVal } : item))
+                                      );
+                                    }}
+                                    placeholder="Aguardando narrativa técnica ou resposta fática..."
+                                    rows={2}
+                                    className="w-full bg-white border border-gray-200 rounded-xl p-3 text-xs focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                                  />
+                                </div>
+
+                                <div className="flex items-center justify-end gap-2.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateQuestionAnswer(q.id, q.answer || '', 'respondido')}
+                                    className="px-3.5 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-650 rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer font-bold"
+                                  >
+                                    Salvar Como Respondido
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateQuestionAnswer(q.id, q.answer || '', 'revisado')}
+                                    className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer font-bold"
+                                  >
+                                    Confirmar e Validar
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* PERGUNTA COMPLEMENTAR FORM */}
+                      <form onSubmit={handleCreateQuestion} className="border-t border-gray-100 pt-6 space-y-3">
+                        <h6 className="text-[10.5px] font-black uppercase text-gray-400 tracking-wider">Nova Pergunta Complementar</h6>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] uppercase font-bold text-gray-400">Texto da Pergunta *</label>
+                          <input
+                            type="text"
+                            placeholder="Ex: Em qual data exata ocorreu a interrupção do fornecimento do serviço?"
+                            value={newQuestionText}
+                            onChange={(e) => setNewQuestionText(e.target.value)}
+                            required
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans"
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          disabled={addingQuestion}
+                          className="flex items-center gap-1.5 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black uppercase tracking-wider transition font-mono cursor-pointer"
+                        >
+                          {addingQuestion ? <RefreshCw size={12} className="animate-spin" /> : <Plus size={12} />}
+                          Adicionar Pergunta
+                        </button>
+                      </form>
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* VIEW 3: RELAÇÃO DOS CASOS DO CLIENTE (AND INNER SELECT PROCESS FORMS) */}

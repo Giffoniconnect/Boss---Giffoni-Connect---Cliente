@@ -42,6 +42,7 @@ import {
   Coins,
   ExternalLink,
   Trash2,
+  Scale,
   FileCheck2,
   CheckCircle2,
   TrendingUp,
@@ -941,6 +942,297 @@ export default function FinanceiroFluxo() {
         status: "failed",
         updatedAt: new Date().toISOString(),
         errorCode: err.errorCode || "CONTRATO_GENERATION_FAILED",
+        errorMessage: errMsg,
+        logs: jobLogs,
+      });
+      setRefreshToggle((prev) => prev + 1);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleGenerateCustomDocument = async (
+    docType: string,
+    docDisplayName: string,
+    customPlaceholders: Record<string, string>,
+    officialTemplateId: string = "1GJZ6LSW_szLSAA8Z3iw9jt4Q6zy5k6EuuTNhR5ooJQQ"
+  ) => {
+    const isPf = client?.type === "PF";
+    const jobId =
+      "job_" + docType + "_" +
+      Date.now() +
+      "_" +
+      Math.random().toString(36).substring(2, 9);
+    const jobLogs: any[] = [];
+    const addClientLog = (action: string, message: string) => {
+      jobLogs.push({
+        action,
+        timestamp: new Date().toISOString(),
+        message,
+      });
+    };
+
+    addClientLog(
+      "DOCUMENT_BUTTON_CLICKED",
+      `O operador clicou em 'Gerar ${docDisplayName}' para iniciar o fluxo de automação.`,
+    );
+
+    if (!caseId) {
+      setError("Erro de validação: ID do caso (caseId) está ausente.");
+      return;
+    }
+
+    if (!caseObj) {
+      setError(
+        "Erro de validação: Dados do caso não carregados do banco de dados.",
+      );
+      return;
+    }
+
+    const targetClientId = caseObj?.clientId || client?.id;
+    if (!targetClientId) {
+      setError("Erro de validação: ID do cliente (clientId) está ausente.");
+      return;
+    }
+
+    if (!client) {
+      setError(
+        "Erro de validação: Dados do cliente não carregados do banco de dados.",
+      );
+      return;
+    }
+
+    const resolvedNomeCompleto = (
+      client?.pfData?.pf_nomeCompleto ||
+      client?.pfDadosPessoais?.pf_nomeCompleto ||
+      client?.razaoSocial ||
+      client?.pjDadosEmpresa?.pj_razaoSocial ||
+      client?.nomeCompleto ||
+      client?.nome ||
+      ""
+    ).trim();
+
+    if (!resolvedNomeCompleto) {
+      setError(
+        "Nome completo ou razão social do cliente não localizado no cadastro. Verifique a Etapa 1 — Cadastro do Cliente.",
+      );
+      return;
+    }
+
+    const clientDriveFolderId = (
+      client?.googleDriveClientFolderId ||
+      client?.gdriveFolderId ||
+      caseObj?.gdriveFolderId ||
+      ""
+    ).trim();
+    const clientDriveFolderUrl = (
+      client?.googleDriveClientFolderUrl ||
+      client?.gdriveFolderUrl ||
+      caseObj?.gdriveFolderUrl ||
+      ""
+    ).trim();
+
+    const folderIsReal = !!(
+      clientDriveFolderId &&
+      !clientDriveFolderId.toLowerCase().includes("mock") &&
+      !clientDriveFolderId.toLowerCase().includes("fake") &&
+      !clientDriveFolderId.toLowerCase().includes("teste") &&
+      !clientDriveFolderId.toLowerCase().includes("undefined") &&
+      !clientDriveFolderId.toLowerCase().includes("null") &&
+      !clientDriveFolderId.toLowerCase().includes("xxxx")
+    );
+
+    if (!folderIsReal) {
+      setError(
+        "Não há pasta real do Google Drive vinculada ao cliente. Acesse a Etapa 1 — Cadastro do Cliente e execute primeiro a Automação Google Drive — Pasta do Cliente.",
+      );
+      return;
+    }
+
+    addClientLog(
+      "FOLDER_FOUND",
+      `Pasta destino no Google Drive localizada com sucesso ID: ${clientDriveFolderId}`,
+    );
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, "0");
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const year = now.getFullYear();
+    const dataAssinaturaFormated = `${day}/${month}/${year}`;
+
+    // Merge standard placeholders
+    let placeholders: Record<string, string> = { ...customPlaceholders };
+    try {
+      let basePlaceholders: Record<string, string> = {};
+      if (isPf) {
+        basePlaceholders = buildContratoHonorariosPfPlaceholders(client, caseObj, caseObj);
+      } else {
+        basePlaceholders = buildContratoHonorariosPjPlaceholders(client, caseObj, caseObj);
+      }
+      placeholders = {
+        ...basePlaceholders,
+        ...customPlaceholders,
+      };
+      placeholders["{{DATA_ASSINATURA}}"] = dataAssinaturaFormated;
+      placeholders["<<data da assinatura>>"] = dataAssinaturaFormated;
+    } catch (e) {
+      console.warn("Could not load full base placeholders, proceeding with custom only", e);
+    }
+
+    const currentGoogleAccessToken =
+      googleAccessToken ||
+      localStorage.getItem("oauth_google_access_token") ||
+      localStorage.getItem("portal_boss_google_accessToken") ||
+      "";
+    const localOverride =
+      localStorage.getItem("portal_boss_gdocs_override") || "";
+
+    if (!currentGoogleAccessToken && !localOverride) {
+      setError(
+        "Faça login novamente com Google para autorizar Google Docs/Drive ou configure a Central de Integrações.",
+      );
+      setSaving(false);
+      return;
+    }
+
+    const initialJob = {
+      id: jobId,
+      contractVersion: "boss.placeholders.v2",
+      source: "Portal BOSS Clientes",
+      target: "Internal Generator Engine",
+      documentType: docType,
+      templateKey: docType,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      caseId: caseId,
+      portalClientId: targetClientId,
+      clientType: isPf ? "PF" : "PJ",
+      destinationFolderId: clientDriveFolderId,
+      destinationFolderUrl: clientDriveFolderUrl,
+      outputFileName: `${docDisplayName} - ${resolvedNomeCompleto}`,
+      placeholders,
+      result: {
+        googleDocsId: null,
+        googleDocsUrl: null,
+        fileName: null,
+      },
+      errorCode: null,
+      errorMessage: null,
+      logs: jobLogs,
+    };
+
+    await setDoc(doc(db, "googleDocsJobs", jobId), initialJob);
+
+    try {
+      const response = await fetch("/api/google-docs/generate-document", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "stateless",
+          googleAccessToken: currentGoogleAccessToken,
+          documentType: docType,
+          templateKey: docType,
+          templateId: officialTemplateId,
+          caseId,
+          clientId: targetClientId,
+          clientType: isPf ? "PF" : "PJ",
+          destinationFolderId: clientDriveFolderId,
+          destinationFolderUrl: clientDriveFolderUrl,
+          documentName: `${docDisplayName} - ${resolvedNomeCompleto}`,
+          placeholders,
+          metadata: {
+            source: `Portal BOSS - Custom Doc`,
+            originRoute: `/boss-giffoni-clientes/fluxo-producao/${caseId}/financeiro`,
+            folderSource: "Automação Google Drive — Pasta do Cliente",
+          },
+          credentialOverride: localOverride,
+        }),
+      });
+
+      const responseText = await response.text();
+      let responseData: any;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = { error: responseText };
+      }
+
+      if (!response.ok || !responseData.success) {
+        throw {
+          message:
+            responseData.errorMessage ||
+            responseData.error ||
+            responseText ||
+            "Falha na geração integrada.",
+          errorCode: responseData.errorCode || "DOCUMENT_GENERATION_FAILED",
+        };
+      }
+
+      const googleDocsId = responseData.googleDocsId;
+      const googleDocsUrl = responseData.googleDocsUrl;
+      const generatedAtISO = new Date().toISOString();
+
+      try {
+        const subdocRef = doc(
+          db,
+          "cases",
+          caseId!,
+          "generatedDocuments",
+          docType,
+        );
+        await setDoc(
+          subdocRef,
+          {
+            documentType: docType,
+            displayName: `${docDisplayName} - ${resolvedNomeCompleto}`,
+            templateKey: docType,
+            templateId: officialTemplateId,
+            googleDocsId,
+            googleDocsUrl,
+            destinationFolderId: clientDriveFolderId,
+            destinationFolderUrl: clientDriveFolderUrl,
+            status: "success",
+            generatedAt: generatedAtISO,
+            generatedBy: "Portal BOSS Central Interna (Stateless)",
+            errorCode: null,
+            errorMessage: null,
+            logs: jobLogs,
+          },
+          { merge: true },
+        );
+      } catch (errSub: any) {
+        console.warn("[PortalBoss] Subcollection write failed", errSub.message);
+      }
+
+      await updateDoc(doc(db, "googleDocsJobs", jobId), {
+        status: "success",
+        updatedAt: new Date().toISOString(),
+        result: {
+          googleDocsId,
+          googleDocsUrl,
+          fileName: `${docDisplayName} - ${resolvedNomeCompleto}`,
+        },
+        logs: jobLogs,
+      });
+
+      setSuccess(
+        `${docDisplayName} gerado com sucesso! Arquivo salvo na pasta do Google Drive do cliente.`,
+      );
+      setRefreshToggle((prev) => prev + 1);
+    } catch (err: any) {
+      console.error(err);
+      const errMsg = err.message || JSON.stringify(err);
+      setError(`Erro na geração: ${errMsg}`);
+
+      await updateDoc(doc(db, "googleDocsJobs", jobId), {
+        status: "failed",
+        updatedAt: new Date().toISOString(),
+        errorCode: err.errorCode || "DOCUMENT_GENERATION_FAILED",
         errorMessage: errMsg,
         logs: jobLogs,
       });
@@ -3138,6 +3430,316 @@ export default function FinanceiroFluxo() {
                         </div>
                         <div className="text-[10px] text-slate-400 font-mono">
                           Atualizado em tempo real com base no demonstrativo de parcelas
+                        </div>
+                      </div>
+
+                      {/* Operational Reports Generation Buttons */}
+                      <div className="border-t border-gray-150 pt-5 space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[9px] font-mono font-black text-indigo-700 bg-indigo-50 border border-indigo-150 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                              GDi — Google Docs Integration
+                            </span>
+                            <span className="text-[10px] text-zinc-500 font-sans">
+                              Relatórios estruturados gerados na pasta de destino do cliente
+                            </span>
+                          </div>
+
+                          {(() => {
+                            const driveUrl = (
+                              client?.googleDriveClientFolderUrl ||
+                              client?.gdriveFolderUrl ||
+                              caseObj?.gdriveFolderUrl ||
+                              ""
+                            ).trim();
+                            if (!driveUrl) return null;
+                            return (
+                              <a
+                                href={driveUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-[9px] font-black uppercase tracking-wider text-slate-700 transition-colors cursor-pointer font-sans"
+                              >
+                                <ExternalLink size={10} className="text-slate-500 shrink-0" />
+                                <span>Destino: Drive do Cliente</span>
+                              </a>
+                            );
+                          })()}
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row items-center gap-3">
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => {
+                              const placeholderData = {
+                                "{{VALOR_TOTAL}}": formatCurrencySum(totalContrato),
+                                "{{TOTAL_PAGO}}": formatCurrencySum(totalPago),
+                                "{{TOTAL_ATRASADO}}": formatCurrencySum(totalAtrasado),
+                                "{{TOTAL_PENDENTE}}": formatCurrencySum(totalPendente),
+                                "{{FALTA_ARRECADAR}}": formatCurrencySum(totalFaltaPagar),
+                                "{{PROG_AMORTIZACAO}}": `${porcEfetivado.toFixed(1)}%`,
+                              };
+                              handleGenerateCustomDocument(
+                                "relatorio_global_contrato",
+                                "Relatório Global do Contrato de Honorários",
+                                placeholderData
+                              );
+                            }}
+                            className="w-full sm:w-auto px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer font-mono"
+                          >
+                            {saving ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />}
+                            Gerar Relatório Global (GDi)
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => {
+                              const today = new Date().toISOString().split("T")[0];
+                              const tabelaTexto = tabelaAnalitica.map((p, idx) => {
+                                const s = p.status || (p.pago ? "pago" : "pendente");
+                                const resolvedStatus = s === "atrasado" || (s === "pendente" && p.dataVencimento && p.dataVencimento < today) ? "VENCIDO" : s.toUpperCase();
+                                return `${idx + 1}. Parcela: ${p.valor} | Vencimento: ${p.dataVencimento || "N/A"} | Status: ${resolvedStatus}`;
+                              }).join("\n");
+
+                              const placeholderData = {
+                                "{{VALOR_TOTAL}}": formatCurrencySum(totalContrato),
+                                "{{TOTAL_PAGO}}": formatCurrencySum(totalPago),
+                                "{{TOTAL_ATRASADO}}": formatCurrencySum(totalAtrasado),
+                                "{{TOTAL_PENDENTE}}": formatCurrencySum(totalPendente),
+                                "{{FALTA_ARRECADAR}}": formatCurrencySum(totalFaltaPagar),
+                                "{{PROG_AMORTIZACAO}}": `${porcEfetivado.toFixed(1)}%`,
+                                "{{TABELA_ANALITICA_DETALHADA}}": tabelaTexto,
+                              };
+                              handleGenerateCustomDocument(
+                                "relatorio_tabela_analitica",
+                                "Relatório de Tabela Analítica do Contrato de Honorários",
+                                placeholderData
+                              );
+                            }}
+                            className="w-full sm:w-auto px-4 py-2.5 bg-slate-850 hover:bg-slate-900 text-white font-black text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer font-mono"
+                          >
+                            {saving ? <Loader2 size={13} className="animate-spin" /> : <TrendingUp size={13} />}
+                            Gerar Tabela Analítica (GDi)
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* CARD: Google Docs Integration - Juridico Interno */}
+                {tabelaAnalitica.length > 0 && (() => {
+                  const parseValue = (valStr: string): number => {
+                    if (!valStr) return 0;
+                    const clean = valStr
+                      .replace("R$", "")
+                      .replace(/\./g, "")
+                      .replace(",", ".")
+                      .replace(/\s/g, "")
+                      .trim();
+                    const num = parseFloat(clean);
+                    return isNaN(num) ? 0 : num;
+                  };
+
+                  const formatCurrency = (val: number): string => {
+                    return val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+                  };
+
+                  let totalContrato = 0;
+                  let totalPago = 0;
+                  let totalAtrasado = 0;
+                  let totalPendente = 0;
+                  const todayStr = new Date().toISOString().split("T")[0];
+
+                  tabelaAnalitica.forEach((row) => {
+                    const status = row.status || (row.pago ? "pago" : "pendente");
+                    const val = parseValue(row.valor);
+                    totalContrato += val;
+
+                    if (status === "pago") {
+                      totalPago += val;
+                    } else if (status === "atrasado" || (status === "pendente" && row.dataVencimento && row.dataVencimento < todayStr)) {
+                      totalAtrasado += val;
+                    } else {
+                      totalPendente += val;
+                    }
+                  });
+
+                  const totalFaltaPagar = totalContrato - totalPago;
+
+                  const clientDriveFolderUrl = (
+                    client?.googleDriveClientFolderUrl ||
+                    client?.gdriveFolderUrl ||
+                    caseObj?.gdriveFolderUrl ||
+                    ""
+                  ).trim();
+
+                  return (
+                    <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-5 animate-in fade-in duration-300">
+                      {/* Header */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+                        <div className="flex items-center gap-2">
+                          <Scale className="text-amber-600 animate-pulse" size={20} />
+                          <div>
+                            <h3 className="text-sm font-black uppercase text-gray-900 tracking-wider font-sans">
+                              Google Docs Integration - Jurídico Interno
+                            </h3>
+                            <p className="text-[10px] text-gray-400 font-sans">
+                              Geração automatizada de peças e atos de cobrança diretamente no Google Drive do cliente
+                            </p>
+                          </div>
+                        </div>
+
+                        {clientDriveFolderUrl && (
+                          <a
+                            href={clientDriveFolderUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-150 hover:bg-indigo-100 rounded-xl text-[10px] font-black uppercase tracking-wider text-indigo-750 transition-colors cursor-pointer font-sans"
+                            id="gdocs-juridico-drive-folder-link"
+                          >
+                            <ExternalLink size={12} className="text-indigo-600 shrink-0" />
+                            <span>Abrir Pasta de Destino</span>
+                          </a>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* CARD 1: Notificação Extrajudicial para cobrança */}
+                        <div className="bg-slate-50 border border-slate-150 p-4 rounded-xl flex flex-col justify-between space-y-4">
+                          <div className="space-y-1">
+                            <span className="text-[8px] font-mono font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                              Atos Preparatórios
+                            </span>
+                            <h4 className="text-xs font-extrabold text-slate-800 tracking-tight leading-snug font-sans">
+                              Notificação Extrajudicial para cobrança
+                            </h4>
+                            <p className="text-[10px] text-slate-400 font-sans leading-normal">
+                              Gere uma minuta em PDF pronto para assinatura e notificação fática do cliente em atraso.
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => {
+                              const today = new Date().toISOString().split("T")[0];
+                              const tabelaTexto = tabelaAnalitica.map((p, idx) => {
+                                const s = p.status || (p.pago ? "pago" : "pendente");
+                                const resolvedStatus = s === "atrasado" || (s === "pendente" && p.dataVencimento && p.dataVencimento < today) ? "VENCIDO" : s.toUpperCase();
+                                return `${idx + 1}. Parcela: ${p.valor} | Vencimento: ${p.dataVencimento || "N/A"} | Status: ${resolvedStatus}`;
+                              }).join("\n");
+
+                              handleGenerateCustomDocument(
+                                "notificacao_extrajudicial_cobranca",
+                                "Notificação Extrajudicial para Cobrança de Honorários",
+                                {
+                                  "{{VALOR_TOTAL}}": formatCurrency(totalContrato),
+                                  "{{TOTAL_PAGO}}": formatCurrency(totalPago),
+                                  "{{TOTAL_ATRASADO}}": formatCurrency(totalAtrasado),
+                                  "{{TOTAL_PENDENTE}}": formatCurrency(totalPendente),
+                                  "{{FALTA_ARRECADAR}}": formatCurrency(totalFaltaPagar),
+                                  "{{TABELA_ANALITICA_DETALHADA}}": tabelaTexto,
+                                }
+                              );
+                            }}
+                            className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white font-mono font-black text-[10px] uppercase tracking-wider rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            {saving ? <Loader2 size={11} className="animate-spin" /> : <FileText size={11} />}
+                            Gerar Notificação
+                          </button>
+                        </div>
+
+                        {/* CARD 2: Protesto extrajudicial do contrato de honorários */}
+                        <div className="bg-slate-50 border border-slate-150 p-4 rounded-xl flex flex-col justify-between space-y-4">
+                          <div className="space-y-1">
+                            <span className="text-[8px] font-mono font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                              Frustração de Acordo
+                            </span>
+                            <h4 className="text-xs font-extrabold text-slate-800 tracking-tight leading-snug font-sans">
+                              Protesto extrajudicial do contrato de honorários
+                            </h4>
+                            <p className="text-[10px] text-slate-400 font-sans leading-normal">
+                              Aponta o título executivo e o contrato inadimplido perante o Cartório de Protestos competente.
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => {
+                              const today = new Date().toISOString().split("T")[0];
+                              const tabelaTexto = tabelaAnalitica.map((p, idx) => {
+                                const s = p.status || (p.pago ? "pago" : "pendente");
+                                const resolvedStatus = s === "atrasado" || (s === "pendente" && p.dataVencimento && p.dataVencimento < today) ? "VENCIDO" : s.toUpperCase();
+                                return `${idx + 1}. Parcela: ${p.valor} | Vencimento: ${p.dataVencimento || "N/A"} | Status: ${resolvedStatus}`;
+                              }).join("\n");
+
+                              handleGenerateCustomDocument(
+                                "protesto_extrajudicial_contrato",
+                                "Protesto Extrajudicial do Contrato de Honorários",
+                                {
+                                  "{{VALOR_TOTAL}}": formatCurrency(totalContrato),
+                                  "{{TOTAL_PAGO}}": formatCurrency(totalPago),
+                                  "{{TOTAL_ATRASADO}}": formatCurrency(totalAtrasado),
+                                  "{{TOTAL_PENDENTE}}": formatCurrency(totalPendente),
+                                  "{{FALTA_ARRECADAR}}": formatCurrency(totalFaltaPagar),
+                                  "{{TABELA_ANALITICA_DETALHADA}}": tabelaTexto,
+                                }
+                              );
+                            }}
+                            className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white font-mono font-black text-[10px] uppercase tracking-wider rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            {saving ? <Loader2 size={11} className="animate-spin" /> : <AlertTriangle size={11} />}
+                            Gerar Protesto
+                          </button>
+                        </div>
+
+                        {/* CARD 3: Ação de cobrança de Honorários Advocatícios */}
+                        <div className="bg-slate-50 border border-slate-150 p-4 rounded-xl flex flex-col justify-between space-y-4">
+                          <div className="space-y-1">
+                            <span className="text-[8px] font-mono font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                              Atos Judiciais
+                            </span>
+                            <h4 className="text-xs font-extrabold text-slate-800 tracking-tight leading-snug font-sans">
+                              Ação de cobrança de Honorários Advocatícios
+                            </h4>
+                            <p className="text-[10px] text-slate-400 font-sans leading-normal">
+                              Minuta de petição inicial fática para ajuizamento da execução de título extrajudicial de honorários.
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => {
+                              const today = new Date().toISOString().split("T")[0];
+                              const tabelaTexto = tabelaAnalitica.map((p, idx) => {
+                                const s = p.status || (p.pago ? "pago" : "pendente");
+                                const resolvedStatus = s === "atrasado" || (s === "pendente" && p.dataVencimento && p.dataVencimento < today) ? "VENCIDO" : s.toUpperCase();
+                                return `${idx + 1}. Parcela: ${p.valor} | Vencimento: ${p.dataVencimento || "N/A"} | Status: ${resolvedStatus}`;
+                              }).join("\n");
+
+                              handleGenerateCustomDocument(
+                                "acao_cobranca_honorarios",
+                                "Ação de Cobrança de Honorários Advocatícios",
+                                {
+                                  "{{VALOR_TOTAL}}": formatCurrency(totalContrato),
+                                  "{{TOTAL_PAGO}}": formatCurrency(totalPago),
+                                  "{{TOTAL_ATRASADO}}": formatCurrency(totalAtrasado),
+                                  "{{TOTAL_PENDENTE}}": formatCurrency(totalPendente),
+                                  "{{FALTA_ARRECADAR}}": formatCurrency(totalFaltaPagar),
+                                  "{{TABELA_ANALITICA_DETALHADA}}": tabelaTexto,
+                                }
+                              );
+                            }}
+                            className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-mono font-black text-[10px] uppercase tracking-wider rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                          >
+                            {saving ? <Loader2 size={11} className="animate-spin" /> : <Scale size={11} />}
+                            Gerar Petição Inicial
+                          </button>
                         </div>
                       </div>
                     </div>
