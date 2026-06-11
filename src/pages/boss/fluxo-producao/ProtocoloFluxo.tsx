@@ -270,18 +270,29 @@ export default function ProtocoloFluxo() {
         // Auto pull defendant from EDRP structuring when empty
         let loadedExAdversosList = rawProtocol.exAdversosList || [];
         if (!Array.isArray(loadedExAdversosList) || loadedExAdversosList.length === 0) {
-          const edrpDef = cData.edrp?.structuring?.defendant || {};
-          let resolvedDefName = '';
-          if (edrpDef.type === 'PF') {
-            resolvedDefName = edrpDef.pf_nomeCompleto || '';
-          } else if (edrpDef.type === 'PJ') {
-            resolvedDefName = edrpDef.pj_razaoSocial || '';
-          }
-          if (!resolvedDefName && cData.opposingParty) {
-            resolvedDefName = cData.opposingParty;
-          }
-          if (resolvedDefName) {
-            loadedExAdversosList = [resolvedDefName];
+          const edrpDefs = cData.edrp?.structuring?.defendants;
+          if (Array.isArray(edrpDefs) && edrpDefs.length > 0) {
+            loadedExAdversosList = edrpDefs.map((d: any) => {
+              if (d.type === 'PF') {
+                return d.pfDadosPessoais?.pf_nomeCompleto || d.pf_nomeCompleto || '';
+              } else {
+                return d.pjDadosEmpresa?.pj_razaoSocial || d.pj_razaoSocial || '';
+              }
+            }).filter(Boolean);
+          } else {
+            const edrpDef = cData.edrp?.structuring?.defendant || {};
+            let resolvedDefName = '';
+            if (edrpDef.type === 'PF') {
+              resolvedDefName = edrpDef.pfDadosPessoais?.pf_nomeCompleto || edrpDef.pf_nomeCompleto || '';
+            } else if (edrpDef.type === 'PJ') {
+              resolvedDefName = edrpDef.pjDadosEmpresa?.pj_razaoSocial || edrpDef.pj_razaoSocial || '';
+            }
+            if (!resolvedDefName && cData.opposingParty) {
+              resolvedDefName = cData.opposingParty;
+            }
+            if (resolvedDefName) {
+              loadedExAdversosList = [resolvedDefName];
+            }
           }
         }
 
@@ -375,15 +386,30 @@ export default function ProtocoloFluxo() {
           : (client.pjDadosEmpresa?.pj_razaoSocial || client.pjData?.pj_razaoSocial || ''))
       : '';
 
-    const edrpDef = caseObj.edrp?.structuring?.defendant || {};
-    let resolvedDefName = '';
-    if (edrpDef.type === 'PF') {
-      resolvedDefName = edrpDef.pf_nomeCompleto || '';
-    } else if (edrpDef.type === 'PJ') {
-      resolvedDefName = edrpDef.pj_razaoSocial || '';
-    }
-    if (!resolvedDefName && caseObj.opposingParty) {
-      resolvedDefName = caseObj.opposingParty;
+    let resolvedDefNames: string[] = [];
+    const edrpDefs = caseObj.edrp?.structuring?.defendants;
+    if (Array.isArray(edrpDefs) && edrpDefs.length > 0) {
+      resolvedDefNames = edrpDefs.map((d: any) => {
+        if (d.type === 'PF') {
+          return d.pfDadosPessoais?.pf_nomeCompleto || d.pf_nomeCompleto || '';
+        } else {
+          return d.pjDadosEmpresa?.pj_razaoSocial || d.pj_razaoSocial || '';
+        }
+      }).filter(Boolean);
+    } else {
+      const edrpDef = caseObj.edrp?.structuring?.defendant || {};
+      let resolvedDefName = '';
+      if (edrpDef.type === 'PF') {
+        resolvedDefName = edrpDef.pf_nomeCompleto || '';
+      } else if (edrpDef.type === 'PJ') {
+        resolvedDefName = edrpDef.pj_razaoSocial || '';
+      }
+      if (!resolvedDefName && caseObj.opposingParty) {
+        resolvedDefName = caseObj.opposingParty;
+      }
+      if (resolvedDefName) {
+        resolvedDefNames = [resolvedDefName];
+      }
     }
 
     const resolvedSubject = caseObj.subject || caseObj.edrp?.structuring?.notes || '';
@@ -393,7 +419,7 @@ export default function ProtocoloFluxo() {
     setProtocol((prev) => ({
       ...prev,
       clientsList: prev.clientsList.length === 0 && primaryClient ? [primaryClient] : prev.clientsList,
-      exAdversosList: prev.exAdversosList.length === 0 && resolvedDefName ? [resolvedDefName] : prev.exAdversosList,
+      exAdversosList: prev.exAdversosList.length === 0 && resolvedDefNames.length > 0 ? resolvedDefNames : prev.exAdversosList,
       subject: prev.subject || resolvedSubject,
       court: prev.court || resolvedCourt,
       comarca: prev.comarca || resolvedComarca

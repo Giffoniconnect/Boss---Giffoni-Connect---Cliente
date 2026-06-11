@@ -21,9 +21,128 @@ import {
   Compass,
   Check,
   MapPin,
-  ExternalLink
+  ExternalLink,
+  Plus,
+  Database,
+  Search,
+  Trash2,
+  Edit3,
+  X,
+  UserPlus
 } from 'lucide-react';
 import { flowRoutes } from './utils/flowRoutes';
+import { PFForm } from '../../../modules/boss/components/forms/PFForm';
+import { PJForm } from '../../../modules/boss/components/forms/PJForm';
+
+// Helper functions for mapping flat <-> nested structures inside edrp.structuring.defendant
+function getNormalizedDefendant(rawDef: any): any {
+  if (!rawDef) {
+    return {
+      type: 'PF',
+      pfDadosPessoais: {},
+      pfContato: {},
+      pfEndereco: {},
+      pfRedesSociais: {},
+      pjDadosEmpresa: {},
+      pjContatoEmpresa: {},
+      pjEnderecoEmpresa: {},
+      pjRedesSociaisEmpresa: {}
+    };
+  }
+
+  const type = rawDef.type || 'PF';
+
+  // Read with defense overrides (flat fields map to nested blocks if blocks are empty)
+  const pfDadosPessoais = {
+    pf_nomeCompleto: (rawDef.pfDadosPessoais?.pf_nomeCompleto || rawDef.pf_nomeCompleto || '').toUpperCase(),
+    pf_nacionalidade: rawDef.pfDadosPessoais?.pf_nacionalidade || rawDef.pf_nacionalidade || 'Brasileira',
+    pf_estadoCivil: rawDef.pfDadosPessoais?.pf_estadoCivil || rawDef.pf_estadoCivil || '',
+    pf_profissao: rawDef.pfDadosPessoais?.pf_profissao || rawDef.pf_profissao || '',
+    pf_cpf: rawDef.pfDadosPessoais?.pf_cpf || rawDef.pf_cpf || '',
+    pf_rg: rawDef.pfDadosPessoais?.pf_rg || rawDef.pf_rg || '',
+    pf_dataNascimento: rawDef.pfDadosPessoais?.pf_dataNascimento || rawDef.pf_dataNascimento || rawDef.pf_nascimento || '',
+    pf_nomePai: (rawDef.pfDadosPessoais?.pf_nomePai || rawDef.pf_nomePai || '').toUpperCase(),
+    pf_nomeMae: (rawDef.pfDadosPessoais?.pf_nomeMae || rawDef.pf_nomeMae || '').toUpperCase()
+  };
+
+  const pfContato = {
+    pf_email: rawDef.pfContato?.pf_email || rawDef.pf_email || '',
+    pf_telefone: rawDef.pfContato?.pf_telefone || rawDef.pf_telefone || '',
+    pf_possuiWhatsapp: rawDef.pfContato?.pf_possuiWhatsapp !== undefined 
+      ? rawDef.pfContato.pf_possuiWhatsapp 
+      : (rawDef.pf_possuiWhatsapp || false),
+    pf_whatsapp: rawDef.pfContato?.pf_whatsapp || rawDef.pf_whatsapp || ''
+  };
+
+  const pfEndereco = {
+    pf_cep: rawDef.pfEndereco?.pf_cep || rawDef.pf_cep || '',
+    pf_endereco: rawDef.pfEndereco?.pf_endereco || rawDef.pf_endereco || '',
+    pf_numero: rawDef.pfEndereco?.pf_numero || rawDef.pf_numero || '',
+    pf_complemento: rawDef.pfEndereco?.pf_complemento || rawDef.pf_complemento || '',
+    pf_bairro: rawDef.pfEndereco?.pf_bairro || rawDef.pf_bairro || '',
+    pf_cidade: rawDef.pfEndereco?.pf_cidade || rawDef.pf_cidade || '',
+    pf_estado: rawDef.pfEndereco?.pf_estado || rawDef.pf_estado || ''
+  };
+
+  const pfRedesSociais = {
+    pf_instagram: rawDef.pfRedesSociais?.pf_instagram || rawDef.pf_instagram || '',
+    pf_facebook: rawDef.pfRedesSociais?.pf_facebook || rawDef.pf_facebook || '',
+    pf_tiktok: rawDef.pfRedesSociais?.pf_tiktok || rawDef.pf_tiktok || ''
+  };
+
+  const pjDadosEmpresa = {
+    pj_cnpj: rawDef.pjDadosEmpresa?.pj_cnpj || rawDef.pj_cnpj || '',
+    pj_razaoSocial: (rawDef.pjDadosEmpresa?.pj_razaoSocial || rawDef.pj_razaoSocial || '').toUpperCase(),
+    pj_nomeFantasia: (rawDef.pjDadosEmpresa?.pj_nomeFantasia || rawDef.pj_nomeFantasia || rawDef.pj_nomeFantasia || '').toUpperCase()
+  };
+
+  const pjContatoEmpresa = {
+    pj_emailEmpresa: rawDef.pjContatoEmpresa?.pj_emailEmpresa || rawDef.pj_emailEmpresa || rawDef.pj_email || '',
+    pj_telefoneEmpresa: rawDef.pjContatoEmpresa?.pj_telefoneEmpresa || rawDef.pj_telefoneEmpresa || rawDef.pj_telefone || '',
+    pj_possuiWhatsappEmpresa: rawDef.pjContatoEmpresa?.pj_possuiWhatsappEmpresa !== undefined 
+      ? rawDef.pjContatoEmpresa.pj_possuiWhatsappEmpresa 
+      : (rawDef.pj_possuiWhatsappEmpresa || false),
+    pj_whatsappEmpresa: rawDef.pjContatoEmpresa?.pj_whatsappEmpresa || rawDef.pj_whatsapp || ''
+  };
+
+  const pjEnderecoEmpresa = {
+    pj_cepEmpresa: rawDef.pjEnderecoEmpresa?.pj_cepEmpresa || rawDef.pj_cepEmpresa || '',
+    pj_enderecoEmpresa: rawDef.pjEnderecoEmpresa?.pj_enderecoEmpresa || rawDef.pj_endereco || '',
+    pj_numeroEmpresa: rawDef.pjEnderecoEmpresa?.pj_numeroEmpresa || rawDef.pj_numeroEmpresa || '',
+    pj_complementoEmpresa: rawDef.pjEnderecoEmpresa?.pj_complementoEmpresa || rawDef.pj_complementoEmpresa || '',
+    pj_bairroEmpresa: rawDef.pjEnderecoEmpresa?.pj_bairroEmpresa || rawDef.pj_bairroEmpresa || '',
+    pj_cidadeEmpresa: rawDef.pjEnderecoEmpresa?.pj_cidadeEmpresa || rawDef.pj_cidadeEmpresa || '',
+    pj_estadoEmpresa: rawDef.pjEnderecoEmpresa?.pj_estadoEmpresa || rawDef.pj_estadoEmpresa || ''
+  };
+
+  const pjRedesSociaisEmpresa = {
+    pj_instagramEmpresa: rawDef.pjRedesSociaisEmpresa?.pj_instagramEmpresa || rawDef.pj_instagramEmpresa || '',
+    pj_facebookEmpresa: rawDef.pjRedesSociaisEmpresa?.pj_facebookEmpresa || rawDef.pj_facebookEmpresa || '',
+    pj_tiktokEmpresa: rawDef.pjRedesSociaisEmpresa?.pj_tiktokEmpresa || rawDef.pj_tiktokEmpresa || ''
+  };
+
+  return {
+    type,
+    // flat legacy/compatible copies
+    ...pfDadosPessoais,
+    ...pfContato,
+    ...pfEndereco,
+    ...pfRedesSociais,
+    ...pjDadosEmpresa,
+    ...pjContatoEmpresa,
+    ...pjEnderecoEmpresa,
+    ...pjRedesSociaisEmpresa,
+    // blocks
+    pfDadosPessoais,
+    pfContato,
+    pfEndereco,
+    pfRedesSociais,
+    pjDadosEmpresa,
+    pjContatoEmpresa,
+    pjEnderecoEmpresa,
+    pjRedesSociaisEmpresa
+  };
+}
 
 // EDRP complete interface matching Regra 2
 interface EDRPData {
@@ -32,22 +151,9 @@ interface EDRPData {
     comarca?: string;
     defendant?: {
       type: 'PF' | 'PJ';
-      pf_nomeCompleto?: string;
-      pf_cpf?: string;
-      pf_rg?: string;
-      pf_estadoCivil?: string;
-      pf_profissao?: string;
-      pf_email?: string;
-      pf_telefone?: string;
-      pf_endereco?: string;
-      pj_razaoSocial?: string;
-      pj_cnpj?: string;
-      pj_inscricaoEstadual?: string;
-      pj_socioAdministrador?: string;
-      pj_email?: string;
-      pj_telefone?: string;
-      pj_endereco?: string;
+      [key: string]: any;
     };
+    defendants?: any[];
     parties: string;
     relevantFacts: string;
     legalGrounds: string;
@@ -134,6 +240,7 @@ const DEFAULT_EDRP: EDRPData = {
       pj_telefone: '',
       pj_endereco: '',
     },
+    defendants: [],
     parties: '',
     relevantFacts: '',
     legalGrounds: '',
@@ -223,6 +330,37 @@ export default function EDRPFluxo() {
   const [client, setClient] = useState<any>(null);
   const [edrp, setEdrp] = useState<EDRPData>(DEFAULT_EDRP);
 
+  // Defendant registration and DB lookup state managers
+  const [dbClients, setDbClients] = useState<any[]>([]);
+  const [dbLoading, setDbLoading] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [showDbSelect, setShowDbSelect] = useState(false);
+  const [tempDefType, setTempDefType] = useState<'PF' | 'PJ' | null>(null);
+  const [currentDefForm, setCurrentDefForm] = useState<any>(null);
+  const [currentEditIndex, setCurrentEditIndex] = useState<number | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Load database of registered clients as potential defendants
+  useEffect(() => {
+    async function fetchDbClients() {
+      try {
+        setDbLoading(true);
+        const { collection, getDocs } = await import('firebase/firestore');
+        const querySnapshot = await getDocs(collection(db, 'clients'));
+        const clientsList: any[] = [];
+        querySnapshot.forEach((doc) => {
+          clientsList.push({ id: doc.id, ...doc.data() });
+        });
+        setDbClients(clientsList);
+      } catch (err) {
+        console.error("Error fetching database of clients:", err);
+      } finally {
+        setDbLoading(false);
+      }
+    }
+    fetchDbClients();
+  }, []);
+
   // Load context from Firestore
   useEffect(() => {
     if (!caseId) {
@@ -259,8 +397,23 @@ export default function EDRPFluxo() {
 
         // Merge EDRP data defensively with standard schema types
         const rawEdrp = caseData.edrp || {};
+        
+        let loadedDefendants = rawEdrp.structuring?.defendants || [];
+        if (!Array.isArray(loadedDefendants)) {
+          loadedDefendants = [];
+        }
+        const singleDef = rawEdrp.structuring?.defendant;
+        if (loadedDefendants.length === 0 && singleDef && (singleDef.pf_nomeCompleto || singleDef.pj_razaoSocial || singleDef.pfDadosPessoais?.pf_nomeCompleto || singleDef.pjDadosEmpresa?.pj_razaoSocial)) {
+          loadedDefendants = [getNormalizedDefendant(singleDef)];
+        }
+
         const merged: EDRPData = {
-          structuring: { ...DEFAULT_EDRP.structuring, ...(rawEdrp.structuring || {}) },
+          structuring: { 
+            ...DEFAULT_EDRP.structuring, 
+            ...(rawEdrp.structuring || {}),
+            defendant: getNormalizedDefendant(rawEdrp.structuring?.defendant),
+            defendants: loadedDefendants.map((d: any) => getNormalizedDefendant(d))
+          },
           delegation: { ...DEFAULT_EDRP.delegation, ...(rawEdrp.delegation || {}) },
           reviewPreparation: { ...DEFAULT_EDRP.reviewPreparation, ...(rawEdrp.reviewPreparation || {}) },
           protocolPreparation: { ...DEFAULT_EDRP.protocolPreparation, ...(rawEdrp.protocolPreparation || {}) },
@@ -312,6 +465,198 @@ export default function EDRPFluxo() {
         [section]: updatedSection
       };
     });
+  };
+
+  // Start the process of adding a new defendant
+  const handleStartAddDefendant = () => {
+    setCurrentEditIndex(null);
+    setTempDefType(null); // Must show only the choice between PF and PJ initially
+    setCurrentDefForm({
+      type: 'PF',
+      pfDadosPessoais: {},
+      pfContato: {},
+      pfEndereco: {},
+      pfRedesSociais: {},
+      pjDadosEmpresa: {},
+      pjContatoEmpresa: {},
+      pjEnderecoEmpresa: {},
+      pjRedesSociaisEmpresa: {}
+    });
+    setShowAddForm(true);
+    setShowDbSelect(false);
+  };
+
+  // Start the process of editing an existing registered defendant
+  const handleStartEditDef = (index: number) => {
+    const list = edrp.structuring.defendants || [];
+    const target = list[index];
+    if (!target) return;
+
+    setCurrentEditIndex(index);
+    setTempDefType(target.type || 'PF');
+    setCurrentDefForm(getNormalizedDefendant(target));
+    setShowAddForm(true);
+    setShowDbSelect(false);
+  };
+
+  // Select between PF and PJ form view
+  const handleSelectTempType = (type: 'PF' | 'PJ') => {
+    setTempDefType(type);
+    setCurrentDefForm((prev: any) => ({
+      ...(prev || {}),
+      type
+    }));
+  };
+
+  // Save/Confirm addition or modification of a manual defendant
+  const handleSaveDefToList = () => {
+    if (!currentDefForm) return;
+    const normalized = getNormalizedDefendant(currentDefForm);
+
+    setEdrp((prev) => {
+      const currentList = prev.structuring.defendants || [];
+      let updatedList = [...currentList];
+
+      if (currentEditIndex !== null) {
+        updatedList[currentEditIndex] = normalized;
+      } else {
+        updatedList.push(normalized);
+      }
+
+      return {
+        ...prev,
+        structuring: {
+          ...prev.structuring,
+          defendants: updatedList,
+          // Update the single defendant field to hold the primary/first item
+          defendant: updatedList[0] || null
+        }
+      };
+    });
+
+    // Reset workflow states
+    setShowAddForm(false);
+    setTempDefType(null);
+    setCurrentEditIndex(null);
+    setCurrentDefForm(null);
+    setSuccess(currentEditIndex !== null ? 'Réu atualizado com sucesso na lista.' : 'Réu adicionado com sucesso na lista.');
+  };
+
+  // Remove defendant from the list
+  const handleRemoveDef = (index: number) => {
+    setEdrp((prev) => {
+      const currentList = prev.structuring.defendants || [];
+      const updatedList = currentList.filter((_, idx) => idx !== index);
+      return {
+        ...prev,
+        structuring: {
+          ...prev.structuring,
+          defendants: updatedList,
+          defendant: updatedList[0] || null
+        }
+      };
+    });
+    setSuccess('Réu removido da lista do caso.');
+  };
+
+  // Import a client from the DB collection as a defendant on this case EDRP
+  const handleAddDefendantFromDb = (dbClient: any) => {
+    const type = dbClient.type || 'PF';
+    let defendantObj: any = { type };
+
+    if (type === 'PF') {
+      const pfDados = dbClient.pfDadosPessoais || dbClient.pfData || {};
+      const pfCont = dbClient.pfContato || {};
+      const pfEnd = dbClient.pfEndereco || {};
+      const pfRed = dbClient.pfRedesSociais || {};
+
+      defendantObj.pfDadosPessoais = {
+        pf_nomeCompleto: (pfDados.pf_nomeCompleto || dbClient.name || '').toUpperCase(),
+        pf_nacionalidade: pfDados.pf_nacionalidade || 'Brasileira',
+        pf_estadoCivil: pfDados.pf_estadoCivil || '',
+        pf_profissao: pfDados.pf_profissao || '',
+        pf_cpf: pfDados.pf_cpf || dbClient.cpf || '',
+        pf_rg: pfDados.pf_rg || '',
+        pf_dataNascimento: pfDados.pf_dataNascimento || '',
+        pf_nomePai: (pfDados.pf_nomePai || '').toUpperCase(),
+        pf_nomeMae: (pfDados.pf_nomeMae || '').toUpperCase()
+      };
+
+      defendantObj.pfContato = {
+        pf_email: pfCont.pf_email || dbClient.email || '',
+        pf_telefone: pfCont.pf_telefone || dbClient.phone || '',
+        pf_possuiWhatsapp: pfCont.pf_possuiWhatsapp !== undefined ? pfCont.pf_possuiWhatsapp : false,
+        pf_whatsapp: pfCont.pf_whatsapp || ''
+      };
+
+      defendantObj.pfEndereco = {
+        pf_cep: pfEnd.pf_cep || '',
+        pf_endereco: pfEnd.pf_endereco || '',
+        pf_numero: pfEnd.pf_numero || '',
+        pf_complemento: pfEnd.pf_complemento || '',
+        pf_bairro: pfEnd.pf_bairro || '',
+        pf_cidade: pfEnd.pf_cidade || '',
+        pf_estado: pfEnd.pf_estado || ''
+      };
+
+      defendantObj.pfRedesSociais = {
+        pf_instagram: pfRed.pf_instagram || '',
+        pf_facebook: pfRed.pf_facebook || '',
+        pf_tiktok: pfRed.pf_tiktok || ''
+      };
+    } else {
+      const pjDados = dbClient.pjDadosEmpresa || dbClient.pjData || {};
+      const pjCont = dbClient.pjContatoEmpresa || {};
+      const pjEnd = dbClient.pjEnderecoEmpresa || {};
+      const pjRed = dbClient.pjRedesSociaisEmpresa || {};
+
+      defendantObj.pjDadosEmpresa = {
+        pj_cnpj: pjDados.pj_cnpj || dbClient.cnpj || '',
+        pj_razaoSocial: (pjDados.pj_razaoSocial || dbClient.name || '').toUpperCase(),
+        pj_nomeFantasia: (pjDados.pj_nomeFantasia || '').toUpperCase()
+      };
+
+      defendantObj.pjContatoEmpresa = {
+        pj_emailEmpresa: pjCont.pj_emailEmpresa || dbClient.email || '',
+        pj_telefoneEmpresa: pjCont.pj_telefoneEmpresa || dbClient.phone || '',
+        pj_possuiWhatsappEmpresa: pjCont.pj_possuiWhatsappEmpresa !== undefined ? pjCont.pj_possuiWhatsappEmpresa : false,
+        pj_whatsappEmpresa: pjCont.pj_whatsappEmpresa || ''
+      };
+
+      defendantObj.pjEnderecoEmpresa = {
+        pj_cepEmpresa: pjEnd.pj_cepEmpresa || '',
+        pj_enderecoEmpresa: pjEnd.pj_enderecoEmpresa || '',
+        pj_numeroEmpresa: pjEnd.pj_numeroEmpresa || '',
+        pj_complementoEmpresa: pjEnd.pj_complementoEmpresa || '',
+        pj_bairroEmpresa: pjEnd.pj_bairroEmpresa || '',
+        pj_cidadeEmpresa: pjEnd.pj_cidadeEmpresa || '',
+        pj_estadoEmpresa: pjEnd.pj_estadoEmpresa || ''
+      };
+
+      defendantObj.pjRedesSociaisEmpresa = {
+        pj_instagramEmpresa: pjRed.pj_instagramEmpresa || '',
+        pj_facebookEmpresa: pjRed.pj_facebookEmpresa || '',
+        pj_tiktokEmpresa: pjRed.pj_tiktok_Empresa || ''
+      };
+    }
+
+    const normalized = getNormalizedDefendant(defendantObj);
+
+    setEdrp((prev) => {
+      const currentList = prev.structuring.defendants || [];
+      const updatedList = [...currentList, normalized];
+      return {
+        ...prev,
+        structuring: {
+          ...prev.structuring,
+          defendants: updatedList,
+          defendant: updatedList[0] || null
+        }
+      };
+    });
+
+    setSuccess(`Réu "${type === 'PF' ? normalized.pfDadosPessoais.pf_nomeCompleto : normalized.pjDadosEmpresa.pj_razaoSocial}" importado com sucesso.`);
+    setShowDbSelect(false);
   };
 
   // Computes the recommended standard statusInterno dynamically based on data state
@@ -745,197 +1090,326 @@ export default function EDRPFluxo() {
                   value={edrp.structuring.parties}
                   onChange={(e) => handleFieldChange('structuring', 'parties', e.target.value)}
                   placeholder="Incorpore co-autores, herdeiros ou especificações acessórias..."
-                  className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[50px] outline-none"
+                  className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2 text-xs text-gray-800 transition-all font-medium min-h-[50px] outline-none"
                 />
               </div>
             </div>
 
             {/* Card 4 - Adicionar Réu */}
-            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-4 shadow-3xs hover:border-gray-300 transition-all">
+            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-6 shadow-3xs hover:border-gray-300 transition-all">
               <div className="flex flex-wrap gap-3 items-center justify-between border-b border-gray-100 pb-3">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
                     Card 4
                   </span>
                   <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
-                    Adicionar Réu (Coletas Originais)
+                    Réus Cadastrados no Caso ({edrp.structuring.defendants?.length || 0})
                   </span>
-                </div>
-                <div className="flex bg-gray-100 p-0.5 rounded-lg shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const currentDef = edrp.structuring.defendant || { type: 'PF' };
-                      handleFieldChange('structuring', 'defendant', { ...currentDef, type: 'PF' });
-                    }}
-                    className={`px-2.5 py-1 text-[9px] font-black uppercase rounded-md transition cursor-pointer ${
-                      (edrp.structuring.defendant?.type || 'PF') === 'PF'
-                        ? 'bg-white text-gray-900 shadow-3xs'
-                        : 'text-gray-500 hover:text-gray-900'
-                    }`}
-                  >
-                    Réu PF
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const currentDef = edrp.structuring.defendant || { type: 'PF' };
-                      handleFieldChange('structuring', 'defendant', { ...currentDef, type: 'PJ' });
-                    }}
-                    className={`px-2.5 py-1 text-[9px] font-black uppercase rounded-md transition cursor-pointer ${
-                      (edrp.structuring.defendant?.type || 'PF') === 'PJ'
-                        ? 'bg-white text-gray-900 shadow-3xs'
-                        : 'text-gray-500 hover:text-gray-900'
-                    }`}
-                  >
-                    Réu PJ
-                  </button>
                 </div>
               </div>
 
-              {(edrp.structuring.defendant?.type || 'PF') === 'PF' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-gray-50/50 p-4 rounded-xl border border-gray-100 text-xs">
-                  <div className="space-y-1 sm:col-span-2">
-                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Nome Completo do Réu</label>
-                    <input
-                      type="text"
-                      value={edrp.structuring.defendant?.pf_nomeCompleto || ''}
-                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pf_nomeCompleto: e.target.value })}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 font-semibold outline-none"
-                    />
+              {/* List of Registered Defendants */}
+              <div className="space-y-2">
+                {(!edrp.structuring.defendants || edrp.structuring.defendants.length === 0) ? (
+                  <div className="p-4 bg-gray-50 rounded-2xl text-center border border-dashed border-gray-200 text-xs text-gray-400 font-medium italic">
+                    Nenhum réu cadastrado neste caso ainda. Use os controles abaixo para adicionar.
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">CPF</label>
-                    <input
-                      type="text"
-                      value={edrp.structuring.defendant?.pf_cpf || ''}
-                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pf_cpf: e.target.value })}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 font-mono outline-none"
-                      placeholder="000.000.000-00"
-                    />
+                ) : (
+                  <div className="divide-y divide-gray-100 border border-gray-150 rounded-2xl overflow-hidden bg-white">
+                    {edrp.structuring.defendants.map((def, idx) => {
+                      const isPF = def.type === 'PF';
+                      const name = isPF 
+                        ? (def.pfDadosPessoais?.pf_nomeCompleto || def.pf_nomeCompleto || 'Nome não especificado')
+                        : (def.pjDadosEmpresa?.pj_razaoSocial || def.pj_razaoSocial || 'Razão Social não especificada');
+                      const docCode = isPF 
+                        ? (def.pf_cpf || def.pfDadosPessoais?.pf_cpf)
+                        : (def.pj_cnpj || def.pjDadosEmpresa?.pj_cnpj);
+
+                      return (
+                        <div key={idx} className="flex items-center justify-between p-4 hover:bg-gray-50/50 transition">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                              isPF ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'
+                            }`}>
+                              {isPF ? <User size={16} /> : <Briefcase size={16} />}
+                            </div>
+                            <div className="min-w-0">
+                              <span className="block text-xs font-black text-gray-800 uppercase truncate">
+                                {idx + 1}. {name}
+                              </span>
+                              <span className="block text-[10px] text-gray-400 font-mono">
+                                {isPF ? 'Pessoa Física (PF)' : 'Pessoa Jurídica (PJ)'} {docCode ? `• Doc: ${docCode}` : ''}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditDef(idx)}
+                              className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                              title="Editar Ficha"
+                            >
+                              <Edit3 size={15} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDef(idx)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                              title="Remover"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">RG</label>
-                    <input
-                      type="text"
-                      value={edrp.structuring.defendant?.pf_rg || ''}
-                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pf_rg: e.target.value })}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 font-mono outline-none"
-                    />
+                )}
+              </div>
+
+              {/* Action Buttons: + Adicionar Réu  OR  Usar Banco de Réus Cadastrados */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={handleStartAddDefendant}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 border rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer ${
+                    showAddForm 
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs' 
+                      : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50/50 hover:border-blue-300'
+                  }`}
+                >
+                  <Plus size={16} />
+                  + Adicionar Réu
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDbSelect(!showDbSelect);
+                    setShowAddForm(false);
+                    setTempDefType(null);
+                  }}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 border rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer ${
+                    showDbSelect
+                      ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
+                      : 'bg-white text-purple-700 border-purple-200 hover:bg-purple-50/50 hover:border-purple-300'
+                  }`}
+                >
+                  <Database size={16} />
+                  Usar Banco de Réus Cadastrados
+                </button>
+              </div>
+
+              {/* Option A: + Adicionar Réu Flow */}
+              {showAddForm && (
+                <div className="p-5 bg-gray-50/70 border border-gray-150 rounded-2xl space-y-5 animate-fade-in animate-duration-200">
+                  <div className="flex items-center justify-between border-b border-gray-200 pb-2.5">
+                    <h3 className="text-xs font-extrabold text-gray-700 uppercase tracking-wider">
+                      {currentEditIndex !== null ? `Editando Réu #${currentEditIndex + 1}` : 'Cadastrar Novo Réu'}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddForm(false);
+                        setTempDefType(null);
+                        setCurrentEditIndex(null);
+                      }}
+                      className="text-gray-400 hover:text-gray-600 transition"
+                    >
+                      <X size={16} />
+                    </button>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Estado Civil</label>
-                    <input
-                      type="text"
-                      value={edrp.structuring.defendant?.pf_estadoCivil || ''}
-                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pf_estadoCivil: e.target.value })}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
-                    />
+
+                  {/* Selective Type Buttons (Pessoa Física / Pessoa Jurídica choice) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectTempType('PF')}
+                      className={`flex items-center gap-3 p-4 rounded-xl border text-left transition cursor-pointer ${
+                        tempDefType === 'PF'
+                          ? 'border-blue-600 bg-blue-50/55 text-blue-950 ring-2 ring-blue-600/10 shadow-3xs'
+                          : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
+                      }`}
+                    >
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                        tempDefType === 'PF' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700'
+                      }`}>
+                        <User size={16} />
+                      </div>
+                      <div>
+                        <span className="block text-xs font-bold uppercase tracking-tight">Pessoa Física</span>
+                        <span className="block text-[9.5px] text-gray-400">Ficha Cadastral de Pessoa Natural (PF)</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSelectTempType('PJ')}
+                      className={`flex items-center gap-3 p-4 rounded-xl border text-left transition cursor-pointer ${
+                        tempDefType === 'PJ'
+                          ? 'border-purple-600 bg-purple-50/55 text-purple-950 ring-2 ring-purple-600/10 shadow-3xs'
+                          : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
+                      }`}
+                    >
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                        tempDefType === 'PJ' ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700'
+                      }`}>
+                        <Briefcase size={16} />
+                      </div>
+                      <div>
+                        <span className="block text-xs font-bold uppercase tracking-tight">Pessoa Jurídica</span>
+                        <span className="block text-[9.5px] text-gray-400">Informações e Ficha de Pessoa Jurídica (PJ)</span>
+                      </div>
+                    </button>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Profissão</label>
-                    <input
-                      type="text"
-                      value={edrp.structuring.defendant?.pf_profissao || ''}
-                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pf_profissao: e.target.value })}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">E-mail</label>
-                    <input
-                      type="email"
-                      value={edrp.structuring.defendant?.pf_email || ''}
-                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pf_email: e.target.value })}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Telefone</label>
-                    <input
-                      type="text"
-                      value={edrp.structuring.defendant?.pf_telefone || ''}
-                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pf_telefone: e.target.value })}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-855 outline-none"
-                      placeholder="(21) 99999-9999"
-                    />
-                  </div>
-                  <div className="space-y-1 sm:col-span-2">
-                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Endereço do Réu</label>
-                    <input
-                      type="text"
-                      value={edrp.structuring.defendant?.pf_endereco || ''}
-                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pf_endereco: e.target.value })}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
-                    />
-                  </div>
+
+                  {/* Only appears if a type has been explicitly clicked */}
+                  {tempDefType ? (
+                    <div className="space-y-4 border-t border-gray-200/60 pt-4 animate-fade-in animate-duration-300">
+                      <div className="bg-white border border-gray-150 p-4 rounded-xl shadow-4xs">
+                        {tempDefType === 'PF' ? (
+                          <PFForm 
+                            data={currentDefForm}
+                            onChange={(newData) => {
+                              setCurrentDefForm(newData);
+                            }}
+                          />
+                        ) : (
+                          <PJForm 
+                            data={currentDefForm}
+                            onChange={(newData) => {
+                              setCurrentDefForm(newData);
+                            }}
+                          />
+                        )}
+                      </div>
+
+                      <div className="flex gap-3 justify-end pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAddForm(false);
+                            setTempDefType(null);
+                            setCurrentEditIndex(null);
+                          }}
+                          className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-bold text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveDefToList}
+                          className="px-4 py-2 bg-indigo-650 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition cursor-pointer shadow-3xs"
+                        >
+                          {currentEditIndex !== null ? 'Confirmar Alterações' : 'Salvar Réu na Lista'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 text-center bg-white border border-gray-150 rounded-xl">
+                      <p className="text-xs text-gray-400 font-medium">
+                        Selecione o tipo de Réu acima (Pessoa Física ou Pessoa Jurídica) para expandir e qualificar.
+                      </p>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 bg-gray-50/50 p-4 rounded-xl border border-gray-100 text-xs">
-                  <div className="space-y-1 sm:col-span-2">
-                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Razão Social / Fantasia do Réu</label>
+              )}
+
+              {/* Option B: Usar Banco de Réus Cadastrados */}
+              {showDbSelect && (
+                <div className="p-5 bg-slate-50 border border-dashed border-purple-200 rounded-2xl space-y-4 animate-fade-in animate-duration-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-purple-950">
+                      <Database size={15} />
+                      <h3 className="text-xs font-extrabold uppercase tracking-wider font-mono">
+                        Banco de Clientes / Réus Cadastrados
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowDbSelect(false)}
+                      className="text-gray-400 hover:text-gray-600 transition"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  {/* Search Bar */}
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                      <Search size={14} />
+                    </span>
                     <input
                       type="text"
-                      value={edrp.structuring.defendant?.pj_razaoSocial || ''}
-                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pj_razaoSocial: e.target.value })}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 font-semibold outline-none"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      placeholder="Pesquisar por Nome, CPF, CNPJ ou Razão Social..."
+                      className="w-full bg-white border border-gray-200 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-xl pl-9 pr-4 py-2 text-xs text-gray-800 transition outline-none"
                     />
                   </div>
-                  <div className="space-y-1 font-mono">
-                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider font-sans">CNPJ</label>
-                    <input
-                      type="text"
-                      value={edrp.structuring.defendant?.pj_cnpj || ''}
-                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pj_cnpj: e.target.value })}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
-                      placeholder="00.000.000/0001-00"
-                    />
-                  </div>
-                  <div className="space-y-1 font-mono">
-                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider font-sans">Inscrição Estadual</label>
-                    <input
-                      type="text"
-                      value={edrp.structuring.defendant?.pj_inscricaoEstadual || ''}
-                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pj_inscricaoEstadual: e.target.value })}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1 sm:col-span-2">
-                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Sócio Administrador</label>
-                    <input
-                      type="text"
-                      value={edrp.structuring.defendant?.pj_socioAdministrador || ''}
-                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pj_socioAdministrador: e.target.value })}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">E-mail corporativo</label>
-                    <input
-                      type="email"
-                      value={edrp.structuring.defendant?.pj_email || ''}
-                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pj_email: e.target.value })}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Telefone Comercial</label>
-                    <input
-                      type="text"
-                      value={edrp.structuring.defendant?.pj_telefone || ''}
-                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pj_telefone: e.target.value })}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1 sm:col-span-2">
-                    <label className="text-[9px] font-bold text-gray-500 uppercase tracking-wider">Endereço da Sede</label>
-                    <input
-                      type="text"
-                      value={edrp.structuring.defendant?.pj_endereco || ''}
-                      onChange={(e) => handleFieldChange('structuring', 'defendant', { ...edrp.structuring.defendant, pj_endereco: e.target.value })}
-                      className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs text-gray-850 outline-none"
-                    />
-                  </div>
+
+                  {/* List Results */}
+                  {dbLoading ? (
+                    <div className="flex items-center justify-center gap-2 p-6 bg-white border border-gray-100 rounded-xl text-gray-400 text-xs">
+                      <Loader2 className="animate-spin text-purple-600" size={16} />
+                      <span>Carregando o banco de dados...</span>
+                    </div>
+                  ) : (
+                    <div className="max-h-[220px] overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-xl bg-white shadow-3xs">
+                      {(() => {
+                        const filtered = dbClients.filter((c) => {
+                          const query = searchTerm.toLowerCase();
+                          const n = (c.name || '').toLowerCase();
+                          const e = (c.email || '').toLowerCase();
+                          const cpf = (c.cpf || '').toLowerCase();
+                          const cnpj = (c.cnpj || '').toLowerCase();
+                          
+                          // Also check inner fields
+                          const rawName = (c.pfDadosPessoais?.pf_nomeCompleto || c.pjDadosEmpresa?.pj_razaoSocial || '').toLowerCase();
+                          
+                          return n.includes(query) || e.includes(query) || cpf.includes(query) || cnpj.includes(query) || rawName.includes(query);
+                        });
+
+                        if (filtered.length === 0) {
+                          return (
+                            <div className="p-6 text-center text-xs text-gray-400 font-medium italic">
+                              {searchTerm ? 'Nenhum contato encontrado correspondente à pesquisa.' : 'Nenhum contato disponível no banco.'}
+                            </div>
+                          );
+                        }
+
+                        return filtered.map((c) => {
+                          const isPF = c.type === 'PF';
+                          const name = isPF 
+                            ? (c.pfDadosPessoais?.pf_nomeCompleto || c.pfData?.pf_nomeCompleto || c.name || 'Nome não qualificado')
+                            : (c.pjDadosEmpresa?.pj_razaoSocial || c.pjData?.pj_razaoSocial || c.name || 'Razão Social não qualificada');
+                          const docCode = isPF 
+                            ? (c.pfDadosPessoais?.pf_cpf || c.pfData?.pf_cpf || c.cpf || '—')
+                            : (c.pjDadosEmpresa?.pj_cnpj || c.pjData?.pj_cnpj || c.cnpj || '—');
+
+                          return (
+                            <div key={c.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 gap-2 hover:bg-slate-50/50 transition">
+                              <div className="min-w-0">
+                                <span className="block text-xs font-black text-gray-700 uppercase truncate">
+                                  {name}
+                                </span>
+                                <span className="block text-[10px] text-gray-400">
+                                  {isPF ? 'Pessoa Física (PF)' : 'Pessoa Jurídica (PJ)'} • Doc: {docCode}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleAddDefendantFromDb(c)}
+                                className="flex items-center gap-1 bg-purple-50 hover:bg-purple-600 hover:text-white text-purple-700 font-extrabold uppercase text-[9px] tracking-wide px-3 py-1.5 rounded-lg transition shrink-0 cursor-pointer text-center"
+                              >
+                                <Plus size={10} />
+                                Importar Coleta
+                              </button>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
