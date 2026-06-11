@@ -1081,22 +1081,30 @@ export default function CadastrarLeadsEtapa2() {
                     <button
                       type="button"
                       onClick={() => {
-                        setShowViabilityForm(!showViabilityForm);
+                        navigate(`/boss/cadastrar.leads/private/etapa02/${leadId}/viabilidade`);
                       }}
-                      className={`text-left p-4.5 border rounded-2xl transition duration-200 flex items-start gap-4 cursor-pointer ${
-                        showViabilityForm 
-                          ? 'border-indigo-400 bg-indigo-950/40' 
-                          : 'border-white/10 bg-white/5 hover:bg-white/[0.08]'
-                      }`}
+                      className="text-left p-4.5 border border-white/10 bg-white/5 hover:bg-white/[0.08] rounded-2xl transition duration-200 flex items-start gap-4 cursor-pointer"
                     >
                       <div className="p-3.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/25 mt-0.5 shrink-0">
                         <Scale size={18} />
                       </div>
-                      <div>
-                        <strong className="text-white text-xs block font-black">Regulamentar Análise de Viabilidade</strong>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <strong className="text-white text-xs block font-black">Regulamentar Análise de Viabilidade</strong>
+                          {lead?.analiseViabilidade?.conclusaoCategoria && (
+                            <span className="px-2 py-0.5 bg-indigo-500/20 border border-indigo-500/40 text-[9px] text-indigo-300 rounded font-black uppercase font-mono tracking-wider shrink-0">
+                              {lead.analiseViabilidade.conclusaoCategoria}
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] text-gray-400 block mt-1 leading-normal font-semibold">
                           Defina e justifique a viabilidade jurídica da tutela demandada com dados mercadológicos e técnicos.
                         </span>
+                        {lead?.analiseViabilidade?.proximaAcaoRecomendada && (
+                          <span className="text-[9px] text-gray-500 block mt-2 font-mono">
+                            Próxima Ação: {lead.analiseViabilidade.proximaAcaoRecomendada}
+                          </span>
+                        )}
                       </div>
                     </button>
 

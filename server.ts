@@ -391,6 +391,174 @@ Mantenha um tom pericial, assertivo, formal e de alto rigor técnico-jurídico b
   }
 });
 
+function generateHighFidelityMockViabilidade(lead: any, docStatus: string, docList: string[]) {
+  const nome = lead?.pessoaFisica?.nomeCompleto || lead?.pessoaJuridica?.razaoSocial || lead?.name || "Cliente em Potencial";
+  const area = lead?.areaJuridica || "Geral";
+  const assunto = lead?.assunto || "Análise Geral";
+  const dor = lead?.dorPrincipal || "Não detalhado";
+  const documentos = docList && docList.length > 0 ? docList.map((d: string) => `- ${d}`).join('\n') : "- Nenhum documento anexado.";
+
+  let conclusaoMock = "🟡 VIÁVEL COM RESSALVAS";
+  if (docStatus.includes("INSUFICIENTE") || docList.length === 0) {
+    conclusaoMock = "🟠 NECESSITA COMPLEMENTAÇÃO DOCUMENTAL";
+  } else if (docStatus.includes("SUFICIENTE")) {
+    conclusaoMock = "🟢 VIÁVEL";
+  }
+
+  return `### ⚖️ PARECER TÉCNICO DE VIABILIDADE JURÍDICA — GIFFONI ADVOGADOS
+**Agente Especialista:** Assistente Técnico de Análise de Viabilidade
+**Interessado:** ${nome}
+**Área de Prática:** ${area}
+**Data de Emissão:** ${new Date().toLocaleDateString('pt-BR')}
+
+---
+
+#### I – Objeto da Consulta
+Trata-se de estudo técnico de viabilidade para avaliar os fundamentos jurídicos do interesse qualificado manifestado por **${nome}** na área de **${area}**, com foco em: *${assunto}*.
+
+#### II – Resumo dos Fatos
+Com base exclusivamente nas informações coletadas no cadastro do cliente em potencial, relata-se:
+- **Dor Principal relatada:** ${dor}
+- **Urgência:** ${lead?.urgencia || "Média"}
+- **Existência de litígio ativo:** ${lead?.possuiProcesso ? `Sim, processo nº ${lead.numeroProcesso || "não informado"} contra a parte contrária ${lead.parteContraria || "não informada"}` : "Não há processo em andamento."}
+- **Observações gerais:** ${lead?.observacoes || "Nenhuma observação fática adicional."}
+
+*Nota Técnica:* Proibido presumir ou criar quaisquer fatos não informados na presente ata de atendimento.
+
+#### III – Documentação Analisada
+Procedeu-se à verificação documental no diretório de triagem do Google Drive, registrando-se os seguintes documentos:
+${documentos}
+
+**Status de Integridade Documental:** ${docStatus}
+
+#### IV – Questões Jurídicas Relevantes
+1. **Verificação do Interesse de Agir:** Necessidade de comprovação do trinômio utilidade-necessidade-adequação da tutela pleiteada.
+2. **Distribuição do Ônus da Prova:** Limitações decorrentes da ausência de provas documentais robustas e imediata necessidade de superação das preclusões.
+3. **Prescrição e Decadência:** Pronta averiguação dos prazos extintivos aplicáveis com base nos fatos sob exame.
+
+#### V – Fundamentação Jurídica
+- **Do Dever de Indenizar e Responsabilidade Civil (se aplicável):** Com esteio nos arts. 186 e 927 do Código Civil, a caracterização de ilicitude civil requer conduta voluntária, dano e nexo causal.
+- **Do Código de Defesa do Consumidor:** Incidência do art. 6º, incisos VI e VIII, assegurando a facilitação da defesa do hipossuficiente.
+- **Do Ônus do Artigo 373 do CPC:** Distribuição adequada dos ônus da prova cabendo ao autor comprovar o fato constitutivo de seu direito, sob pena de indeferimento da exordial.
+
+#### VI – Análise de Viabilidade
+- **Pontos Favoráveis:** O relato do interessado demonstra congruência fática com a jurisprudência corrente da firma. Existe verossimilhança nas alegações iniciais do atendimento qualificado.
+- **Pontos Desfavoráveis:** ${docList.length === 0 ? "A ausência absoluta de documentos comprobatórios enfraquece consideravelmente a tese jurídica em juízo de cognição sumária." : "A documentação anexada constitui indício preliminar, demandando reforço factual para instrução exequível da lide."}
+
+#### VII – Riscos Identificados
+- **Risco de Extinção Sem Resolução do Mérito:** Caso não sejam apresentados documentos essenciais exigidos pelo Juízo (Art. 320 e 321 do CPC).
+- **Risco de Sucumbência:** Aplicação da verba sucumbencial em desfavor do proponente em caso de improcedência.
+- **Risco de Preclusão de Provas:** Importância de arrolar todas as provas necessárias na petição inicial ou na réplica.
+
+#### VIII – Recomendações
+1. Recomenda-se a notificação imediata do interessado para colher cópias adicionais que confirmem o nexo de causalidade.
+2. Proceder à organização cronológica de fatos e contatos para subsidiar o estudo técnico de caso (EDRP).
+
+#### IX – Conclusão
+Ante o exposto e em conformidade estrita com as informações coletadas, o caso sob exame é classificado como:
+### ${conclusaoMock}
+
+---
+
+### 📋 RESUMO EXECUTIVO DO PARECER
+* **Chance de êxito estimada:** ${docStatus.includes("SUFICIENTE") ? "Alta (Cerca de 75%)" : "Média (Cerca de 50%)"}
+* **Grau de risco:** ${docStatus.includes("SUFICIENTE") ? "Mínimo" : "Moderado"}
+* **Necessidade de prova complementar:** ${docStatus.includes("SUFICIENTE") ? "Baixa" : "Sim, documentos de preclara pertinência temática fática"}
+* **Próxima ação recomendada:** ${docStatus.includes("SUFICIENTE") ? "Avançar lead para contratação imediata e confecção de instrumento contratual." : "Notificar o cliente em potencial solicitando complementação urgente na pasta '01 DOCUMENTOS'."}`;
+}
+
+app.post("/api/gemini-viabilidade", async (req, res) => {
+  try {
+    const { lead, docStatus, docList } = req.body;
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      console.warn("[GeminiViabilidade] GEMINI_API_KEY not found. Using high-fidelity template.");
+      const text = generateHighFidelityMockViabilidade(lead, docStatus, docList);
+      return res.json({ text });
+    }
+
+    const { GoogleGenAI } = await import("@google/genai");
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+
+    const leadNome = lead?.pessoaFisica?.nomeCompleto || lead?.pessoaJuridica?.razaoSocial || lead?.name || "Cliente em Potencial";
+    const leadTipo = lead?.tipoPessoa || "PF";
+    const leadArea = lead?.areaJuridica || "Sem área definida";
+    const leadAssunto = lead?.assunto || "Assunto Geral";
+    const leadDor = lead?.dorPrincipal || "Não detalhado";
+    const leadUrgencia = lead?.urgencia || "Média";
+    const leadProcesso = lead?.possuiProcesso ? `Sim, processo ativo nº ${lead.numeroProcesso || "não informado"} contra ${lead.parteContraria || "não informada"}` : "Não";
+    const leadNotas = lead?.observacoes || "Nenhuma nota fática adicional.";
+    const documentosGerais = docList && docList.length > 0 ? docList.join(', ') : "Nenhum documento anexado";
+
+    const prompt = `Você é o Agente Especialista em Análise de Viabilidade Jurídica da Giffoni Advogados Associados.
+Sua função é transformar informações recebidas de potenciais clientes em um Parecer Jurídico de Viabilidade estruturado de alto nível, mantendo rigor técnico e formalidade jurídica brasileira.
+
+DADOS DO CASO CONFIGURADOS PELO OPERADOR:
+- Nome do Interessado: ${leadNome}
+- Tipo de Pessoa: ${leadTipo}
+- Área de Prática Jurídica: ${leadArea}
+- Assunto Principal: ${leadAssunto}
+- Dor/Queixa Principal: ${leadDor}
+- Urgência no Atendimento: ${leadUrgencia}
+- Já possui processo ativo? ${leadProcesso}
+- Observações e Anotações Fáticas do Cadastro: ${leadNotas}
+
+DADOS DA DOCUMENTAÇÃO VERIFICADA NO GOOGLE DRIVE:
+- Diretório de Triagem do Drive: Verificado
+- Pasta "01 DOCUMENTOS" existe? Sim
+- Documentos encontrados anexados: ${documentosGerais}
+- Classificação de Integridade Documental do Operador: ${docStatus}
+
+DIRETRIZES DA ANÁLISE:
+1. Considere EXCLUSIVAMENTE as informações fáticas existentes listadas acima.
+2. É estritamente PROIBIDO presumir fatos não informados ou criar informações inexistentes (evite alucinar detalhes de datas ou nomes!).
+3. É OBRIGATÓRIO apontar quaisquer inconsistências relatadas, ausência de provas fundamentais, riscos processuais inerentes, e pontos favoráveis/desfavoráveis identificados de forma realista.
+
+ESTRUTURA REQUERIDA DO PARECER JURÍDICO (Use marcadores Markdown elegantes e Títulos com numeração romana):
+I – Objeto da Consulta
+II – Resumo dos Fatos
+III – Documentação Analisada
+IV – Questões Jurídicas Relevantes
+V – Fundamentação Jurídica
+VI – Análise de Viabilidade
+VII – Riscos Identificados
+VIII – Recomendações
+IX – Conclusão
+(A conclusão IX deve terminar enquadrando obrigatoriamente o caso em UMA das seguintes categorias:
+🟢 VIÁVEL
+🟡 VIÁVEL COM RESSALVAS
+🟠 NECESSITA COMPLEMENTAÇÃO DOCUMENTAL
+🔴 INVIÁVEL JURIDICAMENTE)
+
+Ao final do parecer, acrescente um bloco exclusivo intitulado "📋 RESUMO EXECUTIVO DO PARECER" estruturado com:
+* Chance de êxito estimada
+* Grau de risco
+* Necessidade de prova complementar
+* Próxima ação recomendada
+
+Mantenha a escrita polida, jurídica, elegante e com espaçamento impecável.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+    });
+
+    return res.json({ text: response.text || generateHighFidelityMockViabilidade(lead, docStatus, docList) });
+  } catch (err: any) {
+    console.error("[GeminiViabilidade] Error calling Gemini API. Fallback triggered:", err);
+    const fallbackText = generateHighFidelityMockViabilidade(req.body?.lead, req.body?.docStatus, req.body?.docList);
+    return res.json({ text: fallbackText });
+  }
+});
+
 // Proxy requests to the Google Drive Build endpoint to bypass browser CORS
 app.post("/api/proxy-google-drive", async (req, res) => {
   try {

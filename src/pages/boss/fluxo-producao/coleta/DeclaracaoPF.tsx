@@ -519,7 +519,13 @@ export default function DeclaracaoPF() {
   };
 
   return (
-    <FluxoStepLayout stepName="Coleta de Documentos" caseId={caseId}>
+    <FluxoStepLayout 
+      stepName="Coleta de Documentos" 
+      caseId={caseId}
+      coletaSubetapasStep="declaracao"
+      tipoPessoa="PF"
+      wizardState={wizardState}
+    >
       <div className="max-w-3xl mx-auto space-y-6 animate-fade-in py-4">
         
         {/* HEADER PANEL */}

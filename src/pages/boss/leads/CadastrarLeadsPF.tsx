@@ -98,6 +98,7 @@ export default function CadastrarLeadsPF() {
 
       setSuccess(`Lead Pessoa Física cadastrado com sucesso!`);
       setCreatedLeadId(newId);
+      navigate(`/boss/cadastrar.leads/private/etapa02/${newId}`);
     } catch (e: any) {
       console.error(e);
       setError('Erro ao salvar o LEAD no banco de dados. Por favor tente novamente.');

@@ -101,6 +101,7 @@ export default function CadastrarLeadsPJ() {
 
       setSuccess(`Lead Pessoa Jurídica cadastrado com sucesso!`);
       setCreatedLeadId(newId);
+      navigate(`/boss/cadastrar.leads/private/etapa02/${newId}`);
     } catch (e: any) {
       console.error(e);
       setError('Erro ao salvar o LEAD no banco de dados. Por favor tente novamente.');

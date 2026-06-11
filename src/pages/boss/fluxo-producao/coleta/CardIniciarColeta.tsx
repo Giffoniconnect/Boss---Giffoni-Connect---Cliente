@@ -9,6 +9,7 @@ export default function CardIniciarColeta() {
     fetching, 
     isPJ, 
     clientName, 
+    wizardState,
     navigate 
   } = useColetaState();
 
@@ -21,7 +22,13 @@ export default function CardIniciarColeta() {
   };
 
   return (
-    <FluxoStepLayout stepName="Coleta de Documentos" caseId={caseId}>
+    <FluxoStepLayout 
+      stepName="Coleta de Documentos" 
+      caseId={caseId}
+      coletaSubetapasStep="inicio"
+      tipoPessoa={isPJ ? 'PJ' : 'PF'}
+      wizardState={wizardState}
+    >
       <div id="card-iniciar-coleta-container" className="max-w-3xl mx-auto space-y-8 animate-fade-in py-6">
         
         {/* UPPER HEADER PANEL */}
@@ -41,7 +48,7 @@ export default function CardIniciarColeta() {
           <button
             type="button"
             onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/tipo-producao`)}
-            className="p-2.5 bg-gray-50 border border-gray-150 rounded-xl text-gray-500 hover:text-gray-950 hover:bg-gray-100 transition-all flex items-center justify-center cursor-pointer"
+            className="p-2.5 bg-gray-50 border border-gray-150 rounded-xl text-gray-550 hover:text-gray-950 hover:bg-gray-100 transition-all flex items-center justify-center cursor-pointer"
             title="Voltar para Tipo de Serviço"
           >
             <ArrowLeft size={14} />

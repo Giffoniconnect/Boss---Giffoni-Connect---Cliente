@@ -34,6 +34,21 @@ import { normalizeCpfCnpj, isValidCpf, isValidCnpj } from './utils/documentUtils
 import { generateSafeClientSlug } from './utils/slugUtils';
 import { useUnsavedChangesGuard } from './hooks/useUnsavedChangesGuard';
 
+const GoogleDriveIcon = ({ size = 16, className = "" }: { size?: number; className?: string }) => (
+  <svg
+    viewBox="0 0 87.3 78"
+    width={size}
+    height={size}
+    className={className}
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path fill="#00a354" d="M18.9 50l-14 24.2 0 3.8h4.2l53.9-1.2-11.4-26.8z" />
+    <path fill="#3b7cf6" d="M14 0l-14 24.2L11.1 50h41.7l14.4-25.8z" />
+    <path fill="#fbb000" d="M72.6 50L53.7 78H83l4.3-11.2L72.6 50z" />
+  </svg>
+);
+
 export default function EditarCadastroCliente() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
@@ -48,6 +63,7 @@ export default function EditarCadastroCliente() {
   const [copiedMotivo, setCopiedMotivo] = useState<boolean>(false);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [showLogs, setShowLogs] = useState<boolean>(false);
+  const [showMetadata, setShowMetadata] = useState<boolean>(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -957,8 +973,8 @@ export default function EditarCadastroCliente() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-1">
-                    <div className="space-y-4">
+                  <div className="space-y-4 pt-1">
+                    <div className="space-y-2">
                       <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block font-mono">
                         Status da Automação
                       </span>
@@ -967,31 +983,27 @@ export default function EditarCadastroCliente() {
                         {formData.googleDriveClientFolderStatus === 'criada' && (
                           <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 text-xs flex items-center gap-2 font-semibold">
                             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                            <span>Pasta criada com sucesso</span>
+                            <span>Pasta criada com sucesso ✅</span>
                           </div>
                         )}
 
-                         {formData.googleDriveClientFolderStatus === 'falha' && (
+                        {formData.googleDriveClientFolderStatus === 'falha' && (
                           <div className="p-4 bg-rose-50 border border-rose-250 rounded-2xl text-rose-950 text-xs flex flex-col gap-3 font-semibold shadow-xs animate-in fade-in duration-200">
                             <div className="flex items-center gap-2 text-rose-700 font-bold">
                               <AlertCircle size={15} />
-                              <span className="text-[13px] font-black uppercase tracking-tight">Falha na criação da pasta</span>
+                              <span className="text-[13px] font-black uppercase tracking-tight">Falha na criação da Pasta, consulte “ver fluxo de logs” para mais informações ❌</span>
                             </div>
-                            <p className="text-xs text-rose-800 leading-relaxed font-semibold">
-                              Automação retornou falha.
-                            </p>
                             
-                            <div className="bg-white/85 border border-rose-150 p-3 rounded-xl space-y-2">
-                              <div className="text-[10px] font-black uppercase text-rose-900 tracking-wider font-mono">
-                                Motivo:
+                            {formData.googleDriveClientFolderLogFalha && (
+                              <div className="bg-white/85 border border-rose-150 p-3 rounded-xl space-y-2">
+                                <div className="text-[10px] font-black uppercase text-rose-900 tracking-wider font-mono">
+                                  Motivo:
+                                </div>
+                                <div className="font-mono text-[11px] text-rose-955 leading-relaxed break-all select-all whitespace-pre-wrap max-h-36 overflow-y-auto">
+                                  {formData.googleDriveClientFolderLogFalha}
+                                </div>
                               </div>
-                              <div className="font-mono text-[11px] text-rose-955 leading-relaxed break-all select-all whitespace-pre-wrap max-h-36 overflow-y-auto">
-                                {formData.googleDriveClientFolderLogFalha?.trim()
-                                  ? formData.googleDriveClientFolderLogFalha
-                                  : "o sistema não recebeu detalhes do erro. Verifique os logs do Build Google Drive."
-                                }
-                              </div>
-                            </div>
+                            )}
 
                             {formData.googleDriveClientFolderUpdatedAt && (
                               <div className="flex items-center gap-1.5 text-[10px] text-rose-700 font-bold font-mono">
@@ -1003,24 +1015,12 @@ export default function EditarCadastroCliente() {
                             <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-rose-100">
                               <button
                                 type="button"
-                                onClick={() => copyToClipboard(formData.googleDriveClientFolderLogFalha || "o sistema não recebeu detalhes do erro. Verifique os logs do Build Google Drive.")}
+                                onClick={() => copyToClipboard(formData.googleDriveClientFolderLogFalha || "o sistema não recebeu detalhes do erro.")}
                                 className="px-3 py-2 bg-white hover:bg-rose-100 border border-rose-200 text-rose-900 font-black uppercase tracking-wider rounded-lg text-[9px] transition flex items-center gap-1.5 cursor-pointer shadow-3xs"
                               >
                                 <Copy size={11} />
                                 <span>{copiedMotivo ? 'Copiado!' : 'Copiar motivo da falha'}</span>
                               </button>
-
-                              {connectorBuildUrl && (
-                                <a
-                                  href={`${connectorBuildUrl}${connectorBuildUrl.includes('showPreview=true') ? '' : '?showPreview=true&showAssistant=true'}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="px-3 py-2 bg-rose-600 hover:bg-rose-700 border border-rose-700 text-white font-black uppercase tracking-wider rounded-lg text-[9px] transition flex items-center gap-1.5 cursor-pointer shadow-3xs"
-                                >
-                                  <ExternalLink size={11} />
-                                  <span>Abrir Build Google Drive</span>
-                                </a>
-                              )}
                             </div>
                           </div>
                         )}
@@ -1056,57 +1056,88 @@ export default function EditarCadastroCliente() {
                             </div>
                           </div>
                         )}
-
-                        <button
-                          type="button"
-                          disabled={isCreatingFolder || formData.googleDriveClientFolderStatus === 'criada'}
-                          onClick={handleCreateDriveFolder}
-                          className={`w-full inline-flex items-center justify-center gap-2 font-extrabold px-4 py-2.5 rounded-xl transition-all text-xs cursor-pointer shadow-xs ${
-                            isCreatingFolder || formData.googleDriveClientFolderStatus === 'criada'
-                              ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
-                              : 'bg-indigo-600 hover:bg-indigo-750 text-white'
-                          }`}
-                        >
-                          {isCreatingFolder ? (
-                            <>
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              <span>Sincronizando com Google Drive...</span>
-                            </>
-                          ) : formData.googleDriveClientFolderStatus === 'criada' ? (
-                            <span>Pasta do Cliente</span>
-                          ) : (
-                            <span>Automação Google Drive — Pasta do Cliente</span>
-                          )}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setShowLogs(!showLogs)}
-                          className={`w-full inline-flex items-center justify-center gap-2 font-extrabold px-4 py-2.5 rounded-xl transition-all text-xs cursor-pointer shadow-xs border ${
-                            showLogs 
-                              ? 'bg-indigo-50 border-indigo-200 text-indigo-700' 
-                              : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-700'
-                          }`}
-                        >
-                          <Activity size={14} className={showLogs ? "text-indigo-600 animate-pulse" : "text-gray-400"} />
-                          <span>Ver Fluxo de logs</span>
-                        </button>
                       </div>
                     </div>
 
-                    <div className="space-y-4">
-                      <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block font-mono">
-                        Metadados da Pasta
-                      </span>
+                    <div className="flex flex-col sm:flex-row flex-wrap items-center gap-2.5 pt-2">
+                      <button
+                        type="button"
+                        disabled={isCreatingFolder || formData.googleDriveClientFolderStatus === 'criada'}
+                        onClick={handleCreateDriveFolder}
+                        className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 font-extrabold px-4 py-2.5 rounded-xl transition-all text-xs cursor-pointer shadow-xs ${
+                          isCreatingFolder || formData.googleDriveClientFolderStatus === 'criada'
+                            ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                            : 'bg-indigo-600 hover:bg-indigo-750 text-white'
+                        }`}
+                      >
+                        {isCreatingFolder ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Sincronizando com Google Drive...</span>
+                          </>
+                        ) : formData.googleDriveClientFolderStatus === 'criada' ? (
+                          <span>Pasta do Cliente</span>
+                        ) : (
+                          <span>Automação Google Drive — Pasta do Cliente</span>
+                        )}
+                      </button>
 
-                      <div className="space-y-2.5">
+                      {formData.googleDriveClientFolderUrl && (
+                        <a
+                          href={formData.googleDriveClientFolderUrl}
+                          target="_blank"
+                          referrerPolicy="no-referrer"
+                          rel="noopener noreferrer"
+                          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 text-emerald-800 font-extrabold rounded-xl text-xs transition-colors cursor-pointer"
+                        >
+                          <GoogleDriveIcon size={14} className="text-emerald-600" />
+                          <span>Abrir pasta no Google Drive</span>
+                        </a>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setShowMetadata(!showMetadata)}
+                        className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 font-extrabold px-4 py-2.5 rounded-xl transition-all text-xs cursor-pointer shadow-xs border ${
+                          showMetadata 
+                            ? 'bg-amber-50 border-amber-200 text-amber-800' 
+                            : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-700'
+                        }`}
+                      >
+                        <span>Ver metadados da pasta</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowLogs(!showLogs)}
+                        className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 font-extrabold px-4 py-2.5 rounded-xl transition-all text-xs cursor-pointer shadow-xs border ${
+                          showLogs 
+                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700' 
+                            : 'bg-white border-gray-200 hover:bg-gray-50 text-gray-700'
+                        }`}
+                      >
+                        <Activity size={14} className={showLogs ? "text-indigo-600 animate-pulse" : "text-gray-400"} />
+                        <span>Ver Fluxo de logs</span>
+                      </button>
+                    </div>
+
+                    {showMetadata && (
+                      <div className="p-4 bg-white border border-gray-150 rounded-2xl space-y-3 shadow-3xs animate-in slide-in-from-top-1 duration-200">
                         <div className="space-y-1">
-                          <label className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block">
+                          <label className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block font-mono">
                             URL da Pasta (googleDriveClientFolderUrl)
                           </label>
                           {formData.googleDriveClientFolderUrl ? (
-                            <div className="p-2.5 bg-gray-50 border border-gray-150 rounded-xl text-xs font-mono text-gray-800 break-all select-all animate-in fade-in duration-200">
-                              {formData.googleDriveClientFolderUrl}
+                            <div className="p-2.5 bg-gray-50 border border-gray-150 rounded-xl text-xs font-mono text-gray-800 break-all select-all flex items-center justify-between gap-2">
+                              <span className="truncate flex-1">{formData.googleDriveClientFolderUrl}</span>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(formData.googleDriveClientFolderUrl)}
+                                className="p-1 hover:bg-gray-150 rounded text-gray-500 hover:text-gray-900 transition shrink-0"
+                                title="Copiar URL"
+                              >
+                                <Copy size={13} />
+                              </button>
                             </div>
                           ) : (
                             <div className="p-2.5 bg-gray-50/50 border border-gray-100 border-dashed rounded-xl text-xs text-gray-400 italic">
@@ -1116,12 +1147,20 @@ export default function EditarCadastroCliente() {
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block">
+                          <label className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block font-mono">
                             ID da Pasta (googleDriveClientFolderId)
                           </label>
                           {formData.googleDriveClientFolderId ? (
-                            <div className="p-2.5 bg-gray-50 border border-gray-150 rounded-xl text-xs font-mono text-gray-800 break-all select-all animate-in fade-in duration-200">
-                              {formData.googleDriveClientFolderId}
+                            <div className="p-2.5 bg-gray-50 border border-gray-150 rounded-xl text-xs font-mono text-gray-800 break-all select-all flex items-center justify-between gap-2">
+                              <span className="truncate flex-1">{formData.googleDriveClientFolderId}</span>
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(formData.googleDriveClientFolderId)}
+                                className="p-1 hover:bg-gray-150 rounded text-gray-500 hover:text-gray-900 transition shrink-0"
+                                title="Copiar ID"
+                              >
+                                <Copy size={13} />
+                              </button>
                             </div>
                           ) : (
                             <div className="p-2.5 bg-gray-50/50 border border-gray-100 border-dashed rounded-xl text-xs text-gray-400 italic">
@@ -1129,21 +1168,8 @@ export default function EditarCadastroCliente() {
                             </div>
                           )}
                         </div>
-
-                        {formData.googleDriveClientFolderUrl && (
-                          <a
-                            href={formData.googleDriveClientFolderUrl}
-                            target="_blank"
-                            referrerPolicy="no-referrer"
-                            rel="noopener noreferrer"
-                            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-750 font-extrabold rounded-xl text-xs transition-colors cursor-pointer animate-in slide-in-from-top-1 duration-200"
-                          >
-                            <ExternalLink size={13} />
-                            <span>Abrir pasta no Google Drive</span>
-                          </a>
-                        )}
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
 

@@ -944,7 +944,13 @@ export default function ProcuracaoPF() {
   };
 
   return (
-    <FluxoStepLayout stepName="Coleta de Documentos" caseId={caseId}>
+    <FluxoStepLayout 
+      stepName="Coleta de Documentos" 
+      caseId={caseId}
+      coletaSubetapasStep="procuracao"
+      tipoPessoa="PF"
+      wizardState={wizardState}
+    >
       <div className="max-w-3xl mx-auto space-y-6 animate-fade-in py-4">
         
         {/* HEADER PANEL */}
@@ -963,7 +969,7 @@ export default function ProcuracaoPF() {
           <button
             type="button"
             onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/card-iniciar-coleta-obrigatoria`)}
-            className="p-2 bg-gray-50 border border-gray-150 rounded-xl text-gray-500 hover:text-gray-950 hover:bg-gray-100 transition-all flex items-center justify-center cursor-pointer font-bold text-xs"
+            className="p-2 bg-gray-50 border border-gray-150 rounded-xl text-gray-550 hover:text-gray-950 hover:bg-gray-100 transition-all flex items-center justify-center cursor-pointer font-bold text-xs"
           >
             <ArrowLeft size={13} className="mr-1" /> Voltar ao Card
           </button>
