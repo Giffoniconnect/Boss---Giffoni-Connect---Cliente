@@ -28,11 +28,125 @@ import {
   Trash2,
   Edit3,
   X,
-  UserPlus
+  UserPlus,
+  Mail,
+  Phone,
+  Share2,
+  RefreshCw
 } from 'lucide-react';
 import { flowRoutes } from './utils/flowRoutes';
 import { PFForm } from '../../../modules/boss/components/forms/PFForm';
 import { PJForm } from '../../../modules/boss/components/forms/PJForm';
+import { buildProcuracaoPfPlaceholders } from '../../../lib/documents/placeholderBuilders';
+
+export function generateAuthorQualification(clientData: any, caseData?: any): string {
+  if (!clientData) return '';
+  if (clientData.type === 'PJ') {
+    const getVal = (arr: any[]) => {
+      for (const val of arr) {
+        if (val !== undefined && val !== null && String(val).trim() !== '') {
+          return String(val).trim();
+        }
+      }
+      return '—';
+    };
+
+    const razaoSocial = getVal([
+      clientData.pjDadosEmpresa?.pj_razaoSocial,
+      clientData.pjData?.pj_razaoSocial,
+      clientData.name
+    ]).toUpperCase();
+
+    const cnpj = getVal([
+      clientData.pjDadosEmpresa?.pj_cnpj,
+      clientData.pjData?.pj_cnpj,
+      clientData.cnpj
+    ]);
+
+    const socio = getVal([
+      clientData.pjDadosEmpresa?.pj_socioAdministrador,
+      clientData.pjData?.pj_socioAdministrador,
+      clientData.socioAdministrador
+    ]);
+
+    const endereco = getVal([
+      clientData.pjEnderecoEmpresa?.pj_enderecoEmpresa,
+      clientData.pjEndereco?.pj_endereco,
+      clientData.endereco
+    ]);
+
+    const numero = getVal([
+      clientData.pjEnderecoEmpresa?.pj_numeroEmpresa,
+      clientData.pjEndereco?.pj_numero,
+    ]);
+
+    const complemento = getVal([
+      clientData.pjEnderecoEmpresa?.pj_complementoEmpresa,
+      clientData.pjEndereco?.pj_complemento,
+    ]);
+
+    const bairro = getVal([
+      clientData.pjEnderecoEmpresa?.pj_bairroEmpresa,
+      clientData.pjEndereco?.pj_bairro,
+    ]);
+
+    const cidade = getVal([
+      clientData.pjEnderecoEmpresa?.pj_cidadeEmpresa,
+      clientData.pjEndereco?.pj_cidade,
+    ]);
+
+    const estado = getVal([
+      clientData.pjEnderecoEmpresa?.pj_estadoEmpresa,
+      clientData.pjEndereco?.pj_estado,
+    ]);
+
+    const cep = getVal([
+      clientData.pjEnderecoEmpresa?.pj_cepEmpresa,
+      clientData.pjEndereco?.pj_cep,
+    ]);
+
+    const telefone = getVal([
+      clientData.pjContatoEmpresa?.pj_telefoneEmpresa,
+      clientData.pjContato?.pj_telefone,
+      clientData.phone,
+      clientData.telefone
+    ]);
+
+    const email = getVal([
+      clientData.pjContatoEmpresa?.pj_emailEmpresa,
+      clientData.pjContato?.pj_email,
+      clientData.email
+    ]);
+
+    const complText = complemento && complemento !== '—' ? `, ${complemento}` : '';
+
+    return `${razaoSocial}, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº ${cnpj}, com sede na ${endereco}, nº ${numero}${complText}, Bairro ${bairro}, ${cidade}/${estado}, CEP ${cep}, neste ato representada por seu Sócio Administrador ${socio}, telefone ${telefone}, e-mail ${email}.`;
+  } else {
+    // Pessoa Física
+    const pls = buildProcuracaoPfPlaceholders(clientData, caseData);
+    
+    const nome = (pls["{{OUTORGANTE_NOME}}"] || '—').toUpperCase();
+    const nacionalidade = pls["{{OUTORGANTE_NACIONALIDADE}}"] || 'Brasileira';
+    const estadoCivil = pls["{{OUTORGANTE_ESTADO_CIVIL}}"] || 'Solteiro(a)';
+    const profissao = pls["{{OUTORGANTE_PROFISSAO}}"] || '—';
+    const rg = pls["{{OUTORGANTE_RG}}"] || '—';
+    const cpf = pls["{{OUTORGANTE_CPF}}"] || '—';
+    const endereco = pls["{{OUTORGANTE_ENDERECO}}"] || '—';
+    const numero = pls["{{OUTORGANTE_NUMERO}}"] || '—';
+    const complemento = pls["{{OUTORGANTE_COMPLEMENTO}}"] || '';
+    const bairro = pls["{{OUTORGANTE_BAIRRO}}"] || '—';
+    const cidade = pls["{{OUTORGANTE_CIDADE}}"] || '—';
+    const estado = pls["{{OUTORGANTE_ESTADO}}"] || '—';
+    const cep = pls["{{OUTORGANTE_CEP}}"] || '—';
+    const telefone = pls["{{OUTORGANTE_TELEFONE}}"] || '—';
+    const whatsapp = pls["{{OUTORGANTE_WHATSAPP}}"] || '—';
+    const email = pls["{{OUTORGANTE_EMAIL}}"] || '—';
+
+    const complText = complemento ? `, ${complemento}` : '';
+
+    return `${nome}, ${nacionalidade}, ${estadoCivil}, ${profissao}, portador(a) do RG nº ${rg}, inscrito(a) no CPF sob o nº ${cpf}, residente e domiciliado(a) na ${endereco}, nº ${numero}${complText}, Bairro ${bairro}, ${cidade}/${estado}, CEP ${cep}, telefone ${telefone}, WhatsApp ${whatsapp}, e-mail ${email}.`;
+  }
+}
 
 // Helper functions for mapping flat <-> nested structures inside edrp.structuring.defendant
 function getNormalizedDefendant(rawDef: any): any {
@@ -340,6 +454,35 @@ export default function EDRPFluxo() {
   const [currentEditIndex, setCurrentEditIndex] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
+  const getFieldVal = (keys: string[]): string => {
+    if (!client) return '';
+    for (const key of keys) {
+      const val = client?.[key] ?? 
+                  client?.pfDadosPessoais?.[key] ?? 
+                  client?.pfData?.[key] ?? 
+                  client?.portalMirror?.[key] ?? 
+                  client?.portalMirror?.pfDadosPessoais?.[key] ??
+                  client?.portalMirror?.pfContato?.[key] ??
+                  client?.portalMirror?.pfEndereco?.[key] ??
+                  client?.pjDadosEmpresa?.[key] ??
+                  client?.pjData?.[key] ??
+                  client?.portalMirror?.pjDadosEmpresa?.[key] ??
+                  client?.portalMirror?.pjContatoEmpresa?.[key] ??
+                  client?.portalMirror?.pjEnderecoEmpresa?.[key];
+      if (val !== undefined && val !== null && String(val).trim() !== '') {
+        return String(val).trim();
+      }
+    }
+    return '';
+  };
+
+  const handleUpdateQualificationFromRegistry = () => {
+    if (!client) return;
+    const generatedQual = generateAuthorQualification(client, caseObj);
+    handleFieldChange('structuring', 'parties', generatedQual);
+    setSuccess('Qualificação detalhada atualizada com sucesso a partir do cadastro do cliente.');
+  };
+
   // Load database of registered clients as potential defendants
   useEffect(() => {
     async function fetchDbClients() {
@@ -388,10 +531,12 @@ export default function EDRPFluxo() {
         setCaseObj(caseData);
 
         // Fetch client
+        let loadedClient: any = null;
         if (caseData.clientId) {
           const clientSnap = await getDoc(doc(db, 'clients', caseData.clientId));
           if (clientSnap.exists()) {
-            setClient(clientSnap.data());
+            loadedClient = clientSnap.data();
+            setClient(loadedClient);
           }
         }
 
@@ -420,6 +565,10 @@ export default function EDRPFluxo() {
           edrpStatus: rawEdrp.edrpStatus || DEFAULT_EDRP.edrpStatus,
           updatedAt: rawEdrp.updatedAt || DEFAULT_EDRP.updatedAt
         };
+
+        if (loadedClient && (!merged.structuring.parties || merged.structuring.parties.trim() === '')) {
+          merged.structuring.parties = generateAuthorQualification(loadedClient, caseData);
+        }
 
         setEdrp(merged);
       } catch (err: any) {
@@ -1022,13 +1171,18 @@ export default function EDRPFluxo() {
             </div>
 
             {/* Card 3 - Parte(s) autora */}
-            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-4 shadow-3xs hover:border-gray-300 transition-all">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
-                  Card 3
-                </span>
-                <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
-                  Parte(s) autora
+            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-6 shadow-3xs hover:border-gray-300 transition-all">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                    Card 3
+                  </span>
+                  <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
+                    Parte(s) autora (Dados do Cadastro)
+                  </span>
+                </div>
+                <span className="text-[10px] bg-slate-100 text-slate-600 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wide">
+                  Etapa 01
                 </span>
               </div>
 
@@ -1038,59 +1192,368 @@ export default function EDRPFluxo() {
                   <span>Dados extraídos automaticamente</span>
                 </div>
                 <p className="text-[10px] text-amber-800 leading-normal font-semibold">
-                  Estes dados estão sendo puxados automaticamente da etapa 1 do cadastro.
+                  Estas informações refletem os dados cadastrados na Etapa 01 do fluxo de produção.
                 </p>
               </div>
 
               {client ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50/50 p-3.5 rounded-xl border border-gray-100 text-[11px] leading-tight">
-                  <div>
-                    <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Cliente</span>
-                    <span className="font-extrabold text-gray-800">
-                      {client.type === 'PF' 
-                        ? (client.pfDadosPessoais?.pf_nomeCompleto || client.pfData?.pf_nomeCompleto || client.name || 'Nome Completo Ausente')
-                        : (client.pjDadosEmpresa?.pj_razaoSocial || client.pjData?.pj_razaoSocial || client.name || 'Razão Social Ausente')}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Tipo / Documento</span>
-                    <span className="font-bold text-gray-750 font-mono">
-                      {client.type || 'PF'} - {client.type === 'PF' 
-                        ? (client.pfDadosPessoais?.pf_cpf || client.pfData?.pf_cpf || '—') 
-                        : (client.pjDadosEmpresa?.pj_cnpj || client.pjData?.pj_cnpj || '—')}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">E-mail</span>
-                    <span className="font-semibold text-gray-700">{client.email || '—'}</span>
-                  </div>
-                  {client.type === 'PF' ? (
-                    <div>
-                      <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Profissão / Telefone</span>
-                      <span className="font-semibold text-gray-700">
-                        {client.pfDadosPessoais?.pf_profissao || '—'} | {client.pfDadosPessoais?.pf_telefone || client.phone || '—'}
-                      </span>
+                <div className="space-y-4">
+                  {client.type === 'PJ' ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* BLOCO DADOS DA EMPRESA */}
+                      <div className="border border-slate-150 rounded-xl bg-white overflow-hidden shadow-4xs">
+                        <div className="bg-slate-50 border-b border-slate-150 p-3 flex items-center gap-2">
+                          <Briefcase size={14} className="text-purple-600 shrink-0" />
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-700">Dados da Empresa</span>
+                        </div>
+                        <div className="p-3.5 space-y-3.5">
+                          <div className="grid grid-cols-2 gap-3.5">
+                            <div className="col-span-2">
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Razão Social</span>
+                              <span className="text-xs font-extrabold text-gray-800 uppercase block break-all">
+                                {getFieldVal(['pj_razaoSocial', 'razaoSocial', 'name']) || '—'}
+                              </span>
+                            </div>
+                            <div className="col-span-2">
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Nome Fantasia</span>
+                              <span className="text-xs font-extrabold text-gray-700 uppercase block break-all">
+                                {getFieldVal(['pj_nomeFantasia', 'nomeFantasia']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">CNPJ</span>
+                              <span className="text-xs font-bold text-gray-800 font-mono">
+                                {getFieldVal(['pj_cnpj', 'cnpj']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Sócio Administrador</span>
+                              <span className="text-xs font-bold text-gray-800 uppercase block truncate">
+                                {getFieldVal(['pj_socioAdministrador', 'socioAdministrador']) || '—'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* BLOCO CONTATO DA EMPRESA */}
+                      <div className="border border-slate-150 rounded-xl bg-white overflow-hidden shadow-4xs">
+                        <div className="bg-slate-50 border-b border-slate-150 p-3 flex items-center gap-2">
+                          <Phone size={14} className="text-purple-600 shrink-0" />
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-700">Contato Comercial</span>
+                        </div>
+                        <div className="p-3.5 space-y-3.5">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                            <div className="col-span-1 sm:col-span-2">
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">E-mail Corporativo</span>
+                              <span className="text-xs font-bold text-gray-800 block break-all">
+                                {getFieldVal(['pj_emailEmpresa', 'pj_email', 'email']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Telefone Comercial</span>
+                              <span className="text-xs font-bold text-gray-800 font-mono block">
+                                {getFieldVal(['pj_telefoneEmpresa', 'pj_telefone', 'phone', 'telefone']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">WhatsApp Corporativo</span>
+                              <span className="text-xs font-bold text-gray-800 font-mono block">
+                                {getFieldVal(['pj_whatsappEmpresa', 'pj_whatsapp', 'whatsapp']) || '—'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* BLOCO ENDEREÇO DA EMPRESA */}
+                      <div className="border border-slate-150 rounded-xl bg-white overflow-hidden shadow-4xs md:col-span-2">
+                        <div className="bg-slate-50 border-b border-slate-150 p-3 flex items-center gap-2">
+                          <MapPin size={14} className="text-purple-600 shrink-0" />
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-700">Endereço da Sede</span>
+                        </div>
+                        <div className="p-3.5">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3.5">
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">CEP</span>
+                              <span className="text-xs font-bold text-gray-800 font-mono">
+                                {getFieldVal(['pj_cepEmpresa', 'cepEmpresa', 'pj_cep', 'cep']) || '—'}
+                              </span>
+                            </div>
+                            <div className="col-span-2 sm:col-span-3">
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Endereço</span>
+                              <span className="text-xs font-bold text-gray-800 uppercase block truncate">
+                                {getFieldVal(['pj_enderecoEmpresa', 'enderecoEmpresa', 'pj_endereco', 'endereco']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Número</span>
+                              <span className="text-xs font-bold text-gray-800 font-mono">
+                                {getFieldVal(['pj_numeroEmpresa', 'numeroEmpresa', 'pj_numero', 'numero']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Complemento</span>
+                              <span className="text-xs font-bold text-gray-800 block truncate">
+                                {getFieldVal(['pj_complementoEmpresa', 'complementoEmpresa', 'pj_complemento', 'complemento']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Bairro</span>
+                              <span className="text-xs font-bold text-gray-800 uppercase block truncate">
+                                {getFieldVal(['pj_bairroEmpresa', 'bairroEmpresa', 'pj_bairro', 'bairro']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Cidade/UF</span>
+                              <span className="text-xs font-bold text-gray-800 uppercase block truncate">
+                                {getFieldVal(['pj_cidadeEmpresa', 'cidadeEmpresa', 'pj_cidade', 'cidade']) || '—'} / {getFieldVal(['pj_estadoEmpresa', 'estadoEmpresa', 'pj_estado', 'estado', 'uf']) || '—'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* BLOCO REDES SOCIAIS DA EMPRESA */}
+                      <div className="border border-slate-150 rounded-xl bg-white overflow-hidden shadow-4xs md:col-span-2">
+                        <div className="bg-slate-50 border-b border-slate-150 p-3 flex items-center gap-2">
+                          <Share2 size={14} className="text-purple-600 shrink-0" />
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-700">Redes Sociais da Empresa</span>
+                        </div>
+                        <div className="p-3.5">
+                          <div className="grid grid-cols-3 gap-3.5">
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Instagram</span>
+                              <span className="text-xs font-bold text-gray-800 block truncate">
+                                {getFieldVal(['pj_instagramEmpresa', 'pj_instagram', 'instagram']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Facebook</span>
+                              <span className="text-xs font-bold text-gray-800 block truncate">
+                                {getFieldVal(['pj_facebookEmpresa', 'pj_facebook', 'facebook']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">TikTok</span>
+                              <span className="text-xs font-bold text-gray-800 block truncate">
+                                {getFieldVal(['pj_tiktok_Empresa', 'pj_tiktokEmpresa', 'tiktok']) || '—'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ) : (
-                    <div>
-                      <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Sócio Adm.</span>
-                      <span className="font-semibold text-gray-700">{client.pjDadosEmpresa?.pj_socioAdministrador || '—'}</span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* BLOCO DADOS PESSOAIS DO AUTOR */}
+                      <div className="border border-slate-150 rounded-xl bg-white overflow-hidden shadow-4xs">
+                        <div className="bg-slate-50 border-b border-slate-150 p-3 flex items-center gap-2">
+                          <User size={14} className="text-blue-600 shrink-0" />
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-700">Dados Pessoais do Autor</span>
+                        </div>
+                        <div className="p-3.5">
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5">
+                            <div className="col-span-2 sm:col-span-3">
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Nome Completo</span>
+                              <span className="text-xs font-extrabold text-blue-950 uppercase block break-all">
+                                {getFieldVal(['pf_nomeCompleto', 'nome', 'name']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">CPF</span>
+                              <span className="text-xs font-bold text-gray-800 font-mono block">
+                                {getFieldVal(['pf_cpf', 'cpf']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">RG</span>
+                              <span className="text-xs font-bold text-gray-800 font-mono block">
+                                {getFieldVal(['pf_rg']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Nacionalidade</span>
+                              <span className="text-xs font-bold text-gray-800 block truncate">
+                                {getFieldVal(['pf_nacionalidade']) || 'Brasileira'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Estado Civil</span>
+                              <span className="text-xs font-bold text-gray-800 block truncate">
+                                {getFieldVal(['pf_estadoCivil']) || 'Solteiro(a)'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Profissão</span>
+                              <span className="text-xs font-bold text-gray-800 block truncate">
+                                {getFieldVal(['pf_profissao']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Data Nascimento</span>
+                              <span className="text-xs font-bold text-gray-800 font-mono block">
+                                {getFieldVal(['pf_dataNascimento', 'pf_nascimento', 'dataNascimento']) || '—'}
+                              </span>
+                            </div>
+                            <div className="col-span-2 sm:col-span-3 grid grid-cols-2 gap-2 mt-1 border-t border-gray-100 pt-2">
+                              <div>
+                                <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Nome do Pai</span>
+                                <span className="text-xxs font-semibold text-gray-750 block uppercase break-words">
+                                  {getFieldVal(['pf_nomePai', 'nomePai']) || '—'}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Nome da Mãe</span>
+                                <span className="text-xxs font-semibold text-gray-750 block uppercase break-words">
+                                  {getFieldVal(['pf_nomeMae', 'nomeMae']) || '—'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* BLOCO CONTATO DO AUTOR */}
+                      <div className="border border-slate-150 rounded-xl bg-white overflow-hidden shadow-4xs">
+                        <div className="bg-slate-50 border-b border-slate-150 p-3 flex items-center gap-2">
+                          <Phone size={14} className="text-blue-600 shrink-0" />
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-700">Contato & Comunicação</span>
+                        </div>
+                        <div className="p-3.5 space-y-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                            <div className="col-span-1 sm:col-span-2">
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">E-mail Particular</span>
+                              <span className="text-xs font-bold text-gray-800 block break-all">
+                                {getFieldVal(['pf_email', 'email']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Telefone Residencial</span>
+                              <span className="text-xs font-bold text-gray-800 font-mono block">
+                                {getFieldVal(['pf_telefone', 'telefone', 'phone']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">WhatsApp Cadastrado</span>
+                              <span className="text-xs font-bold text-gray-800 font-mono block">
+                                {getFieldVal(['pf_whatsapp', 'whatsapp']) || '—'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* BLOCO ENDEREÇO DO AUTOR */}
+                      <div className="border border-slate-150 rounded-xl bg-white overflow-hidden shadow-4xs md:col-span-2">
+                        <div className="bg-slate-50 border-b border-slate-150 p-3 flex items-center gap-2">
+                          <MapPin size={14} className="text-blue-600 shrink-0" />
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-700">Domicílio & Residência</span>
+                        </div>
+                        <div className="p-3.5">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3.5">
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">CEP</span>
+                              <span className="text-xs font-bold text-gray-800 font-mono">
+                                {getFieldVal(['pf_cep', 'cep']) || '—'}
+                              </span>
+                            </div>
+                            <div className="col-span-2 sm:col-span-3">
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Rua / Logradouro</span>
+                              <span className="text-xs font-bold text-gray-800 uppercase block truncate">
+                                {getFieldVal(['pf_endereco', 'endereco', 'rua']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Número</span>
+                              <span className="text-xs font-bold text-gray-800 font-mono">
+                                {getFieldVal(['pf_numero', 'numero']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Complemento</span>
+                              <span className="text-xs font-bold text-gray-800 block truncate">
+                                {getFieldVal(['pf_complemento', 'complemento']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Bairro</span>
+                              <span className="text-xs font-bold text-gray-800 uppercase block truncate">
+                                {getFieldVal(['pf_bairro', 'bairro']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Cidade/UF</span>
+                              <span className="text-xs font-bold text-gray-800 uppercase block truncate">
+                                {getFieldVal(['pf_cidade', 'cidade']) || '—'} / {getFieldVal(['pf_estado', 'estado', 'uf']) || '—'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* BLOCO REDES SOCIAIS DO AUTOR */}
+                      <div className="border border-slate-150 rounded-xl bg-white overflow-hidden shadow-4xs md:col-span-2">
+                        <div className="bg-slate-50 border-b border-slate-150 p-3 flex items-center gap-2">
+                          <Share2 size={14} className="text-blue-600 shrink-0" />
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-700">Identidade em Mídias Sociais</span>
+                        </div>
+                        <div className="p-3.5">
+                          <div className="grid grid-cols-3 gap-3.5">
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Instagram</span>
+                              <span className="text-xs font-bold text-gray-800 block truncate">
+                                {getFieldVal(['pf_instagram', 'instagram']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">Facebook</span>
+                              <span className="text-xs font-bold text-gray-800 block truncate">
+                                {getFieldVal(['pf_facebook', 'facebook']) || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="block text-[9px] text-gray-400 font-bold uppercase tracking-wider">TikTok</span>
+                              <span className="text-xs font-bold text-gray-800 block truncate">
+                                {getFieldVal(['pf_tiktok', 'tiktok']) || '—'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="p-3 text-center text-gray-400 text-[11px] font-medium italic">
-                  Aguardando faturamento de dados do cliente...
+                <div className="p-4 text-center text-gray-400 text-xs font-medium italic border border-dashed border-gray-200 rounded-xl bg-gray-50/50">
+                  Aguardando faturamento de dados do cliente autor...
                 </div>
               )}
 
-              <div className="space-y-1">
-                <label className="block text-[9.5px] font-bold text-gray-400 uppercase">Qualificação Detalhada Autora</label>
+              <div className="space-y-3 pt-3 border-t border-gray-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <label className="block text-[9.5px] font-black text-gray-400 uppercase tracking-wider">
+                    Qualificação Detalhada Autora
+                  </label>
+                  
+                  {client && (
+                    <button
+                      type="button"
+                      onClick={handleUpdateQualificationFromRegistry}
+                      className="flex items-center gap-1 text-[10px] font-bold uppercase transition bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2.5 py-1.5 rounded-lg border border-indigo-100 cursor-pointer self-start"
+                      title="Substitui a qualificação atual com os dados extraídos do cadastro"
+                    >
+                      <RefreshCw size={11} className="mr-0.5 animate-duration-500" />
+                      Atualizar qualificação com dados do cadastro
+                    </button>
+                  )}
+                </div>
+                
                 <textarea
-                  value={edrp.structuring.parties}
+                  value={edrp.structuring.parties || ''}
                   onChange={(e) => handleFieldChange('structuring', 'parties', e.target.value)}
                   placeholder="Incorpore co-autores, herdeiros ou especificações acessórias..."
-                  className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2 text-xs text-gray-800 transition-all font-medium min-h-[50px] outline-none"
+                  className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2.5 text-xs text-gray-800 transition-all font-medium min-h-[90px] outline-none shadow-4xs"
                 />
               </div>
             </div>
