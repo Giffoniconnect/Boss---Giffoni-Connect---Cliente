@@ -172,6 +172,21 @@ interface Checklist5W2HState {
   comoResolverObs: string;
 }
 
+const GoogleDriveIcon = ({ size = 16, className = "" }: { size?: number; className?: string }) => (
+  <svg
+    viewBox="0 0 87.3 78"
+    width={size}
+    height={size}
+    className={className}
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path fill="#00a354" d="M18.9 50l-14 24.2 0 3.8h4.2l53.9-1.2-11.4-26.8z" />
+    <path fill="#3b7cf6" d="M14 0l-14 24.2L11.1 50h41.7l14.4-25.8z" />
+    <path fill="#fbb000" d="M72.6 50L53.7 78H83l4.3-11.2L72.6 50z" />
+  </svg>
+);
+
 export default function DadosCaso() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
@@ -200,6 +215,12 @@ export default function DadosCaso() {
   const [primeiroAtendimentoLogFalha, setPrimeiroAtendimentoLogFalha] = useState('');
   const [forceNewVersion, setForceNewVersion] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Integration config modal/balloon states
+  const [showIntegrationConfig, setShowIntegrationConfig] = useState<boolean>(false);
+  const [integrationTemplateId, setIntegrationTemplateId] = useState<string>('1ODrPbz7qtyeiTYnjzSdv9YQ3NqdafYoub6-KpkmTQTo');
+  const [integrationFolderId, setIntegrationFolderId] = useState<string>('');
+  const [integrationFolderUrl, setIntegrationFolderUrl] = useState<string>('');
   
   // Backward preservation memory
   const [basesFaticas, setBasesFaticas] = useState('');
@@ -394,6 +415,24 @@ export default function DadosCaso() {
           if (clientSnap.exists()) {
             setClient(clientSnap.data());
           }
+        }
+
+        // Load GDI connectors settings
+        try {
+          const docRef = doc(db, 'settings', 'connectors');
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const raw = docSnap.data();
+            const googleDocs = raw.googleDocs || {};
+            const savedTemplateId = googleDocs.templates?.['primeiro_atendimento'] || '1ODrPbz7qtyeiTYnjzSdv9YQ3NqdafYoub6-KpkmTQTo';
+            const savedFolderId = googleDocs.destinationFolderIds?.['primeiro_atendimento'] || googleDocs.destinationFolderId || '';
+            const savedFolderUrl = googleDocs.destinationFolderUrls?.['primeiro_atendimento'] || googleDocs.destinationFolderUrl || '';
+            setIntegrationTemplateId(savedTemplateId);
+            setIntegrationFolderId(savedFolderId);
+            setIntegrationFolderUrl(savedFolderUrl);
+          }
+        } catch (e) {
+          console.error("Erro ao carregar configurações de conectores para o balão: ", e);
         }
 
         // Store safeguard baseline comparison
@@ -1184,22 +1223,144 @@ export default function DadosCaso() {
 
               <div className="space-y-4">
                 {/* Atalho para as configurações de integração */}
-                <div className="flex justify-start">
-                  <button
-                    type="button"
-                    onClick={() => navigate('/boss-giffoni-clientes/configuracoes/integracoes-google-docs/config-primeiro-atendimento-PF')}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 border border-indigo-150 hover:border-indigo-300 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-3xs"
-                  >
-                    <Settings size={13} className="text-indigo-500" />
-                    Ver Configurações de integração
-                  </button>
+                <div className="relative">
+                  <div className="flex justify-start">
+                    <button
+                      type="button"
+                      onClick={() => setShowIntegrationConfig(!showIntegrationConfig)}
+                      className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-3xs border ${
+                        showIntegrationConfig
+                          ? 'bg-indigo-600 border-indigo-700 text-white hover:bg-indigo-700'
+                          : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 border-indigo-150 hover:border-indigo-300'
+                      }`}
+                    >
+                      <Settings size={13} className={showIntegrationConfig ? "text-white" : "text-indigo-500"} />
+                      Ver Configurações de integração
+                    </button>
+                  </div>
+
+                  {showIntegrationConfig && (
+                    <div className="mt-3 p-5 bg-white border border-gray-150 rounded-2xl space-y-4 shadow-lg animate-in slide-in-from-top-1 duration-250 relative z-10 max-w-xl">
+                      <div className="absolute top-3 right-3">
+                        <button
+                          type="button"
+                          onClick={() => setShowIntegrationConfig(false)}
+                          className="p-1 hover:bg-gray-100 rounded text-gray-405 hover:text-gray-700 transition"
+                          title="Fechar"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                      
+                      <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
+                        <Settings size={15} className="text-indigo-600" />
+                        <h4 className="text-xs font-black text-gray-800 uppercase tracking-wider font-mono">
+                          Informações Técnicas & Configurações GDI
+                        </h4>
+                      </div>
+
+                      <div className="space-y-3.5 text-xs">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block font-mono">
+                            Destino Técnico da Pasta do Cliente
+                          </label>
+                          <p className="text-[11px] text-gray-700 font-bold leading-relaxed">
+                            Pasta do Google Drive de {clientName || 'Cliente'}
+                          </p>
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block font-mono">
+                              Pasta ID (googleDriveClientFolderId)
+                            </label>
+                            {clientDriveFolderId && (
+                              <button
+                                type="button"
+                                onClick={() => handleCopyLink(clientDriveFolderId)}
+                                className="text-[9px] font-black uppercase text-indigo-650 hover:text-indigo-850 cursor-pointer"
+                              >
+                                {copied ? "Copiado!" : "Copiar ID"}
+                              </button>
+                            )}
+                          </div>
+                          {clientDriveFolderId ? (
+                            <div className="p-2.5 bg-gray-50 border border-gray-150 rounded-xl font-mono text-[10.5px] text-gray-800 break-all select-all flex items-center justify-between gap-2 leading-relaxed">
+                              <span>{clientDriveFolderId}</span>
+                            </div>
+                          ) : (
+                            <div className="p-2.5 bg-gray-50/50 border border-gray-100 border-dashed rounded-xl text-[11px] text-gray-400 italic">
+                              Não definido. Execute primeiro a criação da Pasta do Cliente.
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block font-mono">
+                              Pasta URL (googleDriveClientFolderUrl)
+                            </label>
+                            {clientDriveFolderUrl && (
+                              <button
+                                type="button"
+                                onClick={() => handleCopyLink(clientDriveFolderUrl)}
+                                className="text-[9px] font-black uppercase text-indigo-650 hover:text-indigo-850 cursor-pointer"
+                              >
+                                {copied ? "Copiado!" : "Copiar URL"}
+                              </button>
+                            )}
+                          </div>
+                          {clientDriveFolderUrl ? (
+                            <div className="p-2.5 bg-gray-50 border border-gray-150 rounded-xl font-mono text-[10.5px] text-gray-800 break-all select-all flex items-center justify-between gap-2 leading-relaxed">
+                              <span className="truncate flex-1">{clientDriveFolderUrl}</span>
+                            </div>
+                          ) : (
+                            <div className="p-2.5 bg-gray-50/50 border border-gray-100 border-dashed rounded-xl text-[11px] text-gray-400 italic">
+                              Não definido. Execute primeiro a criação da Pasta do Cliente.
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-1 pb-1">
+                          <label className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block font-mono">
+                            Template de Referência (Documento Base)
+                          </label>
+                          <div className="space-y-2">
+                            <p className="text-[11px] text-gray-500 font-medium">
+                              Modelo padrão utilizado para preenchimento de metadados fáticos (1º Atendimento PF):
+                            </p>
+                            <a
+                              href={`https://docs.google.com/document/d/${integrationTemplateId}/edit`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-50/70 hover:bg-indigo-100 border border-indigo-150 text-indigo-750 hover:text-indigo-900 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer shadow-3xs"
+                            >
+                              <FileText size={13} className="text-indigo-500" />
+                              <span>Abrir Template de Referência Google Docs</span>
+                              <ExternalLink size={10} className="opacity-70" />
+                            </a>
+                            <div className="p-2 bg-gray-50 border border-gray-150 rounded-xl text-[9px] font-mono select-all text-gray-500 flex items-center justify-between gap-2">
+                              <span className="truncate">ID: {integrationTemplateId}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyLink(integrationTemplateId)}
+                                className="text-indigo-650 hover:text-indigo-850 font-black uppercase tracking-wider cursor-pointer"
+                              >
+                                Copiar ID
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Informações da pasta do cliente */}
                 <div className="p-4 bg-white border border-gray-150 rounded-2xl text-xs flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-3xs animate-in fade-in">
                   <div className="space-y-2 flex-1">
                     <p className="font-extrabold text-gray-500 text-[10px] uppercase tracking-wider block">
-                      Destino da Pasta do Cliente
+                      Destino da Pasta do Cliente: Pasta do Google Drive de {clientName || 'Cliente'}
                     </p>
                     <p className="text-[11px] text-indigo-700 font-extrabold uppercase tracking-wider">
                       Fonte: Automação Google Drive — Pasta do Cliente
@@ -1232,10 +1393,12 @@ export default function DadosCaso() {
                     <a
                       href={clientDriveFolderUrl}
                       target="_blank"
+                      referrerPolicy="no-referrer"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-wider text-indigo-700 hover:text-indigo-900 bg-indigo-50/50 hover:bg-indigo-100 px-4 py-2.5 rounded-xl border border-indigo-200 transition-all cursor-pointer shadow-3xs shrink-0 self-start md:self-center font-bold"
+                      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 text-emerald-800 font-extrabold rounded-xl text-xs transition-colors cursor-pointer shrink-0 self-start md:self-center"
                     >
-                      Abrir Pasta <ExternalLink size={12} />
+                      <GoogleDriveIcon size={14} className="text-emerald-600" />
+                      <span>Abrir pasta no Google Drive</span>
                     </a>
                   )}
                 </div>
