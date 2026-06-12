@@ -2050,6 +2050,46 @@ app.post("/api/system/save-firebase-admin", async (req: any, res: any) => {
   }
 });
 
+app.get("/api/google-docs/export-pdf", async (req: any, res: any) => {
+  const { googleDocsUrl, googleAccessToken } = req.query || {};
+  if (!googleDocsUrl) {
+    return res.status(400).json({ success: false, errorMessage: "URL do documento é obrigatória." });
+  }
+
+  try {
+    // Populate req.body with accessToken so createGoogleDocsJwtClient can pick it up
+    if (googleAccessToken) {
+      req.body = req.body || {};
+      req.body.googleAccessToken = googleAccessToken;
+    }
+
+    const { jwtClient } = await createGoogleDocsJwtClient(req);
+    const drive = google.drive({ version: "v3", auth: jwtClient });
+    const match = googleDocsUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    const fileId = match ? match[1] : null;
+
+    if (!fileId) {
+      return res.status(400).json({ success: false, errorMessage: "ID do documento inválido." });
+    }
+
+    const exportRes = await drive.files.export(
+      {
+        fileId,
+        mimeType: "application/pdf"
+      },
+      { responseType: "arraybuffer" }
+    );
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", "inline; filename=documento.pdf");
+    return res.send(Buffer.from(exportRes.data as ArrayBuffer));
+  } catch (err: any) {
+    console.error("[ExportPDFError]", err.message);
+    const statusCode = err.errorCode === "GOOGLE_DOCS_TOKEN_EXPIRED" ? 401 : 500;
+    return res.status(statusCode).json({ success: false, errorMessage: err.message || "Erro ao exportar PDF." });
+  }
+});
+
 app.post("/api/google-docs/test-auth", async (req: any, res: any) => {
   try {
     const { jwtClient, serviceAccountEmail, projectId, credentialSource } = await createGoogleDocsJwtClient(req);
@@ -2457,13 +2497,20 @@ app.post("/api/google-docs/send-whatsapp", async (req: any, res: any) => {
 });
 
 app.post("/api/google-docs/send-gmail", async (req: any, res: any) => {
-  const { googleDocsUrl, email, docName, clientName, caseId, googleAccessToken } = req.body || {};
+  const { googleDocsUrl, email, docName, clientName, caseId, googleAccessToken, documentType } = req.body || {};
   if (!email) {
     return res.status(400).json({ success: false, errorMessage: "E-mail do cliente é obrigatório." });
   }
 
-  // Composing message text as requested
-  const messageText = `Olá! Segue a procuração conforme solicitado, por gentileza, assine, digitalize e nos envie de volta aqui neste mesmo email.\n\nGrato!\n\nGiffoni Advogados Associados.`;
+  // Choose the dynamic mention of the document based on its type
+  let docMention = "procuração";
+  if (documentType === "declaracao" || (docName && docName.toLowerCase().includes("declara"))) {
+    docMention = "declaração";
+  } else if (documentType === "contrato" || (docName && docName.toLowerCase().includes("contrato"))) {
+    docMention = "contrato de honorários";
+  }
+
+  const messageText = `Olá!\n\nAqui é a Giffoni Advogados Associados. Segue a ${docMention} para sua conferência e assinatura.\n\nPor gentileza assine, digitalize em PDF e nos envie de volta em resposta a este e-mail.\n\nÉ sempre um imenso prazer lhe atender!\n\nAtenciosamente,\nGiffoni Advogados Associados.`;
 
   try {
     // Try exporting PDF from Google Drive if URL is provided
@@ -2497,11 +2544,11 @@ app.post("/api/google-docs/send-gmail", async (req: any, res: any) => {
         oauth2Client.setCredentials({ access_token: googleAccessToken });
         const gmail = google.gmail({ version: "v1", auth: oauth2Client });
 
-        const fileName = docName || "Procuracao";
+        const fileName = docName || "Documento";
         const boundary = "------=_Part_" + Date.now();
         const mailParts = [
           `To: ${email}`,
-          `Subject: Envio de ${docName || "Procuração"} — Giffoni Advogados`,
+          `Subject: Envio de ${docName || "Documento"} — Giffoni Advogados`,
           `MIME-Version: 1.0`,
           `Content-Type: multipart/mixed; boundary="${boundary}"`,
           ``,

@@ -22,19 +22,84 @@ function extractGoogleDocId(url: string): string | null {
   return match ? match[1] : null;
 }
 
-function openGoogleDocPrint(docUrl: string) {
-  const documentId = extractGoogleDocId(docUrl);
+async function openGoogleDocPrint(
+  docUrl: string,
+  googleAccessToken?: string,
+  setPrintingDoc?: (val: boolean) => void,
+  setPrintError?: (err: string | null) => void
+) {
+  if (!docUrl) return;
 
-  if (!documentId) {
+  const documentId = extractGoogleDocId(docUrl);
+  if (!documentId || docUrl.includes('placeholder')) {
     window.open(docUrl, "_blank", "noopener,noreferrer");
     return;
   }
 
-  const printUrl = `https://docs.google.com/document/d/${documentId}/export?format=pdf`;
-  const printWindow = window.open(printUrl, "_blank", "noopener,noreferrer");
+  if (setPrintingDoc) setPrintingDoc(true);
+  if (setPrintError) setPrintError(null);
 
-  if (!printWindow) {
-    alert("O navegador bloqueou a janela de impressão. Autorize pop-ups para imprimir o documento.");
+  try {
+    const tokenQuery = googleAccessToken ? `&googleAccessToken=${encodeURIComponent(googleAccessToken)}` : "";
+    const apiEndpoint = `/api/google-docs/export-pdf?googleDocsUrl=${encodeURIComponent(docUrl)}${tokenQuery}`;
+
+    const response = await fetch(apiEndpoint);
+    if (!response.ok) {
+      const errText = await response.json().catch(() => ({ errorMessage: "Não foi possível recuperar o documento para exportação direta em PDF." }));
+      throw new Error(errText.errorMessage || `Erro ao carregar PDF (${response.status})`);
+    }
+
+    const pdfBlob = await response.blob();
+    const blobUrl = URL.createObjectURL(pdfBlob);
+
+    // Create an invisible iframe
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "absolute";
+    iframe.style.width = "0px";
+    iframe.style.height = "0px";
+    iframe.style.border = "none";
+    iframe.style.left = "-9999px";
+    iframe.src = blobUrl;
+
+    iframe.onload = () => {
+      let printTriggered = false;
+      try {
+        // Safe check for contentWindow and print
+        if (iframe.contentWindow) {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+          printTriggered = true;
+        }
+      } catch (printErr: any) {
+        console.warn("Navegação segura em bloco iframe (CORS sandbox ativo). Abrindo visualização de PDF alta-fidelidade de forma avulsa:", printErr.message);
+      } finally {
+        if (!printTriggered) {
+          // If printing via iframe contentWindow is blocked by CORS/Sandbox, fallback immediately to opening the blob URL in a new window.
+          // This is a seamless, high-fidelity experience that bypasses all iframe sandbox restrictions.
+          window.open(blobUrl, "_blank", "noopener,noreferrer");
+        }
+        if (setPrintingDoc) setPrintingDoc(false);
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+          URL.revokeObjectURL(blobUrl);
+        }, 8000);
+      }
+    };
+
+    document.body.appendChild(iframe);
+  } catch (err: any) {
+    console.error("Falha ao carregar API PDF. Iniciando redirecionamento para o documento do Google Docs:", err.message);
+    
+    // Set a informative warning/error message but DO NOT block the user
+    if (setPrintError) {
+      setPrintError(err.message || "Erro de autorização. Abrindo o Google Docs para impressão...");
+    }
+    if (setPrintingDoc) setPrintingDoc(false);
+
+    // Dynamic, resilient fallback: if backend credentials are not set/expired, open the document
+    // in Google Docs directly where they can print (Ctrl+P) natively inside Google's UI.
+    const defaultDocUrl = docUrl || `https://docs.google.com/document/d/${documentId}/edit`;
+    window.open(defaultDocUrl, "_blank", "noopener,noreferrer");
   }
 }
 
@@ -51,13 +116,25 @@ export default function EntregaDocumento({
   onOutroChange,
   questionNumber = '1.2'
 }: EntregaDocumentoProps) {
-  const { googleAccessToken } = useAuth();
+  const { googleAccessToken, loginWithGoogle } = useAuth();
 
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
   const [whatsappResult, setWhatsappResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const [sendingGmail, setSendingGmail] = useState(false);
   const [gmailResult, setGmailResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const [printingDoc, setPrintingDoc] = useState(false);
+  const [printError, setPrintError] = useState<string | null>(null);
+
+  const handleConnectGoogle = async () => {
+    try {
+      setPrintError(null);
+      await loginWithGoogle('boss_admin');
+    } catch (err: any) {
+      setPrintError(err.message || 'Falha ao conectar com o Google.');
+    }
+  };
 
   // Resolve localized text based on documento
   const getDocInfo = () => {
@@ -155,7 +232,8 @@ export default function EntregaDocumento({
           email: emailCliente,
           docName: docInfo.label,
           clientName: nomeCliente,
-          googleAccessToken
+          googleAccessToken,
+          documentType: tipoDocumento
         })
       });
       const data = await response.json();
@@ -243,18 +321,56 @@ export default function EntregaDocumento({
               </div>
               <button
                 type="button"
-                onClick={() => openGoogleDocPrint(docUrl)}
-                className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-black text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition-all shadow-3xs cursor-pointer"
+                onClick={() => openGoogleDocPrint(docUrl, googleAccessToken, setPrintingDoc, setPrintError)}
+                disabled={printingDoc}
+                className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-black disabled:opacity-50 text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition-all shadow-3xs cursor-pointer"
               >
-                <Printer size={12} />
-                <span>Imprimir {docInfo.label}</span>
+                {printingDoc ? (
+                  <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                ) : (
+                  <Printer size={12} />
+                )}
+                <span>{printingDoc ? 'Preparando...' : `Imprimir ${docInfo.label}`}</span>
               </button>
             </div>
+
+            {/* Print Error feedback if any */}
+            {printError && (
+              <div className="bg-rose-50 border border-rose-100 p-3 rounded-xl flex flex-col gap-2.5 text-[11px] font-bold text-rose-800">
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
+                  <span className="leading-relaxed">{printError}</span>
+                </div>
+                {(printError.includes("autorização fática") || printError.includes("credenciais de Service Account") || printError.includes("expirou") || printError.includes("OAuth")) && (
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleConnectGoogle}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-black uppercase transition-all shadow-3xs cursor-pointer"
+                    >
+                      <Settings size={10} />
+                      <span>Conectar com Google Docs/Drive</span>
+                    </button>
+                    {docUrl && !docUrl.includes('placeholder') && (
+                      <a
+                        href={docUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-[10px] font-black uppercase transition-all cursor-pointer"
+                      >
+                        <ExternalLink size={10} />
+                        <span>Abrir Documento diretamente</span>
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Validation Log */}
             <div className="bg-emerald-50 border border-emerald-100 p-2.5 rounded-xl flex items-center gap-2 text-[11px] font-bold text-emerald-800">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>{docInfo.label} gerado disponível para impressão.</span>
+              <span>{docInfo.label} pronto para impressão direta no navegador.</span>
             </div>
           </div>
         )}
@@ -356,7 +472,7 @@ export default function EntregaDocumento({
                   ) : (
                     <Mail size={12} />
                   )}
-                  <span>{sendingGmail ? 'Enviando...' : 'Enviar Procuração via Gmail'}</span>
+                  <span>{sendingGmail ? 'Enviando...' : `Enviar ${docInfo.label} via Gmail`}</span>
                 </button>
 
                 {emailCliente && (
