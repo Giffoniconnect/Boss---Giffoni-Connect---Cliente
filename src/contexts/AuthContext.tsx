@@ -3,6 +3,36 @@ import { onAuthStateChanged, User as FirebaseUser, signOut, GoogleAuthProvider, 
 import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 
+function safeSessionGet(key: string): string | null {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return null;
+    return window.sessionStorage.getItem(key);
+  } catch (err) {
+    console.warn('[AuthContext] sessionStorage indisponível:', err);
+    return null;
+  }
+}
+
+function safeSessionSet(key: string, value: string) {
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.setItem(key, value);
+    }
+  } catch (err) {
+    console.warn('[AuthContext] não foi possível gravar sessionStorage:', err);
+  }
+}
+
+function safeSessionRemove(key: string) {
+  try {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      window.sessionStorage.removeItem(key);
+    }
+  } catch (err) {
+    console.warn('[AuthContext] não foi possível limpar sessionStorage:', err);
+  }
+}
+
 export type UserRole = 'boss_admin' | 'client' | 'partner' | 'outsourced';
 
 interface UserProfile {
@@ -34,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(() => {
-    return sessionStorage.getItem('google_access_token');
+    return safeSessionGet('google_access_token');
   });
 
   const resolveUserProfile = async (firebaseUser: FirebaseUser, requestedRole?: UserRole): Promise<UserProfile | null> => {
@@ -131,7 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const token = credential?.accessToken || null;
       if (token) {
         setGoogleAccessToken(token);
-        sessionStorage.setItem('google_access_token', token);
+        safeSessionSet('google_access_token', token);
       }
 
       const matchedProfile = await resolveUserProfile(newUser, role);
@@ -147,7 +177,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile(null);
       setUser(null);
       setGoogleAccessToken(null);
-      sessionStorage.removeItem('google_access_token');
+      safeSessionRemove('google_access_token');
     } finally {
       setLoading(false);
     }
@@ -157,7 +187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setErrorMsg(null);
     setProfile(null);
     setGoogleAccessToken(null);
-    sessionStorage.removeItem('google_access_token');
+    safeSessionRemove('google_access_token');
     await signOut(auth);
   };
 

@@ -772,11 +772,22 @@ const router = createBrowserRouter(
 );
 
 export default function App() {
+  const SAFE_BOOT_MODE = false;
+
+  if (SAFE_BOOT_MODE) {
+    return (
+      <div style={{ padding: 40, fontFamily: 'Arial' }}>
+        <h1>BOSS carregou</h1>
+        <p>React montou com sucesso. O problema está em AuthProvider, Router ou Firebase.</p>
+      </div>
+    );
+  }
+
   return (
-    <AuthProvider>
-      <AppErrorBoundary>
+    <AppErrorBoundary>
+      <AuthProvider>
         <RouterProvider router={router} />
-      </AppErrorBoundary>
-    </AuthProvider>
+      </AuthProvider>
+    </AppErrorBoundary>
   );
 }

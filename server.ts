@@ -1402,7 +1402,7 @@ function extractTextFromGoogleDoc(docObj: any): string {
   return text;
 }
 
-app.post("/api/google-docs/generate-document", async (req: any, res: any) => {
+app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], async (req: any, res: any) => {
   const {
     mode,
     documentType,
@@ -2896,6 +2896,91 @@ app.post("/api/google-docs/preflight", async (req: any, res: any) => {
       errorCode: "PREFLIGHT_ERROR",
       errorMessage: `Erro interno crítico ao analisar preflight: ${errPre.message}`,
       checks
+    });
+  }
+});
+
+app.get("/api/google-docs/export-pdf", async (req: any, res: any) => {
+  try {
+    const documentId = req.query.documentId || req.query.fileId || req.body?.documentId;
+    if (!documentId) {
+      return res.status(400).json({ success: false, error: "O parâmetro documentId ou fileId é obrigatório." });
+    }
+
+    const { jwtClient } = await createGoogleDocsJwtClient(req);
+    const drive = google.drive({ version: "v3", auth: jwtClient });
+
+    // Retrieve file metadata to determine native google-apps doc or other mime type
+    const fileMetadata = await drive.files.get({ fileId: documentId, fields: "mimeType, name" });
+    const mimeType = fileMetadata.data.mimeType || "";
+    const name = fileMetadata.data.name || "documento_exportado";
+
+    if (mimeType.startsWith("application/vnd.google-apps")) {
+      // Export Google Doc as PDF
+      const exportRes = await drive.files.export(
+        { fileId: documentId, mimeType: "application/pdf" },
+        { responseType: "stream" }
+      );
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(name)}.pdf"`);
+      exportRes.data.pipe(res);
+    } else {
+      // Support binary downloads directly (e.g. if already pdf)
+      const downloadRes = await drive.files.get(
+        { fileId: documentId, alt: "media" },
+        { responseType: "stream" }
+      );
+      res.setHeader("Content-Type", mimeType || "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(name)}"`);
+      downloadRes.data.pipe(res);
+    }
+  } catch (err: any) {
+    console.error("[ExportPDF] Error exporting document to PDF:", err);
+    return res.status(500).json({
+      success: false,
+      error: `Erro ao exportar documento para PDF: ${err.message || err}`
+    });
+  }
+});
+
+app.get("/api/google-docs/export-html", async (req: any, res: any) => {
+  try {
+    const documentId = req.query.documentId || req.query.fileId || req.body?.documentId;
+    if (!documentId) {
+      return res.status(400).json({ success: false, error: "O parâmetro documentId ou fileId é obrigatório." });
+    }
+
+    const { jwtClient } = await createGoogleDocsJwtClient(req);
+    const drive = google.drive({ version: "v3", auth: jwtClient });
+
+    const fileMetadata = await drive.files.get({ fileId: documentId, fields: "mimeType, name" });
+    const mimeType = fileMetadata.data.mimeType || "";
+    const name = fileMetadata.data.name || "documento_exportado";
+
+    if (mimeType.startsWith("application/vnd.google-apps")) {
+      // Export Google Doc as HTML
+      const exportRes = await drive.files.export(
+        { fileId: documentId, mimeType: "text/html" },
+        { responseType: "stream" }
+      );
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(name)}.html"`);
+      exportRes.data.pipe(res);
+    } else {
+      // Support binary downloads directly
+      const downloadRes = await drive.files.get(
+        { fileId: documentId, alt: "media" },
+        { responseType: "stream" }
+      );
+      res.setHeader("Content-Type", mimeType || "text/html");
+      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(name)}"`);
+      downloadRes.data.pipe(res);
+    }
+  } catch (err: any) {
+    console.error("[ExportHTML] Error exporting document to HTML:", err);
+    return res.status(500).json({
+      success: false,
+      error: `Erro ao exportar documento para HTML: ${err.message || err}`
     });
   }
 });

@@ -9,7 +9,7 @@ export const db = getFirestore(app, firestoreDatabaseId);
 export const auth = getAuth(app);
 
 // Connectivity check
-async function testConnection() {
+export async function testFirebaseConnection() {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
@@ -18,7 +18,6 @@ async function testConnection() {
     }
   }
 }
-testConnection();
 
 export enum OperationType {
   CREATE = 'create',
