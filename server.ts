@@ -2587,6 +2587,398 @@ app.post("/api/google-docs/pdf-diagnostics", async (req: any, res: any) => {
   }
 });
 
+function normalizeBrazilPhoneForWhatsApp(phone: string): string {
+  let digits = String(phone || "").replace(/\D/g, "");
+
+  // Remove zeros iniciais ocasionais
+  digits = digits.replace(/^0+/, "");
+
+  // Se vier com DDD + número, adicionar Brasil 55
+  if (digits.length === 10 || digits.length === 11) {
+    digits = `55${digits}`;
+  }
+
+  // Se vier com 055..., corrigir para 55...
+  if (digits.startsWith("055")) {
+    digits = digits.slice(1);
+  }
+
+  return digits;
+}
+
+function validateWhatsAppPhone(phone: string): { valid: boolean; normalized: string; reason?: string } {
+  const normalized = normalizeBrazilPhoneForWhatsApp(phone);
+
+  if (!normalized) {
+    return { valid: false, normalized, reason: "Telefone vazio." };
+  }
+
+  if (!normalized.startsWith("55")) {
+    return { valid: false, normalized, reason: "Telefone sem código do país 55." };
+  }
+
+  if (normalized.length < 12 || normalized.length > 13) {
+    return { valid: false, normalized, reason: "Telefone fora do padrão brasileiro esperado." };
+  }
+
+  return { valid: true, normalized };
+}
+
+async function readApiResponseSafely(response: any) {
+  const rawBody = await response.text();
+
+  let parsedBody: any = null;
+  let isJson = false;
+
+  if (rawBody && rawBody.trim()) {
+    try {
+      parsedBody = JSON.parse(rawBody);
+      isJson = true;
+    } catch {
+      parsedBody = null;
+      isJson = false;
+    }
+  }
+
+  return {
+    status: response.status,
+    ok: response.ok,
+    rawBody,
+    rawBodyPreview: String(rawBody || "").slice(0, 800),
+    parsedBody,
+    isJson,
+    isEmpty: !rawBody || !rawBody.trim()
+  };
+}
+
+function inspectWascriptResponse(kind: "text" | "document", httpStatus: number, rawBody: string, parsedBody: any) {
+  const raw = String(rawBody || "");
+  const rawLower = raw.toLowerCase();
+  const isEmpty = !raw.trim();
+
+  if (httpStatus < 200 || httpStatus >= 300) {
+    return {
+      accepted: false,
+      confidence: "high",
+      reason: `HTTP ${httpStatus}`,
+      parsedBody,
+      rawBodyPreview: raw.slice(0, 500)
+    };
+  }
+
+  if (isEmpty) {
+    return {
+      accepted: false,
+      confidence: "unknown",
+      reason: "Resposta HTTP OK, mas corpo vazio. Não é possível confirmar aceite.",
+      parsedBody: null,
+      rawBodyPreview: ""
+    };
+  }
+
+  const hasExplicitError =
+    rawLower.includes("error") ||
+    rawLower.includes("erro") ||
+    rawLower.includes("invalid") ||
+    rawLower.includes("inválido") ||
+    rawLower.includes("unauthorized") ||
+    rawLower.includes("forbidden") ||
+    rawLower.includes("token") ||
+    rawLower.includes("not found") ||
+    rawLower.includes("failed") ||
+    rawLower.includes("falha");
+
+  const hasPositiveFlag =
+    parsedBody?.success === true ||
+    parsedBody?.status === true ||
+    parsedBody?.ok === true ||
+    parsedBody?.sent === true ||
+    parsedBody?.enviado === true;
+
+  const hasMessageId =
+    !!parsedBody?.id ||
+    !!parsedBody?.messageId ||
+    !!parsedBody?.message_id ||
+    !!parsedBody?.data?.id ||
+    !!parsedBody?.data?.messageId ||
+    !!parsedBody?.result?.id;
+
+  const hasAcceptedText =
+    rawLower.includes("success") ||
+    rawLower.includes("sucesso") ||
+    rawLower.includes("sent") ||
+    rawLower.includes("enviado") ||
+    rawLower.includes("queued") ||
+    rawLower.includes("fila") ||
+    rawLower.includes("agendado");
+
+  if (hasExplicitError && !hasPositiveFlag && !hasMessageId) {
+    return {
+      accepted: false,
+      confidence: "high",
+      reason: "A API retornou corpo com indicação de erro.",
+      parsedBody,
+      rawBodyPreview: raw.slice(0, 500)
+    };
+  }
+
+  if (hasPositiveFlag || hasMessageId) {
+    return {
+      accepted: true,
+      confidence: "high",
+      reason: hasMessageId ? "Resposta de sucesso estruturada (ID de mensagem presente)." : "Resposta contém flag explícita de sucesso em JSON.",
+      parsedBody,
+      rawBodyPreview: raw.slice(0, 500)
+    };
+  }
+
+  if (hasAcceptedText) {
+    return {
+      accepted: false,
+      confidence: "medium",
+      reason: "Resposta contém indicação de aceite textual, mas sem identificadores estruturados (ID/status em JSON).",
+      parsedBody,
+      rawBodyPreview: raw.slice(0, 500)
+    };
+  }
+
+  return {
+    accepted: false,
+    confidence: "unknown",
+    reason: "HTTP OK, mas sem confirmação clara no corpo da resposta.",
+    parsedBody,
+    rawBodyPreview: raw.slice(0, 500)
+  };
+}
+
+// FASE 8 — CRIAR ENDPOINT DE TESTE DIRETO DO W.A SPEED
+app.post("/api/whatsapp/test-send-text", async (req: any, res: any) => {
+  const { phone, message } = req.body || {};
+
+  if (!phone) {
+    return res.status(400).json({ success: false, errorMessage: "Telefone do cliente é obrigatório." });
+  }
+
+  const phoneValidation = validateWhatsAppPhone(phone);
+  if (!phoneValidation.valid) {
+    return res.status(400).json({
+      success: false,
+      errorCode: "INVALID_WHATSAPP_PHONE",
+      errorMessage: `WhatsApp inválido: ${phoneValidation.reason}`,
+      diagnostic: {
+        originalPhone: phone,
+        normalizedPhone: phoneValidation.normalized
+      }
+    });
+  }
+
+  const cleanPhone = phoneValidation.normalized;
+  const messageText = message || "Teste de integração W.A Speed - Giffoni";
+
+  // Retrieve tokens
+  let waSpeedToken = "";
+  if (dbAdmin) {
+    try {
+      const connectorsSnap = await dbAdmin.collection("settings").doc("connectors").get();
+      if (connectorsSnap.exists) {
+        waSpeedToken = connectorsSnap.data()?.whatsapp?.waSpeedToken || "";
+      }
+    } catch (errDb) {
+      console.warn("[WhatsAppTest] Failed to read settings doc:", errDb);
+    }
+  }
+
+  let targetToken = "";
+  let tokenSource = "missing";
+
+  if (process.env.Wascript_API) {
+    targetToken = process.env.Wascript_API;
+    tokenSource = "process.env.Wascript_API";
+  } else if (process.env.WASCRIPT_API) {
+    targetToken = process.env.WASCRIPT_API;
+    tokenSource = "process.env.WASCRIPT_API";
+  } else if (process.env.WASCRIPT_TOKEN) {
+    targetToken = process.env.WASCRIPT_TOKEN;
+    tokenSource = "process.env.WASCRIPT_TOKEN";
+  } else if (process.env.WA_SPEED_TOKEN) {
+    targetToken = process.env.WA_SPEED_TOKEN;
+    tokenSource = "process.env.WA_SPEED_TOKEN";
+  } else if (waSpeedToken) {
+    targetToken = waSpeedToken;
+    tokenSource = "Firestore settings.connectors.whatsapp.waSpeedToken";
+  }
+
+  if (!targetToken) {
+    return res.status(400).json({
+      success: false,
+      errorCode: "WASCRIPT_TOKEN_MISSING",
+      errorMessage: "Token W.A Speed não configurado. Verifique o Secret Wascript_API."
+    });
+  }
+
+  const baseUrl = "https://api-whatsapp.wascript.com.br";
+  const textUrl = `${baseUrl}/api/enviar-texto/${targetToken}?phone=${cleanPhone}&message=${encodeURIComponent(messageText)}`;
+
+  try {
+    const textRes = await fetch(textUrl);
+    const textApi = await readApiResponseSafely(textRes);
+
+    const textInspection = inspectWascriptResponse(
+      "text",
+      textApi.status,
+      textApi.rawBody,
+      textApi.parsedBody
+    );
+
+    const isHighSuccess = textInspection.accepted && textInspection.confidence === "high";
+
+    return res.json({
+      success: isHighSuccess,
+      requiresManualVerification: !isHighSuccess,
+      phoneOriginal: phone,
+      phoneNormalized: cleanPhone,
+      wascript: {
+        httpStatus: textApi.status,
+        rawBodyPreview: textApi.rawBodyPreview,
+        parsedBody: textApi.parsedBody,
+        inspection: textInspection,
+        isJson: textApi.isJson,
+        isEmpty: textApi.isEmpty
+      },
+      message: isHighSuccess
+        ? "Mensagem enviada com sucesso ao W.A Speed com confirmação da API."
+        : "A API respondeu, mas é necessário confirmar se a mensagem chegou no WhatsApp."
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      errorCode: "WHATSAPP_TEST_SEND_FAILED",
+      errorMessage: `Erro ao enviar teste de texto: ${err.message || err}`,
+      diagnostic: {
+        type: err.name || null
+      }
+    });
+  }
+});
+
+// FASE 5 — VERIFICAR SE A INSTÂNCIA W.A SPEED ESTÁ REALMENTE CONECTADA
+app.get("/api/whatsapp/connection-status", async (req: any, res: any) => {
+  return res.json({
+    success: false,
+    errorCode: "WASCRIPT_STATUS_ENDPOINT_UNKNOWN",
+    errorMessage: "Não foi encontrado endpoint de status da W.A Speed no código. Verificar documentação da Wascript/W.A Speed."
+  });
+});
+
+// FASE 4 — TESTAR FORMATOS DE TELEFONE EM ENDPOINT DE DIAGNÓSTICO
+app.post("/api/whatsapp/test-phone-formats", async (req: any, res: any) => {
+  const { phone, message } = req.body || {};
+
+  if (!phone) {
+    return res.status(400).json({ success: false, errorMessage: "Telefone do cliente é obrigatório." });
+  }
+
+  const messageText = message || "Teste formato telefone W.A Speed";
+
+  // Retrieve token securely
+  let waSpeedToken = "";
+  if (dbAdmin) {
+    try {
+      const connectorsSnap = await dbAdmin.collection("settings").doc("connectors").get();
+      if (connectorsSnap.exists) {
+        waSpeedToken = connectorsSnap.data()?.whatsapp?.waSpeedToken || "";
+      }
+    } catch (errDb) {
+      console.warn("[WhatsAppTestFormats] Failed to read settings doc:", errDb);
+    }
+  }
+
+  let targetToken = "";
+  if (process.env.Wascript_API) {
+    targetToken = process.env.Wascript_API;
+  } else if (process.env.WASCRIPT_API) {
+    targetToken = process.env.WASCRIPT_API;
+  } else if (process.env.WASCRIPT_TOKEN) {
+    targetToken = process.env.WASCRIPT_TOKEN;
+  } else if (process.env.WA_SPEED_TOKEN) {
+    targetToken = process.env.WA_SPEED_TOKEN;
+  } else if (waSpeedToken) {
+    targetToken = waSpeedToken;
+  }
+
+  if (!targetToken) {
+    return res.status(400).json({
+      success: false,
+      errorCode: "WASCRIPT_TOKEN_MISSING",
+      errorMessage: "Token W.A Speed não configurado. Verifique o Secret Wascript_API."
+    });
+  }
+
+  // Generate unique list of formats to test
+  const digitsOnly = String(phone).replace(/\D/g, "");
+  const normalizedWithCountry = validateWhatsAppPhone(phone).normalized;
+
+  // Let's draft the candidates
+  const candidates = [
+    normalizedWithCountry, // e.g. 5531988639056
+    digitsOnly.startsWith("55") ? digitsOnly.slice(2) : digitsOnly, // e.g. 31988639056
+    phone.trim(), // e.g. 55 31 98863-9056 raw
+    `+${normalizedWithCountry}` // e.g. +5531988639056
+  ];
+
+  // Also include 12 digit format (no 9th digit) if DDD with 9 digits
+  if (normalizedWithCountry.startsWith("55") && normalizedWithCountry.length === 13) {
+    // 55 + DDD (2 digits) + 9 + 8 digits -> remove the 9: 55 + DDD + 8 digits
+    const ddd = normalizedWithCountry.slice(2, 4);
+    const rest = normalizedWithCountry.slice(5);
+    candidates.push(`55${ddd}${rest}`); // e.g. 553188639056
+  }
+
+  // Unique elements
+  const formatsToTry = Array.from(new Set(candidates)).filter(Boolean);
+
+  const attempts = [];
+  const baseUrl = "https://api-whatsapp.wascript.com.br";
+
+  for (const format of formatsToTry) {
+    const textUrl = `${baseUrl}/api/enviar-texto/${targetToken}?phone=${encodeURIComponent(format)}&message=${encodeURIComponent(messageText)}`;
+    
+    try {
+      const textRes = await fetch(textUrl);
+      const textApi = await readApiResponseSafely(textRes);
+      const textInspection = inspectWascriptResponse(
+        "text",
+        textApi.status,
+        textApi.rawBody,
+        textApi.parsedBody
+      );
+
+      attempts.push({
+        format,
+        httpStatus: textApi.status,
+        rawBodyPreview: textApi.rawBodyPreview,
+        inspection: textInspection
+      });
+    } catch (err: any) {
+      attempts.push({
+        format,
+        error: err.message || err
+      });
+    }
+
+    // Small delay between requests to conform with Pase 4 requirements
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
+
+  return res.json({
+    success: true,
+    attempts
+  });
+});
+
+
+
+
 app.post("/api/google-docs/send-whatsapp", async (req: any, res: any) => {
   const {
     googleDocsUrl,
@@ -2599,8 +2991,7 @@ app.post("/api/google-docs/send-whatsapp", async (req: any, res: any) => {
     googleAccessToken
   } = req.body || {};
 
-  // FASE 1 — CONFIRMAR QUE O GOOGLE DOCS URL REAL ESTÁ CHEGANDO AO BACKEND
-  console.log("[WhatsAppSend] Received payload:", {
+  console.log("[WhatsAppSend] Received payload safely:", {
     hasGoogleDocsUrl: !!googleDocsUrl,
     googleDocsUrlPreview: googleDocsUrl ? String(googleDocsUrl).slice(0, 80) : null,
     hasPhone: !!phone,
@@ -2612,7 +3003,11 @@ app.post("/api/google-docs/send-whatsapp", async (req: any, res: any) => {
   });
 
   if (!phone) {
-    return res.status(400).json({ success: false, errorMessage: "Telefone do cliente é obrigatório." });
+    return res.status(400).json({
+      success: false,
+      errorCode: "PHONE_MISSING",
+      errorMessage: "Telefone do cliente é obrigatório."
+    });
   }
 
   // FASE 3 — VALIDAR URL ANTES DE EXPORTAR
@@ -2636,6 +3031,21 @@ app.post("/api/google-docs/send-whatsapp", async (req: any, res: any) => {
     });
   }
 
+  const phoneValidation = validateWhatsAppPhone(phone);
+  if (!phoneValidation.valid) {
+    return res.status(400).json({
+      success: false,
+      errorCode: "INVALID_WHATSAPP_PHONE",
+      errorMessage: `WhatsApp inválido: ${phoneValidation.reason}`,
+      diagnostic: {
+        originalPhone: phone,
+        normalizedPhone: phoneValidation.normalized
+      }
+    });
+  }
+
+  const cleanPhone = phoneValidation.normalized;
+
   // Exact message structure with asterisks for bolding, as requested in Fase 1
   let messageText = "";
   let baseFileName = "Documento";
@@ -2653,28 +3063,21 @@ app.post("/api/google-docs/send-whatsapp", async (req: any, res: any) => {
   }
 
   try {
-    // Normalize phone number (digits only)
-    const cleanPhone = phone.replace(/\D/g, "");
-
-    // Retrieve whatsapp config from Firestore via dbAdmin to get token fallback
+    // Retrieve tokens
     let waSpeedToken = "";
     if (dbAdmin) {
       try {
         const connectorsSnap = await dbAdmin.collection("settings").doc("connectors").get();
         if (connectorsSnap.exists) {
-          const whatsappConfig = connectorsSnap.data()?.whatsapp;
-          if (whatsappConfig) {
-            waSpeedToken = whatsappConfig.waSpeedToken || "";
-          }
+          waSpeedToken = connectorsSnap.data()?.whatsapp?.waSpeedToken || "";
         }
       } catch (errDb) {
         console.warn("[WhatsAppSend] Failed to read settings doc:", errDb);
       }
     }
 
-    // FASE 7 — TOKEN WASCRIPT_API CONTINUA OBRIGATÓRIO, MAS NÃO CONFUNDIR COM ERRO DE PDF
-    let tokenSource = "missing";
     let targetToken = "";
+    let tokenSource = "missing";
 
     if (process.env.Wascript_API) {
       targetToken = process.env.Wascript_API;
@@ -2702,7 +3105,7 @@ app.post("/api/google-docs/send-whatsapp", async (req: any, res: any) => {
     console.log("[WhatsAppConfig] Token source:", tokenSource);
     console.log("[WhatsAppConfig] Token present:", !!targetToken);
     console.log("[WhatsAppConfig] Token masked:", maskToken(targetToken));
-    
+
     if (!targetToken) {
       return res.status(400).json({
         success: false,
@@ -2711,7 +3114,7 @@ app.post("/api/google-docs/send-whatsapp", async (req: any, res: any) => {
       });
     }
 
-    // FASE 4 / 5 — CRIAR FUNÇÃO CENTRAL PARA EXPORTAR PDF COM DIAGNÓSTICO E NÃO ENGOLIR MAIS ERRO DE PDF
+    // FASE 4 / 5 — EXPORTAR PDF
     let exportedPdf;
     try {
       exportedPdf = await exportGoogleDocToPdfBase64(req, googleDocsUrl);
@@ -2736,91 +3139,184 @@ app.post("/api/google-docs/send-whatsapp", async (req: any, res: any) => {
     }
 
     const pdfBase64 = exportedPdf.pdfBase64;
-
-    // FASE 10 — NOME DO PDF SANITIZADO
     const safeFileName = `${baseFileName} - ${sanitizeFileName(clientName || "Cliente")}`;
-
     const baseUrl = "https://api-whatsapp.wascript.com.br";
 
-    // FASE 9 — ENVIAR PDF PELO W.A SPEED
     // 1. Send the text message via GET
     const textUrl = `${baseUrl}/api/enviar-texto/${targetToken}?phone=${cleanPhone}&message=${encodeURIComponent(messageText)}`;
-    try {
-      const textRes = await fetch(textUrl);
-      if (!textRes.ok) {
-        const errText = await textRes.text();
-        return res.status(502).json({
-          success: false,
-          errorCode: "WASCRIPT_TEXT_SEND_FAILED",
-          errorMessage: `Falha ao enviar mensagem de texto pelo W.A Speed: ${textRes.status}`,
-          details: errText
-        });
-      }
-    } catch (errTextApi: any) {
+    const textRes = await fetch(textUrl);
+    const textApi = await readApiResponseSafely(textRes);
+
+    console.log("[WascriptTextResponse]", {
+      phone: cleanPhone,
+      httpStatus: textApi.status,
+      isJson: textApi.isJson,
+      isEmpty: textApi.isEmpty,
+      rawBodyPreview: textApi.rawBodyPreview,
+      parsedBody: textApi.parsedBody
+    });
+
+    const textInspection = inspectWascriptResponse(
+      "text",
+      textApi.status,
+      textApi.rawBody,
+      textApi.parsedBody
+    );
+
+    if (textInspection.confidence === "medium") {
       return res.status(502).json({
         success: false,
-        errorCode: "WASCRIPT_TEXT_SEND_FAILED",
-        errorMessage: `Falha ao enviar mensagem de texto via WhatsApp: ${errTextApi.message || errTextApi}`
+        pendingConfirmation: true,
+        errorCode: "WASCRIPT_AMBIGUOUS_ACCEPTANCE",
+        errorMessage: "O W.A Speed respondeu sem confirmação forte de envio. A mensagem/PDF não podem ser considerados enviados.",
+        diagnostic: {
+          phoneOriginal: phone,
+          phoneNormalized: cleanPhone,
+          textConfidence: "medium",
+          documentConfidence: "not_attempted",
+          textRawBodyPreview: textApi.rawBodyPreview,
+          documentRawBodyPreview: "Não tentado (mensagem de texto ambígua)"
+        }
       });
     }
 
-    // 2. Send the PDF document via POST
+    if (!textInspection.accepted) {
+      return res.status(502).json({
+        success: false,
+        errorCode: "WASCRIPT_TEXT_NOT_CONFIRMED",
+        errorMessage: "O W.A Speed respondeu, mas não confirmou o envio da mensagem de texto.",
+        diagnostic: {
+          phoneOriginal: phone,
+          phoneNormalized: cleanPhone,
+          status: textApi.status,
+          isJson: textApi.isJson,
+          isEmpty: textApi.isEmpty,
+          rawBodyPreview: textApi.rawBodyPreview,
+          inspection: textInspection
+        }
+      });
+    }
+
+    // FASE 10 — TESTE COM DELAY ENTRE TEXTO E DOCUMENTO
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // 2. Log PDF parameters diagnostic securely before posting (Fase 11)
+    console.log("[WhatsAppSend] Document payload diagnostic:", {
+      endpoint: "/api/enviar-documento/[TOKEN_MASKED]",
+      phone: cleanPhone,
+      base64Length: pdfBase64.length,
+      fileName: `${safeFileName}.pdf`,
+      hasDataPrefix: true
+    });
+
+    // 3. Send the PDF document via POST
     const docUrl = `${baseUrl}/api/enviar-documento/${targetToken}`;
-    try {
-      const docRes = await fetch(docUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          phone: cleanPhone,
-          base64: `data:application/pdf;base64,${pdfBase64}`,
-          name: `${safeFileName}.pdf`
-        })
-      });
-      
-      if (!docRes.ok) {
-        const errDocText = await docRes.text();
-        console.warn("[WhatsAppSend] Sending PDF failed but message text was successfully sent:", errDocText);
-        return res.status(502).json({
-          success: false,
-          partialSuccess: true,
-          messageSent: true,
-          documentSent: false,
-          errorCode: "WASCRIPT_DOCUMENT_SEND_FAILED",
-          errorMessage: "Mensagem enviada, mas falhou o envio do PDF pelo W.A Speed.",
-          details: errDocText
-        });
-      }
+    const docRes = await fetch(docUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        phone: cleanPhone,
+        base64: `data:application/pdf;base64,${pdfBase64}`,
+        name: `${safeFileName}.pdf`
+      })
+    });
 
-      const docJson = await docRes.json();
-      return res.status(200).json({
-        success: true,
-        message: "Mensagem e PDF enviados com sucesso pelo W.A Speed.",
-        details: { doc: docJson }
-      });
+    const docApi = await readApiResponseSafely(docRes);
 
-    } catch (errDocApi: any) {
-      console.error("[WhatsAppSend] Sending PDF failed but message text was successfully sent:", errDocApi);
+    console.log("[WascriptDocumentResponse]", {
+      phone: cleanPhone,
+      httpStatus: docApi.status,
+      isJson: docApi.isJson,
+      isEmpty: docApi.isEmpty,
+      rawBodyPreview: docApi.rawBodyPreview,
+      parsedBody: docApi.parsedBody
+    });
+
+    const docInspection = inspectWascriptResponse(
+      "document",
+      docApi.status,
+      docApi.rawBody,
+      docApi.parsedBody
+    );
+
+    if (docInspection.confidence === "medium") {
+      return res.status(502).json({
+        success: false,
+        pendingConfirmation: true,
+        errorCode: "WASCRIPT_AMBIGUOUS_ACCEPTANCE",
+        errorMessage: "O W.A Speed respondeu sem confirmação forte de envio. A mensagem/PDF não podem ser considerados enviados.",
+        diagnostic: {
+          phoneOriginal: phone,
+          phoneNormalized: cleanPhone,
+          textConfidence: textInspection.confidence,
+          documentConfidence: "medium",
+          textRawBodyPreview: textApi.rawBodyPreview,
+          documentRawBodyPreview: docApi.rawBodyPreview,
+          inspection: {
+            text: textInspection,
+            document: docInspection
+          }
+        }
+      });
+    }
+
+    if (!docInspection.accepted) {
       return res.status(502).json({
         success: false,
         partialSuccess: true,
         messageSent: true,
         documentSent: false,
-        errorCode: "WASCRIPT_DOCUMENT_SEND_FAILED",
-        errorMessage: "Mensagem enviada, mas falhou o envio do PDF pelo W.A Speed.",
-        details: errDocApi.message || String(errDocApi)
+        errorCode: "WASCRIPT_DOCUMENT_NOT_CONFIRMED",
+        errorMessage: "A mensagem de texto foi aceita, mas o W.A Speed não confirmou o envio do PDF.",
+        diagnostic: {
+          phoneOriginal: phone,
+          phoneNormalized: cleanPhone,
+          status: docApi.status,
+          isJson: docApi.isJson,
+          isEmpty: docApi.isEmpty,
+          rawBodyPreview: docApi.rawBodyPreview,
+          inspection: docInspection
+        }
       });
     }
 
+    // 4. Return success only if both are accepted with High confidence
+    return res.status(200).json({
+      success: true,
+      message: "Mensagem e PDF enviados ao W.A Speed com confirmação da API.",
+      phoneNormalized: cleanPhone,
+      delivery: {
+        phoneOriginal: phone,
+        phoneNormalized: cleanPhone,
+        text: {
+          accepted: true,
+          confidence: textInspection.confidence,
+          reason: textInspection.reason,
+          response: textInspection.parsedBody || textInspection.rawBodyPreview
+        },
+        document: {
+          accepted: true,
+          confidence: docInspection.confidence,
+          reason: docInspection.reason,
+          response: docInspection.parsedBody || docInspection.rawBodyPreview
+        }
+      }
+    });
+
   } catch (err: any) {
-    console.error("[WhatsAppSend] Error:", err);
+    console.error("[WhatsAppSend] Unexpected error in send-whatsapp:", err);
     return res.status(500).json({
       success: false,
-      errorMessage: `Erro ao enviar WhatsApp: ${err.message || err}`
+      errorCode: "WHATSAPP_SEND_UNEXPECTED_ERROR",
+      errorMessage: err.message || "Erro inesperado ao enviar WhatsApp.",
+      diagnostic: {
+        type: err.name || null
+      }
     });
   }
 });
+
+
 
 
 app.post("/api/google-docs/send-gmail", async (req: any, res: any) => {

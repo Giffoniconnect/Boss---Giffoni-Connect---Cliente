@@ -55,7 +55,16 @@ export default function EntregaDocumento({
 
   const [showWhatsappConfirm, setShowWhatsappConfirm] = useState(false);
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
-  const [whatsappResult, setWhatsappResult] = useState<{ success: boolean; message: string; errorCode?: string; fileId?: string | null } | null>(null);
+  const [whatsappResult, setWhatsappResult] = useState<{
+    success: boolean;
+    message: string;
+    pendingConfirmation?: boolean;
+    errorCode?: string;
+    fileId?: string | null;
+    phoneNormalized?: string;
+    delivery?: any;
+    diagnostic?: any;
+  } | null>(null);
 
   const [sendingGmail, setSendingGmail] = useState(false);
   const [gmailResult, setGmailResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -170,31 +179,44 @@ export default function EntregaDocumento({
           googleAccessToken
         })
       });
-      const data = await response.json();
-      if (response.ok && data.success && !data.simulated) {
-        setWhatsappResult({ success: true, message: data.message || 'Mensagem e PDF enviados com sucesso pelo W.A Speed.' });
+      const raw = await response.text();
+      let data: any = null;
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch {
+        data = null;
+      }
+
+      if (!data) {
+        setWhatsappResult({
+          success: false,
+          message: raw
+            ? `Resposta inesperada do servidor: ${raw.slice(0, 300)}`
+            : 'Servidor respondeu sem conteúdo ao tentar enviar pelo W.A Speed.'
+        });
+        return;
+      }
+
+      if (response.ok && data.success) {
+        setWhatsappResult({
+          success: true,
+          message: data.message || `Mensagem e PDF aceitos pelo W.A Speed para o número ${data.phoneNormalized || ''}.`,
+          phoneNormalized: data.phoneNormalized,
+          delivery: data.delivery
+        });
         // Close modal on successfully sending after a short delay
         setTimeout(() => {
           setShowWhatsappConfirm(false);
-        }, 1500);
-      } else if (response.ok && data.success && data.simulated) {
-        setWhatsappResult({
-          success: false,
-          message: 'O envio não foi real. O backend retornou modo simulado. Verifique o token W.A Speed.'
-        });
-      } else if (response.ok && data.partialSuccess) {
-        setWhatsappResult({
-          success: false,
-          message: data.errorMessage || 'Falha parcial ao enviar por WhatsApp.',
-          errorCode: data.errorCode,
-          fileId: data.diagnostic?.fileId
-        });
+        }, 5000);
       } else {
         setWhatsappResult({
           success: false,
-          message: data.errorMessage || 'Falha ao enviar valor por WhatsApp.',
+          pendingConfirmation: data.pendingConfirmation || false,
+          message: data.errorMessage || 'Falha ao enviar por WhatsApp.',
           errorCode: data.errorCode,
-          fileId: data.diagnostic?.fileId
+          diagnostic: data.diagnostic,
+          phoneNormalized: data.phoneNormalized,
+          fileId: data.diagnostic?.fileId || (data.diagnostic?.inspection?.parsedBody?.fileId)
         });
       }
     } catch (err: any) {
@@ -421,18 +443,70 @@ export default function EntregaDocumento({
 
             {/* Send status feedback */}
             {whatsappResult && (
-              <div className={`p-2.5 rounded-xl border flex flex-col gap-1.5 text-[11px] ${
+              <div id="whatsapp-feedback-status-inline" className={`p-2.5 rounded-xl border flex flex-col gap-1.5 text-[11px] ${
                 whatsappResult.success 
                   ? 'bg-emerald-500/10 border-emerald-250 text-emerald-800 font-bold' 
+                  : whatsappResult.pendingConfirmation
+                  ? 'bg-amber-500/10 border-amber-200 text-amber-800 font-bold'
                   : 'bg-rose-550/10 border-rose-200 text-rose-800 font-bold'
               }`}>
                 <div className="flex items-center gap-2">
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${whatsappResult.success ? 'bg-emerald-550 animate-pulse' : 'bg-rose-550'}`}></span>
-                  <span>{whatsappResult.message}</span>
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                    whatsappResult.success 
+                      ? 'bg-emerald-550 animate-pulse' 
+                      : whatsappResult.pendingConfirmation
+                      ? 'bg-amber-550 animate-pulse'
+                      : 'bg-rose-550'
+                  }`}></span>
+                  <span>{whatsappResult.pendingConfirmation ? "O W.A Speed respondeu, mas não confirmou o envio. A mensagem/PDF não foram considerados enviados." : whatsappResult.message}</span>
                 </div>
-                {!whatsappResult.success && whatsappResult.errorCode && (
+                {whatsappResult.success && whatsappResult.delivery && (
+                  <div className="text-[10px] text-emerald-700/80 font-normal pl-3.5 space-y-0.5">
+                    <div>Texto: <span className="font-semibold uppercase text-[9px] px-1 py-0.2 bg-emerald-500/15 rounded">{whatsappResult.delivery.text.confidence}</span> — Documento: <span className="font-semibold uppercase text-[9px] px-1 py-0.2 bg-emerald-500/15 rounded">{whatsappResult.delivery.document.confidence}</span></div>
+                  </div>
+                )}
+                {whatsappResult.pendingConfirmation && whatsappResult.diagnostic && (
+                  <div className="text-[10px] text-amber-700/85 font-normal pl-3 space-y-1 mt-1 border-l-2 border-amber-300">
+                    <div>• Telefone normalizado: <span className="font-semibold">{whatsappResult.phoneNormalized || whatsappResult.diagnostic.phoneNormalized || "N/A"}</span></div>
+                    <div>• Status HTTP: <span className="font-semibold">{whatsappResult.diagnostic.status || "502 (Ambiguidade)"}</span></div>
+                    {whatsappResult.diagnostic.textConfidence && (
+                      <div>• Confiança Texto: <span className="font-semibold uppercase text-[9px] px-1.5 py-0.5 bg-amber-500/15 rounded">{whatsappResult.diagnostic.textConfidence}</span></div>
+                    )}
+                    {whatsappResult.diagnostic.documentConfidence && (
+                      <div>• Confiança Documento: <span className="font-semibold uppercase text-[9px] px-1.5 py-0.5 bg-amber-500/15 rounded">{whatsappResult.diagnostic.documentConfidence}</span></div>
+                    )}
+                    {whatsappResult.diagnostic.textRawBodyPreview && (
+                      <div className="mt-1">
+                        • Retorno Texto API: 
+                        <pre className="max-h-20 overflow-y-auto font-mono text-[9px] bg-amber-500/5 p-1 rounded border border-amber-500/10 mt-0.5 break-all whitespace-pre-wrap">
+                          {whatsappResult.diagnostic.textRawBodyPreview}
+                        </pre>
+                      </div>
+                    )}
+                    {whatsappResult.diagnostic.documentRawBodyPreview && (
+                      <div className="mt-1">
+                        • Retorno PDF API: 
+                        <pre className="max-h-20 overflow-y-auto font-mono text-[9px] bg-amber-500/5 p-1 rounded border border-amber-500/10 mt-0.5 break-all whitespace-pre-wrap">
+                          {whatsappResult.diagnostic.documentRawBodyPreview}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {!whatsappResult.success && !whatsappResult.pendingConfirmation && whatsappResult.errorCode && (
                   <div className="text-[10px] text-rose-700/85 font-normal pl-3">
                     Código: {whatsappResult.errorCode}
+                  </div>
+                )}
+                {!whatsappResult.success && !whatsappResult.pendingConfirmation && whatsappResult.diagnostic && (
+                  <div className="text-[10px] text-rose-700/85 font-normal pl-3 space-y-1 mt-1 border-l-2 border-rose-300">
+                    <div>• Telefone normalizado: <span className="font-semibold">{whatsappResult.diagnostic.phoneNormalized || "N/A"}</span></div>
+                    {whatsappResult.diagnostic.status && (
+                      <div>• Status API: <span className="font-semibold">{whatsappResult.diagnostic.status}</span></div>
+                    )}
+                    {whatsappResult.diagnostic.inspection?.reason && (
+                      <div>• Motivo: <span className="font-semibold">{whatsappResult.diagnostic.inspection.reason}</span></div>
+                    )}
                   </div>
                 )}
                 {!whatsappResult.success && whatsappResult.fileId && (
@@ -624,18 +698,70 @@ export default function EntregaDocumento({
 
               {/* Error/Success feedback inside the modal */}
               {whatsappResult && (
-                <div className={`p-3 rounded-xl border flex flex-col gap-1.5 text-[11px] ${
+                <div id="whatsapp-feedback-status-modal" className={`p-3 rounded-xl border flex flex-col gap-1.5 text-[11px] ${
                   whatsappResult.success 
                     ? 'bg-emerald-50 border-emerald-100 text-emerald-800 font-bold' 
+                    : whatsappResult.pendingConfirmation
+                    ? 'bg-amber-50 border-amber-200 text-amber-800 font-bold'
                     : 'bg-rose-550/10 border-rose-200 text-rose-800 font-bold'
                 }`}>
                   <div className="flex items-center gap-2">
-                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${whatsappResult.success ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
-                    <span>{whatsappResult.message}</span>
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                      whatsappResult.success 
+                        ? 'bg-emerald-500 animate-pulse' 
+                        : whatsappResult.pendingConfirmation
+                        ? 'bg-amber-500 animate-pulse'
+                        : 'bg-rose-550'
+                    }`}></span>
+                    <span>{whatsappResult.pendingConfirmation ? "O W.A Speed respondeu, mas não confirmou o envio. A mensagem/PDF não foram considerados enviados." : whatsappResult.message}</span>
                   </div>
-                  {!whatsappResult.success && whatsappResult.errorCode && (
+                  {whatsappResult.success && whatsappResult.delivery && (
+                    <div className="text-[10px] text-emerald-700/80 font-normal pl-3.5 space-y-0.5">
+                      <div>Texto: <span className="font-semibold uppercase text-[9px] px-1 py-0.2 bg-emerald-500/15 rounded">{whatsappResult.delivery.text.confidence}</span> — Documento: <span className="font-semibold uppercase text-[9px] px-1 py-0.2 bg-emerald-500/15 rounded">{whatsappResult.delivery.document.confidence}</span></div>
+                    </div>
+                  )}
+                  {whatsappResult.pendingConfirmation && whatsappResult.diagnostic && (
+                    <div className="text-[10px] text-amber-700/85 font-normal pl-3 space-y-1 mt-1 border-l-2 border-amber-300">
+                      <div>• Telefone normalizado: <span className="font-semibold">{whatsappResult.phoneNormalized || whatsappResult.diagnostic.phoneNormalized || "N/A"}</span></div>
+                      <div>• Status HTTP: <span className="font-semibold">{whatsappResult.diagnostic.status || "502 (Ambiguidade)"}</span></div>
+                      {whatsappResult.diagnostic.textConfidence && (
+                        <div>• Confiança Texto: <span className="font-semibold uppercase text-[9px] px-1.5 py-0.5 bg-amber-500/15 rounded">{whatsappResult.diagnostic.textConfidence}</span></div>
+                      )}
+                      {whatsappResult.diagnostic.documentConfidence && (
+                        <div>• Confiança Documento: <span className="font-semibold uppercase text-[9px] px-1.5 py-0.5 bg-amber-500/15 rounded">{whatsappResult.diagnostic.documentConfidence}</span></div>
+                      )}
+                      {whatsappResult.diagnostic.textRawBodyPreview && (
+                        <div className="mt-1">
+                          • Retorno Texto API: 
+                          <pre className="max-h-20 overflow-y-auto font-mono text-[9px] bg-amber-500/5 p-1 rounded border border-amber-500/10 mt-0.5 break-all whitespace-pre-wrap">
+                            {whatsappResult.diagnostic.textRawBodyPreview}
+                          </pre>
+                        </div>
+                      )}
+                      {whatsappResult.diagnostic.documentRawBodyPreview && (
+                        <div className="mt-1">
+                          • Retorno PDF API: 
+                          <pre className="max-h-20 overflow-y-auto font-mono text-[9px] bg-amber-500/5 p-1 rounded border border-amber-500/10 mt-0.5 break-all whitespace-pre-wrap">
+                            {whatsappResult.diagnostic.documentRawBodyPreview}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {!whatsappResult.success && !whatsappResult.pendingConfirmation && whatsappResult.errorCode && (
                     <div className="text-[10px] text-rose-700/85 font-normal pl-3">
                       Código: {whatsappResult.errorCode}
+                    </div>
+                  )}
+                  {!whatsappResult.success && !whatsappResult.pendingConfirmation && whatsappResult.diagnostic && (
+                    <div className="text-[10px] text-rose-700/85 font-normal pl-3 space-y-1 mt-1 border-l-2 border-rose-300">
+                      <div>• Telefone normalizado: <span className="font-semibold">{whatsappResult.diagnostic.phoneNormalized || "N/A"}</span></div>
+                      {whatsappResult.diagnostic.status && (
+                        <div>• Status API: <span className="font-semibold">{whatsappResult.diagnostic.status}</span></div>
+                      )}
+                      {whatsappResult.diagnostic.inspection?.reason && (
+                        <div>• Motivo: <span className="font-semibold">{whatsappResult.diagnostic.inspection.reason}</span></div>
+                      )}
                     </div>
                   )}
                   {!whatsappResult.success && whatsappResult.fileId && (
