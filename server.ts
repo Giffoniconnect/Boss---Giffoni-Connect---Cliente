@@ -3593,7 +3593,52 @@ app.post("/api/todoist/create-task", async (req, res) => {
   }
 });
 
+app.get("/__health", (_req, res) => {
+  res.status(200).json({
+    ok: true,
+    service: "boss-giffoni-connect",
+    timestamp: new Date().toISOString(),
+    nodeEnv: process.env.NODE_ENV || null,
+    cwd: process.cwd()
+  });
+});
+
+app.get("/__runtime-info", (_req, res) => {
+  const distPath = path.join(process.cwd(), "dist");
+  const indexPath = path.join(distPath, "index.html");
+
+  res.status(200).json({
+    ok: true,
+    cwd: process.cwd(),
+    distPath,
+    indexPath,
+    distExists: fs.existsSync(distPath),
+    indexExists: fs.existsSync(indexPath),
+    filesInDist: fs.existsSync(distPath) ? fs.readdirSync(distPath) : [],
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get("/__plain", (_req, res) => {
+  res.status(200).send(`
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>BOSS Plain Runtime</title>
+      </head>
+      <body style="font-family: Arial; padding: 40px;">
+        <h1>BOSS — Servidor Express respondeu HTML puro</h1>
+        <p>Se esta tela abriu, o problema não é porta nem roteamento HTTP básico.</p>
+      </body>
+    </html>
+  `);
+});
+
 async function startServer() {
+  console.log("[BOOT] NODE_ENV:", process.env.NODE_ENV);
+  console.log("[BOOT] CWD:", process.cwd());
+
   // Integrate Vite middleware in development mode
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -3603,6 +3648,8 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
+    console.log("[BOOT] distPath:", distPath);
+    console.log("[BOOT] indexExists:", fs.existsSync(path.join(distPath, "index.html")));
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
