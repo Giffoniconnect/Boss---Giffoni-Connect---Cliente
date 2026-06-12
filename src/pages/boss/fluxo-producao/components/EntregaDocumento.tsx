@@ -51,11 +51,11 @@ export default function EntregaDocumento({
   onOutroChange,
   questionNumber = '1.2'
 }: EntregaDocumentoProps) {
-  const { googleAccessToken } = useAuth();
+  const { googleAccessToken, loginWithGoogle } = useAuth();
 
   const [showWhatsappConfirm, setShowWhatsappConfirm] = useState(false);
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
-  const [whatsappResult, setWhatsappResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [whatsappResult, setWhatsappResult] = useState<{ success: boolean; message: string; errorCode?: string; fileId?: string | null } | null>(null);
 
   const [sendingGmail, setSendingGmail] = useState(false);
   const [gmailResult, setGmailResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -183,9 +183,19 @@ export default function EntregaDocumento({
           message: 'O envio não foi real. O backend retornou modo simulado. Verifique o token W.A Speed.'
         });
       } else if (response.ok && data.partialSuccess) {
-        setWhatsappResult({ success: false, message: data.errorMessage || 'Falha parcial ao enviar por WhatsApp.' });
+        setWhatsappResult({
+          success: false,
+          message: data.errorMessage || 'Falha parcial ao enviar por WhatsApp.',
+          errorCode: data.errorCode,
+          fileId: data.diagnostic?.fileId
+        });
       } else {
-        setWhatsappResult({ success: false, message: data.errorMessage || 'Falha ao enviar valor por WhatsApp.' });
+        setWhatsappResult({
+          success: false,
+          message: data.errorMessage || 'Falha ao enviar valor por WhatsApp.',
+          errorCode: data.errorCode,
+          fileId: data.diagnostic?.fileId
+        });
       }
     } catch (err: any) {
       setWhatsappResult({ success: false, message: err.message || 'Erro ao conectar à API de WhatsApp.' });
@@ -411,13 +421,42 @@ export default function EntregaDocumento({
 
             {/* Send status feedback */}
             {whatsappResult && (
-              <div className={`p-2.5 rounded-xl border flex items-center gap-2 text-[11px] font-bold ${
+              <div className={`p-2.5 rounded-xl border flex flex-col gap-1.5 text-[11px] ${
                 whatsappResult.success 
-                  ? 'bg-emerald-500/10 border-emerald-250 text-emerald-800' 
-                  : 'bg-rose-550/10 border-rose-200 text-rose-800'
+                  ? 'bg-emerald-500/10 border-emerald-250 text-emerald-800 font-bold' 
+                  : 'bg-rose-550/10 border-rose-200 text-rose-800 font-bold'
               }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${whatsappResult.success ? 'bg-emerald-550 animate-pulse' : 'bg-rose-550'}`}></span>
-                <span>{whatsappResult.message}</span>
+                <div className="flex items-center gap-2">
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${whatsappResult.success ? 'bg-emerald-550 animate-pulse' : 'bg-rose-550'}`}></span>
+                  <span>{whatsappResult.message}</span>
+                </div>
+                {!whatsappResult.success && whatsappResult.errorCode && (
+                  <div className="text-[10px] text-rose-700/85 font-normal pl-3">
+                    Código: {whatsappResult.errorCode}
+                  </div>
+                )}
+                {!whatsappResult.success && whatsappResult.fileId && (
+                  <div className="text-[10px] text-rose-700/85 font-normal pl-3">
+                    ID do documento: {whatsappResult.fileId}
+                  </div>
+                )}
+                {!whatsappResult.success && (whatsappResult.errorCode === 'GOOGLE_DOCS_TOKEN_EXPIRED' || whatsappResult.errorCode === 'GOOGLE_AUTH_UNAUTHORIZED') && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await loginWithGoogle('boss_admin');
+                        setWhatsappResult(null);
+                      } catch (e: any) {
+                        alert("Erro ao reautorizar conta Google: " + e.message);
+                      }
+                    }}
+                    className="mt-1 w-max px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all shadow-3xs cursor-pointer flex items-center gap-1 shrink-0 self-start"
+                  >
+                    <ExternalLink size={10} />
+                    <span>Conectar com Google / Renovar Token</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -585,13 +624,42 @@ export default function EntregaDocumento({
 
               {/* Error/Success feedback inside the modal */}
               {whatsappResult && (
-                <div className={`p-3 rounded-xl border flex items-center gap-2 text-[11px] font-bold ${
+                <div className={`p-3 rounded-xl border flex flex-col gap-1.5 text-[11px] ${
                   whatsappResult.success 
-                    ? 'bg-emerald-50 border-emerald-100 text-emerald-800' 
-                    : 'bg-rose-550/10 border-rose-200 text-rose-800'
+                    ? 'bg-emerald-50 border-emerald-100 text-emerald-800 font-bold' 
+                    : 'bg-rose-550/10 border-rose-200 text-rose-800 font-bold'
                 }`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${whatsappResult.success ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
-                  <span>{whatsappResult.message}</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${whatsappResult.success ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
+                    <span>{whatsappResult.message}</span>
+                  </div>
+                  {!whatsappResult.success && whatsappResult.errorCode && (
+                    <div className="text-[10px] text-rose-700/85 font-normal pl-3">
+                      Código: {whatsappResult.errorCode}
+                    </div>
+                  )}
+                  {!whatsappResult.success && whatsappResult.fileId && (
+                    <div className="text-[10px] text-rose-700/85 font-normal pl-3">
+                      ID do documento: {whatsappResult.fileId}
+                    </div>
+                  )}
+                  {!whatsappResult.success && (whatsappResult.errorCode === 'GOOGLE_DOCS_TOKEN_EXPIRED' || whatsappResult.errorCode === 'GOOGLE_AUTH_UNAUTHORIZED') && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await loginWithGoogle('boss_admin');
+                          setWhatsappResult(null);
+                        } catch (e: any) {
+                          alert("Erro ao reautorizar conta Google: " + e.message);
+                        }
+                      }}
+                      className="mt-1 w-max px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all shadow-3xs cursor-pointer flex items-center gap-1 shrink-0 self-start"
+                    >
+                      <ExternalLink size={10} />
+                      <span>Conectar com Google / Renovar Token</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
