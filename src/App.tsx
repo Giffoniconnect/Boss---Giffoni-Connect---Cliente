@@ -152,6 +152,7 @@ const PortalClienteFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/
 const EditarPortalCliente = React.lazy(() => import('./pages/boss/fluxo-producao/EditarPortalCliente'));
 
 // Coleta / Documents step views (FASE 3 - Lazy Imports)
+const CardIniciarColeta = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/CardIniciarColeta'));
 const ProcuracaoPF = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/ProcuracaoPF'));
 const ProcuracaoPJ = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/ProcuracaoPJ'));
 const DeclaracaoPF = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/DeclaracaoPF'));
@@ -281,7 +282,7 @@ const bossRouter = createBrowserRouter(
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/dados-caso" element={<SafeRoute children={<DadosCaso />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacoes-informacoes" element={<SafeRoute children={<SolicitacoesInformacoes />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacoes-provas" element={<SafeRoute children={<SolicitacoesProvas />} />} />
-      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/card-iniciar-coleta-obrigatoria" element={<SafeRoute children={<SolicitacoesProvas />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/card-iniciar-coleta-obrigatoria" element={<SafeRoute children={<CardIniciarColeta />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/financeiro" element={<SafeRoute children={<FinanceiroFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/edrp" element={<SafeRoute children={<EDRPFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/delegacao" element={<SafeRoute children={<DelegacaoFluxo />} />} />
