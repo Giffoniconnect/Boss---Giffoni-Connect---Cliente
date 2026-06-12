@@ -119,7 +119,7 @@ function MiniRichEditor({ id, value, onChange, placeholder, isMissing }: MiniRic
           textAlign: 'justify',
           paddingLeft: '1.5rem',
         }}
-        placeholder={placeholder}
+        {...{ placeholder }}
       />
     </div>
   );

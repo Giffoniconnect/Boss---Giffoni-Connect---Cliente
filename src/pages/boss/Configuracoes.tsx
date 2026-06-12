@@ -454,7 +454,7 @@ export default function Configuracoes() {
         setPortalUpdatedAt(new Date().toLocaleString('pt-BR'));
       } else if (activeSubTab === 'conectores') {
         // Enforce strict GDI validations before save
-        const googleDocs = connectors.googleDocs || {};
+        const googleDocs = (connectors as any).googleDocs || {};
         const gapiBaseUrl = (googleDocs.buildUrl || '').trim();
         const integrationKey = (googleDocs.integrationKey || '').trim();
         const status = googleDocs.status || 'não_configurado';
@@ -592,7 +592,7 @@ export default function Configuracoes() {
     const key = 'googleDocs';
     setTestResult(prev => ({ ...prev, [key]: 'loading' }));
     
-    const googleDocs = connectors.googleDocs || {};
+    const googleDocs = (connectors as any).googleDocs || {};
     const gapiBaseUrl = (googleDocs.buildUrl || '').trim();
     const integrationKey = (googleDocs.integrationKey || '').trim();
 

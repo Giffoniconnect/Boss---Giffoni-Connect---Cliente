@@ -18,53 +18,23 @@ interface EntregaDocumentoProps {
 
 function extractGoogleDocId(url: string): string | null {
   if (!url) return null;
-  const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/) || url.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
+  const match = url.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
   return match ? match[1] : null;
 }
 
-function isMockUrl(url: string | null | undefined): boolean {
-  if (!url) return false;
-  const lower = url.toLowerCase();
-  return (
-    lower.includes('mock') ||
-    lower.includes('fake') ||
-    lower.includes('teste') ||
-    lower.includes('diagnostic') ||
-    lower.includes('localhost') ||
-    lower.includes('undefined') ||
-    lower.includes('null') ||
-    lower.includes('placeholder')
-  );
-}
-
-async function openGoogleDocPrint(
-  docUrl: string,
-  googleAccessToken?: string,
-  setPrintingDoc?: (val: boolean) => void,
-  setPrintError?: (err: string | null) => void
-) {
-  if (!docUrl) return;
-
+function openGoogleDocPrint(docUrl: string) {
   const documentId = extractGoogleDocId(docUrl);
-  if (!documentId || isMockUrl(docUrl)) {
-    console.warn("URL de documento é de teste ou vazia. Não imprimindo:", docUrl);
+
+  if (!documentId) {
+    window.open(docUrl, "_blank", "noopener,noreferrer");
     return;
   }
 
-  if (setPrintingDoc) setPrintingDoc(true);
-  if (setPrintError) setPrintError(null);
+  const printUrl = `https://docs.google.com/document/d/${documentId}/preview`;
+  const printWindow = window.open(printUrl, "_blank", "noopener,noreferrer");
 
-  try {
-    const tokenQuery = googleAccessToken ? `&googleAccessToken=${encodeURIComponent(googleAccessToken)}` : "";
-    const pdfUrl = `/api/google-docs/export-pdf?googleDocsUrl=${encodeURIComponent(docUrl)}${tokenQuery}`;
-    window.open(pdfUrl, "_blank");
-  } catch (err: any) {
-    console.error("Falha ao gerar e abrir PDF:", err.message);
-    if (setPrintError) {
-      setPrintError(err.message || "Erro ao abrir PDF.");
-    }
-  } finally {
-    if (setPrintingDoc) setPrintingDoc(false);
+  if (!printWindow) {
+    alert("O navegador bloqueou a janela de impressão. Autorize pop-ups para imprimir o documento.");
   }
 }
 
@@ -81,25 +51,13 @@ export default function EntregaDocumento({
   onOutroChange,
   questionNumber = '1.2'
 }: EntregaDocumentoProps) {
-  const { googleAccessToken, loginWithGoogle } = useAuth();
+  const { googleAccessToken } = useAuth();
 
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
   const [whatsappResult, setWhatsappResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const [sendingGmail, setSendingGmail] = useState(false);
   const [gmailResult, setGmailResult] = useState<{ success: boolean; message: string } | null>(null);
-
-  const [printingDoc, setPrintingDoc] = useState(false);
-  const [printError, setPrintError] = useState<string | null>(null);
-
-  const handleConnectGoogle = async () => {
-    try {
-      setPrintError(null);
-      await loginWithGoogle('boss_admin');
-    } catch (err: any) {
-      setPrintError(err.message || 'Falha ao conectar com o Google.');
-    }
-  };
 
   // Resolve localized text based on documento
   const getDocInfo = () => {
@@ -286,56 +244,18 @@ export default function EntregaDocumento({
               </div>
               <button
                 type="button"
-                onClick={() => openGoogleDocPrint(docUrl, googleAccessToken, setPrintingDoc, setPrintError)}
-                disabled={printingDoc}
-                className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-black disabled:opacity-50 text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition-all shadow-3xs cursor-pointer"
+                onClick={() => openGoogleDocPrint(docUrl)}
+                className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-black text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition-all shadow-3xs cursor-pointer"
               >
-                {printingDoc ? (
-                  <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                ) : (
-                  <Printer size={12} />
-                )}
-                <span>{printingDoc ? 'Preparando...' : `Imprimir ${docInfo.label}`}</span>
+                <Printer size={12} />
+                <span>Imprimir {docInfo.label}</span>
               </button>
             </div>
-
-            {/* Print Error feedback if any */}
-            {printError && (
-              <div className="bg-rose-50 border border-rose-100 p-3 rounded-xl flex flex-col gap-2.5 text-[11px] font-bold text-rose-800">
-                <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
-                  <span className="leading-relaxed">{printError}</span>
-                </div>
-                {(printError.includes("autorização fática") || printError.includes("credenciais de Service Account") || printError.includes("expirou") || printError.includes("OAuth")) && (
-                  <div className="mt-1 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={handleConnectGoogle}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-black uppercase transition-all shadow-3xs cursor-pointer"
-                    >
-                      <Settings size={10} />
-                      <span>Conectar com Google Docs/Drive</span>
-                    </button>
-                    {docUrl && !docUrl.includes('placeholder') && (
-                      <a
-                        href={docUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-[10px] font-black uppercase transition-all cursor-pointer"
-                      >
-                        <ExternalLink size={10} />
-                        <span>Abrir Documento diretamente</span>
-                      </a>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* Validation Log */}
             <div className="bg-emerald-50 border border-emerald-100 p-2.5 rounded-xl flex items-center gap-2 text-[11px] font-bold text-emerald-800">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>{docInfo.label} pronto para impressão direta no navegador.</span>
+              <span>{docInfo.label} gerado disponível para impressão.</span>
             </div>
           </div>
         )}

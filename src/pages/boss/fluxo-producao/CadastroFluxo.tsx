@@ -198,9 +198,12 @@ export default function CadastroFluxo() {
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             setSelectedClientForCase({
+              id: docSnap.id,
               clientId: selectIdForCase,
+              type: docSnap.data()?.type || 'PF',
+              slug: docSnap.data()?.slug || '',
               ...docSnap.data()
-            });
+            } as ClientData);
           }
         } catch (err) {
           console.error("Error loading client for case:", err);

@@ -1375,11 +1375,11 @@ export default function GoogleDocsGeraisConfig() {
                   </button>
                 </div>
                 <textarea 
-                  type={showPrivateKey ? 'text' : 'password'}
                   value={serviceAccountPrivateKey}
                   onChange={(e) => setServiceAccountPrivateKey(e.target.value)}
                   placeholder="-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQD..."
                   className="w-full font-mono text-xs p-3 border border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none h-28 leading-relaxed"
+                  style={!showPrivateKey ? { WebkitTextSecurity: 'disc' } as any : {}}
                   required
                 />
               </div>

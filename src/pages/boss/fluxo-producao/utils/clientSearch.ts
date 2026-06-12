@@ -8,6 +8,9 @@ export interface ClientData {
   type: 'PF' | 'PJ';
   slug: string;
   active?: boolean;
+  portalStatus?: string;
+  googleDriveClientFolderId?: string;
+  googleDriveClientFolderUrl?: string;
   pfData?: any;
   pfDadosPessoais?: any;
   pjData?: any;

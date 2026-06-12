@@ -1,80 +1,103 @@
 import React, { Suspense } from 'react';
 import { createBrowserRouter, createRoutesFromElements, RouterProvider, Route, Navigate, useLocation, Outlet } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import AppErrorBoundary from './components/AppErrorBoundary';
 
 // Regular imports instead of lazy load for debugging
 import Home from './pages/Home';
 import BossLogin from './pages/boss/Login';
-import BossDashboard from './pages/boss/Dashboard';
-import BossConfiguracoes from './pages/boss/Configuracoes';
-import BossSetores from './pages/boss/Setores';
-import CentralControle from './pages/boss/CentralControle';
-import BossPortalClientePreview from './pages/boss/PortalClientePreview';
-import BossEditorPainelCliente from './pages/boss/EditorPainelCliente';
+
+// Lazy imports for other pages
+const BossDashboard = React.lazy(() => import('./pages/boss/Dashboard'));
+const BossConfiguracoes = React.lazy(() => import('./pages/boss/Configuracoes'));
+const BossSetores = React.lazy(() => import('./pages/boss/Setores'));
+const CentralControle = React.lazy(() => import('./pages/boss/CentralControle'));
+const BossPortalClientePreview = React.lazy(() => import('./pages/boss/PortalClientePreview'));
+const BossEditorPainelCliente = React.lazy(() => import('./pages/boss/EditorPainelCliente'));
 
 // Connector Integrations
-import StripeIntegration from './pages/boss/integracoes/StripeIntegration';
-import AsaasIntegration from './pages/boss/integracoes/AsaasIntegration';
-import GoogleDriveIntegration from './pages/boss/integracoes/GoogleDriveIntegration';
-import TodoistIntegration from './pages/boss/integracoes/TodoistIntegration';
-import GoogleCalendarIntegration from './pages/boss/integracoes/GoogleCalendarIntegration';
-import GoogleDocsIntegration from './pages/boss/integracoes/GoogleDocsIntegration';
-import GoogleDocsGeraisConfig from './pages/boss/integracoes/GoogleDocsGeraisConfig';
-import ProcuracaoPFConfig from './pages/boss/integracoes/ProcuracaoPFConfig';
-import DocTypeConfig from './pages/boss/integracoes/DocTypeConfig';
-import WhatsappIntegration from './pages/boss/integracoes/WhatsappIntegration';
-import GmailIntegration from './pages/boss/integracoes/GmailIntegration';
+const StripeIntegration = React.lazy(() => import('./pages/boss/integracoes/StripeIntegration'));
+const AsaasIntegration = React.lazy(() => import('./pages/boss/integracoes/AsaasIntegration'));
+const GoogleDriveIntegration = React.lazy(() => import('./pages/boss/integracoes/GoogleDriveIntegration'));
+const TodoistIntegration = React.lazy(() => import('./pages/boss/integracoes/TodoistIntegration'));
+const GoogleCalendarIntegration = React.lazy(() => import('./pages/boss/integracoes/GoogleCalendarIntegration'));
+const GoogleDocsIntegration = React.lazy(() => import('./pages/boss/integracoes/GoogleDocsIntegration'));
+const GoogleDocsGeraisConfig = React.lazy(() => import('./pages/boss/integracoes/GoogleDocsGeraisConfig'));
+const ProcuracaoPFConfig = React.lazy(() => import('./pages/boss/integracoes/ProcuracaoPFConfig'));
+const DocTypeConfig = React.lazy(() => import('./pages/boss/integracoes/DocTypeConfig'));
+const WhatsappIntegration = React.lazy(() => import('./pages/boss/integracoes/WhatsappIntegration'));
+const GmailIntegration = React.lazy(() => import('./pages/boss/integracoes/GmailIntegration'));
 
 // Decoupled Technical Settings Pages
-import DetalhesTecnicos from './pages/boss/configuracoes/DetalhesTecnicos';
-import DetalhesTecnicosClientes from './pages/boss/configuracoes/DetalhesTecnicosClientes';
-import DetalhesTecnicosCasos from './pages/boss/configuracoes/DetalhesTecnicosCasos';
+const DetalhesTecnicos = React.lazy(() => import('./pages/boss/configuracoes/DetalhesTecnicos'));
+const DetalhesTecnicosClientes = React.lazy(() => import('./pages/boss/configuracoes/DetalhesTecnicosClientes'));
+const DetalhesTecnicosCasos = React.lazy(() => import('./pages/boss/configuracoes/DetalhesTecnicosCasos'));
 
 // Modular Production Flow
-import FluxoHome from './pages/boss/fluxo-producao/FluxoHome';
-import PendenciasFluxo from './pages/boss/fluxo-producao/PendenciasFluxo';
-import TipoServico from './pages/boss/fluxo-producao/TipoServico';
-import DadosCaso from './pages/boss/fluxo-producao/DadosCaso';
-import SolicitacoesInformacoes from './pages/boss/fluxo-producao/SolicitacoesInformacoes';
-import SolicitacoesProvas from './pages/boss/fluxo-producao/SolicitacoesProvas';
-import CardIniciarColeta from './pages/boss/fluxo-producao/coleta/CardIniciarColeta';
-import ProcuracaoPF from './pages/boss/fluxo-producao/coleta/ProcuracaoPF';
-import ProcuracaoPJ from './pages/boss/fluxo-producao/coleta/ProcuracaoPJ';
-import DeclaracaoPF from './pages/boss/fluxo-producao/coleta/DeclaracaoPF';
-import DeclaracaoPJ from './pages/boss/fluxo-producao/coleta/DeclaracaoPJ';
-import ContratoHonorariosPF from './pages/boss/fluxo-producao/coleta/ContratoHonorariosPF';
-import ContratoHonorariosPJ from './pages/boss/fluxo-producao/coleta/ContratoHonorariosPJ';
-import DocumentosMinimosPF from './pages/boss/fluxo-producao/coleta/DocumentosMinimosPF';
-import DocumentosMinimosPJ from './pages/boss/fluxo-producao/coleta/DocumentosMinimosPJ';
-import DocumentosNecessidadePF from './pages/boss/fluxo-producao/coleta/DocumentosNecessidadePF';
-import DocumentosNecessidadePJ from './pages/boss/fluxo-producao/coleta/DocumentosNecessidadePJ';
-import DocumentosAuditoriaPF from './pages/boss/fluxo-producao/coleta/DocumentosAuditoriaPF';
-import DocumentosAuditoriaPJ from './pages/boss/fluxo-producao/coleta/DocumentosAuditoriaPJ';
-import FinanceiroFluxo from './pages/boss/fluxo-producao/FinanceiroFluxo';
-import EDRPFluxo from './pages/boss/fluxo-producao/EDRPFluxo';
-import RevisaoFluxo from './pages/boss/fluxo-producao/RevisaoFluxo';
-import DelegacaoFluxo from './pages/boss/fluxo-producao/DelegacaoFluxo';
-import ProtocoloFluxo from './pages/boss/fluxo-producao/ProtocoloFluxo';
-import NovoCasoFluxo from './pages/boss/fluxo-producao/NovoCasoFluxo';
-import ControladoriaFluxo from './pages/boss/fluxo-producao/ControladoriaFluxo';
-import RelatorioIntegridadeFluxo from './pages/boss/fluxo-producao/RelatorioIntegridadeFluxo';
-import PrePeticionamentoIaFluxo from './pages/boss/fluxo-producao/PrePeticionamentoIaFluxo';
-import ComplianceFluxo from './pages/boss/fluxo-producao/ComplianceFluxo';
-import ArquivamentoFluxo from './pages/boss/fluxo-producao/ArquivamentoFluxo';
-import Recadastramento from './pages/boss/fluxo-producao/Recadastramento';
-import EditarCadastroCliente from './pages/boss/fluxo-producao/EditarCadastroCliente';
-import CadastroFluxo from './pages/boss/fluxo-producao/CadastroFluxo';
-import PortalClienteFluxo from './pages/boss/fluxo-producao/PortalClienteFluxo';
-import EditarPortalCliente from './pages/boss/fluxo-producao/EditarPortalCliente';
-import CentralAtalhos from './pages/boss/giffoni-connect/CentralAtalhos';
-import BossLeadsPrivate from './pages/boss/leads/BossLeadsPrivate';
-import CadastrarLeadsPrivate from './pages/boss/leads/CadastrarLeadsPrivate';
-import CadastrarLeadsPF from './pages/boss/leads/CadastrarLeadsPF';
-import CadastrarLeadsPJ from './pages/boss/leads/CadastrarLeadsPJ';
-import CadastrarLeadsEtapa2 from './pages/boss/leads/CadastrarLeadsEtapa2';
-import RegulamentarViabilidade from './pages/boss/leads/RegulamentarViabilidade';
+const FluxoHome = React.lazy(() => import('./pages/boss/fluxo-producao/FluxoHome'));
+const PendenciasFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/PendenciasFluxo'));
+const TipoServico = React.lazy(() => import('./pages/boss/fluxo-producao/TipoServico'));
+const DadosCaso = React.lazy(() => import('./pages/boss/fluxo-producao/DadosCaso'));
+const SolicitacoesInformacoes = React.lazy(() => import('./pages/boss/fluxo-producao/SolicitacoesInformacoes'));
+const SolicitacoesProvas = React.lazy(() => import('./pages/boss/fluxo-producao/SolicitacoesProvas'));
+const CardIniciarColeta = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/CardIniciarColeta'));
+const ProcuracaoPF = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/ProcuracaoPF'));
+const ProcuracaoPJ = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/ProcuracaoPJ'));
+const DeclaracaoPF = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/DeclaracaoPF'));
+const DeclaracaoPJ = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/DeclaracaoPJ'));
+const ContratoHonorariosPF = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/ContratoHonorariosPF'));
+const ContratoHonorariosPJ = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/ContratoHonorariosPJ'));
+const DocumentosMinimosPF = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/DocumentosMinimosPF'));
+const DocumentosMinimosPJ = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/DocumentosMinimosPJ'));
+const DocumentosNecessidadePF = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/DocumentosNecessidadePF'));
+const DocumentosNecessidadePJ = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/DocumentosNecessidadePJ'));
+const DocumentosAuditoriaPF = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/DocumentosAuditoriaPF'));
+const DocumentosAuditoriaPJ = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/DocumentosAuditoriaPJ'));
+const FinanceiroFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/FinanceiroFluxo'));
+const EDRPFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/EDRPFluxo'));
+const RevisaoFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/RevisaoFluxo'));
+const DelegacaoFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/DelegacaoFluxo'));
+const ProtocoloFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/ProtocoloFluxo'));
+const NovoCasoFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/NovoCasoFluxo'));
+const ControladoriaFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/ControladoriaFluxo'));
+const RelatorioIntegridadeFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/RelatorioIntegridadeFluxo'));
+const PrePeticionamentoIaFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/PrePeticionamentoIaFluxo'));
+const ComplianceFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/ComplianceFluxo'));
+const ArquivamentoFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/ArquivamentoFluxo'));
+const Recadastramento = React.lazy(() => import('./pages/boss/fluxo-producao/Recadastramento'));
+const EditarCadastroCliente = React.lazy(() => import('./pages/boss/fluxo-producao/EditarCadastroCliente'));
+const CadastroFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/CadastroFluxo'));
+const PortalClienteFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/PortalClienteFluxo'));
+const EditarPortalCliente = React.lazy(() => import('./pages/boss/fluxo-producao/EditarPortalCliente'));
+const CentralAtalhos = React.lazy(() => import('./pages/boss/giffoni-connect/CentralAtalhos'));
+const BossLeadsPrivate = React.lazy(() => import('./pages/boss/leads/BossLeadsPrivate'));
+const CadastrarLeadsPrivate = React.lazy(() => import('./pages/boss/leads/CadastrarLeadsPrivate'));
+const CadastrarLeadsPF = React.lazy(() => import('./pages/boss/leads/CadastrarLeadsPF'));
+const CadastrarLeadsPJ = React.lazy(() => import('./pages/boss/leads/CadastrarLeadsPJ'));
+const CadastrarLeadsEtapa2 = React.lazy(() => import('./pages/boss/leads/CadastrarLeadsEtapa2'));
+const RegulamentarViabilidade = React.lazy(() => import('./pages/boss/leads/RegulamentarViabilidade'));
 
+function TemporaryRouteGuard({ name }: { name: string }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="bg-white border border-gray-200 rounded-2xl p-6 max-w-lg text-center shadow-sm">
+        <h1 className="text-lg font-black text-gray-900">Módulo em diagnóstico</h1>
+        <p className="text-sm text-gray-500 mt-2">
+          A rota {name} foi isolada temporariamente para restaurar o carregamento global do app.
+        </p>
+      </div>
+    </div>
+  );
+}
 
+const LoaderFallback = () => (
+  <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-400 font-sans">
+    <div className="flex flex-col items-center gap-4">
+      <div className="w-10 h-10 border-4 border-gray-100 border-t-gray-900 rounded-full animate-spin"></div>
+      <span className="text-sm font-bold uppercase tracking-widest text-gray-600">Carregando módulo...</span>
+    </div>
+  </div>
+);
 
 const ProtectedRoute = ({ children, role }: { children: React.ReactNode, role: 'boss_admin' | 'client' }) => {
   const { profile, loading } = useAuth();
@@ -101,7 +124,7 @@ const ProtectedRoute = ({ children, role }: { children: React.ReactNode, role: '
 
 const router = createBrowserRouter(
   createRoutesFromElements(
-    <Route element={<Suspense fallback={null}><Outlet /></Suspense>}>
+    <Route element={<Suspense fallback={<LoaderFallback />}><Outlet /></Suspense>}>
       <Route path="/" element={<Home />} />
       
       {/* BOSS Admin Routes */}
@@ -751,7 +774,9 @@ const router = createBrowserRouter(
 export default function App() {
   return (
     <AuthProvider>
-      <RouterProvider router={router} />
+      <AppErrorBoundary>
+        <RouterProvider router={router} />
+      </AppErrorBoundary>
     </AuthProvider>
   );
 }
