@@ -53,11 +53,51 @@ export default function EntregaDocumento({
 }: EntregaDocumentoProps) {
   const { googleAccessToken } = useAuth();
 
+  const [showWhatsappConfirm, setShowWhatsappConfirm] = useState(false);
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
   const [whatsappResult, setWhatsappResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const [sendingGmail, setSendingGmail] = useState(false);
   const [gmailResult, setGmailResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const getWhatsappMessageText = () => {
+    switch (tipoDocumento) {
+      case 'procuracao':
+        return 'Olá! Aqui é a Giffoni Advogados Associados, segue a *procuração* para sua conferência e assinatura. Por gentileza, assine, digitalize em PDF e nos envie de volta. É sempre um imenso prazer lhe atender.';
+      case 'declaracao':
+        return 'Olá! Aqui é a Giffoni Advogados Associados, segue a *declaração* para sua conferência e assinatura. Por gentileza, assine, digitalize em PDF e nos envie de volta. É sempre um imenso prazer lhe atender.';
+      case 'contrato':
+        return 'Olá! Aqui é a Giffoni Advogados Associados, segue o *contrato de honorários* para sua conferência e assinatura. Por gentileza, assine, digitalize em PDF e nos envie de volta. É sempre um imenso prazer lhe atender.';
+      default:
+        return 'Olá! Aqui é a Giffoni Advogados Associados, segue o documento para sua conferência e assinatura. Por gentileza, assine, digitalize em PDF e nos envie de volta. É sempre um imenso prazer lhe atender.';
+    }
+  };
+
+  const getSendButtonLabel = () => {
+    switch (tipoDocumento) {
+      case 'procuracao':
+        return 'Preparar envio da Procuração via WhatsApp';
+      case 'declaracao':
+        return 'Preparar envio da Declaração via WhatsApp';
+      case 'contrato':
+        return 'Preparar envio do Contrato via WhatsApp';
+      default:
+        return 'Preparar envio via WhatsApp';
+    }
+  };
+
+  const getModalTitle = () => {
+    switch (tipoDocumento) {
+      case 'procuracao':
+        return 'Confirmar envio da Procuração via W.A Speed';
+      case 'declaracao':
+        return 'Confirmar envio da Declaração via W.A Speed';
+      case 'contrato':
+        return 'Confirmar envio do Contrato via W.A Speed';
+      default:
+        return 'Confirmar envio via W.A Speed';
+    }
+  };
 
   // Resolve localized text based on documento
   const getDocInfo = () => {
@@ -97,17 +137,18 @@ export default function EntregaDocumento({
     onMethodsChange(updated);
   };
 
-  const handleSendWhatsapp = async () => {
+  const handleConfirmWhatsappSend = async () => {
     setSendingWhatsapp(true);
     setWhatsappResult(null);
 
-    if (!cleanPhone) {
+    const cleanPhoneVal = whatsappCliente.replace(/\D/g, '');
+    if (!cleanPhoneVal) {
       setWhatsappResult({ success: false, message: 'WhatsApp do cliente não encontrado.' });
       setSendingWhatsapp(false);
       return;
     }
 
-    if (!googleDocsUrl || googleDocsUrl.includes('placeholder')) {
+    if (!docUrl || docUrl.includes('placeholder')) {
       setWhatsappResult({ success: false, message: 'Documento ainda não foi gerado.' });
       setSendingWhatsapp(false);
       return;
@@ -125,14 +166,26 @@ export default function EntregaDocumento({
           docName: docInfo.label,
           clientName: nomeCliente,
           documentType: tipoDocumento,
+          tipoPessoa,
           googleAccessToken
         })
       });
       const data = await response.json();
-      if (response.ok && data.success) {
-        setWhatsappResult({ success: true, message: data.message || 'Mensagem e PDF enviados com sucesso.' });
+      if (response.ok && data.success && !data.simulated) {
+        setWhatsappResult({ success: true, message: data.message || 'Mensagem e PDF enviados com sucesso pelo W.A Speed.' });
+        // Close modal on successfully sending after a short delay
+        setTimeout(() => {
+          setShowWhatsappConfirm(false);
+        }, 1500);
+      } else if (response.ok && data.success && data.simulated) {
+        setWhatsappResult({
+          success: false,
+          message: 'O envio não foi real. O backend retornou modo simulado. Verifique o token W.A Speed.'
+        });
+      } else if (response.ok && data.partialSuccess) {
+        setWhatsappResult({ success: false, message: data.errorMessage || 'Falha parcial ao enviar por WhatsApp.' });
       } else {
-        setWhatsappResult({ success: false, message: data.errorMessage || 'Falha ao enviar por WhatsApp.' });
+        setWhatsappResult({ success: false, message: data.errorMessage || 'Falha ao enviar valor por WhatsApp.' });
       }
     } catch (err: any) {
       setWhatsappResult({ success: false, message: err.message || 'Erro ao conectar à API de WhatsApp.' });
@@ -144,8 +197,30 @@ export default function EntregaDocumento({
   const handleSendGmail = async () => {
     setSendingGmail(true);
     setGmailResult(null);
+
+    if (!emailCliente) {
+      setGmailResult({ success: false, message: 'E-mail do cliente não encontrado.' });
+      setSendingGmail(false);
+      return;
+    }
+
+    if (!docUrl || docUrl.includes('placeholder')) {
+      setGmailResult({ success: false, message: 'Documento ainda não foi gerado.' });
+      setSendingGmail(false);
+      return;
+    }
+
+    if (!googleAccessToken) {
+      setGmailResult({
+        success: false,
+        message: 'Conecte sua conta Google/Gmail antes de preparar o rascunho.'
+      });
+      setSendingGmail(false);
+      return;
+    }
+
     try {
-      const response = await fetch('/api/google-docs/send-gmail', {
+      const response = await fetch('/api/google-docs/create-gmail-draft', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -156,17 +231,40 @@ export default function EntregaDocumento({
           docName: docInfo.label,
           clientName: nomeCliente,
           googleAccessToken,
-          documentType: tipoDocumento
+          documentType: tipoDocumento,
+          tipoPessoa
         })
       });
       const data = await response.json();
       if (response.ok && data.success) {
-        setGmailResult({ success: true, message: data.message });
+        const urls = data.gmailOpenUrls;
+        const openUrl = urls?.draftById || urls?.draftByMessageId || urls?.inboxThread;
+        
+        if (openUrl) {
+          setGmailResult({
+            success: true,
+            message: 'E-mail aberto no Gmail com destinatário, assunto, corpo e anexo.'
+          });
+          window.open(openUrl, '_blank', 'noopener,noreferrer');
+        } else {
+          setGmailResult({
+            success: true,
+            message: 'Rascunho criado com sucesso, mas o Gmail abriu a pasta de rascunhos. Abra o rascunho recém-criado para enviar.'
+          });
+          const fallbackUrl = urls?.draftsFolder || 'https://mail.google.com/mail/u/0/#drafts';
+          window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
+        }
       } else {
-        setGmailResult({ success: false, message: data.errorMessage || 'Falha ao enviar por e-mail.' });
+        setGmailResult({
+          success: false,
+          message: data.errorMessage || 'Não foi possível preparar o e-mail no Gmail. Verifique se sua conta Google está conectada com permissão Gmail.'
+        });
       }
     } catch (err: any) {
-      setGmailResult({ success: false, message: err.message || 'Erro ao conectar à API de e-mail.' });
+      setGmailResult({
+        success: false,
+        message: 'Não foi possível preparar o e-mail no Gmail. Verifique se sua conta Google está conectada com permissão Gmail.'
+      });
     } finally {
       setSendingGmail(false);
     }
@@ -277,14 +375,14 @@ export default function EntregaDocumento({
                   Transmissão por WhatsApp ({whatsappCliente || 'Número não cadastrado'})
                 </p>
                 <p className="text-[10px] text-emerald-700/80 font-semibold font-sans">
-                  Enviar {docInfo.label} de forma automatizada ao número do cliente.
+                  Preparar a mensagem e o anexo PDF de {docInfo.label} para envio seguro via W.A Speed.
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={handleSendWhatsapp}
+                  onClick={() => setShowWhatsappConfirm(true)}
                   disabled={sendingWhatsapp}
                   className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition-all shadow-3xs cursor-pointer"
                 >
@@ -293,18 +391,19 @@ export default function EntregaDocumento({
                   ) : (
                     <MessageCircle size={12} />
                   )}
-                  <span>{sendingWhatsapp ? 'Enviando...' : `Enviar ${docInfo.label} via WhatsApp`}</span>
+                  <span>{sendingWhatsapp ? 'Preparando...' : getSendButtonLabel()}</span>
                 </button>
 
                 {cleanPhone && (
                   <a
-                    href={whatsappUrl}
+                    href={`https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(getWhatsappMessageText())}`}
                     target="_blank"
                     rel="noreferrer"
                     className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold rounded-xl transition-all"
+                    title="Aviso: Abre o WhatsApp Web convencional apenas com o texto pré-preenchido, sem o PDF anexo de forma automática."
                   >
                     <ExternalLink size={11} />
-                    <span>WhatsApp Web</span>
+                    <span>WhatsApp Web (Manual - Sem Anexo)</span>
                   </a>
                 )}
               </div>
@@ -341,7 +440,7 @@ export default function EntregaDocumento({
                   Transmissão por E-mail ({emailCliente || 'Email não cadastrado'})
                 </p>
                 <p className="text-[10px] text-blue-700/85 font-semibold font-sans">
-                  Enviar {docInfo.label} com anexo PDF automático via integração Gmail ou SMTP.
+                  Preparar e-mail rascunho com o PDF de {docInfo.label} anexado automaticamente na sua conta do Gmail integrada.
                 </p>
               </div>
 
@@ -349,7 +448,7 @@ export default function EntregaDocumento({
                 <button
                   type="button"
                   onClick={handleSendGmail}
-                  disabled={sendingGmail || !emailCliente || !docUrl}
+                  disabled={sendingGmail || !emailCliente || !docUrl || !googleAccessToken}
                   className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition-all shadow-3xs cursor-pointer"
                 >
                   {sendingGmail ? (
@@ -357,7 +456,7 @@ export default function EntregaDocumento({
                   ) : (
                     <Mail size={12} />
                   )}
-                  <span>{sendingGmail ? 'Enviando...' : `Enviar ${docInfo.label} via Gmail`}</span>
+                  <span>{sendingGmail ? 'Preparando...' : 'Preparar e-mail no Gmail'}</span>
                 </button>
 
                 {emailCliente && (
@@ -365,10 +464,11 @@ export default function EntregaDocumento({
                     href={gmailUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold rounded-xl transition-all"
+                    className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-[11px] font-bold rounded-xl transition-all text-center"
+                    title="Aviso: Abre compose de email convencional sem o PDF anexo de forma automática."
                   >
                     <ExternalLink size={11} />
-                    <span>Gmail Web</span>
+                    <span>Gmail Web (Manual - Sem Anexo)</span>
                   </a>
                 )}
               </div>
@@ -416,6 +516,117 @@ export default function EntregaDocumento({
           </div>
         )}
       </div>
+
+      {/* Confirmation Modal for WhatsApp Delivery */}
+      {showWhatsappConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs animate-in fade-in duration-200 p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+              <h3 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2 font-mono">
+                <MessageCircle size={16} className="text-emerald-600" />
+                {getModalTitle()}
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowWhatsappConfirm(false);
+                  setWhatsappResult(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 font-extrabold text-sm p-1 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 space-y-4 flex-1 overflow-y-auto text-xs font-sans text-slate-700">
+              <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                <div>
+                  <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider block">Cliente</span>
+                  <span className="font-extrabold text-slate-800">{nomeCliente}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider block">WhatsApp</span>
+                  <span className="font-extrabold text-slate-800">{whatsappCliente || "Não cadastrado"}</span>
+                </div>
+                <div className="col-span-2 pt-1 border-t border-slate-150">
+                  <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider block">Documento</span>
+                  <span className="font-extrabold text-slate-800">{docInfo.label}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider block">Anexo</span>
+                  <span className="font-bold text-slate-600 flex items-center gap-1.5 pt-0.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    PDF convertido a partir do Google Docs
+                  </span>
+                </div>
+              </div>
+
+              {/* Message preview */}
+              <div className="space-y-1.5">
+                <span className="text-[10px] uppercase font-black text-slate-400 tracking-wider block">Prévia da Mensagem (com asteriscos para negrito)</span>
+                <div className="bg-emerald-50/60 border border-emerald-100 p-3.5 rounded-xl text-[11px] font-semibold text-emerald-950 leading-relaxed font-sans whitespace-pre-line">
+                  {getWhatsappMessageText()}
+                </div>
+              </div>
+
+              {/* Validation errors inside the modal */}
+              {(!whatsappCliente || !docUrl || docUrl.includes('placeholder')) && (
+                <div className="p-3 bg-rose-50 border border-rose-100 text-rose-800 rounded-xl text-[11px] font-bold">
+                  ⚠️ {' '}
+                  {!whatsappCliente 
+                    ? 'WhatsApp do cliente não encontrado.' 
+                    : (!docUrl || docUrl.includes('placeholder')) 
+                    ? 'Documento ainda não foi gerado.' 
+                    : ''}
+                </div>
+              )}
+
+              {/* Error/Success feedback inside the modal */}
+              {whatsappResult && (
+                <div className={`p-3 rounded-xl border flex items-center gap-2 text-[11px] font-bold ${
+                  whatsappResult.success 
+                    ? 'bg-emerald-50 border-emerald-100 text-emerald-800' 
+                    : 'bg-rose-550/10 border-rose-200 text-rose-800'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${whatsappResult.success ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
+                  <span>{whatsappResult.message}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowWhatsappConfirm(false);
+                  setWhatsappResult(null);
+                }}
+                className="px-4 py-2 hover:bg-slate-200 text-slate-700 text-[11px] font-black uppercase tracking-wider rounded-xl transition-all border border-slate-250 cursor-pointer text-center"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmWhatsappSend}
+                disabled={sendingWhatsapp || !whatsappCliente || !docUrl || docUrl.includes('placeholder')}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition-all shadow-3xs cursor-pointer flex items-center gap-1.5 text-center"
+              >
+                {sendingWhatsapp ? (
+                  <>
+                    <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                    <span>Preparando...</span>
+                  </>
+                ) : (
+                  <span>Confirmar envio pelo W.A Speed</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

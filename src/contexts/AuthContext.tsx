@@ -150,10 +150,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setErrorMsg(null);
     try {
       const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
+      provider.setCustomParameters({ prompt: 'consent select_account' });
       provider.addScope('https://www.googleapis.com/auth/drive');
       provider.addScope('https://www.googleapis.com/auth/documents');
       provider.addScope('https://www.googleapis.com/auth/gmail.send');
+      provider.addScope('https://www.googleapis.com/auth/gmail.compose');
       
       const result = await signInWithPopup(auth, provider);
       const newUser = result.user;

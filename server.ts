@@ -2330,22 +2330,84 @@ app.post("/api/google-docs/test-folder-access", async (req: any, res: any) => {
   }
 });
 
+app.get("/api/whatsapp/diagnostics", async (req: any, res: any) => {
+  let waSpeedTokenFromFirestore = "";
+  if (dbAdmin) {
+    try {
+      const connectorsSnap = await dbAdmin.collection("settings").doc("connectors").get();
+      if (connectorsSnap.exists) {
+        waSpeedTokenFromFirestore = connectorsSnap.data()?.whatsapp?.waSpeedToken || "";
+      }
+    } catch (errDb) {
+      console.warn("[WhatsAppDiagnostics] Failed to read settings doc:", errDb);
+    }
+  }
+
+  let tokenSource = "missing";
+  let targetToken = "";
+
+  if (process.env.Wascript_API) {
+    targetToken = process.env.Wascript_API;
+    tokenSource = "process.env.Wascript_API";
+  } else if (process.env.WASCRIPT_API) {
+    targetToken = process.env.WASCRIPT_API;
+    tokenSource = "process.env.WASCRIPT_API";
+  } else if (process.env.WASCRIPT_TOKEN) {
+    targetToken = process.env.WASCRIPT_TOKEN;
+    tokenSource = "process.env.WASCRIPT_TOKEN";
+  } else if (process.env.WA_SPEED_TOKEN) {
+    targetToken = process.env.WA_SPEED_TOKEN;
+    tokenSource = "process.env.WA_SPEED_TOKEN";
+  } else if (waSpeedTokenFromFirestore) {
+    targetToken = waSpeedTokenFromFirestore;
+    tokenSource = "Firestore settings.connectors.whatsapp.waSpeedToken";
+  }
+
+  const maskToken = (token: string): string => {
+    if (!token) return "";
+    if (token.length <= 8) return "****";
+    return `${token.slice(0, 4)}...${token.slice(-4)}`;
+  };
+
+  return res.json({
+    success: true,
+    configured: !!targetToken,
+    tokenSource,
+    tokenMasked: maskToken(targetToken),
+    envKeysPresent: {
+      Wascript_API: !!process.env.Wascript_API,
+      WASCRIPT_API: !!process.env.WASCRIPT_API,
+      WASCRIPT_TOKEN: !!process.env.WASCRIPT_TOKEN,
+      WA_SPEED_TOKEN: !!process.env.WA_SPEED_TOKEN,
+      waSpeedTokenFromFirestore: !!waSpeedTokenFromFirestore
+    }
+  });
+});
+
 app.post("/api/google-docs/send-whatsapp", async (req: any, res: any) => {
   const { googleDocsUrl, phone, docName, clientName, caseId, documentType } = req.body || {};
   if (!phone) {
     return res.status(400).json({ success: false, errorMessage: "Telefone do cliente é obrigatório." });
   }
-
-  // Choose the dynamic mention of the document based on its type
-  let docMention = "procuração";
-  if (documentType === "declaracao" || (docName && docName.toLowerCase().includes("declara"))) {
-    docMention = "declaração";
-  } else if (documentType === "contrato" || (docName && docName.toLowerCase().includes("contrato"))) {
-    docMention = "contrato de honorários";
+  if (!googleDocsUrl) {
+    return res.status(400).json({ success: false, errorMessage: "Não foi possível encontrar o link do Google Docs. Envio cancelado para evitar mensagem sem anexo." });
   }
 
-  // Exact message structure requested:
-  const messageText = `Olá! Aqui é a Giffoni Advogados Associados segue a *${docMention}* para sua conferência e assinatura. Por gentileza assine, digitalize em PDF e nos envie de volta. É sempre um imenso prazer lhe atender`;
+  // Exact message structure with asterisks for bolding, as requested in Fase 1
+  let messageText = "";
+  let baseFileName = "Documento";
+  if (documentType === "procuracao" || (docName && docName.toLowerCase().includes("procura"))) {
+    messageText = "Olá! Aqui é a Giffoni Advogados Associados, segue a *procuração* para sua conferência e assinatura. Por gentileza, assine, digitalize em PDF e nos envie de volta. É sempre um imenso prazer lhe atender.";
+    baseFileName = "Procuração";
+  } else if (documentType === "declaracao" || (docName && docName.toLowerCase().includes("declara"))) {
+    messageText = "Olá! Aqui é a Giffoni Advogados Associados, segue a *declaração* para sua conferência e assinatura. Por gentileza, assine, digitalize em PDF e nos envie de volta. É sempre um imenso prazer lhe atender.";
+    baseFileName = "Declaração";
+  } else if (documentType === "contrato" || (docName && docName.toLowerCase().includes("contrato"))) {
+    messageText = "Olá! Aqui é a Giffoni Advogados Associados, segue o *contrato de honorários* para sua conferência e assinatura. Por gentileza, assine, digitalize em PDF e nos envie de volta. É sempre um imenso prazer lhe atender.";
+    baseFileName = "Contrato de Honorários";
+  } else {
+    messageText = "Olá! Aqui é a Giffoni Advogados Associados, segue o documento para sua conferência e assinatura. Por gentileza, assine, digitalize em PDF e nos envie de volta. É sempre um imenso prazer lhe atender.";
+  }
 
   try {
     // Normalize phone number (digits only)
@@ -2367,86 +2429,149 @@ app.post("/api/google-docs/send-whatsapp", async (req: any, res: any) => {
       }
     }
 
-    // Direct Secret/Env Var priority as requested
-    const targetToken = process.env.Wascript_API || process.env.WASCRIPT_API || waSpeedToken;
-    const isSimulation = !targetToken;
+    let tokenSource = "missing";
+    let targetToken = "";
 
-    // Try exporting PDF from Google Drive if URL is provided
-    let pdfBase64 = "";
-    if (googleDocsUrl) {
-      try {
-        const { jwtClient } = await createGoogleDocsJwtClient(req);
-        const drive = google.drive({ version: "v3", auth: jwtClient });
-        const match = googleDocsUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
-        const fileId = match ? match[1] : null;
-
-        if (fileId) {
-          const exportRes = await drive.files.export(
-            {
-              fileId,
-              mimeType: "application/pdf"
-            },
-            { responseType: "arraybuffer" }
-          );
-          pdfBase64 = Buffer.from(exportRes.data as ArrayBuffer).toString("base64");
-        }
-      } catch (errPdf: any) {
-        console.warn("[WhatsAppSend] PDF Export failed, proceeding with text message only:", errPdf.message);
-      }
+    if (process.env.Wascript_API) {
+      targetToken = process.env.Wascript_API;
+      tokenSource = "process.env.Wascript_API";
+    } else if (process.env.WASCRIPT_API) {
+      targetToken = process.env.WASCRIPT_API;
+      tokenSource = "process.env.WASCRIPT_API";
+    } else if (process.env.WASCRIPT_TOKEN) {
+      targetToken = process.env.WASCRIPT_TOKEN;
+      tokenSource = "process.env.WASCRIPT_TOKEN";
+    } else if (process.env.WA_SPEED_TOKEN) {
+      targetToken = process.env.WA_SPEED_TOKEN;
+      tokenSource = "process.env.WA_SPEED_TOKEN";
+    } else if (waSpeedToken) {
+      targetToken = waSpeedToken;
+      tokenSource = "Firestore settings.connectors.whatsapp.waSpeedToken";
     }
 
-    if (!isSimulation) {
-      const token = targetToken;
-      const baseUrl = "https://api-whatsapp.wascript.com.br";
+    const maskToken = (token: string): string => {
+      if (!token) return "";
+      if (token.length <= 8) return "****";
+      return `${token.slice(0, 4)}...${token.slice(-4)}`;
+    };
 
-      // 1. Send the text message via GET
-      const textUrl = `${baseUrl}/api/enviar-texto/${token}?phone=${cleanPhone}&message=${encodeURIComponent(messageText)}`;
+    console.log("[WhatsAppConfig] Token source:", tokenSource);
+    console.log("[WhatsAppConfig] Token present:", !!targetToken);
+    console.log("[WhatsAppConfig] Token masked:", maskToken(targetToken));
+    
+    // Fase 6: Real-only mode forced, no simulated success allowed
+    if (!targetToken) {
+      return res.status(400).json({
+        success: false,
+        errorMessage: "Token W.A Speed não configurado. Não foi possível realizar envio real."
+      });
+    }
+
+    // Convert Google Docs to PDF. Fase 8: If it fails, cancel immediately
+    let pdfBase64 = "";
+    const match = googleDocsUrl.match(/\/document\/d\/([a-zA-Z0-9-_]+)/) || googleDocsUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    const fileId = match ? match[1] : null;
+
+    if (!fileId) {
+      return res.status(400).json({
+        success: false,
+        errorMessage: "Não foi possível converter o documento em PDF. Envio cancelado para evitar mensagem sem anexo."
+      });
+    }
+
+    try {
+      const { jwtClient } = await createGoogleDocsJwtClient(req);
+      const drive = google.drive({ version: "v3", auth: jwtClient });
+      
+      const exportRes = await drive.files.export(
+        {
+          fileId,
+          mimeType: "application/pdf"
+        },
+        { responseType: "arraybuffer" }
+      );
+      pdfBase64 = Buffer.from(exportRes.data as ArrayBuffer).toString("base64");
+    } catch (errPdf: any) {
+      console.error("[WhatsAppSend] PDF Export failed:", errPdf);
+      return res.status(400).json({
+        success: false,
+        errorMessage: "Não foi possível converter o documento em PDF. Envio cancelado para evitar mensagem sem anexo."
+      });
+    }
+
+    const token = targetToken;
+    const baseUrl = "https://api-whatsapp.wascript.com.br";
+
+    // 1. Send the text message via GET
+    const textUrl = `${baseUrl}/api/enviar-texto/${token}?phone=${cleanPhone}&message=${encodeURIComponent(messageText)}`;
+    let textJson = null;
+    try {
       const textRes = await fetch(textUrl);
       if (!textRes.ok) {
         const errText = await textRes.text();
         throw new Error(`WA Speed API (Texto) respondeu com status ${textRes.status}: ${errText}`);
       }
-      const textJson = await textRes.json();
-
-      let docJson = null;
-      // 2. Send the PDF document if available via POST
-      if (pdfBase64) {
-        const docUrl = `${baseUrl}/api/enviar-documento/${token}`;
-        const docRes = await fetch(docUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            phone: cleanPhone,
-            base64: `data:application/pdf;base64,${pdfBase64}`,
-            name: `${docName || "documento"}.pdf`
-          })
-        });
-        if (!docRes.ok) {
-          const errDocText = await docRes.text();
-          console.warn("[WhatsAppSend] Sending PDF failed but message text was successfully sent:", errDocText);
-        } else {
-          docJson = await docRes.json();
-        }
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: "Mensagem e PDF enviados com sucesso.",
-        details: { text: textJson, doc: docJson }
-      });
-    } else {
-      console.log(`[WhatsAppSend] [SIMULATION] to ${cleanPhone}. Msg: ${messageText}`);
-      return res.status(200).json({
-        success: true,
-        message: "Mensagem e PDF enviados com sucesso. (Ambiente de Simulação)",
-        simulated: true,
-        phone: cleanPhone,
-        text: messageText,
-        hasPdf: !!pdfBase64
+      textJson = await textRes.json();
+    } catch (errTextApi: any) {
+      return res.status(500).json({
+        success: false,
+        errorMessage: `Falha ao enviar mensagem de texto via WhatsApp: ${errTextApi.message || errTextApi}`
       });
     }
+
+    // 2. Send the PDF document via POST
+    const sanitizeFileName = (name: string): string => {
+      return String(name || "Cliente")
+        .replace(/[\/:*?"<>|]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    };
+
+    const fileName = `${baseFileName} - ${sanitizeFileName(clientName || "Cliente")}`;
+
+    let docJson = null;
+    const docUrl = `${baseUrl}/api/enviar-documento/${token}`;
+    try {
+      const docRes = await fetch(docUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          phone: cleanPhone,
+          base64: `data:application/pdf;base64,${pdfBase64}`,
+          name: `${fileName}.pdf`
+        })
+      });
+      if (!docRes.ok) {
+        const errDocText = await docRes.text();
+        console.warn("[WhatsAppSend] Sending PDF failed but message text was successfully sent:", errDocText);
+        return res.status(200).json({
+          success: false,
+          partialSuccess: true,
+          messageSent: true,
+          documentSent: false,
+          errorMessage: "Mensagem enviada, mas falhou o envio do PDF."
+        });
+      }
+      docJson = await docRes.json();
+    } catch (errDocApi: any) {
+      console.error("[WhatsAppSend] Sending PDF failed but message text was successfully sent:", errDocApi);
+      return res.status(200).json({
+        success: false,
+        partialSuccess: true,
+        messageSent: true,
+        documentSent: false,
+        errorMessage: "Mensagem enviada, mas falhou o envio do PDF."
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Mensagem e PDF enviados com sucesso pelo W.A Speed.",
+      details: { text: textJson, doc: docJson }
+    });
+
   } catch (err: any) {
     console.error("[WhatsAppSend] Error:", err);
     return res.status(500).json({
@@ -2584,6 +2709,177 @@ app.post("/api/google-docs/send-gmail", async (req: any, res: any) => {
     return res.status(500).json({
       success: false,
       errorMessage: `Erro ao enviar e-mail: ${err.message || err}`
+    });
+  }
+});
+
+app.post("/api/google-docs/create-gmail-draft", async (req: any, res: any) => {
+  const { googleDocsUrl, email, docName, clientName, googleAccessToken, documentType, tipoPessoa } = req.body || {};
+
+  if (!email) {
+    return res.status(400).json({ success: false, errorMessage: "E-mail do cliente é obrigatório." });
+  }
+  if (!googleDocsUrl) {
+    return res.status(400).json({ success: false, errorMessage: "O link do Google Docs é obrigatório." });
+  }
+  if (!googleAccessToken) {
+    return res.status(400).json({ success: false, errorMessage: "O token de acesso do Google/Gmail é obrigatório." });
+  }
+
+  // Determine dynamic details based on documentType or docName
+  let docMention = "procuração";
+  let subjectPrefix = "Envio de Procuração";
+  let baseFileName = "Procuração";
+
+  if (documentType === "declaracao" || (docName && docName.toLowerCase().includes("declara"))) {
+    docMention = "declaração";
+    subjectPrefix = "Envio de Declaração";
+    baseFileName = "Declaração";
+  } else if (documentType === "contrato" || (docName && docName.toLowerCase().includes("contrato"))) {
+    docMention = "contrato de honorários";
+    subjectPrefix = "Envio de Contrato de Honorários";
+    baseFileName = "Contrato de Honorários";
+  }
+
+  const cleanClientName = (clientName || "Cliente").trim();
+  const subject = `${subjectPrefix} - ${cleanClientName} - Giffoni Advogados`;
+
+  // Encode header to base64 using RFC 2047 format to fix special character encoding problems
+  const encodeMimeHeader = (val: string): string => {
+    return `=?UTF-8?B?${Buffer.from(val, "utf8").toString("base64")}?=`;
+  };
+  const encodedSubject = encodeMimeHeader(subject);
+
+  // Message body with NO asterisks, exactly as requested:
+  const messageText = `Olá! Aqui é a Giffoni Advogados Associados, segue a ${docMention} para sua conferência e assinatura.\n\nPor gentileza, assine, digitalize em PDF e nos envie de volta.\n\nÉ sempre um imenso prazer lhe atender.\n\nAtenciosamente,\nGiffoni Advogados Associados`;
+
+  try {
+    // 1. Convert Google Docs URL to PDF using Drive API
+    let pdfBase64 = "";
+    
+    // Extract file ID
+    const match = googleDocsUrl.match(/\/d\/([a-zA-Z0-9-_]+)/) || googleDocsUrl.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
+    const fileId = match ? match[1] : null;
+
+    if (!fileId) {
+      return res.status(400).json({
+        success: false,
+        errorMessage: "Não foi possível extrair o ID do arquivo a partir da URL do Google Docs fornecida."
+      });
+    }
+
+    try {
+      const { jwtClient } = await createGoogleDocsJwtClient(req);
+      const drive = google.drive({ version: "v3", auth: jwtClient });
+      
+      const exportRes = await drive.files.export(
+        {
+          fileId,
+          mimeType: "application/pdf"
+        },
+        { responseType: "arraybuffer" }
+      );
+      pdfBase64 = Buffer.from(exportRes.data as ArrayBuffer).toString("base64");
+    } catch (errPdf: any) {
+      console.error("[GmailDraft] PDF Export failed:", errPdf);
+      return res.status(550).json({
+        success: false,
+        errorMessage: `Falha ao exportar/converter o Google Doc para PDF: ${errPdf.message || errPdf}`
+      });
+    }
+
+    // 2. Setup OAuth and Gmail Client
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({ access_token: googleAccessToken });
+    const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+
+    // 3. Construct filename
+    const sanitizeFileName = (name: string): string => {
+      return String(name || "Cliente")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "") // remove accents
+        .replace(/[\/:*?"<>|]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    };
+
+    const fileName = `${baseFileName} - ${sanitizeFileName(cleanClientName)}`;
+    
+    // 4. Build MIME message (raw RFC 2822 format)
+    const boundary = "------=_Part_" + Date.now();
+    const bodyBase64 = Buffer.from(messageText, "utf8").toString("base64");
+
+    const mailParts = [
+      `To: ${email}`,
+      `Subject: ${encodedSubject}`,
+      `MIME-Version: 1.0`,
+      `Content-Type: multipart/mixed; boundary="${boundary}"`,
+      ``,
+      `--${boundary}`,
+      `Content-Type: text/plain; charset="UTF-8"`,
+      `Content-Transfer-Encoding: base64`,
+      ``,
+      bodyBase64,
+      ``
+    ];
+
+    if (pdfBase64) {
+      mailParts.push(
+        `--${boundary}`,
+        `Content-Type: application/pdf; name="${fileName}.pdf"`,
+        `Content-Disposition: attachment; filename="${fileName}.pdf"`,
+        `Content-Transfer-Encoding: base64`,
+        ``,
+        pdfBase64,
+        ``
+      );
+    }
+
+    mailParts.push(`--${boundary}--`);
+
+    const rawMessageBase64 = Buffer.from(mailParts.join("\r\n"))
+      .toString("base64")
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+
+    // 5. Create Draft
+    const draftRes = await gmail.users.drafts.create({
+      userId: "me",
+      requestBody: {
+        message: {
+          raw: rawMessageBase64
+        }
+      }
+    });
+
+    const draftId = draftRes.data.id;
+    const messageId = draftRes.data.message?.id;
+    const threadId = draftRes.data.message?.threadId;
+
+    // Return different possible open URL routes
+    return res.status(200).json({
+      success: true,
+      message: "Rascunho de e-mail criado com sucesso no Gmail com o PDF anexado!",
+      draftId,
+      messageId,
+      threadId,
+      gmailOpenUrls: {
+        draftById: draftId ? `https://mail.google.com/mail/u/0/#drafts/${draftId}` : null,
+        draftByMessageId: messageId ? `https://mail.google.com/mail/u/0/#drafts/${messageId}` : null,
+        inboxThread: threadId ? `https://mail.google.com/mail/u/0/#inbox/${threadId}` : null,
+        composeByMessageId: messageId ? `https://mail.google.com/mail/u/0/#all?compose=${messageId}` : null,
+        composeByDraftId: draftId ? `https://mail.google.com/mail/u/0/#all?compose=${draftId}` : null,
+        composeInDraftsByMessageId: messageId ? `https://mail.google.com/mail/u/0/#drafts?compose=${messageId}` : null,
+        draftsFolder: "https://mail.google.com/mail/u/0/#drafts"
+      }
+    });
+
+  } catch (err: any) {
+    console.error("[GmailDraft] Error creating gmail draft:", err);
+    return res.status(500).json({
+      success: false,
+      errorMessage: `Não foi possível criar o rascunho no Gmail. Erro: ${err.message || err}`
     });
   }
 });
