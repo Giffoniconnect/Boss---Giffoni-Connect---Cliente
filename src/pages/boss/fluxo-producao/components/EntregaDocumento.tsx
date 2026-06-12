@@ -16,6 +16,28 @@ interface EntregaDocumentoProps {
   questionNumber?: string;
 }
 
+function extractGoogleDocId(url: string): string | null {
+  if (!url) return null;
+  const match = url.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
+  return match ? match[1] : null;
+}
+
+function openGoogleDocPrint(docUrl: string) {
+  const documentId = extractGoogleDocId(docUrl);
+
+  if (!documentId) {
+    window.open(docUrl, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  const printUrl = `https://docs.google.com/document/d/${documentId}/export?format=pdf`;
+  const printWindow = window.open(printUrl, "_blank", "noopener,noreferrer");
+
+  if (!printWindow) {
+    alert("O navegador bloqueou a janela de impressão. Autorize pop-ups para imprimir o documento.");
+  }
+}
+
 export default function EntregaDocumento({
   tipoDocumento,
   tipoPessoa,
@@ -78,6 +100,19 @@ export default function EntregaDocumento({
   const handleSendWhatsapp = async () => {
     setSendingWhatsapp(true);
     setWhatsappResult(null);
+
+    if (!cleanPhone) {
+      setWhatsappResult({ success: false, message: 'WhatsApp do cliente não encontrado.' });
+      setSendingWhatsapp(false);
+      return;
+    }
+
+    if (!googleDocsUrl || googleDocsUrl.includes('placeholder')) {
+      setWhatsappResult({ success: false, message: 'Documento ainda não foi gerado.' });
+      setSendingWhatsapp(false);
+      return;
+    }
+
     try {
       const response = await fetch('/api/google-docs/send-whatsapp', {
         method: 'POST',
@@ -88,12 +123,14 @@ export default function EntregaDocumento({
           googleDocsUrl: docUrl,
           phone: whatsappCliente,
           docName: docInfo.label,
-          clientName: nomeCliente
+          clientName: nomeCliente,
+          documentType: tipoDocumento,
+          googleAccessToken
         })
       });
       const data = await response.json();
       if (response.ok && data.success) {
-        setWhatsappResult({ success: true, message: data.message });
+        setWhatsappResult({ success: true, message: data.message || 'Mensagem e PDF enviados com sucesso.' });
       } else {
         setWhatsappResult({ success: false, message: data.errorMessage || 'Falha ao enviar por WhatsApp.' });
       }
@@ -204,15 +241,14 @@ export default function EntregaDocumento({
                   Imprimir {docInfo.label}
                 </p>
               </div>
-              <a
-                href={docUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-black text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition-all shadow-3xs"
+              <button
+                type="button"
+                onClick={() => openGoogleDocPrint(docUrl)}
+                className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-black text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition-all shadow-3xs cursor-pointer"
               >
                 <Printer size={12} />
                 <span>Imprimir {docInfo.label}</span>
-              </a>
+              </button>
             </div>
 
             {/* Validation Log */}
@@ -248,7 +284,7 @@ export default function EntregaDocumento({
                 <button
                   type="button"
                   onClick={handleSendWhatsapp}
-                  disabled={sendingWhatsapp || !cleanPhone || !docUrl}
+                  disabled={sendingWhatsapp}
                   className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition-all shadow-3xs cursor-pointer"
                 >
                   {sendingWhatsapp ? (
@@ -256,7 +292,7 @@ export default function EntregaDocumento({
                   ) : (
                     <MessageCircle size={12} />
                   )}
-                  <span>{sendingWhatsapp ? 'Enviando...' : 'Enviar Procuração via WhatsApp'}</span>
+                  <span>{sendingWhatsapp ? 'Enviando...' : `Enviar ${docInfo.label} via WhatsApp`}</span>
                 </button>
 
                 {cleanPhone && (

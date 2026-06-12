@@ -122,18 +122,70 @@ export default function ProcuracaoPJ() {
                 <span>{success}</span>
               </div>
             )}
+            {/* AUDITORIA DA GERAÇÃO DA PROCURAÇÃO CARD */}
+            <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-2xs space-y-5 shadow-3xs">
+              <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                <Sparkles className="text-indigo-600 animate-[spin_10s_linear_infinite]" size={18} />
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 font-mono">Auditoria da Geração da Procuração</h3>
+                  <p className="text-[11px] text-gray-500 mt-0.5 font-medium">Controle automatizado e verificação da pauta de integração via Google Docs para PJ.</p>
+                </div>
+              </div>
+
+              {/* CARD DE ESPAÇO RESERVADO PARA AUTOMAÇÕES FUTURAS */}
+              <div className="p-5 bg-gradient-to-br from-indigo-50/60 to-blue-50/20 border border-indigo-150 rounded-2xl flex flex-col gap-4">
+                <div className="flex items-start gap-3 text-slate-800 text-xs">
+                  <Sparkles size={16} className="text-indigo-600 shrink-0 mt-0.5 animate-pulse" />
+                  <div className="space-y-1">
+                    <span className="block font-extrabold uppercase tracking-widest text-[9px] text-indigo-750 font-mono">Automação Inteligente Ativa</span>
+                    <p className="text-xs text-slate-600 leading-normal">
+                      Esta ferramenta envia os dados consolidados do cadastro de pessoa jurídica diretamente ao build receptor do Google Docs para preenchimento de placeholders, indexação e arquivamento automatizado na pasta empresarial.
+                    </p>
+                  </div>
+                </div>
+
+                {/* STATUS DA AUTOMAÇÃO */}
+                <div className="border border-gray-150 rounded-xl p-3.5 bg-white space-y-2 select-none">
+                  <p className="font-bold text-gray-400 text-[9px] uppercase tracking-wider font-mono">Status da Automação</p>
+                  {caseObj?.procuracaoStatus === 'criada' || caseObj?.procuracaoGoogleDocsUrl ? (
+                    <div className="p-2.5 bg-emerald-50 border border-emerald-100 rounded-lg text-emerald-900 text-xs font-bold leading-normal">
+                      Procuração criada com sucesso ✅
+                    </div>
+                  ) : caseObj?.procuracaoStatus === 'falha' ? (
+                    <div className="p-2.5 bg-red-50 border border-red-150 rounded-lg text-red-900 text-xs font-bold leading-normal">
+                      Falha na criação da Procuração, consulte “ver fluxo de logs” para mais informações ❌
+                    </div>
+                  ) : (
+                    <div className="p-2.5 bg-gray-50 border border-gray-150 rounded-lg text-gray-500 text-xs font-bold leading-normal">
+                      Aguardando comando de geração eletrônica.
+                    </div>
+                  )}
+                </div>
+
+                {/* CONTROL BUTTONS FOR SIMULATOR */}
+                <div className="pt-2 border-t border-indigo-100 flex flex-wrap gap-2 items-center justify-between">
+                  <div className="flex gap-2">
+                    <button 
+                      type="button" 
+                      onClick={() => triggerSimulation('Procuração', 'criada')} 
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-xl text-[9px] font-black uppercase cursor-pointer shadow-3xs transition-all"
+                    >
+                      Gerar via Google Workspace (PJ)
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => triggerSimulation('Procuração', 'falha')} 
+                      className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1.5 rounded-xl text-[9px] font-black uppercase cursor-pointer shadow-3xs transition-all"
+                    >
+                      Simular Falha (PJ)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* FLOW QUESTIONNAIRE CARD */}
             <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-2xs space-y-5">
-              
-              {/* CARD DE ESPAÇO RESERVADO PARA AUTOMAÇÕES FUTURAS */}
-              <div className="p-4 bg-blue-50/75 border border-blue-100 rounded-2xl flex items-start gap-3 text-blue-950 text-xs font-semibold leading-relaxed shadow-3xs">
-                <Sparkles size={16} className="text-blue-500 shrink-0 mt-0.5 animate-pulse" />
-                <div>
-                  <span className="block font-extrabold uppercase tracking-widest text-[9px] text-blue-600 mb-0.5 font-mono">Automação Inteligente</span>
-                  Espaço reservado para automação futura da procuração
-                </div>
-              </div>
 
               <div className="space-y-1 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
                 <p className="text-xs font-extrabold text-gray-800">1.1 Você gerou a procuração do cliente empresarial?</p>
@@ -250,30 +302,13 @@ export default function ProcuracaoPJ() {
                 </div>
               )}
 
-              {/* AUTOMAÇÃO GOOGLE DOCS MOCK SIMULATOR */}
-              <div className="pt-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="flex flex-wrap gap-2">
-                  <button 
-                    type="button" 
-                    onClick={() => triggerSimulation('Procuração', 'criada')} 
-                    className="bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg text-[9.5px] font-black uppercase cursor-pointer"
-                  >
-                    Gerar via Google Workspace (PJ)
-                  </button>
-                  <button 
-                    type="button" 
-                    onClick={() => triggerSimulation('Procuração', 'falha')} 
-                    className="bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-lg text-[9.5px] font-black uppercase cursor-pointer"
-                  >
-                    Simular Falha (PJ)
-                  </button>
-                </div>
-
+              {/* ACTION FOOTER */}
+              <div className="pt-4 border-t border-gray-100 flex justify-end gap-3">
                 <button
                   type="button"
                   disabled={!wizardState.q1_1 || saving}
                   onClick={handleNextPhase}
-                  className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                  className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer font-bold"
                 >
                   <span>Próxima Fase</span>
                   <ArrowRight size={13} />

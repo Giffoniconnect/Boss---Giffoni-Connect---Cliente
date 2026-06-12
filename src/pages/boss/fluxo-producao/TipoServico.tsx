@@ -812,10 +812,10 @@ export default function TipoServico() {
             </div>
 
             {/* TWO COLUMN GRID FOR FORM AND WORKFLOW PREVIEWS */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className={subTypeRoute === 'peticao-inicial' ? "flex flex-col gap-6" : "grid grid-cols-1 lg:grid-cols-3 gap-8"}>
               
               {/* LEFT FORM FIELD CONTAINER */}
-              <div className="lg:col-span-2 space-y-6">
+              <div className={subTypeRoute === 'peticao-inicial' ? "space-y-6 w-full" : "lg:col-span-2 space-y-6"}>
                 
                 <div className="p-6 bg-white border border-gray-150 rounded-3xl space-y-5">
                   <div className="border-b border-gray-100 pb-3 flex items-center gap-2">

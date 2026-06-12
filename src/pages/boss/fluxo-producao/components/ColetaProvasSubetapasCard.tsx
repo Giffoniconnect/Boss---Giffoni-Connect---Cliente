@@ -150,7 +150,7 @@ export default function ColetaProvasSubetapasCard({
                   <span className={`text-[10px] uppercase font-black tracking-widest block font-mono ${isCurrent ? 'text-indigo-200' : 'text-gray-400'}`}>
                     0{index + 1} / 05
                   </span>
-                  <span className="text-[12px] font-extrabold tracking-tight block truncate mt-0.5">
+                  <span className="text-[12px] font-extrabold tracking-tight block leading-tight mt-0.5">
                     {step.label}
                   </span>
                 </div>

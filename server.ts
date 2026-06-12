@@ -2331,37 +2331,45 @@ app.post("/api/google-docs/test-folder-access", async (req: any, res: any) => {
 });
 
 app.post("/api/google-docs/send-whatsapp", async (req: any, res: any) => {
-  const { googleDocsUrl, phone, docName, clientName, caseId } = req.body || {};
+  const { googleDocsUrl, phone, docName, clientName, caseId, documentType } = req.body || {};
   if (!phone) {
     return res.status(400).json({ success: false, errorMessage: "Telefone do cliente é obrigatório." });
   }
 
-  // Composing message text as requested
-  const messageText = `Olá! Segue a procuração conforme solicitado, por gentileza, assine, digitalize e nos envie de volta aqui no What\`s app.\n\nGrato!\n\nGiffoni Advogados Associados.`;
+  // Choose the dynamic mention of the document based on its type
+  let docMention = "procuração";
+  if (documentType === "declaracao" || (docName && docName.toLowerCase().includes("declara"))) {
+    docMention = "declaração";
+  } else if (documentType === "contrato" || (docName && docName.toLowerCase().includes("contrato"))) {
+    docMention = "contrato de honorários";
+  }
+
+  // Exact message structure requested:
+  const messageText = `Olá! Aqui é a Giffoni Advogados Associados segue a *${docMention}* para sua conferência e assinatura. Por gentileza assine, digitalize em PDF e nos envie de volta. É sempre um imenso prazer lhe atender`;
 
   try {
     // Normalize phone number (digits only)
     const cleanPhone = phone.replace(/\D/g, "");
 
-    // Retrieve whatsapp config from Firestore via dbAdmin
-    let whatsappConfig: any = null;
-    let provider = "simulation";
-    let waSpeedUrl = "";
+    // Retrieve whatsapp config from Firestore via dbAdmin to get token fallback
     let waSpeedToken = "";
-    let waSpeedInstanceId = "";
-
     if (dbAdmin) {
-      const connectorsSnap = await dbAdmin.collection("settings").doc("connectors").get();
-      if (connectorsSnap.exists) {
-        whatsappConfig = connectorsSnap.data()?.whatsapp;
-        if (whatsappConfig) {
-          provider = whatsappConfig.provider || "simulation";
-          waSpeedUrl = whatsappConfig.waSpeedUrl || "";
-          waSpeedToken = whatsappConfig.waSpeedToken || "";
-          waSpeedInstanceId = whatsappConfig.waSpeedInstanceId || "";
+      try {
+        const connectorsSnap = await dbAdmin.collection("settings").doc("connectors").get();
+        if (connectorsSnap.exists) {
+          const whatsappConfig = connectorsSnap.data()?.whatsapp;
+          if (whatsappConfig) {
+            waSpeedToken = whatsappConfig.waSpeedToken || "";
+          }
         }
+      } catch (errDb) {
+        console.warn("[WhatsAppSend] Failed to read settings doc:", errDb);
       }
     }
+
+    // Direct Secret/Env Var priority as requested
+    const targetToken = process.env.Wascript_API || process.env.WASCRIPT_API || waSpeedToken;
+    const isSimulation = !targetToken;
 
     // Try exporting PDF from Google Drive if URL is provided
     let pdfBase64 = "";
@@ -2387,45 +2395,52 @@ app.post("/api/google-docs/send-whatsapp", async (req: any, res: any) => {
       }
     }
 
-    if (provider === "wa_speed" && waSpeedToken) {
-      const targetUrl = waSpeedUrl || "https://api.waspeed.com.br";
-      const apiEndpoint = `${targetUrl.replace(/\/+$/, "")}/api/v1/messages/send`;
+    if (!isSimulation) {
+      const token = targetToken;
+      const baseUrl = "https://api-whatsapp.wascript.com.br";
 
-      const payload: any = {
-        number: cleanPhone,
-        message: messageText
-      };
+      // 1. Send the text message via GET
+      const textUrl = `${baseUrl}/api/enviar-texto/${token}?phone=${cleanPhone}&message=${encodeURIComponent(messageText)}`;
+      const textRes = await fetch(textUrl);
+      if (!textRes.ok) {
+        const errText = await textRes.text();
+        throw new Error(`WA Speed API (Texto) respondeu com status ${textRes.status}: ${errText}`);
+      }
+      const textJson = await textRes.json();
 
+      let docJson = null;
+      // 2. Send the PDF document if available via POST
       if (pdfBase64) {
-        payload.file = `data:application/pdf;base64,${pdfBase64}`;
-        payload.filename = `${docName || "Procuração"}.pdf`;
+        const docUrl = `${baseUrl}/api/enviar-documento/${token}`;
+        const docRes = await fetch(docUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            phone: cleanPhone,
+            base64: `data:application/pdf;base64,${pdfBase64}`,
+            name: `${docName || "documento"}.pdf`
+          })
+        });
+        if (!docRes.ok) {
+          const errDocText = await docRes.text();
+          console.warn("[WhatsAppSend] Sending PDF failed but message text was successfully sent:", errDocText);
+        } else {
+          docJson = await docRes.json();
+        }
       }
 
-      const response = await fetch(apiEndpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${waSpeedToken}`
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`WA Speed API respondeu com status ${response.status}: ${errText}`);
-      }
-
-      const resJson = await response.json();
       return res.status(200).json({
         success: true,
-        message: "Documento enviado com absoluto sucesso via WA Speed!",
-        details: resJson
+        message: "Mensagem e PDF enviados com sucesso.",
+        details: { text: textJson, doc: docJson }
       });
     } else {
-      console.log(`[WhatsAppSend] Simulating message to ${cleanPhone} via ${provider}. Msg: ${messageText}`);
+      console.log(`[WhatsAppSend] [SIMULATION] to ${cleanPhone}. Msg: ${messageText}`);
       return res.status(200).json({
         success: true,
-        message: `WhatsApp enviado com sucesso (Simulado via provedor ${provider || 'não_configurado'}).`,
+        message: "Mensagem e PDF enviados com sucesso. (Ambiente de Simulação)",
         simulated: true,
         phone: cleanPhone,
         text: messageText,

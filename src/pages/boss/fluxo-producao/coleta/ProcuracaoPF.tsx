@@ -78,6 +78,7 @@ export default function ProcuracaoPF() {
 
   const [forceNewVersion, setForceNewVersion] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   const [sentPayload, setSentPayload] = React.useState<any>(null);
   const [showPayload, setShowPayload] = React.useState(false);
   const [copiedPayload, setCopiedPayload] = React.useState(false);
@@ -1000,8 +1001,15 @@ export default function ProcuracaoPF() {
               </div>
             )}
 
-            {/* FLOW QUESTIONNAIRE CARD */}
+            {/* AUDITORIA DA GERAÇÃO DA PROCURAÇÃO CARD */}
             <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-2xs space-y-5">
+              <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                <Settings className="text-indigo-600 animate-[spin_10s_linear_infinite]" size={18} />
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 font-mono">Auditoria da Geração da Procuração</h3>
+                  <p className="text-[11px] text-gray-500 mt-0.5 font-medium">Controle automatizado e verificação da pauta de integração via Google Docs.</p>
+                </div>
+              </div>
               
               {/* AUTOMAÇÃO INTELIGENTE CARD PANEL */}
               <div className="bg-gradient-to-br from-indigo-50/60 to-blue-50/20 border border-indigo-150 rounded-3xl p-6 shadow-3xs space-y-5">
@@ -1037,24 +1045,68 @@ export default function ProcuracaoPF() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {/* Atalho para as configurações de integração */}
-                    <div className="flex justify-start">
+                    {/* CONFIGURAÇÕES DA AUTOMAÇÃO */}
+                    <div className="border border-gray-150 rounded-2xl overflow-hidden bg-gray-50/40">
                       <button
-                        onClick={() => navigate('/boss-giffoni-clientes/configuracoes/integracoes-google-docs/config-procuracao-PF')}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 border border-indigo-150 hover:border-indigo-300 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-3xs"
+                        type="button"
+                        onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                        className="w-full px-4.5 py-3 flex items-center justify-between bg-white border-b border-gray-150 hover:bg-gray-55 transition-colors cursor-pointer text-left"
                       >
-                        <Settings size={13} className="text-indigo-500" />
-                        Ver Configurações de integração
+                        <div className="flex items-center gap-2">
+                          <Settings size={14} className="text-indigo-600 animate-[spin_8s_linear_infinite]" />
+                          <span className="text-xs font-black uppercase tracking-wider text-slate-700">Configurações do Google Docs</span>
+                        </div>
+                        <span className="text-[11px] font-black uppercase text-indigo-600 hover:text-indigo-800">
+                          {isSettingsOpen ? 'Ocultar' : 'Visualizar'}
+                        </span>
                       </button>
+
+                      {isSettingsOpen && (
+                        <div className="p-4.5 space-y-4 bg-white animate-fadeIn">
+                          {/* Pasta ID */}
+                          <div className="space-y-1">
+                            <p className="font-extrabold text-gray-400 text-[10px] uppercase tracking-wider">Identificador da Pasta do Cliente (Pasta ID)</p>
+                            <p className="font-mono bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-bold text-gray-800 select-all max-w-fit break-all">
+                              {driveFolderId}
+                            </p>
+                          </div>
+
+                          {/* Ver Template */}
+                          <div className="space-y-1.5 pt-1">
+                            <p className="font-extrabold text-gray-400 text-[10px] uppercase tracking-wider">Template Oficial de Procuração PF</p>
+                            <a
+                              href="https://docs.google.com/document/d/16k_n_BTdf8wTCG8CK4T2TyAT93o5qrmZqjbROtrBqzk/edit"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs text-indigo-650 hover:text-indigo-850 font-extrabold hover:underline"
+                            >
+                              <FileCode size={14} className="text-indigo-500" />
+                              <span>Ver template no Google Docs</span>
+                              <ExternalLink size={12} className="stroke-[2.5]" />
+                            </a>
+                          </div>
+
+                          {/* Link to advanced configuration page */}
+                          <div className="pt-2 border-t border-gray-100">
+                            <button
+                              type="button"
+                              onClick={() => navigate('/boss-giffoni-clientes/configuracoes/integracoes-google-docs/config-procuracao-PF')}
+                              className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-800"
+                            >
+                              Editar Variáveis de Integração <ArrowRight size={10} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Informações da pasta do cliente */}
-                    <div className="p-3.5 bg-white border border-gray-150 rounded-2xl text-xs flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-3xs animate-in fade-in">
-                      <div className="space-y-1">
-                        <p className="font-bold text-gray-500 text-[10px] uppercase tracking-wider">Destino da Pasta Associada</p>
-                        <p className="text-slate-800 font-extrabold truncate max-w-md flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block animate-pulse" />
-                          Pasta ID: <span className="font-mono bg-slate-50 border border-gray-100 rounded px-1.5 py-0.5 font-bold select-all">{driveFolderId}</span>
+                    <div className="p-4 bg-white border border-gray-150 rounded-2xl text-xs flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-3xs animate-in fade-in">
+                      <div className="space-y-1 select-none">
+                        <p className="font-bold text-gray-400 text-[10px] uppercase tracking-wider">Destino da Pasta Associada</p>
+                        <p className="text-slate-800 font-extrabold text-xs flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 block animate-pulse" />
+                          <span>Pasta do Google Drive ({clientName || "Cliente"})</span>
                         </p>
                       </div>
                       {driveFolderUrl && (
@@ -1062,10 +1114,44 @@ export default function ProcuracaoPF() {
                           href={driveFolderUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wider text-indigo-600 hover:text-indigo-800 bg-indigo-50/50 hover:bg-indigo-50 px-3.5 py-1.5 rounded-xl border border-indigo-150 transition-all cursor-pointer shadow-3xs"
+                          className="inline-flex items-center gap-2 px-4.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-250 hover:border-emerald-400 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-3xs whitespace-nowrap"
                         >
-                          Abrir Pasta <ExternalLink size={12} />
+                          {/* Google Drive Visual Indicator */}
+                          <div className="flex items-center gap-0.5 mr-1.5 bg-white shadow-3xs border border-gray-100 px-1 py-0.5 rounded-md size-fit shrink-0">
+                            <span className="w-1 h-3.5 bg-[#4285F4] rounded-full" title="Google Drive Colors" />
+                            <span className="w-1 h-3.5 bg-[#34A853] rounded-full" />
+                            <span className="w-1 h-3.5 bg-[#FBBC05] rounded-full" />
+                          </div>
+                          <span>Abrir pasta do Google Drive</span>
+                          <ExternalLink size={12} className="stroke-[2.5]" />
                         </a>
+                      )}
+                    </div>
+
+                    {/* STATUS DA AUTOMAÇÃO */}
+                    <div className="border border-gray-150 rounded-2xl p-5 bg-gray-50/50 space-y-2.5">
+                      <p className="font-bold text-gray-500 text-[10px] uppercase tracking-widest font-mono">Status da Automação</p>
+                      
+                      {currentCase?.procuracaoGoogleDocsUrl && !isMockUrl(currentCase.procuracaoGoogleDocsUrl) && !forceNewVersion ? (
+                        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 text-xs font-bold flex items-center gap-2 animate-fadeIn">
+                          <span>Procuração criada com sucesso ✅</span>
+                        </div>
+                      ) : activeJob?.status === 'failed' ? (
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-950 text-xs font-bold space-y-1.5 animate-fadeIn">
+                          <div className="flex items-start gap-2">
+                            <span>Falha na criação da Procuração, consulte “ver fluxo de logs” para mais informações ❌</span>
+                          </div>
+                        </div>
+                      ) : activeJob?.status === 'pending' || saving ? (
+                        <div className="p-3 bg-amber-50 border border-amber-250 rounded-xl text-amber-900 text-xs font-bold flex items-center gap-2 animate-pulse">
+                          <RefreshCw className="text-amber-500 shrink-0 animate-spin" size={14} />
+                          <span>Geração em andamento... Sincronizando com Google Docs</span>
+                        </div>
+                      ) : (
+                        <div className="p-3.5 bg-white border border-gray-200 rounded-xl text-gray-400 text-xs font-semibold flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-gray-300" />
+                          <span>Aguardando comando de geração eletrônica.</span>
+                        </div>
                       )}
                     </div>
 
@@ -1277,6 +1363,10 @@ export default function ProcuracaoPF() {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* FLOW QUESTIONNAIRE CARD */}
+            <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-2xs space-y-5">
 
               <div className="space-y-1 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
                 <p className="text-xs font-extrabold text-gray-800">1.1 Você gerou a procuração do cliente?</p>
