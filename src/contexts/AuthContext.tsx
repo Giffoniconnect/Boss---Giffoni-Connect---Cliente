@@ -153,6 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       provider.setCustomParameters({ prompt: 'select_account' });
       provider.addScope('https://www.googleapis.com/auth/drive');
       provider.addScope('https://www.googleapis.com/auth/documents');
+      provider.addScope('https://www.googleapis.com/auth/gmail.send');
       
       const result = await signInWithPopup(auth, provider);
       const newUser = result.user;
