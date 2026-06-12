@@ -18,8 +18,23 @@ interface EntregaDocumentoProps {
 
 function extractGoogleDocId(url: string): string | null {
   if (!url) return null;
-  const match = url.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
+  const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/) || url.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
   return match ? match[1] : null;
+}
+
+function isMockUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return (
+    lower.includes('mock') ||
+    lower.includes('fake') ||
+    lower.includes('teste') ||
+    lower.includes('diagnostic') ||
+    lower.includes('localhost') ||
+    lower.includes('undefined') ||
+    lower.includes('null') ||
+    lower.includes('placeholder')
+  );
 }
 
 async function openGoogleDocPrint(
@@ -31,8 +46,9 @@ async function openGoogleDocPrint(
   if (!docUrl) return;
 
   const documentId = extractGoogleDocId(docUrl);
-  if (!documentId || docUrl.includes('placeholder')) {
-    window.open(docUrl, "_blank", "noopener,noreferrer");
+  if (!documentId || isMockUrl(docUrl)) {
+    // If it's a mock url or placeholder, skip
+    console.warn("URL de documento é de teste ou vazia. Não imprimindo:", docUrl);
     return;
   }
 
@@ -41,63 +57,61 @@ async function openGoogleDocPrint(
 
   try {
     const tokenQuery = googleAccessToken ? `&googleAccessToken=${encodeURIComponent(googleAccessToken)}` : "";
-    const apiEndpoint = `/api/google-docs/export-pdf?googleDocsUrl=${encodeURIComponent(docUrl)}${tokenQuery}`;
+    
+    // PRE-FLIGHT VALIDATION: Test endpoint responsiveness and authentication
+    const apiEndpoint = `/api/google-docs/export-html?googleDocsUrl=${encodeURIComponent(docUrl)}${tokenQuery}`;
 
     const response = await fetch(apiEndpoint);
     if (!response.ok) {
-      const errText = await response.json().catch(() => ({ errorMessage: "Não foi possível recuperar o documento para exportação direta em PDF." }));
-      throw new Error(errText.errorMessage || `Erro ao carregar PDF (${response.status})`);
+      const errText = await response.json().catch(() => ({ errorMessage: "Não foi possível recuperar o documento para exportação fática." }));
+      throw new Error(errText.errorMessage || `Erro ao carregar documento (${response.status})`);
     }
 
-    const pdfBlob = await response.blob();
-    const blobUrl = URL.createObjectURL(pdfBlob);
-
-    // Create an invisible iframe
+    // Since the API responded successfully, setup a same-origin invisible iframe pointing
+    // directly to the same-domain endpoint. This avoids CORS, sandboxing limitations,
+    // and natively displays the secure layout URL instead of "about:blank" in printed headers/footers!
     const iframe = document.createElement("iframe");
     iframe.style.position = "absolute";
     iframe.style.width = "0px";
     iframe.style.height = "0px";
     iframe.style.border = "none";
     iframe.style.left = "-9999px";
-    iframe.src = blobUrl;
+    
+    document.body.appendChild(iframe);
 
     iframe.onload = () => {
-      let printTriggered = false;
-      try {
-        // Safe check for contentWindow and print
-        if (iframe.contentWindow) {
-          iframe.contentWindow.focus();
-          iframe.contentWindow.print();
-          printTriggered = true;
+      // 500ms grace period for internal CSS/assets of Google Docs HTML to finish registering in the frame
+      setTimeout(() => {
+        try {
+          if (iframe.contentWindow) {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+          }
+        } catch (printErr: any) {
+          console.error("Execução de print() falhou:", printErr.message);
+          // Fallback to opening pdf in new tab if anything unexpected happens
+          window.open(`/api/google-docs/export-pdf?googleDocsUrl=${encodeURIComponent(docUrl)}${tokenQuery}`, "_blank");
+        } finally {
+          if (setPrintingDoc) setPrintingDoc(false);
+          setTimeout(() => {
+            if (iframe.parentNode) {
+              document.body.removeChild(iframe);
+            }
+          }, 8000);
         }
-      } catch (printErr: any) {
-        console.warn("Navegação segura em bloco iframe (CORS sandbox ativo). Abrindo visualização de PDF alta-fidelidade de forma avulsa:", printErr.message);
-      } finally {
-        if (!printTriggered) {
-          // If printing via iframe contentWindow is blocked by CORS/Sandbox, fallback immediately to opening the blob URL in a new window.
-          // This is a seamless, high-fidelity experience that bypasses all iframe sandbox restrictions.
-          window.open(blobUrl, "_blank", "noopener,noreferrer");
-        }
-        if (setPrintingDoc) setPrintingDoc(false);
-        setTimeout(() => {
-          document.body.removeChild(iframe);
-          URL.revokeObjectURL(blobUrl);
-        }, 8000);
-      }
+      }, 500);
     };
 
-    document.body.appendChild(iframe);
+    iframe.src = apiEndpoint;
+
   } catch (err: any) {
-    console.error("Falha ao carregar API PDF. Iniciando redirecionamento para o documento do Google Docs:", err.message);
-    
-    // Set a informative warning/error message but DO NOT block the user
+    console.error("Falha ao carregar API HTML. Iniciando redirecionamento para o documento do Google Docs:", err.message);
     if (setPrintError) {
       setPrintError(err.message || "Erro de autorização. Abrindo o Google Docs para impressão...");
     }
     if (setPrintingDoc) setPrintingDoc(false);
 
-    // Dynamic, resilient fallback: if backend credentials are not set/expired, open the document
-    // in Google Docs directly where they can print (Ctrl+P) natively inside Google's UI.
+    // Resilient fallback: open edit or preview page directly where they can print (Ctrl+P) natively inside Google's UI
     const defaultDocUrl = docUrl || `https://docs.google.com/document/d/${documentId}/edit`;
     window.open(defaultDocUrl, "_blank", "noopener,noreferrer");
   }
@@ -126,6 +140,36 @@ export default function EntregaDocumento({
 
   const [printingDoc, setPrintingDoc] = useState(false);
   const [printError, setPrintError] = useState<string | null>(null);
+
+  // AutoPrint tracking ref and last printed URL state for seamless hands-free printing
+  const lastPrintedUrl = React.useRef('');
+
+  React.useEffect(() => {
+    if (googleDocsUrl && !isMockUrl(googleDocsUrl) && googleDocsUrl !== lastPrintedUrl.current) {
+      lastPrintedUrl.current = googleDocsUrl;
+      console.log("[AutoPrint] Dynamic Google Docs URL is ready! Auto-launching print dialog natively...");
+      openGoogleDocPrint(googleDocsUrl, googleAccessToken, setPrintingDoc, setPrintError);
+    }
+  }, [googleDocsUrl, googleAccessToken]);
+
+  // Global Keyboard listener for native Ctrl+P / Cmd+P to auto-print high-fidelity docs
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+        const activeDocUrl = googleDocsUrl || getDocInfo().fallbackUrl;
+        if (activeDocUrl && !isMockUrl(activeDocUrl)) {
+          e.preventDefault();
+          console.log("[Shortcut] Intercepted Ctrl+P. Launching high-fidelity document printer...");
+          openGoogleDocPrint(activeDocUrl, googleAccessToken, setPrintingDoc, setPrintError);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [googleDocsUrl, googleAccessToken, tipoDocumento]);
 
   const handleConnectGoogle = async () => {
     try {

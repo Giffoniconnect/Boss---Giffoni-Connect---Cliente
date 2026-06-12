@@ -2090,6 +2090,44 @@ app.get("/api/google-docs/export-pdf", async (req: any, res: any) => {
   }
 });
 
+app.get("/api/google-docs/export-html", async (req: any, res: any) => {
+  const { googleDocsUrl, googleAccessToken } = req.query || {};
+  if (!googleDocsUrl) {
+    return res.status(400).json({ success: false, errorMessage: "URL do documento é obrigatória." });
+  }
+
+  try {
+    if (googleAccessToken) {
+      req.body = req.body || {};
+      req.body.googleAccessToken = googleAccessToken;
+    }
+
+    const { jwtClient } = await createGoogleDocsJwtClient(req);
+    const drive = google.drive({ version: "v3", auth: jwtClient });
+    const match = googleDocsUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    const fileId = match ? match[1] : null;
+
+    if (!fileId) {
+      return res.status(400).json({ success: false, errorMessage: "ID do documento inválido." });
+    }
+
+    // Export Google Docs to high-fidelity html string
+    const exportRes = await drive.files.export(
+      {
+        fileId,
+        mimeType: "text/html"
+      }
+    );
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.send(exportRes.data);
+  } catch (err: any) {
+    console.error("[ExportHTMLError]", err.message);
+    const statusCode = err.errorCode === "GOOGLE_DOCS_TOKEN_EXPIRED" ? 401 : 500;
+    return res.status(statusCode).json({ success: false, errorMessage: err.message || "Erro ao exportar HTML." });
+  }
+});
+
 app.post("/api/google-docs/test-auth", async (req: any, res: any) => {
   try {
     const { jwtClient, serviceAccountEmail, projectId, credentialSource } = await createGoogleDocsJwtClient(req);
