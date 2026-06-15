@@ -3893,12 +3893,19 @@ app.post("/api/google-docs/create-gmail-draft", async (req: any, res: any) => {
 
     const fileName = `${baseFileName} - ${sanitizeFileName(cleanClientName)}`;
     
+    // Always include direito.rgr@gmail.com as a mandatory recipient
+    const recipientsList = [email.trim()];
+    if (!recipientsList.some(r => r.toLowerCase() === "direito.rgr@gmail.com")) {
+      recipientsList.push("direito.rgr@gmail.com");
+    }
+    const toHeaderValue = recipientsList.join(", ");
+
     // 4. Build MIME message (raw RFC 2822 format)
     const boundary = "------=_Part_" + Date.now();
     const bodyBase64 = Buffer.from(messageText, "utf8").toString("base64");
 
     const mailParts = [
-      `To: ${email}`,
+      `To: ${toHeaderValue}`,
       `Subject: ${encodedSubject}`,
       `MIME-Version: 1.0`,
       `Content-Type: multipart/mixed; boundary="${boundary}"`,

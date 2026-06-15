@@ -392,7 +392,7 @@ export default function EntregaDocumento({
       const data = await response.json();
       if (response.ok && data.success) {
         const urls = data.gmailOpenUrls;
-        const openUrl = urls?.draftById || urls?.draftByMessageId || urls?.inboxThread;
+        const openUrl = urls?.composeInDraftsByMessageId || urls?.composeByDraftId || urls?.composeByMessageId || urls?.draftById || urls?.draftByMessageId || urls?.inboxThread;
         
         if (openUrl) {
           setGmailResult({
