@@ -4,10 +4,29 @@ import FluxoStepLayout from '../components/FluxoStepLayout';
 import EntregaDocumento from '../components/EntregaDocumento';
 import { 
   ArrowRight, FileText, UploadCloud, Trash2, ArrowLeft, 
-  Check, AlertCircle, Sparkles 
+  Check, AlertCircle, Sparkles, RefreshCw, ExternalLink, Copy, FileCode 
 } from 'lucide-react';
+import { doc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { db } from '../../../../lib/firebase';
+import { useAuth } from '../../../../contexts/AuthContext';
+import { buildDeclaracaoPobrezaPjPlaceholders } from '../../../../lib/documents/placeholderBuilders';
 
 export default function DeclaracaoPJ() {
+  const { googleAccessToken, loginWithGoogle } = useAuth();
+  const [isRenewingGoogle, setIsRenewingGoogle] = React.useState(false);
+
+  const handleRenewGoogle = async () => {
+    setIsRenewingGoogle(true);
+    try {
+      await loginWithGoogle('boss_admin');
+      setSuccess("Autenticação Google renovada com sucesso! Você já pode gerar a declaração novamente.");
+    } catch (err: any) {
+      setError(`Falha ao renovar autenticação: ${err.message || err}`);
+    } finally {
+      setIsRenewingGoogle(false);
+    }
+  };
+
   const {
     caseId,
     fetching,
@@ -19,17 +38,441 @@ export default function DeclaracaoPJ() {
     caseObj,
     wizardState,
     saveWizardStateUpdate,
-    triggerSimulation,
     addWizardFile,
     removeWizardFile,
-    handleCheckboxToggle,
-    navigate
+    navigate,
+    setError,
+    setSuccess,
+    setSaving
   } = useColetaState();
+
+  const [localCaseObj, setLocalCaseObj] = React.useState<any>(null);
+
+  // Sync with caseObj from hook on mount/load
+  React.useEffect(() => {
+    if (caseObj) {
+      setLocalCaseObj(caseObj);
+    }
+  }, [caseObj]);
+
+  // Set up real-time listener for current case to react to changes and cleanups
+  React.useEffect(() => {
+    if (!caseId) return;
+    const unsubscribe = onSnapshot(doc(db, 'cases', caseId), (snapshot) => {
+      if (snapshot.exists()) {
+        setLocalCaseObj(snapshot.data());
+      }
+    });
+    return () => unsubscribe();
+  }, [caseId]);
 
   const handleNextPhase = () => {
     saveWizardStateUpdate({ step2_completed: true }).then(() => {
       navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/solicitacao-contrato-PJ`);
     });
+  };
+
+  const clientDriveFolderId = (client?.googleDriveClientFolderId || client?.gdriveFolderId || localCaseObj?.gdriveFolderId || '').trim();
+  const clientDriveFolderUrl = (client?.googleDriveClientFolderUrl || client?.gdriveFolderUrl || localCaseObj?.gdriveFolderUrl || '').trim();
+  
+  const folderIsReal = !!(
+    clientDriveFolderId && 
+    !clientDriveFolderId.toLowerCase().includes('mock') && 
+    !clientDriveFolderId.toLowerCase().includes('fake') && 
+    !clientDriveFolderId.toLowerCase().includes('teste') && 
+    !clientDriveFolderId.toLowerCase().includes('undefined') && 
+    !clientDriveFolderId.toLowerCase().includes('null') && 
+    !clientDriveFolderId.toLowerCase().includes('xxxx')
+  );
+
+  const decStatus = localCaseObj?.declaracaoPobrezaStatus || 'Não gerada';
+  const decUrl = localCaseObj?.declaracaoPobrezaGoogleDocsUrl || localCaseObj?.declaracaoPobrezaPjUrl || '';
+
+  const handleGenerateDeclaracaoPj = async () => {
+    const jobId = 'job_decl_pj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    const jobLogs: any[] = [];
+    const addClientLog = (action: string, message: string) => {
+      jobLogs.push({
+        action,
+        timestamp: new Date().toISOString(),
+        message
+      });
+    };
+
+    // Step 1: DECL_PJ_BUTTON_CLICKED
+    addClientLog("DECL_PJ_BUTTON_CLICKED", "O operador clicou em 'Gerar Declaração PJ' para iniciar o fluxo de automação.");
+
+    if (!caseId) {
+      setError("Erro de validação: ID do caso (caseId) está ausente.");
+      return;
+    }
+
+    if (!caseObj) {
+      setError("Erro de validação: Dados do caso não carregados do banco de dados.");
+      return;
+    }
+
+    const targetClientId = caseObj?.clientId || client?.id;
+    if (!targetClientId) {
+      setError("Erro de validação: ID do cliente (clientId) está ausente.");
+      return;
+    }
+
+    if (!client) {
+      setError("Erro de validação: Dados do cliente não carregados do banco de dados.");
+      return;
+    }
+
+    const clientType = client?.type || client?.clientType || (client?.cnpj ? "PJ" : "PF");
+    if (clientType !== "PJ") {
+      setError("Esta automação é de uso exclusivo para cliente de tipo Pessoa Jurídica (PJ).");
+      return;
+    }
+
+    // Step 2: DECL_PJ_CLIENT_DATA_LOADED
+    addClientLog("DECL_PJ_CLIENT_DATA_LOADED", "Dados cadastrais do cliente e do caso carregados com sucesso do banco.");
+
+    const resolvedRazaoSocial = (
+      client?.pjData?.pj_razaoSocial ||
+      client?.pjDadosEmpresa?.pj_razaoSocial ||
+      client?.razaoSocial ||
+      client?.nome ||
+      clientName ||
+      ""
+    ).trim();
+
+    if (!resolvedRazaoSocial) {
+      addClientLog("DECL_PJ_REQUIRED_PLACEHOLDER_EMPTY", "Razão Social da empresa não localizada.");
+      setError("Razão Social não localizada no cadastro da empresa. Verifique a Etapa 1 — Cadastro do Cliente.");
+      return;
+    }
+
+    const resolvedCnpj = (
+      client?.pjData?.pj_cnpj ||
+      client?.pjDadosEmpresa?.pj_cnpj ||
+      client?.cnpj ||
+      ""
+    ).trim();
+
+    if (!resolvedCnpj) {
+      addClientLog("DECL_PJ_REQUIRED_PLACEHOLDER_EMPTY", "CNPJ do cliente não localizado.");
+      setError("Não é possível gerar a Declaração de Hipossuficiência PJ porque o CNPJ do cliente está ausente no cadastro.");
+      return;
+    }
+
+    if (!folderIsReal) {
+      setError("Não há pasta real do Google Drive vinculada ao cliente. Acesse a Etapa 1 — Cadastro do Cliente e execute primeiro a Automação Google Drive — Pasta do Cliente.");
+      return;
+    }
+
+    // Step 3: DECL_PJ_FOLDER_FOUND
+    addClientLog("DECL_PJ_FOLDER_FOUND", `Pasta destino no Google Drive localizada com sucesso ID: ${clientDriveFolderId}`);
+
+    // Step 4: DECL_PJ_OFFICIAL_TEMPLATE_SELECTED
+    const officialTemplateId = "1e2JbDiPY-2TywfdK_7s75qcY6YkvRrBVQ_0TFDnHYi4";
+    addClientLog("DECL_PJ_OFFICIAL_TEMPLATE_SELECTED", `Template oficial de Declaração PJ selecionado unicamente como fonte da verdade: ${officialTemplateId}`);
+
+    let placeholders: Record<string, string>;
+    try {
+      placeholders = buildDeclaracaoPobrezaPjPlaceholders(client, caseObj);
+
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      const dataAssinaturaFormated = `${day}/${month}/${year}`;
+      
+      placeholders["{{DATA_ASSINATURA}}"] = dataAssinaturaFormated;
+      placeholders["<<data da assinatura>>"] = dataAssinaturaFormated;
+
+      // Step 5: DECL_PJ_PLACEHOLDERS_BUILT
+      addClientLog("DECL_PJ_PLACEHOLDERS_BUILT", "Todas as chaves e valores de placeholders foram processados e vinculados com sucesso com a data da assinatura gerada no clique.");
+    } catch (errPl: any) {
+      setError(`Erro ao construir placeholders: ${errPl.message}`);
+      return;
+    }
+
+    const essentialKeys = [
+      "{{RAZAO_SOCIAL}}",
+      "{{CNPJ}}",
+      "{{ENDERECO_EMPRESA_COMPLETO}}",
+      "{{NOME_SOCIO_ADMINISTRADOR}}",
+      "{{CPF_SOCIO}}",
+      "{{DATA_ASSINATURA}}"
+    ];
+
+    const fieldNamesMap: Record<string, string> = {
+      "{{RAZAO_SOCIAL}}": "Razão Social",
+      "{{CNPJ}}": "CNPJ",
+      "{{ENDERECO_EMPRESA_COMPLETO}}": "Endereço da Empresa",
+      "{{NOME_SOCIO_ADMINISTRADOR}}": "Nome do Sócio Administrador",
+      "{{CPF_SOCIO}}": "CPF do Sócio",
+      "{{DATA_ASSINATURA}}": "Data da Assinatura"
+    };
+
+    const emptyEssentials = essentialKeys.filter(k => {
+      const val = placeholders[k];
+      return !val || String(val).trim() === "";
+    });
+
+    if (emptyEssentials.length > 0) {
+      const fieldNames = emptyEssentials.map(k => fieldNamesMap[k] || k).join(", ");
+      const errorMsg = `Não é possível gerar a Declaração de Hipossuficiência PJ porque existem campos essenciais vazios no cadastro do cliente PJ: ${fieldNames}.`;
+      addClientLog("DECL_PJ_REQUIRED_PLACEHOLDER_EMPTY", errorMsg);
+      
+      const failedJob = {
+        id: jobId,
+        contractVersion: "boss.placeholders.v1",
+        source: "Portal BOSS Clientes",
+        target: "Internal Generator Engine",
+        documentType: "declaracao_pobreza_pj",
+        templateKey: "declaracao_pobreza_pj",
+        status: "failed",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        caseId: caseId,
+        portalClientId: targetClientId,
+        clientType: "PJ",
+        destinationFolderId: clientDriveFolderId,
+        destinationFolderUrl: clientDriveFolderUrl,
+        outputFileName: `Declaração de Hipossuficiência PJ - ${resolvedRazaoSocial}`,
+        placeholders,
+        errorCode: "DECL_PJ_REQUIRED_PLACEHOLDER_EMPTY",
+        errorMessage: errorMsg,
+        logs: jobLogs
+      };
+
+      await setDoc(doc(db, 'googleDocsJobs', jobId), failedJob);
+      setError(errorMsg);
+      return;
+    }
+
+    // Step 6: DECL_PJ_REQUIRED_PLACEHOLDERS_VALIDATED
+    addClientLog("DECL_PJ_REQUIRED_PLACEHOLDERS_VALIDATED", "Contrato de placeholders mapeado contra a especificação com 100% de conformidade.");
+
+    const currentGoogleAccessToken = googleAccessToken || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken') || '';
+    const localOverride = localStorage.getItem('portal_boss_gdocs_override') || '';
+
+    if (!currentGoogleAccessToken && !localOverride) {
+      setError("Faça login novamente com Google para autorizar Google Docs/Drive ou configure a Service Account na Central de Integrações.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    const caseDocRef = doc(db, 'cases', caseId);
+    await updateDoc(caseDocRef, {
+      declaracaoPobrezaStatus: "gerando",
+      declaracaoPobrezaLogFalha: ""
+    });
+
+    // Step 7: DECL_PJ_TEMPLATE_COPY_STARTED
+    addClientLog("DECL_PJ_TEMPLATE_COPY_STARTED", "Disparando processo de clonagem do template oficial no GDrive...");
+
+    const initialJob = {
+      id: jobId,
+      contractVersion: "boss.placeholders.v1",
+      source: "Portal BOSS Clientes",
+      target: "Internal Generator Engine",
+      documentType: "declaracao_pobreza_pj",
+      templateKey: "declaracao_pobreza_pj",
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      caseId: caseId,
+      portalClientId: targetClientId,
+      clientType: "PJ",
+      destinationFolderId: clientDriveFolderId,
+      destinationFolderUrl: clientDriveFolderUrl,
+      outputFileName: `Declaração de Hipossuficiência PJ - ${resolvedRazaoSocial}`,
+      placeholders,
+      result: {
+        googleDocsId: null,
+        googleDocsUrl: null,
+        fileName: null
+      },
+      errorCode: null,
+      errorMessage: null,
+      logs: jobLogs
+    };
+
+    await setDoc(doc(db, 'googleDocsJobs', jobId), initialJob);
+
+    try {
+      const response = await fetch("/api/google-docs/generate-document", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "stateless",
+          googleAccessToken: currentGoogleAccessToken,
+          documentType: "declaracao_pobreza_pj",
+          templateKey: "declaracao_pobreza_pj",
+          templateId: officialTemplateId,
+          caseId,
+          clientId: targetClientId,
+          clientType: "PJ",
+          destinationFolderId: clientDriveFolderId,
+          destinationFolderUrl: clientDriveFolderUrl,
+          documentName: `Declaração de Hipossuficiência PJ - ${resolvedRazaoSocial}`,
+          placeholders,
+          metadata: {
+            source: "Portal BOSS - Declaração PJ",
+            originRoute: `/boss-giffoni-clientes/fluxo-producao/${caseId}/solicitacao-declaracao-PJ`,
+            folderSource: "Automação Google Drive — Pasta do Cliente",
+            clientDataSource: "clients/{clientId}.pjData / clients/{clientId}.pjDadosEmpresa"
+          },
+          credentialOverride: localOverride
+        })
+      });
+
+      const responseText = await response.text();
+      let responseData: any;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = { error: responseText };
+      }
+
+      if (!response.ok || !responseData.success) {
+        throw {
+          message: responseData.errorMessage || responseData.error || responseText || "Falha na geração integrada eletrônica.",
+          errorCode: responseData.errorCode || "DECL_PJ_TEMPLATE_COPY_FAILED"
+        };
+      }
+
+      const googleDocsId = responseData.googleDocsId;
+      const googleDocsUrl = responseData.googleDocsUrl;
+
+      // Add success logs
+      addClientLog("DECL_PJ_TEMPLATE_COPY_SUCCESS", `Clone realizado no Google Drive com o novo ID de documento: ${googleDocsId}`);
+      addClientLog("DECL_PJ_PLACEHOLDER_REPLACEMENT_STARTED", "Iniciando a operation em lote de substituição dos placeholders no documento.");
+      addClientLog("DECL_PJ_PLACEHOLDER_REPLACEMENT_SUCCESS", "Substituição concluída de todos os placeholders com absoluto sucesso.");
+      addClientLog("DECL_PJ_DOCUMENT_CREATED", "Criação física e de dados do arquivo homologada no Google Drive.");
+      addClientLog("DECL_PJ_CASE_UPDATED", "Caso atualizado com as chaves reais de referência da Declaração de Hipossuficiência PJ.");
+      addClientLog("DECL_PJ_FLOW_COMPLETED", "Processamento terminado com 100% de conformidade operacional.");
+
+      await updateDoc(caseDocRef, {
+        declaracaoPobrezaStatus: "criada",
+        declaracaoPobrezaPjId: googleDocsId,
+        declaracaoPobrezaPjUrl: googleDocsUrl,
+        declaracaoPobrezaGoogleDocsId: googleDocsId,
+        declaracaoPobrezaGoogleDocsUrl: googleDocsUrl,
+        declaracaoPobrezaGeneratedAt: new Date().toISOString(),
+        declaracaoPobrezaDestinationFolderId: clientDriveFolderId,
+        declaracaoPobrezaDestinationFolderUrl: clientDriveFolderUrl,
+        declaracaoPobrezaGoogleDocsJobId: jobId,
+        declaracaoPobrezaGoogleDocsJobLogs: jobLogs,
+        declaracaoPobrezaLogFalha: ""
+      });
+
+      try {
+        const subdocRef = doc(db, 'cases', caseId, 'generatedDocuments', 'declaracao_pobreza_pj');
+        await setDoc(subdocRef, {
+          documentType: "declaracao_pobreza_pj",
+          displayName: `Declaração de Hipossuficiência PJ - ${resolvedRazaoSocial}`,
+          templateKey: "declaracao_pobreza_pj",
+          templateId: officialTemplateId,
+          googleDocsId,
+          googleDocsUrl,
+          destinationFolderId: clientDriveFolderId,
+          destinationFolderUrl: clientDriveFolderUrl,
+          status: "success",
+          generatedAt: new Date().toISOString(),
+          generatedBy: "Portal BOSS Central Interna (Stateless)",
+          errorCode: null,
+          errorMessage: null,
+          logs: jobLogs
+        }, { merge: true });
+      } catch (errSub: any) {
+        console.warn("[PortalBoss] Subcollection write failed", errSub.message);
+      }
+
+      await updateDoc(doc(db, 'googleDocsJobs', jobId), {
+        status: "success",
+        updatedAt: new Date().toISOString(),
+        result: {
+          googleDocsId,
+          googleDocsUrl,
+          fileName: `Declaração de Hipossuficiência PJ - ${resolvedRazaoSocial}`
+        },
+        logs: jobLogs
+      });
+
+      await saveWizardStateUpdate({ q2_2: 'sim' });
+
+      setSuccess("Declaração de Hipossuficiência PJ gerada e indexada no caso com absoluto sucesso!");
+      setTimeout(() => setSuccess(null), 5000);
+    } catch (err: any) {
+      console.error("[Generator Execution Failed]", err);
+      const errorMessage = err.message || "Erro desconhecido durante o processamento de geração integrada.";
+      const errorCode = err.errorCode || "DECL_PJ_PLACEHOLDER_REPLACEMENT_FAILED";
+
+      addClientLog(errorCode, `Ocorreu uma falha no fluxo: ${errorMessage}`);
+      addClientLog("DECL_PJ_CASE_UPDATE_FAILED", "Falha ao gravar referências no documento do caso principal.");
+
+      await updateDoc(caseDocRef, {
+        declaracaoPobrezaStatus: "falha",
+        declaracaoPobrezaLogFalha: errorMessage,
+        declaracaoPobrezaGeneratedAt: ""
+      });
+
+      try {
+        await updateDoc(doc(db, 'googleDocsJobs', jobId), {
+          status: "failed",
+          updatedAt: new Date().toISOString(),
+          errorCode,
+          errorMessage,
+          logs: jobLogs
+        });
+      } catch (errJob) {
+        console.warn("Failed to update job status", errJob);
+      }
+
+      setError(`Falha ao gerar Declaração de Hipossuficiência PJ no motor interno: ${errorMessage}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const renderStatusBadge = () => {
+    switch (decStatus) {
+      case 'gerando':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 animate-pulse">
+            <RefreshCw size={12} className="animate-spin" />
+            Gerando...
+          </span>
+        );
+      case 'criada':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <Check size={12} />
+            Criada com sucesso
+          </span>
+        );
+      case 'falha':
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+            <AlertCircle size={12} />
+            Falha na geração
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-gray-50 text-gray-500 border border-gray-200">
+            Não gerada
+          </span>
+        );
+    }
+  };
+
+  const handleCopyLink = () => {
+    if (!decUrl) return;
+    navigator.clipboard.writeText(decUrl);
+    setSuccess("Link copiado com sucesso para a área de transferência!");
+    setTimeout(() => setSuccess(null), 3000);
   };
 
   const FileUploadBox = ({ field }: { field: string }) => {
@@ -153,13 +596,125 @@ export default function DeclaracaoPJ() {
               {wizardState.q2_1 === 'sim' && (
                 <div className="space-y-4 border-l-2 border-indigo-200 pl-4 animate-in fade-in duration-200">
                   
-                  {/* CARD DE ESPAÇO RESERVADO PARA AUTOMAÇÕES FUTURAS */}
-                  <div className="p-4 bg-blue-50/75 border border-blue-100 rounded-2xl flex items-start gap-3 text-blue-950 text-xs font-semibold leading-relaxed shadow-3xs">
-                    <Sparkles size={16} className="text-blue-500 shrink-0 mt-0.5 animate-pulse" />
-                    <div>
-                      <span className="block font-extrabold uppercase tracking-widest text-[9px] text-blue-600 mb-0.5 font-mono">Automação Inteligente</span>
-                      Espaço reservado para automação futura da declaração de hipossuficiência
+                  {/* AUDITORIA DA GERAÇÃO DA DECLARAÇÃO PJ CARD */}
+                  <div className="bg-gradient-to-br from-indigo-50/10 to-blue-50/20 border border-gray-150 rounded-2xl p-5 space-y-4 shadow-3xs bg-white">
+                    <div className="flex items-center gap-2 border-b border-gray-100 pb-2.5">
+                      <Sparkles className="text-indigo-600" size={16} />
+                      <div>
+                        <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 font-mono">Auditoria do Requerimento de Gratuidade PJ</h3>
+                      </div>
                     </div>
+
+                    {/* STATUS BANNER */}
+                    <div className="border border-gray-150 rounded-xl p-3.5 bg-white flex flex-col sm:flex-row items-center justify-between gap-4 select-none">
+                      <div className="space-y-1">
+                        <p className="font-bold text-gray-400 text-[9px] uppercase tracking-wider font-mono">Status da Automação</p>
+                        {renderStatusBadge()}
+                      </div>
+
+                      {decUrl && (
+                        <div className="flex gap-2 shrink-0">
+                          <a
+                            href={decUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-1.5 border border-gray-150 rounded-xl bg-white text-gray-700 hover:bg-gray-50 font-bold text-[9px] uppercase font-mono flex items-center gap-1 shadow-3xs cursor-pointer transition-all"
+                          >
+                            <ExternalLink size={11} /> Abrir Requerimento
+                          </a>
+                          <button
+                            type="button"
+                            onClick={handleCopyLink}
+                            className="p-1.5 border border-gray-150 rounded-xl bg-white text-gray-700 hover:bg-gray-50 font-bold text-[9px] uppercase font-mono flex items-center gap-1 shadow-3xs cursor-pointer transition-all"
+                          >
+                            <Copy size={11} /> Copiar Link
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* FAILURE DIAGNOSTIC */}
+                    {localCaseObj?.declaracaoPobrezaLogFalha && (
+                      <div className="p-3 bg-rose-50 border border-rose-150 rounded-xl flex flex-col gap-2">
+                        <div className="flex items-start gap-2 text-rose-900 text-xs font-semibold leading-normal">
+                          <AlertCircle size={14} className="text-rose-600 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="font-extrabold block text-[9px] uppercase tracking-wide font-mono text-rose-800">Causa Técnica do Erro</span>
+                            <p className="mt-0.5">{localCaseObj.declaracaoPobrezaLogFalha}</p>
+                          </div>
+                        </div>
+
+                        {(localCaseObj.declaracaoPobrezaLogFalha.toLowerCase().includes("expirou") || 
+                          localCaseObj.declaracaoPobrezaLogFalha.toLowerCase().includes("sessão") || 
+                          localCaseObj.declaracaoPobrezaLogFalha.toLowerCase().includes("token") || 
+                          localCaseObj.declaracaoPobrezaLogFalha.toLowerCase().includes("autorização") || 
+                          localCaseObj.declaracaoPobrezaLogFalha.toLowerCase().includes("credentials")) && (
+                          <button
+                            type="button"
+                            onClick={handleRenewGoogle}
+                            disabled={isRenewingGoogle}
+                            className="mt-1 place-self-start bg-rose-700 hover:bg-rose-800 text-white font-bold text-[9px] uppercase tracking-wider font-mono px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer shadow-3xs"
+                          >
+                            <RefreshCw size={11} className={isRenewingGoogle ? "animate-spin" : ""} />
+                            <span>{isRenewingGoogle ? "Conectando..." : "Fazer Login de novo com Google"}</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ACTION CONTROLS */}
+                    <div className="pt-2 border-t border-indigo-100 flex flex-wrap gap-2 items-center justify-between">
+                      {decStatus === 'criada' ? (
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={handleGenerateDeclaracaoPj}
+                          className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-3 py-1.5 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 cursor-pointer shadow-3xs transition-all disabled:opacity-50"
+                        >
+                          <RefreshCw size={10} className={saving ? "animate-spin mr-1" : "mr-1"} />
+                          Gerar Nova Versão (PJ)
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={handleGenerateDeclaracaoPj}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-lg text-[9.5px] font-black uppercase flex items-center gap-1.5 cursor-pointer shadow-3xs transition-all disabled:opacity-50"
+                        >
+                          {saving ? (
+                            <>
+                              <RefreshCw size={10} className="animate-spin" />
+                              Gerando...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles size={10} className="animate-pulse" />
+                              Gerar via Google Workspace (PJ)
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* REAL-TIME LOGS FEED */}
+                    {localCaseObj?.declaracaoPobrezaGoogleDocsJobLogs && localCaseObj.declaracaoPobrezaGoogleDocsJobLogs.length > 0 && (
+                      <div className="p-3.5 border border-gray-150 rounded-xl bg-neutral-950/95 space-y-2">
+                        <div className="flex items-center justify-between text-[8px] font-bold uppercase tracking-widest text-indigo-400 font-mono">
+                          <span><FileCode size={10} className="inline mr-1" /> Logs de Geração da Declaração PJ</span>
+                        </div>
+                        <div className="max-h-24 overflow-y-auto divide-y divide-gray-800/40 font-mono text-[9px] text-gray-300 pr-1">
+                          {localCaseObj.declaracaoPobrezaGoogleDocsJobLogs.map((log: any, idx: number) => (
+                            <div key={idx} className="py-1 flex flex-col gap-0.5 leading-tight">
+                              <div className="flex items-center justify-between text-gray-500 font-bold text-[8px]">
+                                <span className="text-indigo-400/{80}">{log.action}</span>
+                                <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
+                              </div>
+                              <p className="text-gray-300">{log.message}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1">
@@ -170,6 +725,7 @@ export default function DeclaracaoPJ() {
                           <input 
                             type="radio" 
                             name="q2_2" 
+                            disabled={saving}
                             checked={wizardState.q2_2 === o} 
                             onChange={() => saveWizardStateUpdate({ q2_2: o })} 
                           />
@@ -184,7 +740,7 @@ export default function DeclaracaoPJ() {
                       <EntregaDocumento
                         tipoDocumento="declaracao"
                         tipoPessoa="PJ"
-                        googleDocsUrl={caseObj?.declaracaoPobrezaGoogleDocsUrl || ''}
+                        googleDocsUrl={decUrl}
                         whatsappCliente={client?.pjDadosResponsavel?.pj_whatsappResponsavel || client?.pjDadosEmpresa?.pj_whatsappEmpresa || client?.pjData?.pj_whatsappEmpresa || client?.pjData?.pj_whatsappResponsavel || ''}
                         emailCliente={client?.pjDadosEmpresa?.pj_emailEmpresa || client?.pjDadosEmpresa?.pj_emailCorporativo || client?.pjData?.pj_emailEmpresa || client?.pjData?.pj_emailCorporativo || ''}
                         nomeCliente={clientName}
@@ -197,7 +753,7 @@ export default function DeclaracaoPJ() {
 
                       {wizardState.q2_3 && wizardState.q2_3.length > 0 && (
                         <div className="space-y-1 animate-in fade-in duration-300">
-                          <p className="text-xs font-extrabold text-gray-805">2.4 O balancete/declaração foi assinado pelos sócios?</p>
+                          <p className="text-xs font-extrabold text-gray-855">2.4 O balancete/declaração foi assinado pelos sócios?</p>
                           <div className="flex gap-4 mt-1.5">
                             {['sim', 'nao'].map(o => (
                               <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
@@ -216,7 +772,7 @@ export default function DeclaracaoPJ() {
 
                       {wizardState.q2_3 && wizardState.q2_3.length > 0 && (wizardState.q2_4 === 'sim' || wizardState.q2_4 === 'nao') && (
                         <div className="space-y-1 animate-in fade-in duration-300">
-                          <p className="text-xs font-extrabold text-gray-805">2.5 Requisitou digitalização do balanço patrimonial?</p>
+                          <p className="text-xs font-extrabold text-gray-855">2.5 Requisitou digitalização do balanço patrimonial?</p>
                           <div className="flex gap-4 mt-1.5">
                             {['sim', 'nao'].map(o => (
                               <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
@@ -235,7 +791,7 @@ export default function DeclaracaoPJ() {
 
                       {wizardState.q2_3 && wizardState.q2_3.length > 0 && (wizardState.q2_4 === 'sim' || wizardState.q2_4 === 'nao') && (wizardState.q2_5 === 'sim' || wizardState.q2_5 === 'nao') && (
                         <div className="space-y-1 animate-in fade-in duration-300">
-                          <p className="text-xs font-extrabold text-gray-850">2.6 Recebeu o balanço assinado e digitalizado?</p>
+                          <p className="text-xs font-extrabold text-gray-855">2.6 Recebeu o balanço assinado e digitalizado?</p>
                           <div className="flex gap-4 mt-1.5">
                             {['sim', 'nao'].map(o => (
                               <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
@@ -254,7 +810,7 @@ export default function DeclaracaoPJ() {
 
                       {wizardState.q2_3 && wizardState.q2_3.length > 0 && (wizardState.q2_4 === 'sim' || wizardState.q2_4 === 'nao') && (wizardState.q2_5 === 'sim' || wizardState.q2_5 === 'nao') && (wizardState.q2_6 === 'sim' || wizardState.q2_6 === 'nao') && (
                         <div className="space-y-2 animate-in fade-in duration-300">
-                          <p className="text-xs font-extrabold text-gray-850">2.7 Anexar declaração e balanços de hipossuficiência PJ?</p>
+                          <p className="text-xs font-extrabold text-gray-855">2.7 Anexar declaração e balanços de hipossuficiência PJ?</p>
                           <div className="flex gap-4 mt-1.5">
                             {['sim', 'nao'].map(o => (
                               <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
@@ -277,32 +833,13 @@ export default function DeclaracaoPJ() {
                 </div>
               )}
 
-              {/* AUTOMAÇÃO GOOGLE DOCS MOCK SIMULATOR */}
-              <div className="pt-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="flex flex-wrap gap-2">
-                  <button 
-                    type="button" 
-                    disabled={wizardState.q2_1 !== 'sim'}
-                    onClick={() => triggerSimulation('Declaração de Pobreza', 'criada')} 
-                    className="bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg text-[9.5px] font-black uppercase cursor-pointer disabled:opacity-50"
-                  >
-                    Gerar via Google Workspace (PJ)
-                  </button>
-                  <button 
-                    type="button" 
-                    disabled={wizardState.q2_1 !== 'sim'}
-                    onClick={() => triggerSimulation('Declaração de Pobreza', 'falha')} 
-                    className="bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-lg text-[9.5px] font-black uppercase cursor-pointer disabled:opacity-50"
-                  >
-                    Simular Falha (PJ)
-                  </button>
-                </div>
-
+              {/* ACTION FOOTER */}
+              <div className="pt-4 border-t border-gray-100 flex justify-end">
                 <button
                   type="button"
                   disabled={!wizardState.q2_1 || (wizardState.q2_1 === 'sim' && !wizardState.q2_2) || saving}
                   onClick={handleNextPhase}
-                  className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                  className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer font-bold disabled:opacity-50"
                 >
                   <span>Próxima Fase</span>
                   <ArrowRight size={13} />

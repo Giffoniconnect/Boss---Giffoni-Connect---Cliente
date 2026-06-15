@@ -116,6 +116,7 @@ export default function TipoServico() {
   const [todoistAutomationStatus, setTodoistAutomationStatus] = useState('aguardando');
 
   // Todoist Project and Search states
+  const SHOW_TODOIST_QA_SIMULATION = false;
   const [todoistProjectId, setTodoistProjectId] = useState('');
   const [todoistProjectName, setTodoistProjectName] = useState('');
   const [projectSearchQuery, setProjectSearchQuery] = useState('');
@@ -478,6 +479,10 @@ export default function TipoServico() {
         todoistFormula: currentFormula,
         todoistProjectId: todoistProjectId,
         todoistProjectName: todoistProjectName,
+        todoistTaskId: todoistTaskId || '',
+        todoistTaskUrl: todoistTaskUrl || '',
+        todoistAutomationStatus: todoistAutomationStatus || 'aguardando',
+        todoistTaskLogFalha: todoistTaskLogFalha || '',
         updatedAt: now,
         productionStage: nextStage
       };
@@ -513,6 +518,10 @@ export default function TipoServico() {
           productionStage: nextStage,
           todoistProjectId: todoistProjectId,
           todoistProjectName: todoistProjectName,
+          todoistTaskId: todoistTaskId || '',
+          todoistTaskUrl: todoistTaskUrl || '',
+          todoistAutomationStatus: todoistAutomationStatus || 'aguardando',
+          todoistTaskLogFalha: todoistTaskLogFalha || '',
           updatedAt: now
         }, { merge: true });
       } catch (mirrorErr) {
@@ -562,6 +571,110 @@ export default function TipoServico() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleSyncTodoistProjects = async () => {
+    setSyncingProjects(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/todoist/projects');
+      const data = await response.json();
+      if (data.success && Array.isArray(data.projects)) {
+        setSyncedProjectsList(data.projects);
+      } else {
+        const errorMsg = data.errorMessage || "Não foi possível obter a lista de projetos do Todoist.";
+        setError(`Erro ao sincronizar projetos: ${errorMsg}`);
+      }
+    } catch (err: any) {
+      console.error("[Todoist Projects Sync Failed]", err);
+      setError(`Falha ao conectar com o backend do Todoist: ${err.message || err}`);
+    } finally {
+      setSyncingProjects(false);
+    }
+  };
+
+  const handleCreateTodoistTask = async () => {
+    if (!safeCaseId) {
+      setError("Erro ao criar tarefa: O ID do caso (caseId) está ausente.");
+      return;
+    }
+    if (!todoistProjectId) {
+      setError("Selecione um projeto do Todoist para criar a tarefa.");
+      return;
+    }
+    const currentFormula = getTodoistFormula();
+    if (!currentFormula || !currentFormula.trim()) {
+      setError("A fórmula do Todoist está vazia.");
+      return;
+    }
+
+    // prevent duplicate task creation
+    if (todoistTaskId && todoistAutomationStatus === "criado") {
+      const ok = window.confirm("Esta tarefa já foi cadastrada no Todoist. Deseja criar outra tarefa mesmo assim?");
+      if (!ok) return;
+    }
+
+    setTodoistAutomationStatus("gerando");
+    setTodoistTaskLogFalha("");
+    setError(null);
+
+    // Prepare structural description
+    const descriptionText = `Cliente: ${clientName || 'N/A'}\n` +
+                            `Parte Adversa: ${oppositeParty || 'N/A'}\n` +
+                            `Assunto: ${assunto || 'N/A'}\n` +
+                            `Tipo de Serviço: ${serviceSubtype || 'Petição Inicial a Ajuizar'}\n` +
+                            `Vara: ${vara || 'A definir'}\n` +
+                            `Comarca: ${comarca || 'N/A'}\n` +
+                            `Processo CNJ: ${processNumber || 'N/A'}\n` +
+                            `Case ID: ${safeCaseId}\n` +
+                            `Link Portal BOSS: https://ais-dev-urso7r2mee6mhzh6bhdlpn-599536317399.us-east1.run.app${pathname}`;
+
+    // Prepare body
+    const bodyPayload = {
+      caseId: safeCaseId,
+      projectId: todoistProjectId,
+      projectName: todoistProjectName,
+      content: currentFormula,
+      description: descriptionText,
+      metadata: {
+        route: pathname,
+        subTypeRoute,
+        clientName,
+        oppositeParty,
+        assunto,
+        vara,
+        comarca,
+        processNumber,
+        serviceSubtype
+      }
+    };
+
+    try {
+      const response = await fetch('/api/todoist/create-case-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyPayload)
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        setTodoistAutomationStatus("criado");
+        setTodoistTaskId(data.todoistTaskId);
+        setTodoistTaskUrl(data.todoistTaskUrl);
+        setTodoistTaskLogFalha("");
+      } else {
+        const errMsg = data.errorMessage || "Erro ao processar criação de tarefa real.";
+        setTodoistAutomationStatus("falha");
+        setTodoistTaskLogFalha(errMsg);
+        setError(`Falha na criação da tarefa Todoist: ${errMsg}`);
+      }
+    } catch (err: any) {
+      console.error("[Todoist Create Task Failed]", err);
+      const errStr = err.message || err;
+      setTodoistAutomationStatus("falha");
+      setTodoistTaskLogFalha(`Erro de rede / conexão: ${errStr}`);
+      setError(`Erro ao criar tarefa no Todoist: ${errStr}`);
     }
   };
 
@@ -1075,12 +1188,7 @@ export default function TipoServico() {
                       <button
                         type="button"
                         disabled={syncingProjects}
-                        onClick={() => {
-                          setSyncingProjects(true);
-                          setTimeout(() => {
-                            setSyncingProjects(false);
-                          }, 1000);
-                        }}
+                        onClick={handleSyncTodoistProjects}
                         className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-[#e44332] hover:text-[#c53222] transition-colors cursor-pointer disabled:opacity-50"
                       >
                         <RefreshCw size={10} className={`shrink-0 ${syncingProjects ? 'animate-spin' : ''}`} />
@@ -1197,6 +1305,12 @@ export default function TipoServico() {
                         <span>Tarefa criada com sucesso</span>
                       </div>
                     )}
+                    {todoistAutomationStatus === 'gerando' && (
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-950 text-xs flex items-center gap-2 animate-fadeIn font-semibold">
+                        <span className="w-2.5 h-2.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                        <span>Criando tarefa real no Todoist...</span>
+                      </div>
+                    )}
                     {todoistAutomationStatus === 'falha' && (
                       <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-950 text-xs flex flex-col gap-2 animate-fadeIn font-semibold">
                         <div className="flex items-center gap-2">
@@ -1219,11 +1333,15 @@ export default function TipoServico() {
 
                     <button
                       type="button"
-                      disabled={loading}
-                      onClick={() => handleSimulateTodoistStatus('criado', 'https://todoist.com/showcase-giffoni-task/12345', 'task_12345_demo', '')}
+                      disabled={todoistAutomationStatus === 'gerando' || !todoistProjectId}
+                      onClick={handleCreateTodoistTask}
                       className="w-full inline-flex items-center justify-center gap-2 bg-[#e44332] hover:bg-[#c53222] text-white font-extrabold px-4 py-2.5 rounded-xl transition-all text-xs cursor-pointer shadow-xs disabled:opacity-50"
                     >
-                      Criar tarefa no Todoist
+                      {todoistAutomationStatus === 'gerando' && "Criando tarefa real..."}
+                      {todoistAutomationStatus === 'criado' && "Criar Tarefa no Todoist"}
+                      {todoistAutomationStatus === 'falha' && "Tentar criar novamente"}
+                      {todoistAutomationStatus === 'aguardando' && "Criar Tarefa no Todoist"}
+                      {todoistAutomationStatus !== 'gerando' && todoistAutomationStatus !== 'criado' && todoistAutomationStatus !== 'falha' && todoistAutomationStatus !== 'aguardando' && "Criar Tarefa no Todoist"}
                     </button>
                   </div>
 
@@ -1257,40 +1375,42 @@ export default function TipoServico() {
                     </div>
 
                     {/* Manual QA Simulation widget integrated */}
-                    <div className="p-3 border border-gray-150 bg-white rounded-xl space-y-2">
-                      <span className="text-[9.5px] uppercase font-black text-gray-400 block border-b border-gray-50 pb-1">
-                        ⚡ Simular Retorno da Automação (Fase de Testes)
-                      </span>
-                      <div className="flex gap-2 flex-wrap text-xs">
-                        <button
-                          type="button"
-                          onClick={() => handleSimulateTodoistStatus('aguardando', '', '', '')}
-                          className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                            todoistAutomationStatus === 'aguardando' ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-gray-50 text-gray-505 border-gray-200'
-                          }`}
-                        >
-                          Aguardando
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSimulateTodoistStatus('criado', 'https://todoist.com/showcase-giffoni-task/12345', 'task_12345_demo', '')}
-                          className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                            todoistAutomationStatus === 'criado' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-gray-50 text-gray-505 border-gray-200'
-                          }`}
-                        >
-                          Sucesso
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleSimulateTodoistStatus('falha', '', '', 'Falha fática: Token de integração expirado ou projeto destino indisponível.')}
-                          className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                            todoistAutomationStatus === 'falha' ? 'bg-red-100 border-red-300 text-red-800' : 'bg-gray-50 text-gray-505 border-gray-200'
-                          }`}
-                        >
-                          Falha
-                        </button>
+                    {SHOW_TODOIST_QA_SIMULATION && (
+                      <div className="p-3 border border-gray-150 bg-white rounded-xl space-y-2">
+                        <span className="text-[9.5px] uppercase font-black text-gray-400 block border-b border-gray-50 pb-1">
+                          ⚡ Simular Retorno da Automação (Fase de Testes)
+                        </span>
+                        <div className="flex gap-2 flex-wrap text-xs">
+                          <button
+                            type="button"
+                            onClick={() => handleSimulateTodoistStatus('aguardando', '', '', '')}
+                            className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                              todoistAutomationStatus === 'aguardando' ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-gray-50 text-gray-505 border-gray-200'
+                            }`}
+                          >
+                            Aguardando
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSimulateTodoistStatus('criado', 'https://todoist.com/showcase-giffoni-task/12345', 'task_12345_demo', '')}
+                            className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                              todoistAutomationStatus === 'criado' ? 'bg-emerald-100 border-emerald-300 text-emerald-800' : 'bg-gray-50 text-gray-505 border-gray-200'
+                            }`}
+                          >
+                            Sucesso
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSimulateTodoistStatus('falha', '', '', 'Falha fática: Token de integração expirado ou projeto destino indisponível.')}
+                            className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                              todoistAutomationStatus === 'falha' ? 'bg-red-100 border-red-300 text-red-800' : 'bg-gray-50 text-gray-505 border-gray-200'
+                            }`}
+                          >
+                            Falha
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
 

@@ -3842,37 +3842,17 @@ app.post("/api/google-docs/create-gmail-draft", async (req: any, res: any) => {
   const messageText = `Olá! Aqui é a Giffoni Advogados Associados, segue a ${docMention} para sua conferência e assinatura.\n\nPor gentileza, assine, digitalize em PDF e nos envie de volta.\n\nÉ sempre um imenso prazer lhe atender.\n\nAtenciosamente,\nGiffoni Advogados Associados`;
 
   try {
-    // 1. Convert Google Docs URL to PDF using Drive API
+    // 1. Convert Google Docs URL to PDF using exportGoogleDocToPdfBase64
     let pdfBase64 = "";
-    
-    // Extract file ID
-    const match = googleDocsUrl.match(/\/d\/([a-zA-Z0-9-_]+)/) || googleDocsUrl.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
-    const fileId = match ? match[1] : null;
-
-    if (!fileId) {
-      return res.status(400).json({
-        success: false,
-        errorMessage: "Não foi possível extrair o ID do arquivo a partir da URL do Google Docs fornecida."
-      });
-    }
-
     try {
-      const { jwtClient } = await createGoogleDocsJwtClient(req);
-      const drive = google.drive({ version: "v3", auth: jwtClient });
-      
-      const exportRes = await drive.files.export(
-        {
-          fileId,
-          mimeType: "application/pdf"
-        },
-        { responseType: "arraybuffer" }
-      );
-      pdfBase64 = Buffer.from(exportRes.data as ArrayBuffer).toString("base64");
+      const exported = await exportGoogleDocToPdfBase64(req, googleDocsUrl);
+      pdfBase64 = exported.pdfBase64;
     } catch (errPdf: any) {
       console.error("[GmailDraft] PDF Export failed:", errPdf);
-      return res.status(550).json({
+      return res.status(500).json({
         success: false,
-        errorMessage: `Falha ao exportar/converter o Google Doc para PDF: ${errPdf.message || errPdf}`
+        errorCode: errPdf.errorCode || "GOOGLE_DOCS_PDF_EXPORT_FAILED",
+        errorMessage: buildGoogleDocsPdfErrorMessage(errPdf)
       });
     }
 
@@ -3972,8 +3952,14 @@ app.post("/api/google-docs/create-gmail-draft", async (req: any, res: any) => {
 
   } catch (err: any) {
     console.error("[GmailDraft] Error creating gmail draft:", err);
+    let errorCode = "GMAIL_DRAFT_CREATION_FAILED";
+    const msg = err?.message || String(err);
+    if (err.code === 401 || msg.toLowerCase().includes("unauthorized") || msg.toLowerCase().includes("invalid_token") || msg.toLowerCase().includes("expired")) {
+      errorCode = "GOOGLE_DOCS_TOKEN_EXPIRED";
+    }
     return res.status(500).json({
       success: false,
+      errorCode,
       errorMessage: `Não foi possível criar o rascunho no Gmail. Erro: ${err.message || err}`
     });
   }
@@ -4980,6 +4966,260 @@ app.post("/api/todoist/create-task", async (req, res) => {
       success: false,
       error: "TODOIST_API_ERROR",
       message: "Erro ao processar criação de tarefa de forma segura. Certifique-se de que os dados e a chave estejam corretificados."
+    });
+  }
+});
+
+// GET /api/todoist/projects
+app.get("/api/todoist/projects", async (req: any, res: any) => {
+  try {
+    const token = process.env.TODOIST_API_TOKEN;
+    if (!token || !token.trim()) {
+      return res.status(400).json({
+        success: false,
+        errorCode: "TODOIST_TOKEN_MISSING",
+        errorMessage: "O token de API do Todoist (TODOIST_API_TOKEN) não foi configurado.",
+        httpStatus: 400,
+        rawResponse: ""
+      });
+    }
+
+    const response = await fetch("https://api.todoist.com/rest/v2/projects", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      const slicedText = text.slice(0, 1000);
+      return res.status(response.status).json({
+        success: false,
+        errorCode: "TODOIST_RESPONSE_ERROR",
+        errorMessage: `Erro de resposta do Todoist: ${response.statusText}`,
+        httpStatus: response.status,
+        rawResponse: slicedText
+      });
+    }
+
+    const projects = await response.json();
+    return res.status(200).json({
+      success: true,
+      projects: projects.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        url: p.url || `https://todoist.com/showProject?id=${p.id}`,
+        color: p.color,
+        is_favorite: p.is_favorite
+      }))
+    });
+  } catch (err: any) {
+    console.error("[Todoist Projects Endpoint Error]:", err);
+    return res.status(500).json({
+      success: false,
+      errorCode: "TODOIST_SERVER_ERROR",
+      errorMessage: err.message || "Erro interno do servidor ao obter projetos.",
+      httpStatus: 500,
+      rawResponse: ""
+    });
+  }
+});
+
+// POST /api/todoist/create-case-task
+app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
+  const token = process.env.TODOIST_API_TOKEN;
+  const { caseId, projectId, projectName, content, description, metadata } = req.body;
+
+  // Validate presence of token first
+  if (!token || !token.trim()) {
+    const msg = "O token de API do Todoist (TODOIST_API_TOKEN) não foi configurado.";
+    if (caseId && dbAdmin) {
+      try {
+        const failUpdates = {
+          todoistAutomationStatus: "falha",
+          todoistTaskId: "",
+          todoistTaskUrl: "",
+          todoistTaskLogFalha: msg,
+          todoistUpdatedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        await dbAdmin.collection("cases").doc(caseId).set(failUpdates, { merge: true });
+        await dbAdmin.collection("casos").doc(caseId).set(failUpdates, { merge: true });
+      } catch (errDb: any) {
+        console.error("Erro ao salvar falha no Firestore:", errDb.message || errDb);
+      }
+    }
+    return res.status(400).json({
+      success: false,
+      errorCode: "TODOIST_TOKEN_MISSING",
+      errorMessage: msg
+    });
+  }
+
+  // Validate case ID
+  if (!caseId) {
+    return res.status(400).json({
+      success: false,
+      errorCode: "VALIDATION_ERROR",
+      errorMessage: "O ID do caso (caseId) é obrigatório."
+    });
+  }
+
+  // Validate project ID
+  if (!projectId) {
+    const errorMsg = "O ID do projeto (projectId) é obrigatório.";
+    if (dbAdmin) {
+      try {
+        const failUpdates = {
+          todoistAutomationStatus: "falha",
+          todoistTaskId: "",
+          todoistTaskUrl: "",
+          todoistTaskLogFalha: errorMsg,
+          todoistUpdatedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        await dbAdmin.collection("cases").doc(caseId).set(failUpdates, { merge: true });
+        await dbAdmin.collection("casos").doc(caseId).set(failUpdates, { merge: true });
+      } catch (errDb: any) {
+        console.error("Erro ao salvar falha no Firestore:", errDb.message || errDb);
+      }
+    }
+    return res.status(400).json({
+      success: false,
+      errorCode: "VALIDATION_ERROR",
+      errorMessage: errorMsg
+    });
+  }
+
+  // Validate content (getTodoistFormula)
+  if (!content || !content.trim()) {
+    const errorMsg = "O conteúdo/fórmula da tarefa (content) é obrigatório.";
+    if (dbAdmin) {
+      try {
+        const failUpdates = {
+          todoistAutomationStatus: "falha",
+          todoistTaskId: "",
+          todoistTaskUrl: "",
+          todoistTaskLogFalha: errorMsg,
+          todoistUpdatedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        await dbAdmin.collection("cases").doc(caseId).set(failUpdates, { merge: true });
+        await dbAdmin.collection("casos").doc(caseId).set(failUpdates, { merge: true });
+      } catch (errDb: any) {
+        console.error("Erro ao salvar falha no Firestore:", errDb.message || errDb);
+      }
+    }
+    return res.status(400).json({
+      success: false,
+      errorCode: "VALIDATION_ERROR",
+      errorMessage: errorMsg
+    });
+  }
+
+  // Build a clean, structured description
+  let finalDescription = description || "";
+  if (!finalDescription && metadata) {
+    finalDescription = `Cliente: ${metadata.clientName || 'N/A'}\n` +
+                       `Parte Adversa: ${metadata.oppositeParty || 'N/A'}\n` +
+                       `Assunto: ${metadata.assunto || 'N/A'}\n` +
+                       `Tipo de Serviço: ${metadata.serviceSubtype || 'Petição Inicial'}\n` +
+                       `Vara: ${metadata.vara || 'A definir'}\n` +
+                       `Comarca: ${metadata.comarca || 'N/A'}\n` +
+                       `Processo CNJ: ${metadata.processNumber || 'N/A'}\n` +
+                       `Case ID: ${caseId}\n` +
+                       `Link Portal BOSS: https://ais-dev-urso7r2mee6mhzh6bhdlpn-599536317399.us-east1.run.app${metadata.route || '/boss-giffoni-clientes/fluxo-producao/' + caseId}`;
+  }
+
+  try {
+    const response = await fetch("https://api.todoist.com/rest/v2/tasks", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        content: content.trim(),
+        description: finalDescription,
+        project_id: projectId
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      const detailedError = `Todoist API HTTP ${response.status}: ${errText}`;
+      if (dbAdmin) {
+        const failUpdates = {
+          todoistAutomationStatus: "falha",
+          todoistTaskId: "",
+          todoistTaskUrl: "",
+          todoistTaskLogFalha: detailedError,
+          todoistUpdatedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        await dbAdmin.collection("cases").doc(caseId).set(failUpdates, { merge: true });
+        await dbAdmin.collection("casos").doc(caseId).set(failUpdates, { merge: true });
+      }
+      return res.status(response.status).json({
+        success: false,
+        errorCode: "TODOIST_API_ERROR",
+        errorMessage: detailedError
+      });
+    }
+
+    const task = await response.json();
+    const taskUrl = task.url || `https://todoist.com/showTask?id=${task.id}`;
+
+    const successUpdates = {
+      todoistAutomationStatus: "criado",
+      todoistTaskId: task.id,
+      todoistTaskUrl: taskUrl,
+      todoistTaskLogFalha: "",
+      todoistProjectId: projectId,
+      todoistProjectName: projectName || "",
+      todoistCreatedAt: new Date().toISOString(),
+      todoistUpdatedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    if (dbAdmin) {
+      await dbAdmin.collection("cases").doc(caseId).set(successUpdates, { merge: true });
+      await dbAdmin.collection("casos").doc(caseId).set(successUpdates, { merge: true });
+    }
+
+    return res.status(200).json({
+      success: true,
+      todoistTaskId: task.id,
+      todoistTaskUrl: taskUrl,
+      todoistProjectId: projectId,
+      todoistProjectName: projectName || "",
+      rawTodoistTask: task
+    });
+
+  } catch (err: any) {
+    console.error("[Todoist Create Case Task Endpoint Error]:", err);
+    const serverErrStr = err.message || "Erro de servidor ao chamar api do Todoist.";
+    if (dbAdmin && caseId) {
+      try {
+        const failUpdates = {
+          todoistAutomationStatus: "falha",
+          todoistTaskId: "",
+          todoistTaskUrl: "",
+          todoistTaskLogFalha: serverErrStr,
+          todoistUpdatedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        await dbAdmin.collection("cases").doc(caseId).set(failUpdates, { merge: true });
+        await dbAdmin.collection("casos").doc(caseId).set(failUpdates, { merge: true });
+      } catch (errDb) {
+        console.error("Erro ao salvar falha por exceção no Firestore:", errDb);
+      }
+    }
+    return res.status(500).json({
+      success: false,
+      errorCode: "TODOIST_SERVER_ERROR",
+      errorMessage: serverErrStr
     });
   }
 });

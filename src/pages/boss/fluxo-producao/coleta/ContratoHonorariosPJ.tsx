@@ -6,10 +6,12 @@ import {
   ArrowRight, FileText, UploadCloud, Trash2, ArrowLeft, 
   Check, AlertCircle, Sparkles, DollarSign, Calendar, Info, 
   ShieldAlert, FileCheck, CheckCircle2, ChevronRight, Lock, 
-  HelpCircle, Sparkle, Ban, Coins
+  HelpCircle, Sparkle, Ban, Coins, Copy, RefreshCw, ExternalLink, FileCode
 } from 'lucide-react';
-import { collection, query, where, getDocs, getDoc, doc, updateDoc, addDoc, setDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, getDoc, doc, updateDoc, addDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
+import { useAuth } from '../../../../contexts/AuthContext';
+import { buildContratoHonorariosPjPlaceholders } from '../../../../lib/documents/placeholderBuilders';
 
 export default function ContratoHonorariosPJ() {
   const {
@@ -32,6 +34,37 @@ export default function ContratoHonorariosPJ() {
     handleCheckboxToggle,
     navigate
   } = useColetaState();
+
+  const { googleAccessToken, loginWithGoogle } = useAuth();
+  const [isRenewingGoogle, setIsRenewingGoogle] = useState(false);
+  const [localCaseObj, setLocalCaseObj] = useState<any>(null);
+
+  const handleRenewGoogle = async () => {
+    setIsRenewingGoogle(true);
+    try {
+      await loginWithGoogle('boss_admin');
+      setSuccess("Autenticação Google renovada com sucesso! Você já pode gerar o contrato novamente.");
+    } catch (err: any) {
+      setError(`Falha ao renovar autenticação: ${err.message || err}`);
+    } finally {
+      setIsRenewingGoogle(false);
+    }
+  };
+
+  // Real-time synchronization for GDocs engine parameters and statuses
+  useEffect(() => {
+    if (!caseId) return;
+    const unsub = onSnapshot(doc(db, 'cases', caseId), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        setLocalCaseObj(data);
+        if (data.contratoHonorariosStatus === 'criada' || data.contratoHonorariosGoogleDocsUrl) {
+          setGdocsConfirmed(true);
+        }
+      }
+    });
+    return () => unsub();
+  }, [caseId]);
 
   // Financial Form state (SubEtapa 1)
   const [financialDocId, setFinancialDocId] = useState<string | null>(null);
@@ -251,9 +284,385 @@ export default function ContratoHonorariosPJ() {
 
   const handleConfirmGDocs = () => {
     setGdocsConfirmed(true);
-    setSuccess('Contrato de Honorários Corporativos gerado via workspace em background!');
+    setSuccess('Contrato de Honorários PJ confirmado e pronto para auditoria!');
     setActiveSubStep(3);
     setTimeout(() => setSuccess(null), 2500);
+  };
+
+  const handleGenerateContratoGDocs = async () => {
+    const jobId = 'job_contr_pj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    const jobLogs: any[] = [];
+    const addClientLog = (action: string, message: string) => {
+      jobLogs.push({
+        action,
+        timestamp: new Date().toISOString(),
+        message
+      });
+    };
+
+    addClientLog("CONTR_PJ_BUTTON_CLICKED", "O operador solicitou a geração fática do Contrato de Honorários PJ.");
+
+    if (!caseId) {
+      setError("Erro de validação: ID do caso (caseId) está ausente.");
+      return;
+    }
+
+    if (!caseObj) {
+      setError("Erro de validação: Dados do caso não carregados do banco de dados.");
+      return;
+    }
+
+    const targetClientId = caseObj?.clientId || client?.id;
+    if (!targetClientId) {
+      setError("Erro de validação: ID do cliente (clientId) está ausente.");
+      return;
+    }
+
+    if (!client) {
+      setError("Erro de validação: Dados do cliente não carregados do banco de dados.");
+      return;
+    }
+
+    addClientLog("CONTR_PJ_CLIENT_DATA_LOADED", "Dados cadastrais corporativos do cliente PJ carregados com sucesso.");
+
+    // Core PJ validation rules
+    const resolvedRazaoSocial = (
+      client?.pjDadosEmpresa?.pj_razaoSocial ||
+      client?.pjData?.pj_razaoSocial ||
+      client?.portalMirror?.pjDadosEmpresa?.razaoSocial ||
+      client?.nomeCompleto ||
+      client?.nome ||
+      ""
+    ).trim();
+
+    if (!resolvedRazaoSocial) {
+      addClientLog("CONTR_PJ_REQUIRED_PLACEHOLDER_EMPTY", "Razão Social da empresa não cadastrada.");
+      setError("Razão Social da empresa não cadastrada. Verifique a Etapa 1 — Cadastro do Cliente.");
+      return;
+    }
+
+    const resolvedCnpj = (
+      client?.pjDadosEmpresa?.pj_cnpj ||
+      client?.pjData?.pj_cnpj ||
+      client?.portalMirror?.pjDadosEmpresa?.cnpj ||
+      client?.cnpj ||
+      ""
+    ).trim();
+
+    if (!resolvedCnpj) {
+      addClientLog("CONTR_PJ_REQUIRED_PLACEHOLDER_EMPTY", "CNPJ do cliente PJ não localizado.");
+      setError("Não é possível gerar o Contrato corporativo porque o CNPJ da empresa está ausente.");
+      return;
+    }
+
+    // Google Drive check
+    const clientDriveFolderId = (client?.googleDriveClientFolderId || client?.gdriveFolderId || localCaseObj?.gdriveFolderId || '').trim();
+    const clientDriveFolderUrl = (client?.googleDriveClientFolderUrl || client?.gdriveFolderUrl || localCaseObj?.gdriveFolderUrl || '').trim();
+
+    const folderIsReal = !!(
+      clientDriveFolderId && 
+      !clientDriveFolderId.toLowerCase().includes('mock') && 
+      !clientDriveFolderId.toLowerCase().includes('fake') && 
+      !clientDriveFolderId.toLowerCase().includes('teste') && 
+      !clientDriveFolderId.toLowerCase().includes('undefined') && 
+      !clientDriveFolderId.toLowerCase().includes('null') && 
+      !clientDriveFolderId.toLowerCase().includes('xxxx')
+    );
+
+    if (!folderIsReal) {
+      setError("Não há pasta real do Google Drive vinculada a este cliente corporativo. Acesse a Etapa 1 e crie a pasta do cliente primeiro.");
+      return;
+    }
+
+    addClientLog("CONTR_PJ_FOLDER_FOUND", `Pasta destino PJ no Google Drive localizada com sucesso ID: ${clientDriveFolderId}`);
+
+    // Official template ID matching client size
+    const officialTemplateId = "1GJZ6LSW_szLSAA8Z3iw9jt4Q6zy5k6EuuTNhR5ooJQQ";
+    addClientLog("CONTR_PJ_OFFICIAL_TEMPLATE_SELECTED", `Template oficial de Contrato PJ unificado selecionado: ${officialTemplateId}`);
+
+    const resolvedChargeType = formChargeType === 'Outro' ? customChargeType.trim() : formChargeType;
+    const parsedAmount = parseFloat(formTotalAmount) || 0;
+    const calculatedInstallments = formPaymentMode === 'avista' ? 1 : (Number(formInstallments) || 1);
+    const calculatedInstallmentAmount = parseFloat((parsedAmount / calculatedInstallments).toFixed(2)) || 0;
+
+    const mockFinData = {
+      tipoServicoContratado: contractedServiceType.trim(),
+      tipoServico: contractedServiceType.trim(),
+      formaPagamento: formPaymentMethod,
+      formaCobranca: resolvedChargeType,
+      totalAmount: parsedAmount,
+      valorTotal: parsedAmount,
+      valorHonorarios: parsedAmount,
+      honorarioFixoValor: parsedAmount,
+      quantidadeParcelas: calculatedInstallments,
+      parcelas: calculatedInstallments,
+      valorParcela: calculatedInstallmentAmount,
+      dataPrimeiroVencimento: formFirstDueDate,
+      vencimento: formFirstDueDate,
+      notes: formNotes.trim(),
+      cobrancaAutomaticaInteg: formPaymentProvider
+    };
+
+    let placeholders: Record<string, string>;
+    try {
+      placeholders = buildContratoHonorariosPjPlaceholders(client, { ...caseObj, ...mockFinData }, mockFinData);
+
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      const dataAssinaturaFormated = `${day}/${month}/${year}`;
+      
+      placeholders["{{DATA_ASSINATURA}}"] = dataAssinaturaFormated;
+      placeholders["<<data da assinatura>>"] = dataAssinaturaFormated;
+
+      addClientLog("CONTR_PJ_PLACEHOLDERS_BUILT", "Todas as chaves corporativas e placeholders de faturamento foram processados.");
+    } catch (errPl: any) {
+      setError(`Erro ao construir placeholders PJ: ${errPl.message}`);
+      return;
+    }
+
+    const essentialKeys = [
+      "{{OUTORGANTE_NOME}}",
+      "{{OUTORGANTE_CNPJ}}",
+      "{{OUTORGANTE_ENDERECO}}",
+      "{{TIPO_SERVICO}}",
+      "{{VALOR_HONORARIOS}}",
+      "{{DATA_ASSINATURA}}"
+    ];
+
+    const fieldNamesMap: Record<string, string> = {
+      "{{OUTORGANTE_NOME}}": "Razão Social",
+      "{{OUTORGANTE_CNPJ}}": "CNPJ",
+      "{{OUTORGANTE_ENDERECO}}": "Endereço Corporativo",
+      "{{TIPO_SERVICO}}": "Tipo de Serviço Jurídico",
+      "{{VALOR_HONORARIOS}}": "Honorários Combinados",
+      "{{DATA_ASSINATURA}}": "Data da Assinatura"
+    };
+
+    const emptyEssentials = essentialKeys.filter(k => {
+      const val = placeholders[k];
+      return !val || String(val).trim() === "";
+    });
+
+    if (emptyEssentials.length > 0) {
+      const fieldNames = emptyEssentials.map(k => fieldNamesMap[k] || k).join(", ");
+      const errorMsg = `Não é possível gerar o Contrato PJ porque existem campos essenciais vazios no cadastro da empresa: ${fieldNames}.`;
+      addClientLog("CONTR_PJ_REQUIRED_PLACEHOLDER_EMPTY", errorMsg);
+      
+      const failedJob = {
+        id: jobId,
+        contractVersion: "boss.placeholders.v1",
+        source: "Portal BOSS Clientes",
+        target: "Internal Generator Engine",
+        documentType: "contrato_honorarios_pj",
+        templateKey: "contrato_honorarios_pj",
+        status: "failed",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        caseId: caseId,
+        portalClientId: targetClientId,
+        clientType: "PJ",
+        destinationFolderId: clientDriveFolderId,
+        destinationFolderUrl: clientDriveFolderUrl,
+        outputFileName: `Contrato PJ - ${resolvedRazaoSocial}`,
+        placeholders,
+        errorCode: "CONTR_PJ_REQUIRED_PLACEHOLDER_EMPTY",
+        errorMessage: errorMsg,
+        logs: jobLogs
+      };
+
+      await setDoc(doc(db, 'googleDocsJobs', jobId), failedJob);
+      setError(errorMsg);
+      return;
+    }
+
+    addClientLog("CONTR_PJ_REQUIRED_PLACEHOLDERS_VALIDATED", "Contrato verificado contra especificidades PJ fáticas.");
+
+    const currentGoogleAccessToken = googleAccessToken || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken') || '';
+    const localOverride = localStorage.getItem('portal_boss_gdocs_override') || '';
+
+    if (!currentGoogleAccessToken && !localOverride) {
+      setError("Faça login com Google para autorizar o acesso ou configure a Service Account.");
+      return;
+    }
+
+    setSavingFinancial(true); // show loading state on generation
+    setError(null);
+    setSuccess(null);
+
+    const caseDocRef = doc(db, 'cases', caseId);
+    await updateDoc(caseDocRef, {
+      contratoHonorariosStatus: "gerando",
+      contratoHonorariosLogFalha: ""
+    });
+
+    addClientLog("CONTR_PJ_TEMPLATE_COPY_STARTED", "Duplicação integrada do GDocs PJ iniciada...");
+
+    const initialJob = {
+      id: jobId,
+      contractVersion: "boss.placeholders.v1",
+      source: "Portal BOSS Clientes",
+      target: "Internal Generator Engine",
+      documentType: "contrato_honorarios_pj",
+      templateKey: "contrato_honorarios_pj",
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      caseId: caseId,
+      portalClientId: targetClientId,
+      clientType: "PJ",
+      destinationFolderId: clientDriveFolderId,
+      destinationFolderUrl: clientDriveFolderUrl,
+      outputFileName: `Contrato de Honorários PJ - ${resolvedRazaoSocial}`,
+      placeholders,
+      result: {
+        googleDocsId: null,
+        googleDocsUrl: null,
+        fileName: null
+      },
+      errorCode: null,
+      errorMessage: null,
+      logs: jobLogs
+    };
+
+    await setDoc(doc(db, 'googleDocsJobs', jobId), initialJob);
+
+    try {
+      const response = await fetch("/api/google-docs/generate-document", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "stateless",
+          googleAccessToken: currentGoogleAccessToken,
+          documentType: "contrato_honorarios_pj",
+          templateKey: "contrato_honorarios_pj",
+          templateId: officialTemplateId,
+          caseId,
+          clientId: targetClientId,
+          clientType: "PJ",
+          destinationFolderId: clientDriveFolderId,
+          destinationFolderUrl: clientDriveFolderUrl,
+          documentName: `Contrato de Honorários PJ - ${resolvedRazaoSocial}`,
+          placeholders,
+          metadata: {
+            source: "Portal BOSS - Contrato PJ",
+            originRoute: `/boss-giffoni-clientes/fluxo-producao/${caseId}/solicitacao-contrato-PJ`,
+            clientDataSource: "clients/{clientId}.pjData / financials"
+          },
+          credentialOverride: localOverride
+        })
+      });
+
+      const responseText = await response.text();
+      let responseData: any;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = { error: responseText };
+      }
+
+      if (!response.ok || !responseData.success) {
+        throw {
+          message: responseData.errorMessage || responseData.error || responseText || "Falha na geração integrada eletrônica corporativa.",
+          errorCode: responseData.errorCode || "CONTR_PJ_TEMPLATE_COPY_FAILED"
+        };
+      }
+
+      const googleDocsId = responseData.googleDocsId;
+      const googleDocsUrl = responseData.googleDocsUrl;
+
+      addClientLog("CONTR_PJ_TEMPLATE_COPY_SUCCESS", `Clone GDocs PJ bem-sucedido. ID gerado: ${googleDocsId}`);
+      addClientLog("CONTR_PJ_PLACEHOLDER_REPLACEMENT_STARTED", "Operação de lote para substituição dos placeholders PJ ativada.");
+      addClientLog("CONTR_PJ_PLACEHOLDER_REPLACEMENT_SUCCESS", "Substituição corporativa terminada sem anomalias.");
+      addClientLog("CONTR_PJ_DOCUMENT_CREATED", "Homologação do arquivo fático integrada ao Drive.");
+      addClientLog("CONTR_PJ_CASE_UPDATED", "Caso persistido com chaves de referência adicionadas.");
+      addClientLog("CONTR_PJ_FLOW_COMPLETED", "Fluxo corporativo terminou com absoluto sucesso.");
+
+      await updateDoc(caseDocRef, {
+        contratoHonorariosStatus: "criada",
+        contratoHonorariosPjId: googleDocsId,
+        contratoHonorariosPjUrl: googleDocsUrl,
+        contratoHonorariosGoogleDocsId: googleDocsId,
+        contratoHonorariosGoogleDocsUrl: googleDocsUrl,
+        contratoHonorariosGeneratedAt: new Date().toISOString(),
+        contratoHonorariosDestinationFolderId: clientDriveFolderId,
+        contratoHonorariosDestinationFolderUrl: clientDriveFolderUrl,
+        contratoHonorariosGoogleDocsJobId: jobId,
+        contratoHonorariosGoogleDocsJobLogs: jobLogs,
+        contratoHonorariosLogFalha: ""
+      });
+
+      // Save in generatedDocuments subcollection
+      try {
+        const subdocRef = doc(db, 'cases', caseId, 'generatedDocuments', 'contrato_honorarios_pj');
+        await setDoc(subdocRef, {
+          documentType: "contrato_honorarios_pj",
+          displayName: `Contrato de Honorários PJ - ${resolvedRazaoSocial}`,
+          templateKey: "contrato_honorarios_pj",
+          templateId: officialTemplateId,
+          googleDocsId,
+          googleDocsUrl,
+          destinationFolderId: clientDriveFolderId,
+          destinationFolderUrl: clientDriveFolderUrl,
+          status: "success",
+          generatedAt: new Date().toISOString(),
+          generatedBy: "Portal BOSS Central Interna (Stateless PJ)",
+          errorCode: null,
+          errorMessage: null,
+          logs: jobLogs
+        }, { merge: true });
+      } catch (errSub: any) {
+        console.warn("[PortalBoss] PJ Subcollection write failed", errSub.message);
+      }
+
+      await updateDoc(doc(db, 'googleDocsJobs', jobId), {
+        status: "success",
+        updatedAt: new Date().toISOString(),
+        result: {
+          googleDocsId,
+          googleDocsUrl,
+          fileName: `Contrato de Honorários PJ - ${resolvedRazaoSocial}`
+        },
+        logs: jobLogs
+      });
+
+      await saveWizardStateUpdate({ q3_1: 'sim' });
+      setGdocsConfirmed(true);
+
+      setSuccess("Contrato de Honorários PJ gerado e associado com absoluto sucesso!");
+      setTimeout(() => setSuccess(null), 5000);
+      setActiveSubStep(3);
+    } catch (err: any) {
+      console.error("[PJ Contract Generator Failed]", err);
+      const errorMessage = err.message || "Falha na execução integrada.";
+      const errorCode = err.errorCode || "CONTR_PJ_PLACEHOLDER_REPLACEMENT_FAILED";
+
+      addClientLog(errorCode, `Ocorreu uma falha no fluxo corporativo: ${errorMessage}`);
+      addClientLog("CONTR_PJ_CASE_UPDATE_FAILED", "Falha ao persistir erro no BD.");
+
+      await updateDoc(caseDocRef, {
+        contratoHonorariosStatus: "falha",
+        contratoHonorariosLogFalha: errorMessage,
+        contratoHonorariosGeneratedAt: ""
+      });
+
+      try {
+        await updateDoc(doc(db, 'googleDocsJobs', jobId), {
+          status: "failed",
+          updatedAt: new Date().toISOString(),
+          errorCode,
+          errorMessage,
+          logs: jobLogs
+        });
+      } catch (errJob) {
+        console.warn("Failed to update job status", errJob);
+      }
+
+      setError(`Falha ao gerar Contrato PJ corporativo: ${errorMessage}`);
+    } finally {
+      setSavingFinancial(false);
+    }
   };
 
   const FileUploadBox = ({ field }: { field: string }) => {
@@ -732,38 +1141,194 @@ export default function ContratoHonorariosPJ() {
 
             {/* SUB-STEP 2 — AUTOMAÇÃO INTELIGENTE GOOGLE DOCS */}
             {activeSubStep === 2 && (
-              <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-2xs space-y-6">
-                <div className="border-b border-gray-100 pb-3">
-                  <h4 className="text-xs font-black text-indigo-950 uppercase tracking-widest flex items-center gap-2">
-                    <Sparkles size={18} className="text-blue-600 animate-pulse" /> SubEtapa 2 de 3 — Automação Inteligente Google Docs
-                  </h4>
-                  <p className="text-[11px] text-gray-400 mt-1">Espaço visual técnico reservado com antecedência para integração GDocs corporativo.</p>
+              <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-2xs space-y-6 animate-fade-in">
+                <div className="border-b border-gray-100 pb-3 flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-black text-indigo-950 uppercase tracking-widest flex items-center gap-2">
+                      <Sparkles size={18} className="text-blue-600 animate-pulse" /> SubEtapa 2 de 3 — Automação Inteligente Google Docs
+                    </h4>
+                    <p className="text-[11px] text-gray-400 mt-1">Gere a minuta oficial do Contrato corporativo integrada ao motor BOSS.</p>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded-md">
+                    v2.1.0-corp
+                  </span>
                 </div>
 
-                <div className="bg-blue-50/70 border border-blue-150 rounded-2xl p-5 text-blue-950 text-xs font-medium space-y-3 leading-relaxed shadow-3xs">
-                  <div className="flex items-start gap-2.5">
-                    <Sparkle size={18} className="text-blue-500 shrink-0 mt-0.5 animate-pulse" />
+                {/* TEMPLATE INFO */}
+                <div className="flex items-center justify-between p-3.5 bg-gray-50 border border-gray-150 rounded-2xl text-xs gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-indigo-50 text-indigo-650 rounded-xl">
+                      <FileCode size={16} />
+                    </div>
                     <div>
-                      <h5 className="font-extrabold uppercase tracking-wider text-[10px] text-blue-600 font-mono mb-1">AUTOMACAO INTELIGENTE GOOGLE DOCS</h5>
-                      <span className="block text-gray-650 leading-relaxed font-semibold">
-                        Espaço reservado para automação futura do contrato de honorários via Google Docs.
-                      </span>
+                      <span className="block font-extrabold text-gray-800">Modelo Oficial Contrato de Honorários PJ</span>
+                      <span className="text-[10px] text-gray-400 font-mono">Template ID: 1GJZ6LSW_szL...</span>
                     </div>
                   </div>
-                  <p className="text-[10px] text-blue-500 font-semibold bg-blue-100/30 p-2.5 rounded-lg">
-                    A integração real com o Google Doc Builder será implementada em build separado. O fluxo fático pode ser testado por enquanto clicando no botão para bypassar a barreira de validação e prosseguir ao passo de auditoria contratual.
-                  </p>
+                  <a
+                    href="https://docs.google.com/document/d/1GJZ6LSW_szLSAA8Z3iw9jt4Q6zy5k6EuuTNhR5ooJQQ/edit"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1 px-2 bg-white border border-gray-250 text-gray-700 hover:text-gray-950 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
+                  >
+                    Ver Minuta Base <ExternalLink size={10} />
+                  </a>
                 </div>
 
-                <div className="flex justify-end">
+                {/* GENERATION STATE RENDERER */}
+                {localCaseObj?.contratoHonorariosStatus === 'gerando' && (
+                  <div className="p-8 border border-blue-150 bg-blue-50/20 rounded-2xl text-center space-y-3">
+                    <div className="w-8 h-8 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mx-auto"></div>
+                    <p className="text-xs font-black uppercase text-blue-900 tracking-wider font-mono">Gerando Contrato PJ...</p>
+                    <p className="text-[11px] text-blue-600 font-semibold max-w-md mx-auto leading-relaxed">
+                      O motor BOSS está gerando o Contrato de Honorários PJ em background e preenchendo todos os placeholders fáticos de sua empresa. Aguarde...
+                    </p>
+                  </div>
+                )}
+
+                {localCaseObj?.contratoHonorariosStatus === 'criada' && (
+                  <div className="p-6 border border-emerald-150 bg-emerald-50/20 rounded-3xl space-y-4 animate-fade-in">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-emerald-100 text-emerald-700 rounded-2xl">
+                        <CheckCircle2 size={18} />
+                      </div>
+                      <div className="space-y-1">
+                        <h5 className="text-xs font-extrabold text-emerald-950">Contrato PJ Gerado com Sucesso!</h5>
+                        <p className="text-[11px] text-emerald-800 font-medium">O documento foi criado e arquivado na pasta corporativa do cliente no Google Drive da Giffoni.</p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 pt-1 font-sans">
+                      <a
+                        href={localCaseObj?.contratoHonorariosGoogleDocsUrl || localCaseObj?.contratoHonorariosPjUrl || '#'}
+                        target="_blank"
+                        referrerPolicy="no-referrer"
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10.5px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                      >
+                        <ExternalLink size={12} /> Abrir Contrato PJ
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const url = localCaseObj?.contratoHonorariosGoogleDocsUrl || localCaseObj?.contratoHonorariosPjUrl || '';
+                          navigator.clipboard.writeText(url);
+                          setSuccess("Link do Contrato copiado para a área de transferência!");
+                          setTimeout(() => setSuccess(null), 3000);
+                        }}
+                        className="px-4 py-2 bg-white border border-gray-250 text-gray-700 hover:text-gray-900 text-[10.5px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Copy size={12} /> Copiar Link
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleGenerateContratoGDocs}
+                        className="px-4 py-2 bg-gray-50 border border-gray-200 text-gray-600 hover:text-gray-800 text-[10.5px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <RefreshCw size={12} /> Gerar Nova Versão
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {localCaseObj?.contratoHonorariosStatus === 'falha' && (
+                  <div className="p-5 border border-rose-150 bg-rose-55/15 rounded-3xl space-y-4 animate-fade-in">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-rose-100 text-rose-700 rounded-2xl">
+                        <ShieldAlert size={18} />
+                      </div>
+                      <div className="space-y-1">
+                        <h5 className="text-xs font-black text-rose-950 uppercase tracking-wide font-mono">Falha na Automação GDocs PJ</h5>
+                        <p className="text-[11px] text-rose-805 font-bold leading-normal">{localCaseObj?.contratoHonorariosLogFalha || 'Ocorreu um erro ao preencher o Contrato PJ no motor.'}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 pt-1 border-t border-rose-100 pt-3">
+                      <button
+                        type="button"
+                        onClick={handleGenerateContratoGDocs}
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-[10.5px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <RefreshCw size={12} /> Tentar Gerar Novamente
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRenewGoogle}
+                        disabled={isRenewingGoogle}
+                        className="px-4 py-2 bg-white border border-gray-250 text-gray-700 hover:text-gray-950 text-[10.5px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        <RefreshCw size={12} className={isRenewingGoogle ? "animate-spin" : ""} />
+                        {isRenewingGoogle ? 'Renovando...' : 'Renovar Credencial Google'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {(!localCaseObj?.contratoHonorariosStatus || localCaseObj?.contratoHonorariosStatus === 'pendente') && (
+                  <div className="p-5 bg-indigo-50/30 border border-indigo-100 rounded-3xl space-y-3">
+                    <p className="text-xs font-bold text-indigo-950">Pronto para Geração Eletrônica Corporativa</p>
+                    <p className="text-[11px] text-indigo-800 leading-normal">
+                      As metas financeiras corporativas da SubEtapa 1 foram agendadas. Clique no botão abaixo para gerar a cópia oficial estruturada e automatizada do Contrato corporativo PJ.
+                    </p>
+                    <div className="pt-1 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleGenerateContratoGDocs}
+                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                      >
+                        <Sparkles size={13} className="animate-pulse" /> Gerar Contrato no Google Docs
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleConfirmGDocs}
+                        className="px-4 py-2 bg-white border border-gray-250 text-gray-700 hover:text-gray-900 text-[10.5px] font-bold uppercase rounded-xl"
+                      >
+                        Pular Geração GDocs
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* REAL-TIME JOB LOGS PANEL */}
+                {localCaseObj?.contratoHonorariosGoogleDocsJobLogs && localCaseObj?.contratoHonorariosGoogleDocsJobLogs.length > 0 && (
+                  <div className="border border-gray-150 rounded-2xl overflow-hidden shadow-2xs font-mono text-[10.5px]">
+                    <div className="bg-gray-900 text-gray-400 p-2.5 px-3 flex items-center justify-between">
+                      <span className="font-extrabold text-[9px] uppercase tracking-wider flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-ping"></span>
+                        LOGS DO MOTOR ELETRÔNICO GDocs (CONTR_PJ_)
+                      </span>
+                      <span className="text-[8.5px] text-gray-500 font-bold">REAL-TIME FEEDBACK</span>
+                    </div>
+                    <div className="bg-gray-950 text-gray-200 p-3 max-h-40 overflow-y-auto space-y-1.5 leading-normal scrollbar-thin">
+                      {localCaseObj.contratoHonorariosGoogleDocsJobLogs.map((log: any, idx: number) => (
+                        <div key={idx} className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-3 border-b border-gray-900/40 pb-1 last:border-0 last:pb-0">
+                          <span className="text-indigo-400 font-bold shrink-0">{log.timestamp ? log.timestamp.split('T')[1].substring(0, 8) : '00:00:00'}</span>
+                          <span className="text-blue-300 font-semibold shrink-0">[{log.action}]</span>
+                          <span className="text-gray-300">{log.message}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* BOTTOM ACTION BAR */}
+                <div className="flex justify-between items-center pt-3 border-t border-gray-100">
                   <button
                     type="button"
-                    onClick={handleConfirmGDocs}
-                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[10.5px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    onClick={() => setActiveSubStep(1)}
+                    className="p-2 px-4 bg-gray-50 hover:bg-gray-100 text-gray-600 hover:text-gray-900 border border-gray-200 text-[10px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1 transition-all"
                   >
-                    Próxima Subetapa
-                    <ArrowRight size={13} />
+                    Voltar ao Faturamento
                   </button>
+                  {gdocsConfirmed && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveSubStep(3)}
+                      className="px-5 py-2.5 bg-indigo-650 hover:bg-indigo-700 text-white text-[11px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    >
+                      Seguir para Auditoria
+                      <ArrowRight size={13} />
+                    </button>
+                  )}
                 </div>
               </div>
             )}

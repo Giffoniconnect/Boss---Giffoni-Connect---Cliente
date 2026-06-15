@@ -71,7 +71,7 @@ export default function EntregaDocumento({
   } | null>(null);
 
   const [sendingGmail, setSendingGmail] = useState(false);
-  const [gmailResult, setGmailResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [gmailResult, setGmailResult] = useState<{ success: boolean; message: string; errorCode?: string } | null>(null);
 
   const [waDiagnostics, setWaDiagnostics] = useState<{
     configured: boolean;
@@ -411,13 +411,15 @@ export default function EntregaDocumento({
       } else {
         setGmailResult({
           success: false,
+          errorCode: data.errorCode,
           message: data.errorMessage || 'Não foi possível preparar o e-mail no Gmail. Verifique se sua conta Google está conectada com permissão Gmail.'
         });
       }
     } catch (err: any) {
       setGmailResult({
         success: false,
-        message: 'Não foi possível preparar o e-mail no Gmail. Verifique se sua conta Google está conectada com permissão Gmail.'
+        errorCode: err.errorCode,
+        message: err.message || 'Não foi possível preparar o e-mail no Gmail. Verifique se sua conta Google está conectada com permissão Gmail.'
       });
     } finally {
       setSendingGmail(false);
@@ -740,13 +742,36 @@ export default function EntregaDocumento({
 
             {/* Gmail result feedback */}
             {gmailResult && (
-              <div className={`p-2.5 rounded-xl border flex items-center gap-2 text-[11px] font-bold ${
-                gmailResult.success 
-                  ? 'bg-blue-500/10 border-blue-250 text-blue-800' 
-                  : 'bg-rose-550/10 border-rose-200 text-rose-800'
-              }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${gmailResult.success ? 'bg-blue-550' : 'bg-rose-550'}`}></span>
-                <span>{gmailResult.message}</span>
+              <div className="space-y-2">
+                <div className={`p-2.5 rounded-xl border flex items-center gap-2 text-[11px] font-bold ${
+                  gmailResult.success 
+                    ? 'bg-blue-500/10 border-blue-250 text-blue-800' 
+                    : 'bg-rose-550/10 border-rose-200 text-rose-800'
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${gmailResult.success ? 'bg-blue-550' : 'bg-rose-550'}`}></span>
+                  <span>{gmailResult.message}</span>
+                </div>
+                {!gmailResult.success && (
+                  gmailResult.errorCode === 'GOOGLE_DOCS_TOKEN_EXPIRED' ||
+                  gmailResult.errorCode === 'GOOGLE_AUTH_UNAUTHORIZED' ||
+                  gmailResult.errorCode === 'GOOGLE_DOCS_CREDENTIALS_MISSING'
+                ) && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await loginWithGoogle('boss_admin');
+                        setGmailResult(null);
+                      } catch (e: any) {
+                        alert("Erro ao reautorizar conta Google: " + e.message);
+                      }
+                    }}
+                    className="mt-1 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all shadow-3xs cursor-pointer flex items-center gap-1.5"
+                  >
+                    <ExternalLink size={10} />
+                    <span>Conectar com Google / Renovar Token</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
