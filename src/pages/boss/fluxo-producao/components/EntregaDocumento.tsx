@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { Printer, MessageCircle, Mail, Settings, Check, ExternalLink } from 'lucide-react';
 import { useAuth } from '../../../../contexts/AuthContext';
 
@@ -52,6 +53,9 @@ export default function EntregaDocumento({
   questionNumber = '1.2'
 }: EntregaDocumentoProps) {
   const { googleAccessToken, loginWithGoogle } = useAuth();
+  const { caseId } = useParams<{ caseId: string }>();
+
+  const resolvedGoogleAccessToken = googleAccessToken || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken') || '';
 
   const [showWhatsappConfirm, setShowWhatsappConfirm] = useState(false);
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false);
@@ -68,6 +72,123 @@ export default function EntregaDocumento({
 
   const [sendingGmail, setSendingGmail] = useState(false);
   const [gmailResult, setGmailResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const [waDiagnostics, setWaDiagnostics] = useState<{
+    configured: boolean;
+    tokenSource: string;
+    tokenMasked: string;
+    provider: string;
+    status: string;
+    warnings?: string[];
+  } | null>(null);
+
+  const [preflightData, setPreflightData] = useState<{
+    valid: boolean;
+    readiness: string;
+    pdfExportCheck: string;
+    diagnostic?: any;
+    phoneValidation?: any;
+  } | null>(null);
+
+  const [testFormatsResult, setTestFormatsResult] = useState<any[] | null>(null);
+  const [testingFormats, setTestingFormats] = useState(false);
+
+  const [prechecking, setPrechecking] = useState(false);
+  const [showTechDetails, setShowTechDetails] = useState(false);
+
+  // Fetch diagnostics on mount
+  React.useEffect(() => {
+    const fetchDiagnostics = async () => {
+      try {
+        const res = await fetch('/api/whatsapp/diagnostics');
+        if (res.ok) {
+          const data = await res.json();
+          setWaDiagnostics(data);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch WA diagnostics:', err);
+      }
+    };
+    fetchDiagnostics();
+  }, []);
+
+  const runPreflightCheck = async () => {
+    if (!docUrl || docUrl.includes('placeholder')) return;
+    setPrechecking(true);
+    try {
+      const response = await fetch('/api/whatsapp/preflight-send-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          googleDocsUrl: docUrl,
+          phone: whatsappCliente,
+          docName: docInfo.label,
+          clientName: nomeCliente,
+          documentType: tipoDocumento,
+          tipoPessoa,
+          caseId,
+          googleAccessToken: resolvedGoogleAccessToken
+        })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setPreflightData(data);
+        // Clear previous error if it was a token expiration and preflight succeeds now
+        if (whatsappResult && whatsappResult.errorCode === 'GOOGLE_DOCS_TOKEN_EXPIRED') {
+          setWhatsappResult(null);
+        }
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        setWhatsappResult({
+          success: false,
+          message: errorData.errorMessage || "Falha na verificação prévia do documento.",
+          errorCode: errorData.errorCode,
+          fileId: errorData.diagnostic?.fileId || null
+        });
+      }
+    } catch (err) {
+      console.warn('Preflight check failed:', err);
+    } finally {
+      setPrechecking(false);
+    }
+  };
+
+  const runTestPhoneFormats = async () => {
+    if (!whatsappCliente) return;
+    setTestingFormats(true);
+    setTestFormatsResult(null);
+    try {
+      const response = await fetch('/api/whatsapp/test-phone-formats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: whatsappCliente,
+          message: `Giffoni Advogados — Este é um teste real para validar a comunicação e roteamento correto do WhatsApp com a sua linha telefônica.`
+        })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setTestFormatsResult(data.attempts || []);
+      } else {
+        const err = await response.json().catch(() => ({}));
+        alert("Erro ao disparar teste técnico de envio: " + (err.errorMessage || "Falha desconhecida."));
+      }
+    } catch (e: any) {
+      alert("Falha de rede ao disparar teste: " + e.message);
+    } finally {
+      setTestingFormats(false);
+    }
+  };
+
+  // Trigger preflight when modal opens
+  React.useEffect(() => {
+    if (showWhatsappConfirm) {
+      runPreflightCheck();
+    } else {
+      setPreflightData(null);
+      setTestFormatsResult(null);
+    }
+  }, [showWhatsappConfirm]);
 
   const getWhatsappMessageText = () => {
     switch (tipoDocumento) {
@@ -176,7 +297,8 @@ export default function EntregaDocumento({
           clientName: nomeCliente,
           documentType: tipoDocumento,
           tipoPessoa,
-          googleAccessToken
+          caseId,
+          googleAccessToken: resolvedGoogleAccessToken
         })
       });
       const raw = await response.text();
@@ -242,7 +364,7 @@ export default function EntregaDocumento({
       return;
     }
 
-    if (!googleAccessToken) {
+    if (!resolvedGoogleAccessToken) {
       setGmailResult({
         success: false,
         message: 'Conecte sua conta Google/Gmail antes de preparar o rascunho.'
@@ -262,7 +384,7 @@ export default function EntregaDocumento({
           email: emailCliente,
           docName: docInfo.label,
           clientName: nomeCliente,
-          googleAccessToken,
+          googleAccessToken: resolvedGoogleAccessToken,
           documentType: tipoDocumento,
           tipoPessoa
         })
@@ -399,9 +521,19 @@ export default function EntregaDocumento({
                   <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest block font-mono">
                     {questionNumber}.2 — WhatsApp Integration
                   </span>
-                  <span className="text-[9px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-200 rounded px-1.5 py-0.2 tracking-wider">
-                    Conector WA Speed Ativo
-                  </span>
+                  {waDiagnostics === null ? (
+                    <span className="text-[9px] font-sans font-semibold text-slate-400 animate-pulse">
+                      Buscando status...
+                    </span>
+                  ) : (
+                    <span className={`text-[9px] font-black uppercase border rounded px-1.5 py-0.2 tracking-wider ${
+                      waDiagnostics.configured 
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-200' 
+                        : 'bg-rose-100 text-rose-800 border-rose-200'
+                    }`}>
+                      {waDiagnostics.configured ? 'Conector WA Speed Ativo' : 'W.A Speed Não Configurado'}
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs font-extrabold text-emerald-950">
                   Transmissão por WhatsApp ({whatsappCliente || 'Número não cadastrado'})
@@ -410,7 +542,7 @@ export default function EntregaDocumento({
                   Preparar a mensagem e o anexo PDF de {docInfo.label} para envio seguro via W.A Speed.
                 </p>
               </div>
-
+ 
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
@@ -425,7 +557,7 @@ export default function EntregaDocumento({
                   )}
                   <span>{sendingWhatsapp ? 'Preparando...' : getSendButtonLabel()}</span>
                 </button>
-
+ 
                 {cleanPhone && (
                   <a
                     href={`https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(getWhatsappMessageText())}`}
@@ -435,12 +567,31 @@ export default function EntregaDocumento({
                     title="Aviso: Abre o WhatsApp Web convencional apenas com o texto pré-preenchido, sem o PDF anexo de forma automática."
                   >
                     <ExternalLink size={11} />
-                    <span>WhatsApp Web (Manual - Sem Anexo)</span>
+                    <span>WhatsApp Web (Manual — Sem PDF Integrado)</span>
                   </a>
                 )}
               </div>
             </div>
 
+            {/* Config warning alerts */}
+            {waDiagnostics !== null && !waDiagnostics.configured && (
+              <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-[11px] font-bold">
+                <div className="flex items-center gap-1.5">
+                  <span>⚠️</span>
+                  <span>Token W.A Speed não encontrado. Configure Wascript_API ou settings/connectors.whatsapp.waSpeedToken nas configurações.</span>
+                </div>
+              </div>
+            )}
+
+            {(!googleDocsUrl || googleDocsUrl.includes('placeholder')) && (
+              <div className="p-3 bg-rose-50 border border-rose-150 text-rose-800 rounded-xl text-[11px] font-bold">
+                <div className="flex items-center gap-1.5">
+                  <span>⚠️</span>
+                  <span>O PDF de {docInfo.label} ainda não pôde ser exportado a partir do Google Docs. Verifique permissão do documento/pasta ou renove a conexão Google.</span>
+                </div>
+              </div>
+            )}
+ 
             {/* Send status feedback */}
             {whatsappResult && (
               <div id="whatsapp-feedback-status-inline" className={`p-2.5 rounded-xl border flex flex-col gap-1.5 text-[11px] ${
@@ -462,7 +613,7 @@ export default function EntregaDocumento({
                 </div>
                 {whatsappResult.success && whatsappResult.delivery && (
                   <div className="text-[10px] text-emerald-700/80 font-normal pl-3.5 space-y-0.5">
-                    <div>Texto: <span className="font-semibold uppercase text-[9px] px-1 py-0.2 bg-emerald-500/15 rounded">{whatsappResult.delivery.text.confidence}</span> — Documento: <span className="font-semibold uppercase text-[9px] px-1 py-0.2 bg-emerald-500/15 rounded">{whatsappResult.delivery.document.confidence}</span></div>
+                    <div>Texto: <span className="font-semibold uppercase text-[9px] px-1 py-0.2 bg-emerald-500/15 rounded text-emerald-800">{whatsappResult.delivery.text.confidence}</span> — Documento: <span className="font-semibold uppercase text-[9px] px-1 py-0.2 bg-emerald-500/15 rounded text-emerald-800">{whatsappResult.delivery.document.confidence}</span></div>
                   </div>
                 )}
                 {whatsappResult.pendingConfirmation && whatsappResult.diagnostic && (
@@ -470,10 +621,10 @@ export default function EntregaDocumento({
                     <div>• Telefone normalizado: <span className="font-semibold">{whatsappResult.phoneNormalized || whatsappResult.diagnostic.phoneNormalized || "N/A"}</span></div>
                     <div>• Status HTTP: <span className="font-semibold">{whatsappResult.diagnostic.status || "502 (Ambiguidade)"}</span></div>
                     {whatsappResult.diagnostic.textConfidence && (
-                      <div>• Confiança Texto: <span className="font-semibold uppercase text-[9px] px-1.5 py-0.5 bg-amber-500/15 rounded">{whatsappResult.diagnostic.textConfidence}</span></div>
+                      <div>• Confiança Texto: <span className="font-semibold uppercase text-[9px] px-1.5 py-0.5 bg-amber-500/15 rounded text-amber-800">{whatsappResult.diagnostic.textConfidence}</span></div>
                     )}
                     {whatsappResult.diagnostic.documentConfidence && (
-                      <div>• Confiança Documento: <span className="font-semibold uppercase text-[9px] px-1.5 py-0.5 bg-amber-500/15 rounded">{whatsappResult.diagnostic.documentConfidence}</span></div>
+                      <div>• Confiança Documento: <span className="font-semibold uppercase text-[9px] px-1.5 py-0.5 bg-amber-500/15 rounded text-amber-800">{whatsappResult.diagnostic.documentConfidence}</span></div>
                     )}
                     {whatsappResult.diagnostic.textRawBodyPreview && (
                       <div className="mt-1">
@@ -561,7 +712,7 @@ export default function EntregaDocumento({
                 <button
                   type="button"
                   onClick={handleSendGmail}
-                  disabled={sendingGmail || !emailCliente || !docUrl || !googleAccessToken}
+                  disabled={sendingGmail || !emailCliente || !docUrl || !resolvedGoogleAccessToken}
                   className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-[11px] font-black uppercase tracking-wider rounded-xl transition-all shadow-3xs cursor-pointer"
                 >
                   {sendingGmail ? (
@@ -696,6 +847,33 @@ export default function EntregaDocumento({
                 </div>
               )}
 
+              {/* Google Connection helper banner */}
+              {!resolvedGoogleAccessToken && (
+                <div className="p-3.5 bg-amber-50/70 border border-amber-200/80 rounded-xl flex flex-col gap-2.5 text-[11px]">
+                  <div className="flex gap-1.5 items-center">
+                    <span className="flex h-2 w-2 rounded-full bg-amber-500 animate-pulse"></span>
+                    <span className="font-extrabold uppercase tracking-wider text-amber-900">Google Drive & Docs Desconectado</span>
+                  </div>
+                  <p className="text-amber-800 leading-normal font-medium text-[10.5px]">
+                    Sua sessão do Google Docs não possui autorização fática ativa para que o W.A Speed possa ler a procuração/declaração e convertê-la em PDF antes de enviar.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await loginWithGoogle('boss_admin');
+                      } catch (e: any) {
+                        alert("Erro ao conectar conta Google: " + e.message);
+                      }
+                    }}
+                    className="w-full px-4 py-2 bg-amber-600 hover:bg-amber-700 active:scale-[0.98] text-white rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all shadow-3xs cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <ExternalLink size={12} />
+                    <span>Conectar minha Conta Google / Renovar Session Token</span>
+                  </button>
+                </div>
+              )}
+
               {/* Error/Success feedback inside the modal */}
               {whatsappResult && (
                 <div id="whatsapp-feedback-status-modal" className={`p-3 rounded-xl border flex flex-col gap-1.5 text-[11px] ${
@@ -769,7 +947,11 @@ export default function EntregaDocumento({
                       ID do documento: {whatsappResult.fileId}
                     </div>
                   )}
-                  {!whatsappResult.success && (whatsappResult.errorCode === 'GOOGLE_DOCS_TOKEN_EXPIRED' || whatsappResult.errorCode === 'GOOGLE_AUTH_UNAUTHORIZED') && (
+                  {!whatsappResult.success && (
+                    whatsappResult.errorCode === 'GOOGLE_DOCS_TOKEN_EXPIRED' || 
+                    whatsappResult.errorCode === 'GOOGLE_AUTH_UNAUTHORIZED' ||
+                    whatsappResult.errorCode === 'GOOGLE_DOCS_CREDENTIALS_MISSING'
+                  ) && (
                     <button
                       type="button"
                       onClick={async () => {
@@ -788,6 +970,127 @@ export default function EntregaDocumento({
                   )}
                 </div>
               )}
+
+              {/* Technical diagnostics accordion */}
+              <div className="border border-slate-150 rounded-xl overflow-hidden mt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowTechDetails(!showTechDetails)}
+                  className="w-full flex items-center justify-between px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 text-[10px] font-bold text-slate-600 uppercase tracking-wider transition-all"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Settings size={12} className="text-slate-500" />
+                    Diagnósticos & Logs Técnicos (API)
+                  </span>
+                  <span>{showTechDetails ? 'Recolher ▲' : 'Expandir ▼'}</span>
+                </button>
+                {showTechDetails && (
+                  <div className="p-3 bg-white border-t border-slate-150 text-[10px] space-y-2.5 max-h-60 overflow-y-auto">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-slate-50 p-2 rounded">
+                        <span className="text-[9px] uppercase font-bold text-slate-400 block">Status Conector</span>
+                        <span className="font-extrabold text-slate-800">{waDiagnostics?.configured ? "CONFIGURADO" : "NÃO CONFIGURADO"}</span>
+                      </div>
+                      <div className="bg-slate-50 p-2 rounded">
+                        <span className="text-[9px] uppercase font-bold text-slate-400 block">Origem do Token</span>
+                        <span className="font-extrabold text-slate-800 break-all">{waDiagnostics?.tokenSource || "N/A"}</span>
+                      </div>
+                    </div>
+
+                    {preflightData && (
+                      <div className="space-y-1 bg-slate-50/50 p-2 rounded border border-slate-100">
+                        <span className="text-[9px] uppercase font-black text-slate-500 tracking-wider block">Verificação Prévia (Preflight)</span>
+                        <div>• Telefone válido: <span className={preflightData.phoneValidation?.valid ? "font-extrabold text-emerald-600" : "font-extrabold text-rose-600"}>{preflightData.phoneValidation?.valid ? "SIM" : "NÃO"}</span></div>
+                        <div>• Validação do PDF: <span className={preflightData.pdfExportCheck === "ok" ? "font-extrabold text-emerald-600" : "font-extrabold text-rose-600"}>{preflightData.pdfExportCheck === "ok" ? "PRONTO" : "FALHA / INDISPONÍVEL"}</span></div>
+                        <div>• Status geral de Prontidão: <span className="font-extrabold uppercase">{preflightData.readiness}</span></div>
+                      </div>
+                    )}
+
+                    {prechecking && (
+                      <div className="flex items-center gap-1.5 text-slate-500 py-1 font-semibold animate-pulse">
+                        <span className="w-2.5 h-2.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></span>
+                        <span>Carregando dados de prontidão técnica...</span>
+                      </div>
+                    )}
+
+                    {whatsappResult && (
+                      <div className="space-y-1.5 mt-2 pt-2 border-t border-slate-150">
+                        <span className="text-[9px] uppercase font-black text-slate-500 tracking-wider block">Resultado do Último Envio</span>
+                        <div>• Sucesso Geral: <span className="font-bold">{whatsappResult.success ? "SIM" : "NÃO"}</span></div>
+                        {whatsappResult.pendingConfirmation && (
+                          <div className="text-amber-700 font-bold">• Confirmação Pendente (Aguardando Retorno de ID)</div>
+                        )}
+                        {whatsappResult.delivery && (
+                          <div className="space-y-0.5 pl-2 font-semibold">
+                            <div>• Confiança Texto: <span className="uppercase">{whatsappResult.delivery.text?.confidence || "N/A"}</span></div>
+                            <div>• Detalhe Texto API: <span className="font-mono text-[9px]">{whatsappResult.delivery.text?.reason || "N/A"}</span></div>
+                            <div>• Confiança PDF: <span className="uppercase">{whatsappResult.delivery.document?.confidence || "N/A"}</span></div>
+                            <div>• Detalhe PDF API: <span className="font-mono text-[9px]">{whatsappResult.delivery.document?.reason || "N/A"}</span></div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Interactive Real Batch Diagnostics for W.A Speed */}
+                    <div className="pt-2.5 border-t border-slate-150 space-y-2">
+                      <span className="text-[9px] uppercase font-black text-indigo-600 tracking-wider block font-mono">
+                        Painel de Diagnóstico em Tempo Real (Wascript API)
+                      </span>
+                      <p className="text-[10px] text-slate-500 leading-normal">
+                        O W.A Speed exige padrões de número específicos (com ou sem o 9º dígito). Clique abaixo para disparar mensagens de controle reais para as combinações de números possíveis e confirmar a conectividade seletiva.
+                      </p>
+                      
+                      <button
+                        type="button"
+                        disabled={testingFormats || !whatsappCliente}
+                        onClick={runTestPhoneFormats}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all shadow-3xs cursor-pointer flex items-center gap-1 shrink-0 self-start"
+                      >
+                        {testingFormats ? (
+                          <>
+                            <span className="w-2.5 h-2.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                            <span>Testando Conexão Real...</span>
+                          </>
+                        ) : (
+                          <span>Testar Conexão Real com W.A Speed</span>
+                        )}
+                      </button>
+
+                      {testFormatsResult && (
+                        <div className="space-y-2 mt-2 bg-slate-50/50 p-2.5 border border-slate-150 rounded-xl max-h-52 overflow-y-auto">
+                          <span className="text-[9px] font-black text-slate-600 uppercase block font-mono">Retorno Direto da API W.A Speed:</span>
+                          {testFormatsResult.length === 0 ? (
+                            <div className="text-slate-500 italic text-[9px]">Nenhum formato alternativo para testar.</div>
+                          ) : (
+                            testFormatsResult.map((attempt: any, idx: number) => {
+                              const isAttemptOk = attempt.inspection?.accepted;
+                              return (
+                                <div key={idx} className="p-2 bg-white rounded-lg border border-slate-150 text-[9px] space-y-1 font-mono text-slate-700">
+                                  <div className="flex items-center justify-between font-bold border-b border-slate-100 pb-1">
+                                    <span>Nº: <span className="text-indigo-600 font-extrabold">{attempt.format}</span></span>
+                                    <span className={isAttemptOk ? "text-emerald-600 uppercase" : "text-rose-600 uppercase font-extrabold"}>
+                                      {isAttemptOk ? "ATIVA / ACEITA" : "FALHA / REJEITADA"}
+                                    </span>
+                                  </div>
+                                  <div>• HTTP Status: <span className="font-extrabold">{attempt.httpStatus || attempt.error || "N/A"}</span></div>
+                                  {attempt.inspection?.reason && (
+                                    <div>• Status Técnico: <span className="font-semibold text-slate-500 font-sans">{attempt.inspection.reason}</span></div>
+                                  )}
+                                  {attempt.rawBodyPreview && (
+                                    <div className="text-[8px] bg-slate-50 p-1.5 rounded font-mono text-slate-600 max-h-16 overflow-y-auto break-all whitespace-pre-wrap leading-normal border border-slate-100 mt-1">
+                                      Corpo: {attempt.rawBodyPreview}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Footer */}

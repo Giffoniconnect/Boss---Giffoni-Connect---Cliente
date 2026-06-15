@@ -162,49 +162,231 @@ export default function FinanceiroFluxo() {
     const list: any[] = [];
     let currentId = 1;
 
-    // 1. Check entry payment
-    const entradaLimpa = (valorEntradaForm || "0,00").replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
-    const entryVal = parseFloat(entradaLimpa);
-    if (!isNaN(entryVal) && entryVal > 0) {
-      list.push({
-        id: String(currentId++),
-        numero: "Entrada",
-        valor: `R$ ${valorEntradaForm.replace("R$", "").trim()}`,
-        dataVencimento: dataPrimeiroVencimentoForm || new Date().toISOString().split("T")[0],
-        pago: false,
-        status: "pendente",
-        formaRecebimento: tipoRecebimentoForm || "PIX"
-      });
+    // 1. Generate Fixo portions (for fixo and combined types)
+    const isFixoModel = ["fixo", "fixo_mais_exito_simples", "fixo_mais_exito_completo_trabalhista", "fixo_mais_exito_completo_previdenciario"].includes(modeloHonorariosForm);
+    
+    if (isFixoModel || !modeloHonorariosForm) {
+      // Check entry
+      const entradaLimpa = (valorEntradaForm || "0,00").replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
+      const entryVal = parseFloat(entradaLimpa);
+      if (!isNaN(entryVal) && entryVal > 0) {
+        list.push({
+          id: String(currentId++),
+          numero: "Entrada Fixo",
+          valor: `R$ ${valorEntradaForm.replace("R$", "").trim()}`,
+          dataVencimento: dataPrimeiroVencimentoForm || new Date().toISOString().split("T")[0],
+          pago: false,
+          status: "pendente",
+          formaRecebimento: tipoRecebimentoForm || "PIX"
+        });
+      }
+
+      // Installments
+      const nParcelas = Math.max(1, Number(quantidadeParcelasForm) || 1);
+      const baseDate = dataPrimeiroVencimentoForm 
+        ? new Date(dataPrimeiroVencimentoForm + "T12:00:00") 
+        : new Date();
+
+      for (let i = 0; i < nParcelas; i++) {
+        const dueDate = new Date(baseDate);
+        dueDate.setMonth(baseDate.getMonth() + i);
+        const isDateValid = !isNaN(dueDate.getTime());
+        const dateStr = isDateValid ? dueDate.toISOString().split("T")[0] : "";
+
+        list.push({
+          id: String(currentId++),
+          numero: `Parcela Fixo ${i + 1}/${nParcelas}`,
+          valor: `R$ ${valorParcelaForm.replace("R$", "").trim()}`,
+          dataVencimento: dateStr,
+          pago: false,
+          status: "pendente",
+          formaRecebimento: tipoRecebimentoForm || "PIX"
+        });
+      }
     }
 
-    // 2. Installments
-    const nParcelas = Math.max(1, Number(quantidadeParcelasForm) || 1);
-    const parcelaLimpa = (valorParcelaForm || "0,00").replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
-    const pVal = parseFloat(parcelaLimpa);
-    
-    // Base date for increments
-    const baseDate = dataPrimeiroVencimentoForm 
-      ? new Date(dataPrimeiroVencimentoForm + "T12:00:00") 
-      : new Date();
-
-    for (let i = 0; i < nParcelas; i++) {
-      const dueDate = new Date(baseDate);
-      dueDate.setMonth(baseDate.getMonth() + i);
-      const isDateValid = !isNaN(dueDate.getTime());
-      const dateStr = isDateValid ? dueDate.toISOString().split("T")[0] : "";
+    // 2. Generate Exito/Labor/Previdenciario portions (for exito models)
+    if (modeloHonorariosForm === "exito_simples" || modeloHonorariosForm === "fixo_mais_exito_simples") {
+      list.push({
+        id: String(currentId++),
+        numero: "Honorários Êxito Simples Estimado",
+        valor: `R$ 1.500,00`, // place holder or calculate if has baseCalculo
+        dataVencimento: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString().split("T")[0],
+        pago: false,
+        status: "pendente",
+        formaRecebimento: "Alvará / Pix"
+      });
+    } else if (modeloHonorariosForm === "exito_completo_trabalhista" || modeloHonorariosForm === "fixo_mais_exito_completo_trabalhista") {
+      // Add split rows based on apuracaoTrabalhistaState or default estimates
+      const hContratuais = financeiroRateioState?.totalHonorariosContratuais || "0,00";
+      const hSucumbenciais = financeiroRateioState?.totalHonorariosSucumbenciais || "0,00";
+      const lCliente = financeiroRateioState?.totalCliente || "0,00";
 
       list.push({
         id: String(currentId++),
-        numero: `Parcela ${i + 1}/${nParcelas}`,
-        valor: `R$ ${valorParcelaForm.replace("R$", "").trim()}`,
-        dataVencimento: dateStr,
+        numero: "Honorários Contratuais Trabalhistas",
+        valor: hContratuais !== "0,00" && hContratuais !== "NaN" ? `R$ ${hContratuais}` : `R$ 4.500,00 (Estimativo)`,
+        dataVencimento: new Date(Date.now() + 120 * 24 * 3600 * 1000).toISOString().split("T")[0],
         pago: false,
         status: "pendente",
-        formaRecebimento: tipoRecebimentoForm || "PIX"
+        formaRecebimento: "Retenção em Guia/Alvará"
       });
+
+      list.push({
+        id: String(currentId++),
+        numero: "Honorários Sucumbenciais",
+        valor: hSucumbenciais !== "0,00" && hSucumbenciais !== "NaN" ? `R$ ${hSucumbenciais}` : "R$ 0,00",
+        dataVencimento: new Date(Date.now() + 120 * 24 * 3600 * 1000).toISOString().split("T")[0],
+        pago: false,
+        status: "pendente",
+        formaRecebimento: "Alvará Judicial"
+      });
+
+      list.push({
+        id: String(currentId++),
+        numero: "Repasse Líquido ao Cliente",
+        valor: lCliente !== "0,00" && lCliente !== "NaN" ? `R$ ${lCliente}` : `R$ 10.500,00 (Estimativo)`,
+        dataVencimento: new Date(Date.now() + 120 * 24 * 3600 * 1000).toISOString().split("T")[0],
+        pago: false,
+        status: "pendente",
+        formaRecebimento: "Repasse por Pix"
+      });
+    } else if (modeloHonorariosForm === "exito_completo_previdenciario" || modeloHonorariosForm === "fixo_mais_exito_completo_previdenciario") {
+      const hRetroativo = financeiroApuracaoPrevidenciariaState?.valorHonorariosRetroativo || "0,00";
+      
+      list.push({
+        id: String(currentId++),
+        numero: "Honorários sobre Retroativo",
+        valor: hRetroativo !== "0,00" && hRetroativo !== "NaN" ? `R$ ${hRetroativo}` : "R$ 3.000,00 (Estimativo)",
+        dataVencimento: new Date(Date.now() + 150 * 24 * 3600 * 1000).toISOString().split("T")[0],
+        pago: false,
+        status: "pendente",
+        formaRecebimento: "Precatório / RPV"
+      });
+
+      const limitPrevidenciarioFuturo = Math.max(0, Number(quantidadeParcelasExitoPrevidenciarioForm) || 0);
+      const prcPrevVal = financeiroApuracaoPrevidenciariaState?.valorBeneficioMensal || "0,00";
+      
+      for (let j = 0; j < limitPrevidenciarioFuturo; j++) {
+        list.push({
+          id: String(currentId++),
+          numero: `Honorários Parc. Benefício ${j + 1}/${limitPrevidenciarioFuturo}`,
+          valor: prcPrevVal !== "0,00" && prcPrevVal !== "NaN" ? `R$ ${prcPrevVal}` : "R$ 1.412,00 (Estimativo)",
+          dataVencimento: new Date(Date.now() + (180 + j * 30) * 24 * 3600 * 1000).toISOString().split("T")[0],
+          pago: false,
+          status: "pendente",
+          formaRecebimento: "Boleto / Pix"
+        });
+      }
     }
 
     await handleSaveTabelaAnalitica(list);
+    
+    // Set sync confirmation in cases
+    try {
+      const caseDocRef = doc(db, "cases", caseId!);
+      await updateDoc(caseDocRef, {
+        financeiroUltimaSincronizacaoSubetapa01: modeloHonorariosForm || "fixo",
+        updatedAt: new Date().toISOString()
+      });
+      setSuccess("SubEtapas sincronizadas com êxito!");
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (e) {
+      console.error("Error saving sync timestamp:", e);
+    }
+  };
+
+  const handleUpdateApuracaoTrabalhista = (field: string, val: any) => {
+    setFinanceiroApuracaoTrabalhista((prev: any) => {
+      const next = { ...prev, [field]: val };
+      
+      // Auto-compute rateio live based on the new values!
+      const creditoL = parseFloat((next.creditoLiquido || "0").replace("R$", "").replace(/\./g, "").replace(",", ".").trim()) || 0;
+      const pctExitoVal = parseFloat((percentualExitoForm || "30").replace("%", "").trim()) / 100 || 0.3;
+      const honorariosContratuais = creditoL * pctExitoVal;
+      
+      const vSucumbencia = next.houveSucumbencia === "sim"
+        ? (parseFloat((next.valorSucumbencia || "0").replace("R$", "").replace(/\./g, "").replace(",", ".").trim()) || 0)
+        : 0;
+        
+      const totalAdv = honorariosContratuais + vSucumbencia;
+      const totalCli = creditoL - honorariosContratuais;
+      
+      // Update our rateio preview state live!
+      setFinanceiroRateio({
+        totalAdvogado: totalAdv.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        totalHonorariosContratuais: honorariosContratuais.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        totalHonorariosSucumbenciais: vSucumbencia.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        totalCliente: totalCli.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      });
+      
+      return next;
+    });
+  };
+
+  const handleUpdateApuracaoPrevidenciaria = (field: string, val: any) => {
+    setFinanceiroApuracaoPrevidenciaria((prev: any) => {
+      const next = { ...prev, [field]: val };
+      
+      // Auto-compute previdenciario rateio live!
+      const rRetro = parseFloat((next.valorRetroativo || "0").replace("R$", "").replace(/\./g, "").replace(",", ".").trim()) || 0;
+      const rBenef = parseFloat((next.valorBeneficioMensal || "0").replace("R$", "").replace(/\./g, "").replace(",", ".").trim()) || 0;
+      const pctRetroVal = parseFloat((percentualExitoSobreRetroativoForm || "30").replace("%", "").trim()) / 100 || 0.3;
+      const qtyFut = Math.max(0, Number(quantidadeParcelasExitoPrevidenciarioForm) || 0);
+      
+      const hRetro = rRetro * pctRetroVal;
+      const hFut = rBenef * qtyFut;
+      
+      const totalAdv = hRetro + hFut;
+      const totalCli = rRetro - hRetro;
+      
+      setFinanceiroRateio({
+        totalAdvogado: totalAdv.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        totalHonorariosContratuais: hRetro.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        totalHonorariosSucumbenciais: "0,00",
+        totalCliente: totalCli.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        valorHonorariosRetroativo: hRetro.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        valorHonorariosParcelasFuturas: hFut.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      });
+      
+      return next;
+    });
+  };
+
+  const handleSaveApuracaoTrabalhistaToDb = async () => {
+    try {
+      setError(null);
+      setSuccess(null);
+      const caseDocRef = doc(db, "cases", caseId!);
+      await updateDoc(caseDocRef, {
+        financeiroApuracaoTrabalhista: financeiroApuracaoTrabalhistaState,
+        financeiroRateio: financeiroRateioState,
+        updatedAt: new Date().toISOString()
+      });
+      setSuccess("Apuração trabalhista gravada com sucesso!");
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      console.error(err);
+      setError("Erro ao gravar apuração trabalhista: " + (err.message || err));
+    }
+  };
+
+  const handleSaveApuracaoPrevidenciariaToDb = async () => {
+    try {
+      setError(null);
+      setSuccess(null);
+      const caseDocRef = doc(db, "cases", caseId!);
+      await updateDoc(caseDocRef, {
+        financeiroApuracaoPrevidenciaria: financeiroApuracaoPrevidenciariaState,
+        financeiroRateio: financeiroRateioState,
+        updatedAt: new Date().toISOString()
+      });
+      setSuccess("Apuração previdenciária gravada com sucesso!");
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      console.error(err);
+      setError("Erro ao gravar apuração previdenciária: " + (err.message || err));
+    }
   };
 
   const handleAddParcelaManual = async () => {
@@ -430,6 +612,58 @@ export default function FinanceiroFluxo() {
   const [cobrancaAutomaticaIntegForm, setCobrancaAutomaticaIntegForm] =
     useState("Não");
 
+  // 15 Brand New Dynamic Financial Fields
+  const [modeloHonorariosForm, setModeloHonorariosForm] = useState<string>("fixo");
+  const [categoriaExitoForm, setCategoriaExitoForm] = useState<string>("");
+  const [classeExitoForm, setClasseExitoForm] = useState<string>("");
+  const [percentualExitoForm, setPercentualExitoForm] = useState<string>("30%");
+  const [percentualExitoSobreRetroativoForm, setPercentualExitoSobreRetroativoForm] = useState<string>("30%");
+  const [quantidadeParcelasExitoPrevidenciarioForm, setQuantidadeParcelasExitoPrevidenciarioForm] = useState<number>(0);
+  const [baseCalculoExitoForm, setBaseCalculoExitoForm] = useState<string>("Proveito Econômico");
+
+  const [financeiroDetalhamentoState, setFinanceiroDetalhamento] = useState<any>({});
+  const [financeiroApuracaoTrabalhistaState, setFinanceiroApuracaoTrabalhista] = useState<any>({
+    idHomologacaoCalculos: "",
+    localSentencaHomologacao: "",
+    creditoLiquido: "0,00",
+    fgtsContaVinculada: "0,00",
+    inssRecolhimento: "0,00",
+    houveSucumbencia: "não",
+    valorSucumbencia: "0,00",
+    houveAcordo: "não",
+    localAcordoProcesso: "",
+    localDecisaoHomologatoriaAcordo: "",
+    formaPagamentoAcordo: "Pix",
+    valorTotalDepositoConta: "0,00",
+    haveraAlvara: "não",
+    valorAlvara: "0,00",
+    quantidadeParcelasAcordo: 1,
+    valorCadaParcela: "0,00",
+    datasPagamentoParcelas: ""
+  });
+  const [financeiroApuracaoPrevidenciariaState, setFinanceiroApuracaoPrevidenciaria] = useState<any>({
+    valorRetroativo: "0,00",
+    valorBeneficioMensal: "0,00",
+    valorHonorariosRetroativo: "0,00",
+    valorHonorariosParcelasFuturas: "0,00"
+  });
+  const [financeiroRateioState, setFinanceiroRateio] = useState<any>({
+    totalAdvogado: "0,00",
+    totalHonorariosContratuais: "0,00",
+    totalHonorariosSucumbenciais: "0,00",
+    totalCliente: "0,00"
+  });
+  const [financeiroDadosBancariosClienteSnapshotState, setFinanceiroDadosBancariosClienteSnapshot] = useState<any>({});
+  const [financeiroDadosBancariosAdvogadoState, setFinanceiroDadosBancariosAdvogado] = useState<any>({
+    pix: "direito.rgr@gmail.com",
+    banco: "Banco do Brasil",
+    agencia: "0428-6",
+    conta: "61.954-x",
+    titular: "Rodrigo Giffoni Rodrigues"
+  });
+  const [financeiroTabelaAnaliticaVersionState, setFinanceiroTabelaAnaliticaVersion] = useState<string>("v1");
+  const [valSImuladoExito, setValSimuladoExito] = useState<string>("50000");
+
   useEffect(() => {
     if (caseObj) {
       setTipoServicoContratadoForm(
@@ -454,6 +688,64 @@ export default function FinanceiroFluxo() {
       setValorEntradaForm(caseObj.valorEntrada || "0,00");
       setDataPrimeiroVencimentoForm(caseObj.dataPrimeiroVencimento || "");
       setCobrancaAutomaticaIntegForm(caseObj.cobrancaAutomaticaInteg || "Não");
+
+      // Load new fields
+      setModeloHonorariosForm(caseObj.modeloHonorarios || "fixo");
+      setCategoriaExitoForm(caseObj.categoriaExito || "");
+      setClasseExitoForm(caseObj.classeExito || "");
+      setPercentualExitoForm(caseObj.percentualExito || caseObj.honorarioExitoPercentual || "30%");
+      setPercentualExitoSobreRetroativoForm(caseObj.percentualExitoSobreRetroativo || "30%");
+      setQuantidadeParcelasExitoPrevidenciarioForm(Number(caseObj.quantidadeParcelasExitoPrevidenciario) || 0);
+      setBaseCalculoExitoForm(caseObj.baseCalculoExito || "Proveito Econômico");
+
+      setFinanceiroDetalhamento(caseObj.financeiroDetalhamento || {});
+      setFinanceiroApuracaoTrabalhista(caseObj.financeiroApuracaoTrabalhista || {
+        idHomologacaoCalculos: "",
+        localSentencaHomologacao: "",
+        creditoLiquido: "0,00",
+        fgtsContaVinculada: "0,00",
+        inssRecolhimento: "0,00",
+        houveSucumbencia: "não",
+        valorSucumbencia: "0,00",
+        houveAcordo: "não",
+        localAcordoProcesso: "",
+        localDecisaoHomologatoriaAcordo: "",
+        formaPagamentoAcordo: "Pix",
+        valorTotalDepositoConta: "0,00",
+        haveraAlvara: "não",
+        valorAlvara: "0,00",
+        quantidadeParcelasAcordo: 1,
+        valorCadaParcela: "0,00",
+        datasPagamentoParcelas: ""
+      });
+      setFinanceiroApuracaoPrevidenciaria(caseObj.financeiroApuracaoPrevidenciaria || {
+        valorRetroativo: "0,00",
+        valorBeneficioMensal: "0,00",
+        valorHonorariosRetroativo: "0,00",
+        valorHonorariosParcelasFuturas: "0,00"
+      });
+      setFinanceiroRateio(caseObj.financeiroRateio || {
+        totalAdvogado: "0,00",
+        totalHonorariosContratuais: "0,00",
+        totalHonorariosSucumbenciais: "0,00",
+        totalCliente: "0,00"
+      });
+      setFinanceiroDadosBancariosClienteSnapshot(caseObj.financeiroDadosBancariosClienteSnapshot || {
+        pix: client?.bancario_chavePix || "",
+        banco: client?.bancario_bancoPix || "",
+        agencia: client?.bancario_agencia || "",
+        conta: client?.bancario_conta || "",
+        tipo: client?.bancario_tipoConta || "",
+        titular: client?.bancario_titular || client?.nomeCompleto || ""
+      });
+      setFinanceiroDadosBancariosAdvogado(caseObj.financeiroDadosBancariosAdvogado || {
+        pix: "direito.rgr@gmail.com",
+        banco: "Banco do Brasil",
+        agencia: "0428-6",
+        conta: "61.954-x",
+        titular: "Rodrigo Giffoni Rodrigues"
+      });
+      setFinanceiroTabelaAnaliticaVersion(caseObj.financeiroTabelaAnaliticaVersion || "v1");
 
       // Sync back legacy/backward compatibility variables
       setTipoServicoContratado(
@@ -1249,10 +1541,23 @@ export default function FinanceiroFluxo() {
     setSaving(true);
     try {
       const caseDocRef = doc(db, "cases", caseId!);
-      const updatedFinanceData = {
+      
+      // Determine backward compatibility mappings
+      let compatTipoHonorario = "Honorários Fixos";
+      if (modeloHonorariosForm === "fixo") {
+        compatTipoHonorario = "Honorários Fixos";
+      } else if (["exito_simples", "exito_completo_trabalhista", "exito_completo_previdenciario"].includes(modeloHonorariosForm)) {
+        compatTipoHonorario = "Êxito";
+      } else {
+        compatTipoHonorario = "Misto (Fixo + Êxito)";
+      }
+
+      const updatedFinanceData: Record<string, any> = {
         tipoServicoContratado: tipoServicoContratadoForm,
-        tipoHonorario: tipoHonorarioForm,
-        honorarioExitoPercentual: honorarioExitoPercentualForm,
+        tipoHonorario: compatTipoHonorario,
+        honorarioExitoPercentual: ["exito_completo_previdenciario", "fixo_mais_exito_completo_previdenciario"].includes(modeloHonorariosForm)
+          ? percentualExitoSobreRetroativoForm
+          : percentualExitoForm,
         honorarioFixoValor: honorarioFixoValorForm,
         formaPagamento: formaPagamentoForm,
         tipoRecebimento: tipoRecebimentoForm,
@@ -1264,15 +1569,59 @@ export default function FinanceiroFluxo() {
         valorEntrada: valorEntradaForm,
         dataPrimeiroVencimento: dataPrimeiroVencimentoForm,
         cobrancaAutomaticaInteg: cobrancaAutomaticaIntegForm,
+        
+        // Brand new financial fields
+        modeloHonorarios: modeloHonorariosForm,
+        categoriaExito: categoriaExitoForm,
+        classeExito: classeExitoForm,
+        percentualExito: percentualExitoForm,
+        percentualExitoSobreRetroativo: percentualExitoSobreRetroativoForm,
+        quantidadeParcelasExitoPrevidenciario: Number(quantidadeParcelasExitoPrevidenciarioForm) || 0,
+        baseCalculoExito: baseCalculoExitoForm,
+        financeiroDetalhamento: financeiroDetalhamentoState || {},
+        financeiroApuracaoTrabalhista: financeiroApuracaoTrabalhistaState || {},
+        financeiroApuracaoPrevidenciaria: financeiroApuracaoPrevidenciariaState || {},
+        financeiroRateio: financeiroRateioState || {},
+        financeiroDadosBancariosClienteSnapshot: financeiroDadosBancariosClienteSnapshotState || {},
+        financeiroDadosBancariosAdvogado: financeiroDadosBancariosAdvogadoState || {},
+        financeiroTabelaAnaliticaVersion: financeiroTabelaAnaliticaVersionState || "v1",
+
         // For backwards compatibility mapping when templates expect these
-        honorariosPercentual: honorarioExitoPercentualForm,
+        honorariosPercentual: ["exito_completo_previdenciario", "fixo_mais_exito_completo_previdenciario"].includes(modeloHonorariosForm)
+          ? percentualExitoSobreRetroativoForm
+          : percentualExitoForm,
         honorariosValorFixo: honorarioFixoValorForm,
         bancoRecebimento: pixBancoForm,
         pixRecebimento: pixChaveForm,
         updatedAt: new Date().toISOString(),
       };
+
+      // Archive historical values if configuration model changes!
+      if (caseObj?.modeloHonorarios && caseObj.modeloHonorarios !== modeloHonorariosForm) {
+        const historicoEntry = {
+          modeloAnterior: caseObj.modeloHonorarios || "não definido",
+          modeloNovo: modeloHonorariosForm,
+          dataAlteracao: new Date().toISOString(),
+          camposArquivados: {
+            tipoHonorario: caseObj.tipoHonorario || "",
+            honorarioExitoPercentual: caseObj.honorarioExitoPercentual || "",
+            honorarioFixoValor: caseObj.honorarioFixoValor || "",
+            percentualExito: caseObj.percentualExito || "",
+            percentualExitoSobreRetroativo: caseObj.percentualExitoSobreRetroativo || "",
+            quantidadeParcelasExitoPrevidenciario: caseObj.quantidadeParcelasExitoPrevidenciario || 0,
+            baseCalculoExito: caseObj.baseCalculoExito || "",
+            tabelaAnalitica: caseObj.tabelaAnalitica || []
+          },
+          operador: "Operador Portal BOSS"
+        };
+        const historicosAtuais = Array.isArray(caseObj.financeiroHistoricoModelos)
+          ? caseObj.financeiroHistoricoModelos
+          : [];
+        updatedFinanceData.financeiroHistoricoModelos = [...historicosAtuais, historicoEntry];
+      }
+
       await updateDoc(caseDocRef, updatedFinanceData);
-      setSuccess("Condições financeiras gravadas com sucesso no caso!");
+      setSuccess("Condições financeiras gravadas com sucesso no caso e integradas ao modelo novo!");
       setRefreshToggle((prev) => prev + 1);
       setTimeout(() => setSuccess(null), 3050);
     } catch (err: any) {
@@ -1965,56 +2314,138 @@ export default function FinanceiroFluxo() {
                   </div>
 
                   {/* 2. Tipo de Honorários */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
-                      2. Tipo de Honorários
-                    </label>
-                    <select
-                      value={tipoHonorarioForm}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setTipoHonorarioForm(val);
-                        let mappedQ32 = "";
-                        if (val === "Honorários Fixos") {
-                          mappedQ32 = "fixo";
-                        } else if (val === "Êxito") {
-                          mappedQ32 = "exito";
-                        } else if (val === "Misto (Fixo + Êxito)") {
-                          mappedQ32 = "exito_fixo";
-                        }
-                        if (mappedQ32) {
-                          saveWizardStateUpdate({ q3_1: "sim", q3_2: mappedQ32 });
-                        }
-                      }}
-                      className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                    >
-                      <option value="Honorários Fixos">Honorários Fixos</option>
-                      <option value="Êxito">Êxito</option>
-                      <option value="Misto (Fixo + Êxito)">
-                        Misto (Fixo + Êxito)
-                      </option>
-                    </select>
-                  </div>
-
-                  {/* 3. Êxito Percentual */}
-                  {tipoHonorarioForm === "Êxito" ||
-                  tipoHonorarioForm === "Misto (Fixo + Êxito)" ? (
-                    <div className="space-y-1 animate-fadeIn">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
                       <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
-                        3. Êxito Percentual
+                        2. Modelo de Honorários Detalhado
+                      </label>
+                      <select
+                        value={modeloHonorariosForm}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setModeloHonorariosForm(val);
+                          
+                          // Set compatibility variables
+                          let compatTipo = "Honorários Fixos";
+                          let mappedQ32 = "fixo";
+                          if (val === "fixo") {
+                            compatTipo = "Honorários Fixos";
+                            mappedQ32 = "fixo";
+                          } else if (["exito_simples", "exito_completo_trabalhista", "exito_completo_previdenciario"].includes(val)) {
+                            compatTipo = "Êxito";
+                            mappedQ32 = "exito";
+                          } else {
+                            compatTipo = "Misto (Fixo + Êxito)";
+                            mappedQ32 = "exito_fixo";
+                          }
+                          setTipoHonorarioForm(compatTipo);
+                          saveWizardStateUpdate({ q3_1: "sim", q3_2: mappedQ32 });
+                        }}
+                        className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                      >
+                        <option value="fixo">1. Honorários Fixos</option>
+                        <option value="exito_simples">2. Honorários de Êxito Simples</option>
+                        <option value="exito_completo_trabalhista">3. Honorários de Êxito Completo — Trabalhista</option>
+                        <option value="exito_completo_previdenciario">4. Honorários de Êxito Completo — Previdenciário</option>
+                        <option value="fixo_mais_exito_simples">5. Honorários Fixos + Êxito Simples</option>
+                        <option value="fixo_mais_exito_completo_trabalhista">6. Honorários Fixos + Êxito Completo — Trabalhista</option>
+                        <option value="fixo_mais_exito_completo_previdenciario">7. Honorários Fixos + Êxito Completo — Previdenciário</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold uppercase text-gray-455 tracking-wide font-mono">
+                        Tipo de Honorários (Compatibilidade)
                       </label>
                       <input
                         type="text"
-                        value={honorarioExitoPercentualForm}
-                        onChange={(e) =>
-                          setHonorarioExitoPercentualForm(e.target.value)
-                        }
-                        onFocus={() => setHonorarioExitoPercentualForm("")}
-                        className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
-                        placeholder="Ex: 30%"
+                        readOnly
+                        disabled
+                        value={tipoHonorarioForm}
+                        className="w-full px-3 py-2 bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-600 cursor-not-allowed outline-none font-sans"
                       />
                     </div>
-                  ) : null}
+                  </div>
+
+                  {/* CONDITIONAL SUCCESS FIELDS */}
+                  {["exito_simples", "exito_completo_trabalhista", "exito_completo_previdenciario", "fixo_mais_exito_simples", "fixo_mais_exito_completo_trabalhista", "fixo_mais_exito_completo_previdenciario"].includes(modeloHonorariosForm) && (
+                    <div className="bg-slate-50/50 border border-slate-150 p-4 rounded-xl space-y-4 animate-fadeIn">
+                      <h4 className="text-xs font-black uppercase text-slate-900 tracking-wider flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
+                        Parâmetros de Êxito Contratual
+                      </h4>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Percentual de Exito (Geral) */}
+                        {!["exito_completo_previdenciario", "fixo_mais_exito_completo_previdenciario"].includes(modeloHonorariosForm) && (
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
+                              Percentual de Êxito (Geral)
+                            </label>
+                            <input
+                              type="text"
+                              value={percentualExitoForm}
+                              onChange={(e) => {
+                                setPercentualExitoForm(e.target.value);
+                                setHonorarioExitoPercentualForm(e.target.value);
+                              }}
+                              className="w-full px-3 py-2 bg-white border border-gray-250 rounded-lg text-xs font-semibold text-gray-800 focus:border-indigo-500 outline-none transition"
+                              placeholder="Ex: 30%"
+                            />
+                          </div>
+                        )}
+
+                        {/* Percentual de Exito sobre Retroativos (only for Previdenciario) */}
+                        {["exito_completo_previdenciario", "fixo_mais_exito_completo_previdenciario"].includes(modeloHonorariosForm) && (
+                          <>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
+                                Percentual sobre Retroativos
+                              </label>
+                              <input
+                                type="text"
+                                value={percentualExitoSobreRetroativoForm}
+                                onChange={(e) => {
+                                  setPercentualExitoSobreRetroativoForm(e.target.value);
+                                  setHonorarioExitoPercentualForm(e.target.value);
+                                }}
+                                className="w-full px-3 py-2 bg-white border border-gray-250 rounded-lg text-xs font-semibold text-gray-800 focus:border-indigo-500 outline-none transition"
+                                placeholder="Ex: 35%"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
+                                Parcelas de Benefício Futuro (Mensalidades)
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={quantidadeParcelasExitoPrevidenciarioForm}
+                                onChange={(e) => setQuantidadeParcelasExitoPrevidenciarioForm(Number(e.target.value))}
+                                className="w-full px-3 py-2 bg-white border border-gray-250 rounded-lg text-xs font-semibold text-gray-800 focus:border-indigo-500 outline-none transition"
+                                placeholder="Ex: 4"
+                              />
+                            </div>
+                          </>
+                        )}
+
+                        {/* Base de Calculo de Exito */}
+                        <div className="space-y-1 md:col-span-2">
+                          <label className="text-[10px] font-bold uppercase text-gray-455 tracking-wide font-mono">
+                            Base de Cálculo dos Honorários de Êxito
+                          </label>
+                          <input
+                            type="text"
+                            value={baseCalculoExitoForm}
+                            onChange={(e) => setBaseCalculoExitoForm(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-gray-250 rounded-lg text-xs font-semibold text-gray-800 focus:border-indigo-500 outline-none transition"
+                            placeholder="Ex: Proveito econômico obtido ou valor da condenação líquida julgada"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* 4. Valor Fixo Total */}
                   {tipoHonorarioForm === "Honorários Fixos" ||
@@ -2567,6 +2998,29 @@ export default function FinanceiroFluxo() {
             {/* SUBETAPA 02 - VER DETALHES DO CONTRATO FINANCEIRO */}
             {activeSubStep === 2 && (
               <div className="xl:col-span-12 max-w-4xl mx-auto w-full space-y-6">
+                {/* AVISO DE SINCRONIZAÇÃO */}
+                {caseObj?.modeloHonorarios !== caseObj?.financeiroUltimaSincronizacaoSubetapa01 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fadeIn">
+                    <div className="space-y-1.5 flex-1">
+                      <div className="flex items-center gap-2 text-amber-900 font-extrabold text-xs uppercase tracking-wider">
+                        <AlertTriangle className="text-amber-600 shrink-0" size={16} />
+                        Descompasso de Sincronização Detectado
+                      </div>
+                      <p className="text-xs text-amber-800 font-medium leading-relaxed max-w-2xl">
+                        O Modelo de Honorários foi alterado na <strong>SubEtapa 01</strong> para <strong>{caseObj?.modeloHonorarios ? caseObj.modeloHonorarios.toUpperCase().replace(/_/g, " ") : "NÃO SELECIONADO"}</strong>, mas a tabela de apurações e parcelas da <strong>SubEtapa 02</strong> ainda está rodando nas premissas anteriores. Sincronize para atualizar as bases.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleGerarTabelaAutomatica}
+                      className="bg-amber-600 hover:bg-amber-700 text-white font-extrabold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-sm shrink-0 cursor-pointer"
+                    >
+                      <RefreshCw size={12} className="shrink-0" />
+                      Sincronizar SubEtapa 01 ⟷ SubEtapa 02
+                    </button>
+                  </div>
+                )}
+
                 {/* CARD: Ver detalhes do contrato */}
                 <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-6">
                   {/* Header */}
@@ -2936,6 +3390,507 @@ export default function FinanceiroFluxo() {
                     </div>
                   </div>
                 </div>
+
+                {/* CARD: APURAÇÃO TRABALHISTA */}
+                {["exito_completo_trabalhista", "fixo_mais_exito_completo_trabalhista"].includes(modeloHonorariosForm) && (
+                  <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-6 animate-fadeIn">
+                    {/* Header */}
+                    <div className="pb-4 border-b border-gray-100 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Scale className="text-indigo-650" size={20} />
+                        <h3 className="text-sm font-black uppercase text-gray-900 tracking-wider">
+                          Apuração de Verbas Trabalhistas (Homologação)
+                        </h3>
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-1 border border-indigo-200 rounded-full font-mono">
+                        Liquidação Trabalhista
+                      </span>
+                    </div>
+
+                    {/* Questions list */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-sans">
+                      {/* Q1: Id. / folha / evento que HOMOLOGOU OS CALCULOS? */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
+                          Qual é o Id. / folha / evento que homologou os cálculos?
+                        </label>
+                        <input
+                          type="text"
+                          value={financeiroApuracaoTrabalhistaState.idHomologacaoCalculos || ""}
+                          onChange={(e) => handleUpdateApuracaoTrabalhista("idHomologacaoCalculos", e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                          placeholder="Ex: Id a4c3e8, folha 412"
+                        />
+                      </div>
+
+                      {/* Q2: Onde a sentença de homologação está no processo? */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
+                          Onde a sentença de homologação está no processo?
+                        </label>
+                        <input
+                          type="text"
+                          value={financeiroApuracaoTrabalhistaState.localSentencaHomologacao || ""}
+                          onChange={(e) => handleUpdateApuracaoTrabalhista("localSentencaHomologacao", e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                          placeholder="Ex: Evento 125, pág 3"
+                        />
+                      </div>
+
+                      {/* Q3: Qual é o crédito líquido ao exequente? */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
+                          Qual é o crédito líquido ao exequente? (R$)
+                        </label>
+                        <input
+                          type="text"
+                          value={financeiroApuracaoTrabalhistaState.creditoLiquido || ""}
+                          onChange={(e) => handleUpdateApuracaoTrabalhista("creditoLiquido", e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-bold text-gray-800 outline-none transition font-mono"
+                          placeholder="Ex: R$ 45.230,12"
+                        />
+                      </div>
+
+                      {/* Q4: Quanto é o Depósito do FGTS em conta vinculada? */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
+                          Quanto é o Depósito do FGTS em conta vinculada? (R$)
+                        </label>
+                        <input
+                          type="text"
+                          value={financeiroApuracaoTrabalhistaState.fgtsContaVinculada || ""}
+                          onChange={(e) => handleUpdateApuracaoTrabalhista("fgtsContaVinculada", e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-bold text-gray-800 outline-none transition font-mono"
+                          placeholder="Ex: R$ 8.412,50"
+                        />
+                      </div>
+
+                      {/* Q5: Qual é o recolhimento do INSS neste caso? */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
+                          Qual é o recolhimento do INSS neste caso? (R$)
+                        </label>
+                        <input
+                          type="text"
+                          value={financeiroApuracaoTrabalhistaState.inssRecolhimento || ""}
+                          onChange={(e) => handleUpdateApuracaoTrabalhista("inssRecolhimento", e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-bold text-gray-800 outline-none transition font-mono"
+                          placeholder="Ex: R$ 2.341,95"
+                        />
+                      </div>
+
+                      {/* Q6: Houve condenação em sucumbência? */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
+                          Houve condenação em sucumbência?
+                        </label>
+                        <select
+                          value={financeiroApuracaoTrabalhistaState.houveSucumbencia || "não"}
+                          onChange={(e) => handleUpdateApuracaoTrabalhista("houveSucumbencia", e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                        >
+                          <option value="não">Não</option>
+                          <option value="sim">Sim</option>
+                        </select>
+                      </div>
+
+                      {/* Condicional Sucumbência */}
+                      {financeiroApuracaoTrabalhistaState.houveSucumbencia === "sim" && (
+                        <div className="space-y-1 animate-fadeIn">
+                          <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
+                            Qual o valor da sucumbência? (R$)
+                          </label>
+                          <input
+                            type="text"
+                            value={financeiroApuracaoTrabalhistaState.valorSucumbencia || ""}
+                            onChange={(e) => handleUpdateApuracaoTrabalhista("valorSucumbencia", e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-bold text-gray-800 outline-none transition font-mono"
+                            placeholder="Ex: R$ 5.000,00"
+                          />
+                        </div>
+                      )}
+
+                      {/* Q7: Foi celebrado Acordo no presente caso? */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
+                          Foi celebrado Acordo no presente caso?
+                        </label>
+                        <select
+                          value={financeiroApuracaoTrabalhistaState.houveAcordo || "não"}
+                          onChange={(e) => handleUpdateApuracaoTrabalhista("houveAcordo", e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                        >
+                          <option value="não">Não</option>
+                          <option value="sim">Sim</option>
+                        </select>
+                      </div>
+
+                      {/* Condicional de Acordo celebrado */}
+                      {financeiroApuracaoTrabalhistaState.houveAcordo === "sim" && (
+                        <div className="col-span-1 md:col-span-2 bg-slate-50 p-4 border border-slate-100 rounded-xl space-y-4 animate-fadeIn">
+                          <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-widest">Detalhes do Acordo Celebrado</h4>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold uppercase text-slate-550">
+                                Onde o acordo foi firmado no processo?
+                              </label>
+                              <input
+                                type="text"
+                                value={financeiroApuracaoTrabalhistaState.localAcordoProcesso || ""}
+                                onChange={(e) => handleUpdateApuracaoTrabalhista("localAcordoProcesso", e.target.value)}
+                                className="w-full px-3 py-2 bg-white border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-lg text-xs font-semibold text-gray-800 outline-none transition"
+                                placeholder="Ex: Evento 45 ou folha 123"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold uppercase text-slate-550">
+                                Onde está a decisão homologatória do acordo?
+                              </label>
+                              <input
+                                type="text"
+                                value={financeiroApuracaoTrabalhistaState.localDecisaoHomologatoriaAcordo || ""}
+                                onChange={(e) => handleUpdateApuracaoTrabalhista("localDecisaoHomologatoriaAcordo", e.target.value)}
+                                className="w-full px-3 py-2 bg-white border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-lg text-xs font-semibold text-gray-800 outline-none transition"
+                                placeholder="Ex: Evento 52, pág 2"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold uppercase text-slate-550">
+                                Como será feito o pagamento do acordo?
+                              </label>
+                              <select
+                                value={financeiroApuracaoTrabalhistaState.formaPagamentoAcordo || "Dinheiro"}
+                                onChange={(e) => handleUpdateApuracaoTrabalhista("formaPagamentoAcordo", e.target.value)}
+                                className="w-full px-3 py-2 bg-white border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-lg text-xs font-semibold text-gray-850 outline-none transition"
+                              >
+                                <option value="Dinheiro">Dinheiro</option>
+                                <option value="Pix">Pix</option>
+                                <option value="Alvará">Alvará</option>
+                                <option value="Depósito em Conta">Depósito em Conta</option>
+                              </select>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold uppercase text-slate-550">
+                                Valor total depositado em conta (R$)
+                              </label>
+                              <input
+                                type="text"
+                                value={financeiroApuracaoTrabalhistaState.valorTotalDepositoConta || ""}
+                                onChange={(e) => handleUpdateApuracaoTrabalhista("valorTotalDepositoConta", e.target.value)}
+                                className="w-full px-3 py-2 bg-white border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-lg text-xs font-semibold text-gray-800 outline-none transition font-mono"
+                                placeholder="Ex: R$ 35.000,00"
+                              />
+                            </div>
+
+                            <div className="space-y-1 col-span-1 md:col-span-2">
+                              <label className="text-[10px] font-bold uppercase text-slate-555">
+                                Como o valor total será pago? (Qual o parcelamento?)
+                              </label>
+                              <input
+                                type="text"
+                                value={financeiroApuracaoTrabalhistaState.datasPagamentoParcelas || ""}
+                                onChange={(e) => handleUpdateApuracaoTrabalhista("datasPagamentoParcelas", e.target.value)}
+                                className="w-full px-3 py-2 bg-white border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-lg text-xs font-semibold text-gray-850 outline-none transition"
+                                placeholder="Ex: 5 parcelas de R$ 7.000,00 com vencimento no dia 10 de cada mês"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold uppercase text-slate-550">
+                                Haverá o pagamento por alvará judicial?
+                              </label>
+                              <select
+                                value={financeiroApuracaoTrabalhistaState.haveraAlvara || "não"}
+                                onChange={(e) => handleUpdateApuracaoTrabalhista("haveraAlvara", e.target.value)}
+                                className="w-full px-3 py-2 bg-white border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-lg text-xs font-semibold text-gray-800 outline-none transition"
+                              >
+                                <option value="não">Não</option>
+                                <option value="sim">Sim</option>
+                              </select>
+                            </div>
+
+                            {financeiroApuracaoTrabalhistaState.haveraAlvara === "sim" && (
+                              <div className="space-y-1 animate-fadeIn">
+                                <label className="text-[10px] font-bold uppercase text-indigo-900 font-extrabold">
+                                  Valor do alvará judicial (R$)
+                                </label>
+                                <input
+                                  type="text"
+                                  value={financeiroApuracaoTrabalhistaState.valorAlvara || ""}
+                                  onChange={(e) => handleUpdateApuracaoTrabalhista("valorAlvara", e.target.value)}
+                                  className="w-full px-3 py-2 bg-white border border-indigo-200 focus:border-indigo-505 rounded-lg text-xs font-bold text-gray-800 outline-none transition font-mono"
+                                  placeholder="Ex: R$ 10.230,00"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Save Action */}
+                    <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
+                      <p className="text-[10px] text-gray-405 leading-relaxed font-semibold">
+                        ⚠️ A gravação recalcula os rateios e snapshots analíticos em tempo de persistência.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleSaveApuracaoTrabalhistaToDb}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                      >
+                        <Save size={14} />
+                        Gravar Apuração Trabalhista
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* RATEIO PANEL TRABALHISTA */}
+                {["exito_completo_trabalhista", "fixo_mais_exito_completo_trabalhista"].includes(modeloHonorariosForm) && (
+                  <div className="bg-slate-900 text-white border border-slate-950 rounded-2xl p-6 shadow-xl space-y-6 animate-fadeIn">
+                    <div className="pb-4 border-b border-slate-800 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Coins className="text-yellow-400 shrink-0" size={20} />
+                        <h3 className="text-sm font-black uppercase tracking-wider text-slate-105">
+                          Demonstrativo de Rateio Contratual e Repasses
+                        </h3>
+                      </div>
+                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded font-mono">
+                        Parâmetro {percentualExitoForm || "30%"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono">
+                      <div className="bg-slate-800/60 border border-slate-700/50 p-3.5 rounded-xl space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-405 block mb-1 font-sans">Crédito Líquido Base:</span>
+                        <span className="text-sm font-black text-slate-200">R$ {financeiroApuracaoTrabalhistaState.creditoLiquido || "0,00"}</span>
+                      </div>
+
+                      <div className="bg-slate-800/60 border border-slate-700/50 p-3.5 rounded-xl space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-305 block mb-1 font-sans">Contratuais Escritório:</span>
+                        <span className="text-sm font-black text-indigo-400">R$ {financeiroRateioState.totalHonorariosContratuais || "0,00"}</span>
+                      </div>
+
+                      <div className="bg-slate-800/60 border border-slate-700/50 p-3.5 rounded-xl space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-yellow-305 block mb-1 font-sans">Sucumbenciais Devidos:</span>
+                        <span className="text-sm font-black text-yellow-400">R$ {financeiroRateioState.totalHonorariosSucumbenciais || "0,00"}</span>
+                      </div>
+
+                      <div className="bg-slate-800/60 border border-slate-700/50 p-3.5 rounded-xl space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-305 block mb-1 font-sans">Líquido do Cliente (Repasse):</span>
+                        <span className="text-sm font-black text-emerald-400">R$ {financeiroRateioState.totalCliente || "0,00"}</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-800/40 p-4 rounded-xl text-slate-300 text-[11px] leading-relaxed space-y-2">
+                      <p className="font-sans font-medium text-slate-300">
+                        💡 <strong>Memória de Cálculo Comercial:</strong> O crédito total homologado é o ponto de partida do rateio. Os honorários contratuais de {percentualExitoForm || "30%"} são deduzidos do crédito do cliente, acrescido de honorários de sucumbência arbitrados ({financeiroApuracaoTrabalhistaState.houveSucumbencia === "sim" ? "Sim" : "Não"}), totalizando um saldo a favor dos advogados de <strong>R$ {financeiroRateioState.totalAdvogado || "0,00"}</strong>.
+                      </p>
+                      {financeiroApuracaoTrabalhistaState.fgtsContaVinculada && (
+                        <p className="border-t border-slate-850 pt-2 font-sans font-medium text-amber-300">
+                          💰 <strong>FGTS Vinculado Adicional:</strong> O exequente receberá diretamente em sua conta vinculada o montante adicional de <strong>R$ {financeiroApuracaoTrabalhistaState.fgtsContaVinculada}</strong>.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* CARD: APURAÇÃO PREVIDENCIÁRIA */}
+                {["exito_completo_previdenciario", "fixo_mais_exito_completo_previdenciario"].includes(modeloHonorariosForm) && (
+                  <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-6 animate-fadeIn">
+                    {/* Header */}
+                    <div className="pb-4 border-b border-gray-100 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="text-indigo-650" size={20} />
+                        <h3 className="text-sm font-black uppercase text-gray-900 tracking-wider">
+                          Apuração de Benefícios Previdenciários (Inss)
+                        </h3>
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-1 border border-emerald-200 rounded-full font-mono">
+                        Liquidação de Atrasados
+                      </span>
+                    </div>
+
+                    {/* Inputs list */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-sans">
+                      {/* Q1: Valor total acumulado de atrasados (retroativo) */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
+                          Valor total de acumulados atrasados (R$)
+                        </label>
+                        <input
+                          type="text"
+                          value={financeiroApuracaoPrevidenciariaState.valorRetroativo || ""}
+                          onChange={(e) => handleUpdateApuracaoPrevidenciaria("valorRetroativo", e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-bold text-gray-800 outline-none transition font-mono"
+                          placeholder="Ex: R$ 68.210,00"
+                        />
+                      </div>
+
+                      {/* Q2: Valor do benefício mensal implantado */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
+                          Valor do Benefício Mensal Implantado (R$)
+                        </label>
+                        <input
+                          type="text"
+                          value={financeiroApuracaoPrevidenciariaState.valorBeneficioMensal || ""}
+                          onChange={(e) => handleUpdateApuracaoPrevidenciaria("valorBeneficioMensal", e.target.value)}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-bold text-gray-800 outline-none transition font-mono"
+                          placeholder="Ex: R$ 3.820,00"
+                        />
+                      </div>
+
+                      {/* Q3: Quantidade de parcelas futuras */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
+                          Quantidade de Parcelas Futuras Contratadas (Mensalidades)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={quantidadeParcelasExitoPrevidenciarioForm}
+                          onChange={(e) => {
+                            setQuantidadeParcelasExitoPrevidenciarioForm(Number(e.target.value));
+                            handleUpdateApuracaoPrevidenciaria("quantidadeParcelasExitoPrevidenciario", Number(e.target.value));
+                          }}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-bold text-gray-800 outline-none transition"
+                          placeholder="Ex: 4"
+                        />
+                      </div>
+
+                      {/* Q4: Percentual de Êxito sobre Retroativo */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
+                          Percentual de Êxito sobre Retroativos (%)
+                        </label>
+                        <input
+                          type="text"
+                          value={percentualExitoSobreRetroativoForm}
+                          onChange={(e) => {
+                            setPercentualExitoSobreRetroativoForm(e.target.value);
+                            handleUpdateApuracaoPrevidenciaria("percentualExitoSobreRetroativo", e.target.value);
+                          }}
+                          className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-bold text-gray-800 outline-none transition font-mono"
+                          placeholder="Ex: 35%"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Save Action */}
+                    <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
+                      <p className="text-[10px] text-gray-450 leading-relaxed font-semibold">
+                        ⚠️ A gravação recalcula os rateios e snapshots do INSS atrasado de forma segura no BD.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleSaveApuracaoPrevidenciariaToDb}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
+                      >
+                        <Save size={14} />
+                        Gravar Apuração Previdenciária
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* RATEIO PANEL INSS PREVIDENCIARIO */}
+                {["exito_completo_previdenciario", "fixo_mais_exito_completo_previdenciario"].includes(modeloHonorariosForm) && (
+                  <div className="bg-zinc-950 text-white border border-zinc-900 rounded-2xl p-6 shadow-xl space-y-6 animate-fadeIn">
+                    <div className="pb-4 border-b border-zinc-805 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Scale className="text-yellow-405" size={20} />
+                        <h3 className="text-sm font-black uppercase tracking-wider text-slate-100">
+                          Demonstrativo de Rateio Previdenciário (Atrasados + Futuros)
+                        </h3>
+                      </div>
+                      <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 bg-zinc-800 border border-zinc-700 px-2 py-0.5 rounded font-mono">
+                        Parâmetro {percentualExitoSobreRetroativoForm || "30%"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs font-mono">
+                      <div className="bg-zinc-900/65 border border-zinc-800 p-3.5 rounded-xl space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400 block mb-1 font-sans">Honorários do Retroativo:</span>
+                        <span className="text-sm font-black text-zinc-200">R$ {financeiroRateioState.valorHonorariosRetroativo || "0,00"}</span>
+                      </div>
+
+                      <div className="bg-zinc-900/65 border border-zinc-800 p-3.5 rounded-xl space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300 block mb-1 font-sans">Honorários sobre Tutela Futura:</span>
+                        <span className="text-sm font-black text-indigo-400">R$ {financeiroRateioState.valorHonorariosParcelasFuturas || "0,00"}</span>
+                      </div>
+
+                      <div className="bg-zinc-900/65 border border-zinc-800 p-3.5 rounded-xl space-y-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-305 block mb-1 font-sans">Líquido do Cliente (Atrasados):</span>
+                        <span className="text-sm font-black text-emerald-400">R$ {financeiroRateioState.totalCliente || "0,00"}</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl text-zinc-400 text-[11px] leading-relaxed">
+                      <p className="font-sans font-medium text-zinc-300">
+                        💡 <strong>Memória de Cálculo Previdenciária:</strong> O exequente receberá o total acumulado do retroativo deduzido de {percentualExitoSobreRetroativoForm || "30%"} contratados, totalizando um repasse de atrasados de <strong>R$ {financeiroRateioState.totalCliente || "0,00"}</strong>. Adicionalmente, as parcelas de tutela futuras arbitradas em contratos ({quantidadeParcelasExitoPrevidenciarioForm}x parcelas de benefício mensal de R$ {financeiroApuracaoPrevidenciariaState.valorBeneficioMensal || "0,00"}) geram um faturamento adicional de <strong>R$ {financeiroRateioState.valorHonorariosParcelasFuturas || "0,00"}</strong>, totalizando em favor do escritório <strong>R$ {financeiroRateioState.totalAdvogado || "0,00"}</strong>.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* CARD: APURAÇÃO ÊXITO SIMPLES */}
+                {["exito_simples", "fixo_mais_exito_simples"].includes(modeloHonorariosForm) && (
+                  <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-6 animate-fadeIn">
+                    {/* Header */}
+                    <div className="pb-4 border-b border-gray-100 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Coins className="text-indigo-650" size={20} />
+                        <h3 className="text-sm font-black uppercase text-gray-900 tracking-wider">
+                          Liquidação e Apuração de Êxito Simples
+                        </h3>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs font-sans">
+                      <div className="space-y-4">
+                        <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Simulador de Proveito Econômico</h4>
+                        
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase font-mono">Insira o Proveito Econômico Estimado (R$):</label>
+                          <input
+                            type="text"
+                            value={valSImuladoExito}
+                            onChange={(e) => setValSimuladoExito(e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-bold text-gray-800 outline-none transition font-mono"
+                            placeholder="Ex: 50000"
+                          />
+                        </div>
+
+                        <div className="p-4 bg-indigo-50 border border-indigo-150 rounded-xl space-y-2">
+                          <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest block font-mono">Honorários Simulados</span>
+                          <div className="text-xl font-bold text-indigo-950 font-mono">
+                            R$ {(((parseFloat((valSImuladoExito || "0").replace("R$", "").replace(/\./g, "").replace(",", ".").trim()) || 0) * (parseFloat((percentualExitoForm || "30").replace("%", "").trim()) / 100 || 0.3))).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <span className="text-[9px] text-indigo-500 font-medium block">Cálculo: Proveito econômico multiplicado pelo percentual contratado ({percentualExitoForm || "30%"}).</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Premissas Operacionais</h4>
+                        <div className="space-y-3.5">
+                          <div className="flex justify-between items-center py-1 border-b border-gray-50">
+                            <span className="text-gray-500 font-medium">Percentual Pactuado:</span>
+                            <span className="font-bold text-slate-900">{percentualExitoForm || "30%"}</span>
+                          </div>
+                          <div className="flex flex-col gap-1 py-1 border-b border-gray-55">
+                            <span className="text-gray-500 font-medium font-bold text-slate-700">Base de Cálculo Contratual:</span>
+                            <p className="font-semibold text-slate-600 leading-normal text-[11px] bg-slate-50 p-2 rounded-lg border border-slate-100">{baseCalculoExitoForm || "Proveito econômico obtido."}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* CARD: Tabela analítica do contrato de honorários */}
                 <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-6">

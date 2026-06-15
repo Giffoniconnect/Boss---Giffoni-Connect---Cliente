@@ -468,6 +468,7 @@ export function buildDeclaracaoPobrezaPjPlaceholders(clientData: any, caseData: 
 }
 
 export function buildClausulaSegunda(fin: any, caseData: any): string {
+  const modeloHonorarios = fin?.modeloHonorarios || caseData?.modeloHonorarios || '';
   const tipoHonorario = fin?.tipoHonorario || caseData?.tipoHonorario || 'Honorários Fixos';
   const honorarioExitoPercentual = fin?.honorarioExitoPercentual || caseData?.honorarioExitoPercentual || '30%';
   const honorarioFixoValor = fin?.honorarioFixoValor || caseData?.honorarioFixoValor || '0,00';
@@ -480,6 +481,11 @@ export function buildClausulaSegunda(fin: any, caseData: any): string {
   const diaVencimento = fin?.diaVencimento || caseData?.diaVencimento || '10';
   const valorEntrada = fin?.valorEntrada || caseData?.valorEntrada || '0,00';
   const dataPrimeiroVencimento = fin?.dataPrimeiroVencimento || caseData?.dataPrimeiroVencimento || 'A combinar';
+
+  // New specific properties from fields list
+  const percentualExito = fin?.percentualExito || caseData?.percentualExito || honorarioExitoPercentual;
+  const percentualExitoRetroativo = fin?.percentualExitoSobreRetroativo || caseData?.percentualExitoSobreRetroativo || percentualExito;
+  const qtdParcelasFuturas = Number(fin?.quantidadeParcelasExitoPrevidenciario || caseData?.quantidadeParcelasExitoPrevidenciario) || 0;
 
   let descricaoFormaPagamento = '';
   switch (tipoRecebimento) {
@@ -511,6 +517,38 @@ export function buildClausulaSegunda(fin: any, caseData: any): string {
       descricaoFormaPagamento = 'pago conforme condições acordadas.';
   }
 
+  // Construct fixed portion summary
+  let fixedDetailStr = '';
+  if (formaPagamento === 'À vista') {
+    fixedDetailStr = `mencionado valor de R$ ${honorarioFixoValor} pago à vista, mediante ${descricaoFormaPagamento}`;
+  } else if (formaPagamento === 'Parcelado') {
+    fixedDetailStr = `mencionado valor de R$ ${honorarioFixoValor} parcelado em ${quantidadeParcelas} vezes mensais e sucessivas de R$ ${valorParcela}, vencendo-se a primeira em ${dataPrimeiroVencimento} e as demais todo dia ${diaVencimento} dos meses subsequentes, mediante ${descricaoFormaPagamento}`;
+  } else if (formaPagamento === 'Entrada + Parcelado') {
+    fixedDetailStr = `mencionado valor de R$ ${honorarioFixoValor}, com sinal de R$ ${valorEntrada} a título de entrada e saldo em ${quantidadeParcelas} parcelas mensais e sucessivas de R$ ${valorParcela}, vencendo-se a primeira em ${dataPrimeiroVencimento} e as demais todo dia ${diaVencimento} dos meses subsequentes, mediante ${descricaoFormaPagamento}`;
+  } else {
+    fixedDetailStr = `mencionado valor de R$ ${honorarioFixoValor} pago conforme condições da forma ${formaPagamento}`;
+  }
+
+  // Check normalized model first
+  if (modeloHonorarios === 'fixo') {
+    return `Cláusula Segunda: A título de honorários advocatícios contratuais, fica estabelecido o valor fixo de R$ ${honorarioFixoValor}, que será ${fixedDetailStr}.`;
+  } else if (modeloHonorarios === 'exito_simples') {
+    return `Cláusula Segunda: A título de honorários advocatícios em caso de êxito na demanda, fica estabelecido o percentual de ${percentualExito} sobre o proveito econômico efetivo obtido pela PARTE CONTRATANTE, devido apenas em caso de desfecho favorável.`;
+  } else if (modeloHonorarios === 'exito_completo_trabalhista') {
+    return `Cláusula Segunda: A título de honorários advocatícios em caso de êxito na demanda, fica estabelecido o percentual de ${percentualExito} incidentes sobre todos os valores efetivamente recebidos pela PARTE CONTRATANTE ou apurados em liquidação, acordo, alvará ou depósitos judiciais, apurados minuciosamente conforme tabela analítica de rateio.`;
+  } else if (modeloHonorarios === 'exito_completo_previdenciario') {
+    const parcelasStr = qtdParcelasFuturas > 0 ? `, bem como o valor equivalente a ${qtdParcelasFuturas} parcelas mensais do benefício previdenciário concedido após sua implantação` : '';
+    return `Cláusula Segunda: A título de honorários advocatícios em caso de êxito na correspondente demanda previdenciária, fica estabelecido o percentual de ${percentualExitoRetroativo} incidentes sobre o montante total de valores atrasados (retroativos) recebidos pela PARTE CONTRATANTE${parcelasStr}, em conformidade com as regras de proveito previdenciário.`;
+  } else if (modeloHonorarios === 'fixo_mais_exito_simples') {
+    return `Cláusula Segunda: A título de honorários advocatícios, pactua-se de forma cumulada: (a) o valor fixo de R$ ${honorarioFixoValor}, sendo ${fixedDetailStr}; e (b) o percentual de ${percentualExito} sobre o proveito econômico final obtido pela PARTE CONTRATANTE como honorários de êxito.`;
+  } else if (modeloHonorarios === 'fixo_mais_exito_completo_trabalhista') {
+    return `Cláusula Segunda: A título de honorários advocatícios, pactua-se de forma cumulada: (a) o valor fixo de R$ ${honorarioFixoValor}, sendo ${fixedDetailStr}; e (b) o percentual de ${percentualExito} incidentes sobre todos os valores recebidos ou apurados em liquidação, acordo, alvará ou depósitos judiciais vinculados ao processo trabalhista, apurados em tabela analítica.`;
+  } else if (modeloHonorarios === 'fixo_mais_exito_completo_previdenciario') {
+    const parcelasStr = qtdParcelasFuturas > 0 ? `, cumulado ainda com o valor de ${qtdParcelasFuturas} parcelas do benefício previdenciário implantado` : '';
+    return `Cláusula Segunda: A título de honorários advocatícios, pactua-se de forma cumulada: (a) o valor fixo de R$ ${honorarioFixoValor}, sendo ${fixedDetailStr}; e (b) o percentual de ${percentualExitoRetroativo} incidentes sobre os montante de parcelas atrasadas (retroativos)${parcelasStr}.`;
+  }
+
+  // Legacy fallback behaviors
   if (tipoHonorario === 'Êxito') {
     return `Cláusula Segunda: A título de honorários advocatícios, fica estabelecido o percentual de ${honorarioExitoPercentual} sobre o proveito econômico obtido pela PARTE CONTRATANTE, percentual este devido apenas em caso de êxito na demanda.`;
   } else if (tipoHonorario === 'Honorários Fixos' && formaPagamento === 'À vista') {
@@ -523,6 +561,36 @@ export function buildClausulaSegunda(fin: any, caseData: any): string {
     return `Cláusula Segunda: A título de honorários advocatícios, fica estabelecido o valor fixo de R$ ${honorarioFixoValor}, pago mediante ${descricaoFormaPagamento}, bem como o percentual de ${honorarioExitoPercentual} sobre o proveito econômico obtido pela PARTE CONTRATANTE em caso de êxito na demanda.`;
   }
   return '';
+}
+
+function buildDatosBancariosClienteStr(clientData: any): string {
+  if (!clientData) return "Não informado";
+  const b = clientData.bancario_bancoPix || clientData.banco || "";
+  const key = clientData.bancario_chavePix || clientData.chavePix || clientData.pix || "";
+  if (b || key) {
+    const ag = clientData.bancario_agencia || clientData.agencia || "N/A";
+    const cc = clientData.bancario_conta || clientData.conta || "N/A";
+    const tipo = clientData.bancario_tipoConta || clientData.tipoConta || "N/A";
+    const tit = clientData.bancario_titular || clientData.titular || clientData.nomeCompleto || clientData.nome || "";
+    return `Banco: ${b} — Chave PIX: ${key} — Agência: ${ag} — Conta: ${cc} — Tipo: ${tipo} — Titular: ${tit}`;
+  }
+  return "Não informado";
+}
+
+function buildTabelaAnaliticaResumo(tabela?: any[]): string {
+  if (!tabela || !Array.isArray(tabela) || tabela.length === 0) return "Nenhum lançamento cadastrado.";
+  return tabela.map((row, idx) => {
+    return `${idx + 1}. [${row.descricao || row.rowTipo || 'Parcela'}] Origem: ${row.origem || row.rowOrigem || 'N/A'}, Valor: R$ ${row.valor || row.valorLiquido || '0,00'}, Destino: ${row.destino || row.rowDadosBancariosDestino || 'N/A'}, Status: ${row.status || row.rowStatus || 'Pendente'}, Data: ${row.data || row.dataVencimento || row.dataPrevista || 'N/A'}`;
+  }).join('\n');
+}
+
+function buildRateioFinalResumo(fin: any): string {
+  if (!fin) return "A apurar";
+  const totAdv = fin.totalAdvogado || fin.financeiroRateio?.totalAdvogado || '0,00';
+  const totCli = fin.totalCliente || fin.financeiroRateio?.totalCliente || '0,00';
+  const contratual = fin.totalHonorariosContratuais || fin.financeiroRateio?.totalHonorariosContratuais || '0,00';
+  const sucumbencial = fin.totalHonorariosSucumbenciais || fin.financeiroRateio?.totalHonorariosSucumbenciais || '0,00';
+  return `Valor Total do Advogado: R$ ${totAdv} (Contratuais: R$ ${contratual}, Sucumbenciais: R$ ${sucumbencial}) — Valor Líquido do Cliente: R$ ${totCli}`;
 }
 
 export function buildContratoHonorariosPfPlaceholders(clientData: any, caseData: any, financialData?: any): Record<string, string> {
@@ -540,6 +608,18 @@ export function buildContratoHonorariosPfPlaceholders(clientData: any, caseData:
   const dataAssinaturaFormated = `${day}/${month}/${year}`;
 
   const cl2 = buildClausulaSegunda(fin, caseData);
+
+  const modeloLabels: Record<string, string> = {
+    fixo: "Honorários Fixos",
+    exito_simples: "Êxito Simples",
+    exito_completo_trabalhista: "Êxito Completo — Trabalhista",
+    exito_completo_previdenciario: "Êxito Completo — Previdenciário",
+    fixo_mais_exito_simples: "Fixo + Êxito Simples",
+    fixo_mais_exito_completo_trabalhista: "Fixo + Êxito Completo — Trabalhista",
+    fixo_mais_exito_completo_previdenciario: "Fixo + Êxito Completo — Previdenciário"
+  };
+  const mHon = fin?.modeloHonorarios || caseData?.modeloHonorarios || "";
+  const modelLabel = mHon ? (modeloLabels[mHon] || mHon) : (fin?.tipoHonorario || caseData?.tipoHonorario || "Honorários Fixos");
 
   return {
     ...global,
@@ -589,6 +669,37 @@ export function buildContratoHonorariosPfPlaceholders(clientData: any, caseData:
     "{{DATA_PRIMEIRO_VENCIMENTO}}": fin?.dataPrimeiroVencimento || caseData?.dataPrimeiroVencimento || "A combinar",
     "{{CLAUSULA_SEGUNDA}}": cl2,
 
+    // BRAND NEW PLACEHOLDERS
+    "{{MODELO_HONORARIOS}}": modelLabel,
+    "{{CATEGORIA_EXITO}}": fin?.categoriaExito || caseData?.categoriaExito || "N/A",
+    "{{CLASSE_EXITO}}": fin?.classeExito || caseData?.classeExito || "N/A",
+    "{{PERCENTUAL_EXITO}}": fin?.percentualExito || caseData?.percentualExito || fin?.honorarioExitoPercentual || "0%",
+    "{{BASE_CALCULO_EXITO}}": fin?.baseCalculoExito || caseData?.baseCalculoExito || "N/A",
+    "{{VALOR_CREDITO_LIQUIDO_EXEQUENTE}}": fin?.financeiroApuracaoTrabalhista?.creditoLiquido || fin?.creditoLiquido || "0,00",
+    "{{VALOR_FGTS_CONTA_VINCULADA}}": fin?.financeiroApuracaoTrabalhista?.fgtsContaVinculada || fin?.fgtsContaVinculada || "0,00",
+    "{{VALOR_INSS}}": fin?.financeiroApuracaoTrabalhista?.inssRecolhimento || fin?.inssRecolhimento || "0,00",
+    "{{HOUVE_SUCUMBENCIA}}": fin?.financeiroApuracaoTrabalhista?.houveSucumbencia || fin?.houveSucumbencia || "não",
+    "{{VALOR_SUCUMBENCIA}}": fin?.financeiroApuracaoTrabalhista?.valorSucumbencia || fin?.valorSucumbencia || "0,00",
+    "{{HOUVE_ACORDO}}": fin?.financeiroApuracaoTrabalhista?.houveAcordo || fin?.houveAcordo || "não",
+    "{{LOCAL_ACORDO_PROCESSO}}": fin?.financeiroApuracaoTrabalhista?.localAcordoProcesso || fin?.localAcordoProcesso || "N/A",
+    "{{LOCAL_DECISAO_HOMOLOGATORIA_ACORDO}}": fin?.financeiroApuracaoTrabalhista?.localDecisaoHomologatoriaAcordo || fin?.localDecisaoHomologatoriaAcordo || "N/A",
+    "{{FORMA_PAGAMENTO_ACORDO}}": fin?.financeiroApuracaoTrabalhista?.formaPagamentoAcordo || fin?.formaPagamentoAcordo || "N/A",
+    "{{VALOR_TOTAL_DEPOSITO_CONTA}}": fin?.financeiroApuracaoTrabalhista?.valorTotalDepositoConta || fin?.valorTotalDepositoConta || "0,00",
+    "{{HAVERA_ALVARA}}": fin?.financeiroApuracaoTrabalhista?.haveraAlvara || fin?.haveraAlvara || "não",
+    "{{VALOR_ALVARA}}": fin?.financeiroApuracaoTrabalhista?.valorAlvara || fin?.valorAlvara || "0,00",
+    "{{QUANTIDADE_PARCELAS_ACORDO}}": String(fin?.financeiroApuracaoTrabalhista?.quantidadeParcelasAcordo || fin?.quantidadeParcelasAcordo || "1"),
+    "{{VALOR_CADA_PARCELA}}": fin?.financeiroApuracaoTrabalhista?.valorCadaParcela || fin?.valorCadaParcela || "0,00",
+    "{{DATAS_PAGAMENTO_PARCELAS}}": fin?.financeiroApuracaoTrabalhista?.datasPagamentoParcelas || fin?.datasPagamentoParcelas || "N/A",
+    "{{DADOS_BANCARIOS_ADVOGADO}}": "PIX Nubank CPF: 099.356.706-19 ou BB direito.rgr@gmail.com | Banco do Brasil, Agência: 0428-6, C/C: 61.954-x, Titular: Rodrigo Giffoni Rodrigues",
+    "{{DADOS_BANCARIOS_CLIENTE}}": buildDatosBancariosClienteStr(clientData),
+    "{{VALOR_RETROATIVO_PREVIDENCIARIO}}": fin?.financeiroApuracaoPrevidenciaria?.valorRetroativo || fin?.valorRetroativoPrevidenciaria || "0,00",
+    "{{PERCENTUAL_EXITO_RETROATIVO}}": fin?.percentualExitoSobreRetroativo || caseData?.percentualExitoSobreRetroativo || "0%",
+    "{{QUANTIDADE_PARCELAS_EXITO_PREVIDENCIARIO}}": String(fin?.quantidadeParcelasExitoPrevidenciario || caseData?.quantidadeParcelasExitoPrevidenciario || "0"),
+    "{{VALOR_HONORARIOS_RETROATIVO}}": fin?.financeiroApuracaoPrevidenciaria?.valorHonorariosRetroativo || fin?.valorHonorariosRetroativo || "0,00",
+    "{{VALOR_HONORARIOS_PARCELAS_FUTURAS}}": fin?.financeiroApuracaoPrevidenciaria?.valorHonorariosParcelasFuturas || fin?.valorHonorariosParcelasFuturas || "0,00",
+    "{{TABELA_ANALITICA_RESUMO}}": buildTabelaAnaliticaResumo(fin?.tabelaAnalitica || caseData?.tabelaAnalitica),
+    "{{RATEIO_FINAL_ADVOGADO_CLIENTE}}": buildRateioFinalResumo(fin || caseData),
+
     "{{DATA_ASSINATURA}}": dataAssinaturaFormated,
     "<<data da assinatura>>": dataAssinaturaFormated,
   };
@@ -601,6 +712,18 @@ export function buildContratoHonorariosPjPlaceholders(clientData: any, caseData:
   
   const fin = financialData || caseData?.financeiro || {};
   const cl2 = buildClausulaSegunda(fin, caseData);
+
+  const modeloLabels: Record<string, string> = {
+    fixo: "Honorários Fixos",
+    exito_simples: "Êxito Simples",
+    exito_completo_trabalhista: "Êxito Completo — Trabalhista",
+    exito_completo_previdenciario: "Êxito Completo — Previdenciário",
+    fixo_mais_exito_simples: "Fixo + Êxito Simples",
+    fixo_mais_exito_completo_trabalhista: "Fixo + Êxito Completo — Trabalhista",
+    fixo_mais_exito_completo_previdenciario: "Fixo + Êxito Completo — Previdenciário"
+  };
+  const mHon = fin?.modeloHonorarios || caseData?.modeloHonorarios || "";
+  const modelLabel = mHon ? (modeloLabels[mHon] || mHon) : (fin?.tipoHonorario || caseData?.tipoHonorario || "Honorários Fixos");
 
   return {
     ...global,
@@ -631,6 +754,37 @@ export function buildContratoHonorariosPjPlaceholders(clientData: any, caseData:
     "{{VALOR_ENTRADA}}": fin?.valorEntrada || caseData?.valorEntrada || "0,00",
     "{{DATA_PRIMEIRO_VENCIMENTO}}": fin?.dataPrimeiroVencimento || caseData?.dataPrimeiroVencimento || "A combinar",
     "{{CLAUSULA_SEGUNDA}}": cl2,
+
+    // BRAND NEW PLACEHOLDERS
+    "{{MODELO_HONORARIOS}}": modelLabel,
+    "{{CATEGORIA_EXITO}}": fin?.categoriaExito || caseData?.categoriaExito || "N/A",
+    "{{CLASSE_EXITO}}": fin?.classeExito || caseData?.classeExito || "N/A",
+    "{{PERCENTUAL_EXITO}}": fin?.percentualExito || caseData?.percentualExito || fin?.honorarioExitoPercentual || "0%",
+    "{{BASE_CALCULO_EXITO}}": fin?.baseCalculoExito || caseData?.baseCalculoExito || "N/A",
+    "{{VALOR_CREDITO_LIQUIDO_EXEQUENTE}}": fin?.financeiroApuracaoTrabalhista?.creditoLiquido || fin?.creditoLiquido || "0,00",
+    "{{VALOR_FGTS_CONTA_VINCULADA}}": fin?.financeiroApuracaoTrabalhista?.fgtsContaVinculada || fin?.fgtsContaVinculada || "0,00",
+    "{{VALOR_INSS}}": fin?.financeiroApuracaoTrabalhista?.inssRecolhimento || fin?.inssRecolhimento || "0,00",
+    "{{HOUVE_SUCUMBENCIA}}": fin?.financeiroApuracaoTrabalhista?.houveSucumbencia || fin?.houveSucumbencia || "não",
+    "{{VALOR_SUCUMBENCIA}}": fin?.financeiroApuracaoTrabalhista?.valorSucumbencia || fin?.valorSucumbencia || "0,00",
+    "{{HOUVE_ACORDO}}": fin?.financeiroApuracaoTrabalhista?.houveAcordo || fin?.houveAcordo || "não",
+    "{{LOCAL_ACORDO_PROCESSO}}": fin?.financeiroApuracaoTrabalhista?.localAcordoProcesso || fin?.localAcordoProcesso || "N/A",
+    "{{LOCAL_DECISAO_HOMOLOGATORIA_ACORDO}}": fin?.financeiroApuracaoTrabalhista?.localDecisaoHomologatoriaAcordo || fin?.localDecisaoHomologatoriaAcordo || "N/A",
+    "{{FORMA_PAGAMENTO_ACORDO}}": fin?.financeiroApuracaoTrabalhista?.formaPagamentoAcordo || fin?.formaPagamentoAcordo || "N/A",
+    "{{VALOR_TOTAL_DEPOSITO_CONTA}}": fin?.financeiroApuracaoTrabalhista?.valorTotalDepositoConta || fin?.valorTotalDepositoConta || "0,00",
+    "{{HAVERA_ALVARA}}": fin?.financeiroApuracaoTrabalhista?.haveraAlvara || fin?.haveraAlvara || "não",
+    "{{VALOR_ALVARA}}": fin?.financeiroApuracaoTrabalhista?.valorAlvara || fin?.valorAlvara || "0,00",
+    "{{QUANTIDADE_PARCELAS_ACORDO}}": String(fin?.financeiroApuracaoTrabalhista?.quantidadeParcelasAcordo || fin?.quantidadeParcelasAcordo || "1"),
+    "{{VALOR_CADA_PARCELA}}": fin?.financeiroApuracaoTrabalhista?.valorCadaParcela || fin?.valorCadaParcela || "0,00",
+    "{{DATAS_PAGAMENTO_PARCELAS}}": fin?.financeiroApuracaoTrabalhista?.datasPagamentoParcelas || fin?.datasPagamentoParcelas || "N/A",
+    "{{DADOS_BANCARIOS_ADVOGADO}}": "PIX Nubank CPF: 099.356.706-19 ou BB direito.rgr@gmail.com | Banco do Brasil, Agência: 0428-6, C/C: 61.954-x, Titular: Rodrigo Giffoni Rodrigues",
+    "{{DADOS_BANCARIOS_CLIENTE}}": buildDatosBancariosClienteStr(clientData),
+    "{{VALOR_RETROATIVO_PREVIDENCIARIO}}": fin?.financeiroApuracaoPrevidenciaria?.valorRetroativo || fin?.valorRetroativoPrevidenciaria || "0,00",
+    "{{PERCENTUAL_EXITO_RETROATIVO}}": fin?.percentualExitoSobreRetroativo || caseData?.percentualExitoSobreRetroativo || "0%",
+    "{{QUANTIDADE_PARCELAS_EXITO_PREVIDENCIARIO}}": String(fin?.quantidadeParcelasExitoPrevidenciario || caseData?.quantidadeParcelasExitoPrevidenciario || "0"),
+    "{{VALOR_HONORARIOS_RETROATIVO}}": fin?.financeiroApuracaoPrevidenciaria?.valorHonorariosRetroativo || fin?.valorHonorariosRetroativo || "0,00",
+    "{{VALOR_HONORARIOS_PARCELAS_FUTURAS}}": fin?.financeiroApuracaoPrevidenciaria?.valorHonorariosParcelasFuturas || fin?.valorHonorariosParcelasFuturas || "0,00",
+    "{{TABELA_ANALITICA_RESUMO}}": buildTabelaAnaliticaResumo(fin?.tabelaAnalitica || caseData?.tabelaAnalitica),
+    "{{RATEIO_FINAL_ADVOGADO_CLIENTE}}": buildRateioFinalResumo(fin || caseData),
   };
 }
 
