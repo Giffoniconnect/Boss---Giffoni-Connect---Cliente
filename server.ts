@@ -4873,26 +4873,28 @@ interface TodoistTaskPayload {
   priority?: number;
 }
 
-// 1. Backend helper function for communicating with Todoist REST API v2
+// 1. Backend helper function for communicating with Todoist REST API v1
 async function createTodoistTask(payload: TodoistTaskPayload) {
   const token = process.env.TODOIST_API_TOKEN;
   if (!token || !token.trim()) {
     throw new Error("TODOIST_SECRET_MISSING");
   }
 
-  // Map input params to safe Todoist REST API v2 parameters (content, description, etc.)
+  // Map input params to safe Todoist REST API v1 parameters (content, description, etc.)
   const body: any = {
     content: payload.title || "Nova Tarefa do Caso"
   };
 
   if (payload.description) body.description = payload.description;
-  if (payload.projectId) body.project_id = payload.projectId;
+  if (payload.projectId && payload.projectId !== "__TODOIST_INBOX__" && payload.projectId !== "**TODOIST_INBOX**" && payload.projectId !== "inbox") {
+    body.project_id = payload.projectId;
+  }
   if (payload.sectionId) body.section_id = payload.sectionId;
   if (payload.labels) body.labels = payload.labels;
   if (payload.dueString) body.due_string = payload.dueString;
   if (payload.priority) body.priority = payload.priority;
 
-  const url = "https://api.todoist.com/rest/v2/tasks";
+  const url = "https://api.todoist.com/api/v1/tasks";
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -4901,6 +4903,10 @@ async function createTodoistTask(payload: TodoistTaskPayload) {
     },
     body: JSON.stringify(body)
   });
+
+  if (response.status === 410) {
+    throw new Error("TODOIST_ENDPOINT_DEPRECATED");
+  }
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -4916,7 +4922,7 @@ async function createTodoistTask(payload: TodoistTaskPayload) {
   };
 }
 
-// 2. Internal secure API endpoint to receive task specifications and request Todoist API v2
+// 2. Internal secure API endpoint to receive task specifications and request Todoist API v1
 app.post("/api/todoist/create-task", async (req, res) => {
   try {
     const token = process.env.TODOIST_API_TOKEN;
@@ -4962,6 +4968,13 @@ app.post("/api/todoist/create-task", async (req, res) => {
         message: "O token de API do Todoist (TODOIST_API_TOKEN) não foi configurado."
       });
     }
+    if (err.message === "TODOIST_ENDPOINT_DEPRECATED") {
+      return res.status(410).json({
+        success: false,
+        error: "TODOIST_ENDPOINT_DEPRECATED",
+        message: "Endpoint antigo do Todoist detectado. Use somente https://api.todoist.com/api/v1."
+      });
+    }
     return res.status(500).json({
       success: false,
       error: "TODOIST_API_ERROR",
@@ -4984,12 +4997,22 @@ app.get("/api/todoist/projects", async (req: any, res: any) => {
       });
     }
 
-    const response = await fetch("https://api.todoist.com/rest/v2/projects", {
+    const response = await fetch("https://api.todoist.com/api/v1/projects", {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${token}`
       }
     });
+
+    if (response.status === 410) {
+      return res.status(410).json({
+        success: false,
+        errorCode: "TODOIST_ENDPOINT_DEPRECATED",
+        errorMessage: "Endpoint antigo do Todoist detectado. Use somente https://api.todoist.com/api/v1.",
+        httpStatus: 410,
+        rawResponse: ""
+      });
+    }
 
     if (!response.ok) {
       const text = await response.text();
@@ -5026,221 +5049,459 @@ app.get("/api/todoist/projects", async (req: any, res: any) => {
   }
 });
 
+async function saveTodoistStatusToFirestore(caseId: string, payload: any) {
+  if (!dbAdmin || !caseId) return;
+
+  await dbAdmin.collection("cases").doc(caseId).set(payload, { merge: true });
+
+  await dbAdmin.collection("casos").doc(caseId).set({
+    id: caseId,
+    caseId,
+    ...payload
+  }, { merge: true });
+}
+
+async function appendTodoistLogs(caseId: string, logs: any[]) {
+  if (!dbAdmin || !caseId || !Array.isArray(logs) || logs.length === 0) return;
+
+  const caseRef = dbAdmin.collection("cases").doc(caseId);
+  const mirrorRef = dbAdmin.collection("casos").doc(caseId);
+
+  try {
+    const snap = await caseRef.get();
+    const oldLogs = snap.exists && Array.isArray(snap.data()?.todoistLogs)
+      ? snap.data().todoistLogs
+      : [];
+
+    let mergedLogs = [...oldLogs, ...logs]
+      .filter(Boolean);
+
+    // Sanitize keys in details
+    mergedLogs = mergedLogs.map((log: any) => {
+      if (log.details) {
+        const sanitizedDetails = JSON.parse(JSON.stringify(log.details));
+        const sanitizeKeys = (obj: any) => {
+          if (obj && typeof obj === 'object') {
+            for (const k in obj) {
+              if (k.toLowerCase().includes('token') || k.toLowerCase().includes('authorization') || k.toLowerCase().includes('secret') || k.toLowerCase().includes('key')) {
+                obj[k] = '***';
+              } else if (typeof obj[k] === 'object') {
+                sanitizeKeys(obj[k]);
+              }
+            }
+          }
+        };
+        sanitizeKeys(sanitizedDetails);
+        return {
+          ...log,
+          details: sanitizedDetails
+        };
+      }
+      return log;
+    });
+
+    mergedLogs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    const limited = mergedLogs.slice(-100);
+
+    await caseRef.set({ todoistLogs: limited }, { merge: true });
+    await mirrorRef.set({
+      id: caseId,
+      caseId,
+      todoistLogs: limited
+    }, { merge: true });
+  } catch (err: any) {
+    console.warn("WARNING: Falha ao acrescentar logs do Todoist no Firestore:", err.message || err);
+  }
+}
+
+// GET /api/todoist/diagnostics
+app.get("/api/todoist/diagnostics", async (req: any, res: any) => {
+  const token = process.env.TODOIST_API_TOKEN;
+  const tokenConfigured = !!(token && token.trim());
+  let tokenMasked = "não configurado";
+  if (tokenConfigured && token) {
+    const trimmed = token.trim();
+    if (trimmed.length > 8) {
+      tokenMasked = `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
+    } else {
+      tokenMasked = "***";
+    }
+  }
+
+  let canReachTodoistApi = false;
+  let isDeprecated = false;
+  if (tokenConfigured) {
+    try {
+      const pingRes = await fetch("https://api.todoist.com/api/v1/projects", {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      if (pingRes.status === 410) {
+        isDeprecated = true;
+      } else {
+        canReachTodoistApi = pingRes.ok;
+      }
+    } catch (err) {
+      console.error("Error pinging Todoist API:", err);
+    }
+  }
+
+  if (isDeprecated) {
+    return res.status(410).json({
+      success: false,
+      tokenConfigured,
+      tokenMasked,
+      service: "todoist",
+      canReachTodoistApi: false,
+      errorCode: "TODOIST_ENDPOINT_DEPRECATED",
+      errorMessage: "Endpoint antigo do Todoist detectado. Use somente https://api.todoist.com/api/v1."
+    });
+  }
+
+  return res.json({
+    success: true,
+    tokenConfigured,
+    tokenMasked,
+    service: "todoist",
+    canReachTodoistApi
+  });
+});
+
+const TODOIST_API_BASE_URL = "https://api.todoist.com/api/v1";
+
 // POST /api/todoist/create-case-task
 app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
   const token = process.env.TODOIST_API_TOKEN;
-  const { caseId, projectId, projectName, content, description, metadata } = req.body;
+  const logs: any[] = [];
 
-  const targetProjectId = projectId || "**TODOIST_INBOX**";
-  const targetProjectName = projectName || (targetProjectId === "**TODOIST_INBOX**" ? "Caixa de Entrada (Inbox)" : "");
-
-  // Helper function to update Firestore with failure details
-  const saveFailureToFirestore = async (errorMsg: string) => {
-    if (caseId && dbAdmin) {
-      try {
-        const failUpdates = {
-          todoistAutomationStatus: "falha",
-          todoistTaskId: "",
-          todoistTaskUrl: "",
-          todoistTaskLogFalha: errorMsg,
-          todoistProjectId: "**TODOIST_INBOX**",
-          todoistProjectName: "Caixa de Entrada (Inbox)",
-          todoistFormula: content || "",
-          todoistUpdatedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        await dbAdmin.collection("cases").doc(caseId).set(failUpdates, { merge: true });
-        await dbAdmin.collection("casos").doc(caseId).set(failUpdates, { merge: true });
-      } catch (errDb: any) {
-        console.error("Erro ao salvar falha no Firestore:", errDb.message || errDb);
-      }
-    }
+  const addLog = (level: "info" | "success" | "warning" | "error", step: string, message: string, details: any = {}) => {
+    logs.push({
+      timestamp: new Date().toISOString(),
+      level,
+      step,
+      message,
+      details
+    });
   };
 
-  // 1. Validate presence of token first
-  if (!token || !token.trim()) {
-    const errorMsg = "TODOIST_API_TOKEN não está configurado no ambiente.";
-    await saveFailureToFirestore(errorMsg);
-    return res.status(400).json({
+  const fail = async (httpStatus: number, errorCode: string, errorMessage: string, details: any = {}) => {
+    addLog("error", errorCode, errorMessage, details);
+
+    if (req.body?.caseId) {
+      await appendTodoistLogs(req.body.caseId, logs).catch(() => {});
+      await saveTodoistStatusToFirestore(req.body.caseId, {
+        todoistAutomationStatus: "falha",
+        todoistTaskId: "",
+        todoistTaskUrl: "",
+        todoistTaskLogFalha: errorMessage,
+        todoistProjectId: "__TODOIST_INBOX__",
+        todoistProjectName: "Caixa de Entrada (Inbox)",
+        todoistFormula: req.body?.content || "",
+        todoistUpdatedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }).catch(() => {});
+    }
+
+    return res.status(httpStatus).json({
       success: false,
       verified: false,
-      errorCode: "TODOIST_API_TOKEN_MISSING",
-      errorMessage: errorMsg
+      errorCode,
+      errorMessage,
+      logs
     });
-  }
-
-  // 2. Validate case ID
-  if (!caseId) {
-    return res.status(400).json({
-      success: false,
-      verified: false,
-      errorCode: "VALIDATION_ERROR",
-      errorMessage: "O ID do caso (caseId) é obrigatório."
-    });
-  }
-
-  // 3. Validate content (getTodoistFormula)
-  if (!content || !content.trim()) {
-    const errorMsg = "O conteúdo/fórmula da tarefa (content) é obrigatório.";
-    await saveFailureToFirestore(errorMsg);
-    return res.status(400).json({
-      success: false,
-      verified: false,
-      errorCode: "VALIDATION_ERROR",
-      errorMessage: errorMsg
-    });
-  }
-
-  // Validate that content does not contain unreplaced placeholders as requested
-  const lowercaseContent = content.toLowerCase();
-  const invalidPlaceholders = [
-    "[assunto]",
-    "[parte adversa]",
-    "[comarca]",
-    "[cliente]",
-    "{{assunto}}",
-    "{{parte_adversa}}",
-    "{{comarca}}",
-    "{{cliente}}"
-  ];
-  if (invalidPlaceholders.some(p => lowercaseContent.includes(p))) {
-    const errorMsg = "A fórmula da tarefa ainda contém placeholders não preenchidos (por exemplo: [Assunto], [Parte Adversa], [Comarca]). Por favor, preencha todos os campos do formulário antes de criar a tarefa.";
-    await saveFailureToFirestore(errorMsg);
-    return res.status(400).json({
-      success: false,
-      verified: false,
-      errorCode: "VALIDATION_ERROR",
-      errorMessage: errorMsg
-    });
-  }
-
-  // Build a clean, structured description
-  let finalDescription = description || "";
-  if (!finalDescription && metadata) {
-    finalDescription = `Cliente: ${metadata.clientName || 'N/A'}\n` +
-                       `Parte Adversa: ${metadata.oppositeParty || 'N/A'}\n` +
-                       `Assunto: ${metadata.assunto || 'N/A'}\n` +
-                       `Tipo de Serviço: ${metadata.serviceSubtype || 'Petição Inicial'}\n` +
-                       `Vara: ${metadata.vara || 'A definir'}\n` +
-                       `Comarca: ${metadata.comarca || 'N/A'}\n` +
-                       `Processo CNJ: ${metadata.processNumber || 'N/A'}\n` +
-                       `Case ID: ${caseId}\n` +
-                       `Link Portal BOSS: https://ais-dev-urso7r2mee6mhzh6bhdlpn-599536317399.us-east1.run.app${metadata.route || '/boss-giffoni-clientes/fluxo-producao/' + caseId}`;
-  }
+  };
 
   try {
-    // 4. Montar payload para Todoist.
-    // Se targetProjectId === "**TODOIST_INBOX**", omitimos project_id no payload
-    const todoistBody: any = {
-      content: content.trim(),
-      description: finalDescription
-    };
+    addLog("info", "BACKEND_REQUEST_RECEIVED", "Backend recebeu solicitação para criar tarefa no Todoist.");
 
-    if (targetProjectId !== "**TODOIST_INBOX**") {
-      todoistBody.project_id = targetProjectId;
+    if (!token) {
+      return fail(
+        500,
+        "TODOIST_API_TOKEN_MISSING",
+        "TODOIST_API_TOKEN não está configurado no ambiente."
+      );
     }
 
-    // 5. Chamar API real para criar tarefa
-    const response = await fetch("https://api.todoist.com/rest/v2/tasks", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`
-      },
-      body: JSON.stringify(todoistBody)
+    addLog("success", "TODOIST_TOKEN_PRESENT", "TODOIST_API_TOKEN encontrado no ambiente.");
+
+    const {
+      caseId,
+      projectId,
+      projectName,
+      content,
+      description,
+      dueDate,
+      priority,
+      labels,
+      assignee
+    } = req.body || {};
+
+    if (!caseId) {
+      return fail(400, "TODOIST_CASE_ID_MISSING", "caseId é obrigatório.");
+    }
+
+    if (!content || !String(content).trim()) {
+      return fail(400, "TODOIST_CONTENT_MISSING", "O conteúdo da tarefa é obrigatório.");
+    }
+
+    const contentText = String(content).trim();
+
+    const forbiddenPlaceholders = [
+      "[Assunto]",
+      "[Parte Adversa]",
+      "[Comarca]",
+      "DOCUMENTO SEM CLIENTE"
+    ];
+
+    const foundPlaceholder = forbiddenPlaceholders.find((p) => contentText.toLowerCase().includes(p.toLowerCase()));
+
+    if (foundPlaceholder) {
+      return fail(
+        400,
+        "TODOIST_CONTENT_HAS_PLACEHOLDERS",
+        `A tarefa não foi enviada porque o conteúdo ainda possui o placeholder pendente: ${foundPlaceholder}`,
+        { foundPlaceholder }
+      );
+    }
+
+    addLog("success", "BACKEND_PAYLOAD_VALIDATED", "Payload validado com sucesso antes do envio ao Todoist.", {
+      caseId,
+      projectId,
+      projectName,
+      content: contentText
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      const detailedError = `Todoist API HTTP ${response.status}: ${errText}`;
-      await saveFailureToFirestore(detailedError);
-      return res.status(response.status).json({
-        success: false,
-        verified: false,
-        errorCode: "TODOIST_API_ERROR",
-        errorMessage: detailedError
-      });
+    const isInbox = projectId === "__TODOIST_INBOX__" || projectId === "**TODOIST_INBOX**" || !projectId;
+
+    const todoistPayload: any = {
+      content: contentText,
+      description: "" // Retirar do template ao criar a tarefa o preenchimento da descrição da tarefa
+    };
+
+    if (dueDate && String(dueDate).trim()) {
+      todoistPayload.due_string = String(dueDate).trim();
     }
 
-    const task = await response.json();
-
-    // 6. Ler resposta de forma segura.
-    if (!task || !task.id || String(task.id).includes("demo") || String(task.id).includes("fake")) {
-      const detailedError = "A resposta do Todoist não contém um ID de tarefa válido.";
-      await saveFailureToFirestore(detailedError);
-      return res.status(500).json({
-        success: false,
-        verified: false,
-        errorCode: "TODOIST_API_INVALID_RESPONSE",
-        errorMessage: detailedError
-      });
+    if (priority) {
+      const pNum = Number(priority);
+      if (pNum >= 1 && pNum <= 4) {
+        todoistPayload.priority = pNum;
+      }
     }
 
-    const todoistTaskUrl = task.url || `https://todoist.com/showTask?id=${task.id}`;
+    if (Array.isArray(labels) && labels.length > 0) {
+      todoistPayload.labels = labels;
+    }
 
-    // 7. Verificação obrigatória após criação (GET task.id)
-    const verifyResponse = await fetch(`https://api.todoist.com/rest/v2/tasks/${task.id}`, {
+    if (assignee && String(assignee).trim()) {
+      todoistPayload.assignee_id = String(assignee).trim();
+    }
+
+    if (!isInbox) {
+      todoistPayload.project_id = projectId;
+    }
+
+    addLog("info", "TODOIST_CREATE_STARTED", "Enviando tarefa para a API real do Todoist v1.", {
+      endpoint: `${TODOIST_API_BASE_URL}/tasks`,
+      isInbox,
+      hasProjectId: !!todoistPayload.project_id,
+      todoistPayload
+    });
+
+    const createRes = await fetch(`${TODOIST_API_BASE_URL}/tasks`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
+      body: JSON.stringify(todoistPayload)
+    });
+
+    if (createRes.status === 410) {
+      return fail(
+        410,
+        "TODOIST_ENDPOINT_DEPRECATED",
+        "Endpoint antigo do Todoist detectado. Use somente https://api.todoist.com/api/v1."
+      );
+    }
+
+    const createRaw = await createRes.text();
+    const createContentType = createRes.headers.get("content-type") || "";
+
+    addLog("info", "TODOIST_CREATE_RESPONSE_RECEIVED", "Resposta recebida da API de criação do Todoist.", {
+      httpStatus: createRes.status,
+      contentType: createContentType,
+      rawPreview: createRaw.slice(0, 300)
+    });
+
+    let createdTask: any = null;
+
+    try {
+      createdTask = createRaw ? JSON.parse(createRaw) : null;
+    } catch {
+      return fail(
+        502,
+        "TODOIST_CREATE_RESPONSE_NOT_JSON",
+        `Todoist API response was not JSON. Status: ${createRes.status}. Response: ${createRaw.slice(0, 500)}`,
+        {
+          httpStatus: createRes.status,
+          contentType: createContentType,
+          rawResponse: createRaw.slice(0, 1000)
+        }
+      );
+    }
+
+    if (!createRes.ok || !createdTask?.id) {
+      return fail(
+        createRes.status || 502,
+        "TODOIST_CREATE_FAILED",
+        createdTask?.error || createdTask?.message || "Todoist não confirmou criação da tarefa.",
+        {
+          httpStatus: createRes.status,
+          createdTask
+        }
+      );
+    }
+
+    const todoistTaskId = String(createdTask.id);
+    const todoistTaskUrl = `https://app.todoist.com/app/task/${todoistTaskId}`;
+
+    addLog("success", "TODOIST_TASK_CREATED", "Tarefa criada no Todoist com ID real.", {
+      todoistTaskId,
+      todoistTaskUrl
+    });
+
+    addLog("info", "TODOIST_VERIFY_STARTED", "Iniciando verificação da tarefa criada no Todoist.", {
+      endpoint: `${TODOIST_API_BASE_URL}/tasks/${todoistTaskId}`
+    });
+
+    const verifyRes = await fetch(`${TODOIST_API_BASE_URL}/tasks/${todoistTaskId}`, {
       method: "GET",
       headers: {
-        "Authorization": `Bearer ${token}`
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json"
       }
     });
 
-    if (!verifyResponse.ok) {
-      const verifyErrText = await verifyResponse.text();
-      const detailedError = `Tarefa criada (ID: ${task.id}), mas a verificação falhou. HTTP ${verifyResponse.status}: ${verifyErrText}`;
-      await saveFailureToFirestore(detailedError);
-      return res.status(500).json({
-        success: false,
-        verified: false,
-        errorCode: "TODOIST_TASK_CREATED_BUT_NOT_VERIFIED",
-        errorMessage: "A tarefa pode ter sido criada, mas não foi possível confirmar a existência dela no Todoist.",
-        rawTodoistTask: task
+    if (verifyRes.status === 410) {
+      return fail(
+        410,
+        "TODOIST_ENDPOINT_DEPRECATED",
+        "Endpoint antigo do Todoist detectado. Use somente https://api.todoist.com/api/v1."
+      );
+    }
+
+    const verifyRaw = await verifyRes.text();
+    const verifyContentType = verifyRes.headers.get("content-type") || "";
+
+    let verifiedTask: any = null;
+
+    try {
+      verifiedTask = verifyRaw ? JSON.parse(verifyRaw) : null;
+    } catch {
+      return fail(
+        502,
+        "TODOIST_VERIFY_RESPONSE_NOT_JSON",
+        `Todoist verification response was not JSON. Status: ${verifyRes.status}. Response: ${verifyRaw.slice(0, 500)}`,
+        {
+          httpStatus: verifyRes.status,
+          contentType: verifyContentType,
+          rawResponse: verifyRaw.slice(0, 1000)
+        }
+      );
+    }
+
+    if (!verifyRes.ok || !verifiedTask?.id || String(verifiedTask.id) !== todoistTaskId) {
+      return fail(
+        502,
+        "TODOIST_TASK_CREATED_BUT_NOT_VERIFIED",
+        "A tarefa pode ter sido criada, mas não foi possível confirmar a existência dela no Todoist.",
+        {
+          httpStatus: verifyRes.status,
+          verifiedTask
+        }
+      );
+    }
+
+    addLog("success", "TODOIST_TASK_VERIFIED", "Tarefa confirmada na API real do Todoist.", {
+      todoistTaskId
+    });
+
+    // Criar comentário: "Tarefa criada automaticamente através da Giffoni Connect"
+    try {
+      addLog("info", "TODOIST_COMMENT_STARTED", "Adicionando comentário institucional na tarefa do Todoist.");
+      const commentRes = await fetch(`${TODOIST_API_BASE_URL}/comments`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json"
+        },
+        body: JSON.stringify({
+          task_id: todoistTaskId,
+          content: "Tarefa criada automaticamente através da Giffoni Connect"
+        })
+      });
+      const commentRaw = await commentRes.text();
+      addLog("success", "TODOIST_COMMENT_CREATED", "Comentário adicionado com sucesso no Todoist.", {
+        httpStatus: commentRes.status,
+        rawPreview: commentRaw.slice(0, 150)
+      });
+    } catch (commentErr: any) {
+      addLog("warning", "TODOIST_COMMENT_FAILED", "Falha ao adicionar comentário na tarefa do Todoist.", {
+        errorMessage: commentErr.message || String(commentErr)
       });
     }
 
-    const verifiedTask = await verifyResponse.json();
+    const now = new Date().toISOString();
 
-    // 8. Sucesso verificado. Atualizar Firestore e retornar.
-    const successUpdates = {
+    const firestorePayload = {
       todoistAutomationStatus: "criado",
-      todoistTaskId: task.id,
-      todoistTaskUrl: todoistTaskUrl,
+      todoistTaskId,
+      todoistTaskUrl,
       todoistTaskLogFalha: "",
-      todoistProjectId: "**TODOIST_INBOX**",
+      todoistProjectId: "__TODOIST_INBOX__",
       todoistProjectName: "Caixa de Entrada (Inbox)",
-      todoistFormula: content.trim(),
-      todoistCreatedAt: new Date().toISOString(),
-      todoistUpdatedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      todoistFormula: contentText,
+      todoistCreatedAt: now,
+      todoistUpdatedAt: now,
+      updatedAt: now
     };
 
-    if (dbAdmin) {
-      await dbAdmin.collection("cases").doc(caseId).set(successUpdates, { merge: true });
-      await dbAdmin.collection("casos").doc(caseId).set(successUpdates, { merge: true });
-    }
+    await saveTodoistStatusToFirestore(caseId, firestorePayload).catch((err: any) => {
+      addLog("warning", "FIRESTORE_UPDATE_WARNING", "Tarefa criada no Todoist, mas houve falha ao salvar no Firestore.", {
+        errorMessage: err.message || String(err)
+      });
+    });
+
+    addLog("success", "FIRESTORE_UPDATED", "Dados reais da tarefa salvos no Firestore.");
+    addLog("success", "TODOIST_FLOW_COMPLETED", "Fluxo de criação da tarefa Todoist concluído com sucesso.");
+
+    await appendTodoistLogs(caseId, logs).catch(() => {});
 
     return res.status(200).json({
       success: true,
       verified: true,
-      todoistTaskId: task.id,
+      todoistTaskId,
       todoistTaskUrl,
-      todoistProjectId: "**TODOIST_INBOX**",
+      todoistProjectId: "__TODOIST_INBOX__",
       todoistProjectName: "Caixa de Entrada (Inbox)",
-      rawTodoistTask: task,
-      verifiedTodoistTask: verifiedTask
+      rawTodoistTask: createdTask,
+      verifiedTodoistTask: verifiedTask,
+      logs
     });
-
   } catch (err: any) {
-    console.error("[Todoist Create Case Task Endpoint Error]:", err);
-    const serverErrStr = err.message || "Erro de servidor ao chamar api do Todoist.";
-    await saveFailureToFirestore(serverErrStr);
-    return res.status(500).json({
-      success: false,
-      verified: false,
-      errorCode: "TODOIST_SERVER_ERROR",
-      errorMessage: serverErrStr
-    });
+    return fail(
+      500,
+      "TODOIST_CREATE_EXCEPTION",
+      err.message || String(err),
+      {
+        name: err.name || null
+      }
+    );
   }
 });
 
