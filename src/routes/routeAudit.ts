@@ -68,6 +68,7 @@ export const expectedRoutes = [
   '/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/judicial',
   '/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/extrajudicial',
   '/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/peticao-inicial',
+  '/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/peticao_inicial',
   '/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/processo-judicial-em-andamento',
   '/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/requerimento-administrativo',
   '/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/outro-servico-administrativo',

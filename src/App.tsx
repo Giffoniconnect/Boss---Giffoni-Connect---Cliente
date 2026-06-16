@@ -276,6 +276,7 @@ const bossRouter = createBrowserRouter(
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/judicial" element={<SafeRoute children={<TipoServico />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/extrajudicial" element={<SafeRoute children={<TipoServico />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/peticao-inicial" element={<SafeRoute children={<TipoServico />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/peticao_inicial" element={<SafeRoute children={<TipoServico />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/processo-judicial-em-andamento" element={<SafeRoute children={<TipoServico />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/requerimento-administrativo" element={<SafeRoute children={<TipoServico />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/outro-servico-administrativo" element={<SafeRoute children={<TipoServico />} />} />

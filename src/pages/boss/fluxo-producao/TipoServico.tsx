@@ -90,7 +90,7 @@ export default function TipoServico() {
 
   // Parsed subtype sub-page
   let subTypeRoute: 'peticao-inicial' | 'processo-judicial-em-andamento' | 'requerimento-administrativo' | 'outro-servico-administrativo' | null = null;
-  if (pathname.endsWith('/peticao-inicial')) subTypeRoute = 'peticao-inicial';
+  if (pathname.endsWith('/peticao-inicial') || pathname.endsWith('/peticao_inicial')) subTypeRoute = 'peticao-inicial';
   else if (pathname.endsWith('/processo-judicial-em-andamento')) subTypeRoute = 'processo-judicial-em-andamento';
   else if (pathname.endsWith('/requerimento-administrativo')) subTypeRoute = 'requerimento-administrativo';
   else if (pathname.endsWith('/outro-servico-administrativo')) subTypeRoute = 'outro-servico-administrativo';
@@ -186,16 +186,7 @@ export default function TipoServico() {
   const [syncingProjects, setSyncingProjects] = useState(false);
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const [syncedProjectsList, setSyncedProjectsList] = useState([
-    { id: TODOIST_INBOX_SENTINEL, name: TODOIST_INBOX_NAME },
-    { id: 'contencioso_12048', name: 'Giffoni Advocacia - Contencioso' },
-    { id: 'consultivo_39201', name: 'Giffoni Advocacia - Consultivo' },
-    { id: 'triagem_peticao_88219', name: 'Petições Iniciais - Triagem' },
-    { id: 'boss_especiais_11029', name: 'Projetos Especiais - Boss' },
-    { id: 'familia_55029', name: 'Direito de Família' },
-    { id: 'consumidor_44910', name: 'Direito do Consumidor' },
-    { id: 'trabalho_33819', name: 'Direito do Trabalho' },
-    { id: 'contratos_22102', name: 'Contratos fáticos' },
-    { id: 'urgente_civil_99302', name: 'Processos Cíveis - Urgente' }
+    { id: TODOIST_INBOX_SENTINEL, name: TODOIST_INBOX_NAME }
   ]);
 
   // Novas possibilidades: data, prazo, prioridade, etiqueta, responsável
@@ -666,6 +657,12 @@ export default function TipoServico() {
     }
   };
 
+  useEffect(() => {
+    if (subTypeRoute === 'peticao-inicial') {
+      handleSyncTodoistProjects();
+    }
+  }, [subTypeRoute]);
+
   const handleCreateTodoistTask = async () => {
     if (!safeCaseId) {
       setError("Erro ao criar tarefa: O ID do caso (caseId) está ausente.");
@@ -980,14 +977,23 @@ export default function TipoServico() {
                   {/* CARD judicial */}
                   <button
                     type="button"
-                    onClick={() => navigate(getRouteTo('judicial'))}
-                    className="p-6 rounded-3xl border bg-white border-gray-150 hover:border-indigo-400 hover:shadow-xs text-left flex gap-4 items-start transition-all cursor-pointer"
+                    onClick={() => {
+                      setMacroTypeSelection('judicial');
+                      navigate(getRouteTo('judicial'));
+                    }}
+                    className={`p-6 rounded-3xl border text-left flex gap-4 items-start transition-all cursor-pointer ${
+                      macroTypeSelection === 'judicial' 
+                        ? 'border-indigo-600 bg-indigo-50/10 ring-2 ring-indigo-600/20 shadow-xs' 
+                        : 'bg-white border-gray-150 hover:border-indigo-400 hover:shadow-xs'
+                    }`}
                   >
-                    <div className="w-12 h-12 rounded-2xl border bg-gray-50 text-gray-500 border-gray-100 flex items-center justify-center shrink-0 shadow-xs">
+                    <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center shrink-0 shadow-xs ${
+                      macroTypeSelection === 'judicial' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-500 border-gray-100'
+                    }`}>
                       <Scale size={20} />
                     </div>
                     <div className="space-y-1">
-                      <h5 className="font-black text-xs tracking-wider uppercase text-gray-900 font-sans">
+                      <h5 className={`font-black text-xs tracking-wider uppercase font-sans ${macroTypeSelection === 'judicial' ? 'text-indigo-900' : 'text-gray-900'}`}>
                         1. JUDICIAL
                       </h5>
                       <p className="text-xs text-gray-550 leading-relaxed font-semibold">
@@ -999,14 +1005,23 @@ export default function TipoServico() {
                   {/* CARD extrajudicial */}
                   <button
                     type="button"
-                    onClick={() => navigate(getRouteTo('extrajudicial'))}
-                    className="p-6 rounded-3xl border bg-white border-gray-150 hover:border-indigo-400 hover:shadow-xs text-left flex gap-4 items-start transition-all cursor-pointer"
+                    onClick={() => {
+                      setMacroTypeSelection('extrajudicial');
+                      navigate(getRouteTo('extrajudicial'));
+                    }}
+                    className={`p-6 rounded-3xl border text-left flex gap-4 items-start transition-all cursor-pointer ${
+                      macroTypeSelection === 'extrajudicial' 
+                        ? 'border-indigo-600 bg-indigo-50/10 ring-2 ring-indigo-600/20 shadow-xs' 
+                        : 'bg-white border-gray-150 hover:border-indigo-400 hover:shadow-xs'
+                    }`}
                   >
-                    <div className="w-12 h-12 rounded-2xl border bg-gray-50 text-gray-500 border-gray-100 flex items-center justify-center shrink-0 shadow-xs">
+                    <div className={`w-12 h-12 rounded-2xl border flex items-center justify-center shrink-0 shadow-xs ${
+                      macroTypeSelection === 'extrajudicial' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-500 border-gray-100'
+                    }`}>
                       <Briefcase size={20} />
                     </div>
                     <div className="space-y-1">
-                      <h5 className="font-black text-xs tracking-wider uppercase text-gray-900 font-sans">
+                      <h5 className={`font-black text-xs tracking-wider uppercase font-sans ${macroTypeSelection === 'extrajudicial' ? 'text-indigo-900' : 'text-gray-900'}`}>
                         2. EXTRAJUDICIAL
                       </h5>
                       <p className="text-xs text-gray-550 leading-relaxed font-semibold">
@@ -1040,14 +1055,29 @@ export default function TipoServico() {
                   {/* BUTTON sub 1: Petição Inicial */}
                   <button
                     type="button"
-                    onClick={() => handleNavigateToSubtype('peticao-inicial')}
-                    className="p-5 bg-white border border-gray-150 hover:border-indigo-400 rounded-3xl text-left flex gap-4 items-start transition-all hover:bg-gray-50/30 cursor-pointer"
+                    onClick={() => {
+                      setServiceSubtype('peticao-inicial');
+                      handleNavigateToSubtype('peticao-inicial');
+                    }}
+                    className={`p-5 rounded-3xl text-left flex gap-4 items-start transition-all cursor-pointer border ${
+                      serviceSubtype === 'peticao-inicial' || serviceSubtype === 'peticao_inicial'
+                        ? 'border-indigo-600 bg-indigo-50/10 ring-2 ring-indigo-600/20 shadow-xs'
+                        : 'bg-white border-gray-150 hover:border-indigo-400 hover:bg-gray-50/30'
+                    }`}
                   >
-                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center shrink-0">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                      serviceSubtype === 'peticao-inicial' || serviceSubtype === 'peticao_inicial'
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-indigo-50 text-indigo-600 border-indigo-100'
+                    }`}>
                       <FileText size={18} />
                     </div>
                     <div className="space-y-1">
-                      <h5 className="font-extrabold text-xs text-gray-900 uppercase">Petição Inicial</h5>
+                      <h5 className={`font-extrabold text-xs uppercase ${
+                        serviceSubtype === 'peticao-inicial' || serviceSubtype === 'peticao_inicial' ? 'text-indigo-900' : 'text-gray-900'
+                      }`}>
+                        Petição Inicial
+                      </h5>
                       <p className="text-xs text-gray-550 leading-relaxed">
                         Ajuizar peça inicial qualificada contendo pleitos liminares ou fáticos.
                       </p>
@@ -1057,14 +1087,29 @@ export default function TipoServico() {
                   {/* BUTTON sub 2: Processo Judicial em Andamento */}
                   <button
                     type="button"
-                    onClick={() => handleNavigateToSubtype('processo-judicial-em-andamento')}
-                    className="p-5 bg-white border border-gray-150 hover:border-indigo-400 rounded-3xl text-left flex gap-4 items-start transition-all hover:bg-gray-50/30 cursor-pointer"
+                    onClick={() => {
+                      setServiceSubtype('processo-judicial-em-andamento');
+                      handleNavigateToSubtype('processo-judicial-em-andamento');
+                    }}
+                    className={`p-5 rounded-3xl text-left flex gap-4 items-start transition-all cursor-pointer border ${
+                      serviceSubtype === 'processo-judicial-em-andamento'
+                        ? 'border-indigo-600 bg-indigo-50/10 ring-2 ring-indigo-600/20 shadow-xs'
+                        : 'bg-white border-gray-150 hover:border-indigo-400 hover:bg-gray-50/30'
+                    }`}
                   >
-                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center shrink-0">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                      serviceSubtype === 'processo-judicial-em-andamento'
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-indigo-50 text-indigo-600 border-indigo-100'
+                    }`}>
                       <FolderOpen size={18} />
                     </div>
                     <div className="space-y-1">
-                      <h5 className="font-extrabold text-xs text-gray-900 uppercase">Processo Judicial em Andamento</h5>
+                      <h5 className={`font-extrabold text-xs uppercase ${
+                        serviceSubtype === 'processo-judicial-em-andamento' ? 'text-indigo-900' : 'text-gray-900'
+                      }`}>
+                        Processo Judicial em Andamento
+                      </h5>
                       <p className="text-xs text-gray-500 leading-relaxed font-semibold">
                         Habilitação ativa com número CNJ preexistente nas varas federais ou estaduais.
                       </p>
@@ -1096,14 +1141,29 @@ export default function TipoServico() {
                   {/* BUTTON sub 3: Requerimento Administrativo */}
                   <button
                     type="button"
-                    onClick={() => handleNavigateToSubtype('requerimento-administrativo')}
-                    className="p-5 bg-white border border-gray-150 hover:border-indigo-400 rounded-3xl text-left flex gap-4 items-start transition-all hover:bg-gray-50/30 cursor-pointer"
+                    onClick={() => {
+                      setServiceSubtype('requerimento-administrativo');
+                      handleNavigateToSubtype('requerimento-administrativo');
+                    }}
+                    className={`p-5 rounded-3xl text-left flex gap-4 items-start transition-all cursor-pointer border ${
+                      serviceSubtype === 'requerimento-administrativo'
+                        ? 'border-indigo-600 bg-indigo-50/10 ring-2 ring-indigo-600/20 shadow-xs'
+                        : 'bg-white border-gray-150 hover:border-indigo-400 hover:bg-gray-50/30'
+                    }`}
                   >
-                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center shrink-0">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                      serviceSubtype === 'requerimento-administrativo'
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-indigo-50 text-indigo-600 border-indigo-100'
+                    }`}>
                       <FileSignature size={18} />
                     </div>
                     <div className="space-y-1">
-                      <h5 className="font-extrabold text-xs text-gray-900 uppercase">Requerimento Administrativo</h5>
+                      <h5 className={`font-extrabold text-xs uppercase ${
+                        serviceSubtype === 'requerimento-administrativo' ? 'text-indigo-900' : 'text-gray-900'
+                      }`}>
+                        Requerimento Administrativo
+                      </h5>
                       <p className="text-xs text-gray-550 leading-relaxed">
                         Requerimento em trâmite na esfera de autarquias públicas ou órgãos governamentais.
                       </p>
@@ -1113,14 +1173,29 @@ export default function TipoServico() {
                   {/* BUTTON sub 4: Outro Tipo de Serviço Administrativo */}
                   <button
                     type="button"
-                    onClick={() => handleNavigateToSubtype('outro-servico-administrativo')}
-                    className="p-5 bg-white border border-gray-150 hover:border-indigo-400 rounded-3xl text-left flex gap-4 items-start transition-all hover:bg-gray-50/30 cursor-pointer"
+                    onClick={() => {
+                      setServiceSubtype('outro-servico-administrativo');
+                      handleNavigateToSubtype('outro-servico-administrativo');
+                    }}
+                    className={`p-5 rounded-3xl text-left flex gap-4 items-start transition-all cursor-pointer border ${
+                      serviceSubtype === 'outro-servico-administrativo'
+                        ? 'border-indigo-600 bg-indigo-50/10 ring-2 ring-indigo-600/20 shadow-xs'
+                        : 'bg-white border-gray-150 hover:border-indigo-400 hover:bg-gray-50/30'
+                    }`}
                   >
-                    <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center shrink-0">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                      serviceSubtype === 'outro-servico-administrativo'
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-indigo-50 text-indigo-600 border-indigo-100'
+                    }`}>
                       <Briefcase size={18} />
                     </div>
                     <div className="space-y-1">
-                      <h5 className="font-extrabold text-xs text-gray-900 uppercase">Outro Serviço Administrativo</h5>
+                      <h5 className={`font-extrabold text-xs uppercase ${
+                        serviceSubtype === 'outro-servico-administrativo' ? 'text-indigo-900' : 'text-gray-900'
+                      }`}>
+                        Outro Serviço Administrativo
+                      </h5>
                       <p className="text-xs text-gray-550 leading-relaxed">
                         Atividades genéricas, pareceres, notificações ou serviços customizados extrajudiciais.
                       </p>
@@ -1172,142 +1247,76 @@ export default function TipoServico() {
                   </div>
 
                   <div className="space-y-4">
-                    
-                    {/* CLIENT NAME FIELD (preenchido automaticamente e bloqueado) */}
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
-                        Nome Completo do Cliente *
-                      </label>
-                      <input 
-                        type="text" 
-                        value={clientName || "IDENTIFICANDO CLIENTE..."} 
-                        disabled 
-                        className="w-full px-4 py-3 bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-500 cursor-not-allowed"
-                      />
-                    </div>
-
-                    {/* ASSUNTO (Substitui o antigo título operacional do caso, não temos mais título operacional) */}
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block mt-3">
-                        Assunto *
-                      </label>
-                      <input 
-                        type="text" 
-                        value={assunto} 
-                        onChange={(e) => setAssunto(e.target.value)}
-                        placeholder="Ex: Empréstimo consignado indevido d/c juros abusivos" 
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
-                      />
-                    </div>
-
-                    {/* CONTEXT-BASED EXTRA FIELDS */}
-                    
-                    {/* TYPE BLOCK */}
-                    {(subTypeRoute === 'peticao-inicial' || subTypeRoute === 'requerimento-administrativo') && (
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block mt-3">
-                          Tipo de Serviço
-                        </label>
-                        <input 
-                          type="text" 
-                          value={subTypeRoute === 'peticao-inicial' ? 'Petição inicial a ajuizar' : 'Requerimento Administrativo'} 
-                          disabled 
-                          className="w-full px-4 py-3 bg-gray-100 border border-gray-150 rounded-xl text-xs font-black text-gray-500 cursor-not-allowed"
-                        />
-                      </div>
-                    )}
-
-                    {/* SERVICE SUBTYPE TEXT INPUT FOR OTHER TYPE */}
-                    {subTypeRoute === 'outro-servico-administrativo' && (
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block mt-3">
-                          Tipo de Serviço Administrativo *
-                        </label>
-                        <input 
-                          type="text" 
-                          value={serviceSubtype} 
-                          onChange={(e) => setServiceSubtype(e.target.value)}
-                          placeholder="Ex: Confecção de Notificação Extrajudicial" 
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
-                        />
-                      </div>
-                    )}
-
-                    {/* PARTE ADVERSA CONTROLS */}
-                    {(subTypeRoute === 'requerimento-administrativo' || subTypeRoute === 'outro-servico-administrativo') ? (
-                      <div className="space-y-4 pt-2">
-                        <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                    {subTypeRoute === 'peticao-inicial' ? (
+                      <>
+                        {/* Nome completo do cliente */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
+                            Nome completo do cliente
+                          </label>
                           <input 
-                            type="checkbox" 
-                            checked={hasOppositeParty} 
-                            onChange={(e) => {
-                              setHasOppositeParty(e.target.checked);
-                              if (!e.target.checked) setOppositeParty('');
-                            }}
-                            className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                            type="text" 
+                            value={clientName || "IDENTIFICANDO CLIENTE..."} 
+                            disabled 
+                            className="w-full px-4 py-3 bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-500 cursor-not-allowed outline-none"
                           />
-                          <span className="text-xs font-bold text-gray-700">Possui parte adversa neste fluxo?</span>
-                        </label>
+                        </div>
 
-                        {hasOppositeParty && (
-                          <div className="space-y-1.5 animate-fadeIn">
-                            <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
-                              Nome da Parte Adversa *
-                            </label>
-                            <input 
-                              type="text" 
-                              value={oppositeParty} 
-                              onChange={(e) => setOppositeParty(e.target.value)}
-                              placeholder="Ex: Banco X S/A" 
-                              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      // Judicial always has oppositeParty
-                      <div className="space-y-1.5 pt-1">
-                        <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block mt-3">
-                          Nome da Parte Adversa *
-                        </label>
-                        <input 
-                          type="text" 
-                          value={oppositeParty} 
-                          onChange={(e) => setOppositeParty(e.target.value)}
-                          placeholder="Ex: Banco X S/A ou Seguradora Y" 
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
-                        />
-                      </div>
-                    )}
+                        {/* Assunto */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
+                            Assunto
+                          </label>
+                          <input 
+                            type="text" 
+                            value={assunto} 
+                            onChange={(e) => setAssunto(e.target.value)}
+                            placeholder="Ex: Empréstimo consignado indevido d/c juros abusivos" 
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                          />
+                        </div>
 
-                    {/* JUDICIAL SPECIFIC DETAILS */}
-                    {(subTypeRoute === 'peticao-inicial' || subTypeRoute === 'processo-judicial-em-andamento') && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                        
-                        {/* VARA */}
-                        <div className="space-y-1.5 flex-1">
+                        {/* Tipo de serviço */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
+                            Tipo de serviço
+                          </label>
+                          <input 
+                            type="text" 
+                            value="Petição inicial a ajuizar" 
+                            disabled 
+                            className="w-full px-4 py-3 bg-gray-100 border border-gray-150 rounded-xl text-xs font-black text-gray-500 cursor-not-allowed outline-none"
+                          />
+                        </div>
+
+                        {/* Nome da Parte Adversa */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
+                            Nome da Parte Adversa
+                          </label>
+                          <input 
+                            type="text" 
+                            value={oppositeParty} 
+                            onChange={(e) => setOppositeParty(e.target.value)}
+                            placeholder="Ex: Banco X S/A ou Seguradora Y" 
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                          />
+                        </div>
+
+                        {/* Vara */}
+                        <div className="space-y-1.5">
                           <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
                             Vara
                           </label>
-                          {subTypeRoute === 'peticao-inicial' ? (
-                            <input 
-                              type="text" 
-                              value="A definir" 
-                              disabled 
-                              className="w-full px-4 py-3 bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-500 cursor-not-allowed outline-none"
-                            />
-                          ) : (
-                            <input 
-                              type="text" 
-                              value={vara} 
-                              onChange={(e) => setVara(e.target.value)}
-                              placeholder="Ex: 2ª Vara Cível / Juizado" 
-                              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
-                            />
-                          )}
+                          <input 
+                            type="text" 
+                            value="A definir" 
+                            disabled 
+                            className="w-full px-4 py-3 bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-500 cursor-not-allowed outline-none"
+                          />
                         </div>
 
-                        {/* COMARCA */}
+                        {/* Comarca */}
                         <div className="space-y-1.5">
                           <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
                             Comarca
@@ -1320,31 +1329,173 @@ export default function TipoServico() {
                             className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
                           />
                         </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* CLIENT NAME FIELD (preenchido automaticamente e bloqueado) */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
+                            Nome Completo do Cliente *
+                          </label>
+                          <input 
+                            type="text" 
+                            value={clientName || "IDENTIFICANDO CLIENTE..."} 
+                            disabled 
+                            className="w-full px-4 py-3 bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-500 cursor-not-allowed"
+                          />
+                        </div>
 
-                      </div>
+                        {/* ASSUNTO (Substitui o antigo título operacional do caso, não temos mais título operacional) */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block mt-3">
+                            Assunto *
+                          </label>
+                          <input 
+                            type="text" 
+                            value={assunto} 
+                            onChange={(e) => setAssunto(e.target.value)}
+                            placeholder="Ex: Empréstimo consignado indevido d/c juros abusivos" 
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                          />
+                        </div>
+
+                        {/* CONTEXT-BASED EXTRA FIELDS */}
+                        
+                        {/* TYPE BLOCK */}
+                        {subTypeRoute === 'requerimento-administrativo' && (
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block mt-3">
+                              Tipo de Serviço
+                            </label>
+                            <input 
+                              type="text" 
+                              value="Requerimento Administrativo" 
+                              disabled 
+                              className="w-full px-4 py-3 bg-gray-100 border border-gray-150 rounded-xl text-xs font-black text-gray-500 cursor-not-allowed"
+                            />
+                          </div>
+                        )}
+
+                        {/* SERVICE SUBTYPE TEXT INPUT FOR OTHER TYPE */}
+                        {subTypeRoute === 'outro-servico-administrativo' && (
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block mt-3">
+                              Tipo de Serviço Administrativo *
+                            </label>
+                            <input 
+                              type="text" 
+                              value={serviceSubtype} 
+                              onChange={(e) => setServiceSubtype(e.target.value)}
+                              placeholder="Ex: Confecção de Notificação Extrajudicial" 
+                              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                            />
+                          </div>
+                        )}
+
+                        {/* PARTE ADVERSA CONTROLS */}
+                        {(subTypeRoute === 'requerimento-administrativo' || subTypeRoute === 'outro-servico-administrativo') ? (
+                          <div className="space-y-4 pt-2">
+                            <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                              <input 
+                                type="checkbox" 
+                                checked={hasOppositeParty} 
+                                onChange={(e) => {
+                                  setHasOppositeParty(e.target.checked);
+                                  if (!e.target.checked) setOppositeParty('');
+                                }}
+                                className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                              />
+                              <span className="text-xs font-bold text-gray-700">Possui parte adversa neste fluxo?</span>
+                            </label>
+
+                            {hasOppositeParty && (
+                              <div className="space-y-1.5 animate-fadeIn">
+                                <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
+                                  Nome da Parte Adversa *
+                                </label>
+                                <input 
+                                  type="text" 
+                                  value={oppositeParty} 
+                                  onChange={(e) => setOppositeParty(e.target.value)}
+                                  placeholder="Ex: Banco X S/A" 
+                                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          // Judicial always has oppositeParty
+                          <div className="space-y-1.5 pt-1">
+                            <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block mt-3">
+                              Nome da Parte Adversa *
+                            </label>
+                            <input 
+                              type="text" 
+                              value={oppositeParty} 
+                              onChange={(e) => setOppositeParty(e.target.value)}
+                              placeholder="Ex: Banco X S/A ou Seguradora Y" 
+                              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                            />
+                          </div>
+                        )}
+
+                        {/* JUDICIAL SPECIFIC DETAILS */}
+                        {subTypeRoute === 'processo-judicial-em-andamento' && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                            
+                            {/* VARA */}
+                            <div className="space-y-1.5 flex-1">
+                              <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
+                                Vara
+                              </label>
+                              <input 
+                                type="text" 
+                                value={vara} 
+                                onChange={(e) => setVara(e.target.value)}
+                                placeholder="Ex: 2ª Vara Cível / Juizado" 
+                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                              />
+                            </div>
+
+                            {/* COMARCA */}
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
+                                Comarca
+                              </label>
+                              <input 
+                                type="text" 
+                                value={comarca} 
+                                onChange={(e) => setComarca(e.target.value)}
+                                placeholder="Ex: Viçosa/MG" 
+                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                              />
+                            </div>
+
+                          </div>
+                        )}
+
+                        {/* PROCESS NUMBER CNJ WITH MASK */}
+                        {subTypeRoute === 'processo-judicial-em-andamento' && (
+                          <div className="space-y-1.5 pt-2">
+                            <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
+                              Número do Processo CNJ *
+                            </label>
+                            <input 
+                              type="text" 
+                              value={processNumber} 
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                setProcessNumber(formatCNJ(raw));
+                              }}
+                              placeholder="Ex: 0000000-00.0000.0.00.0000" 
+                              maxLength={25}
+                              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-mono font-semibold text-gray-800 transition-all outline-none"
+                            />
+                            <p className="text-xs text-gray-400 font-medium">Formato automático: NNNNNNN-DD.AAAA.J.TR.OOOO</p>
+                          </div>
+                        )}
+                      </>
                     )}
-
-                    {/* PROCESS NUMBER CNJ WITH MASK */}
-                    {subTypeRoute === 'processo-judicial-em-andamento' && (
-                      <div className="space-y-1.5 pt-2">
-                        <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
-                          Número do Processo CNJ *
-                        </label>
-                        <input 
-                          type="text" 
-                          value={processNumber} 
-                          onChange={(e) => {
-                            const raw = e.target.value;
-                            setProcessNumber(formatCNJ(raw));
-                          }}
-                          placeholder="Ex: 0000000-00.0000.0.00.0000" 
-                          maxLength={25}
-                          className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-mono font-semibold text-gray-800 transition-all outline-none"
-                        />
-                        <p className="text-xs text-gray-400 font-medium">Formato automático: NNNNNNN-DD.AAAA.J.TR.OOOO</p>
-                      </div>
-                    )}
-
                   </div>
                 </div>
 
@@ -1805,13 +1956,45 @@ export default function TipoServico() {
                     </>
                   ) : (
                     <>
-                      <span>Salvar e Avançar</span>
+                      <span>Próxima subetapa (Salvar e Avançar)</span>
                       <ArrowRight size={14} />
                     </>
                   )}
                 </button>
               </>
-            ) : null}
+            ) : (
+              <button
+                type="button"
+                disabled={loading || fetching}
+                onClick={async () => {
+                  if (currentStep === 'natureza') {
+                    // Go to step 2: Serviço Judicial or Extrajudicial
+                    navigate(getRouteTo(macroTypeSelection || 'judicial'));
+                  } else if (currentStep === 'judicial') {
+                    // Go to step 3: Cadastrando Petição Inicial no Todoist (defaulting to peticao-inicial, or current serviceSubtype if set)
+                    let targetSubtype = serviceSubtype || 'peticao-inicial';
+                    if (targetSubtype === 'peticao_inicial') targetSubtype = 'peticao-inicial';
+                    await handleNavigateToSubtype(targetSubtype);
+                  } else if (currentStep === 'extrajudicial') {
+                    let targetSubtype = serviceSubtype || 'requerimento-administrativo';
+                    await handleNavigateToSubtype(targetSubtype);
+                  }
+                }}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-black text-white px-8 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-md disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Carregando...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Próxima subetapa</span>
+                    <ArrowRight size={14} />
+                  </>
+                )}
+              </button>
+            )}
 
           </div>
         </div>

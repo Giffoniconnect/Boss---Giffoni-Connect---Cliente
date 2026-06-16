@@ -82,7 +82,7 @@ export default function TipoProducaoSubetapasCard({
   const step2Label = step2Macro === 'extrajudicial' ? 'Serviço Extrajudicial' : 'Serviço Judicial';
   const step2Icon = step2Macro === 'extrajudicial' ? Briefcase : Scale;
 
-  const step3Subtype = subtype || 'peticao-inicial';
+  const step3Subtype = (subtype === 'peticao_inicial' || subtype === 'peticao-inicial') ? 'peticao-inicial' : (subtype || 'peticao-inicial');
   
   let step3Label = 'Cadastrando Petição Inicial no Todoist';
   if (step3Subtype === 'processo-judicial-em-andamento') {

@@ -145,6 +145,15 @@ export default function EntregaDocumento({
           errorCode: errorData.errorCode,
           fileId: errorData.diagnostic?.fileId || null
         });
+        if (errorData.errorCode === 'GOOGLE_DOCS_TOKEN_EXPIRED' || errorData.errorCode === 'GOOGLE_AUTH_UNAUTHORIZED') {
+          try {
+            localStorage.removeItem('oauth_google_access_token');
+            localStorage.removeItem('portal_boss_google_accessToken');
+            sessionStorage.removeItem('google_access_token');
+          } catch (e) {
+            console.warn("Could not clean expired tokens:", e);
+          }
+        }
       }
     } catch (err) {
       console.warn('Preflight check failed:', err);
@@ -340,6 +349,15 @@ export default function EntregaDocumento({
           phoneNormalized: data.phoneNormalized,
           fileId: data.diagnostic?.fileId || (data.diagnostic?.inspection?.parsedBody?.fileId)
         });
+        if (data.errorCode === 'GOOGLE_DOCS_TOKEN_EXPIRED' || data.errorCode === 'GOOGLE_AUTH_UNAUTHORIZED') {
+          try {
+            localStorage.removeItem('oauth_google_access_token');
+            localStorage.removeItem('portal_boss_google_accessToken');
+            sessionStorage.removeItem('google_access_token');
+          } catch (e) {
+            console.warn("Could not clean expired tokens:", e);
+          }
+        }
       }
     } catch (err: any) {
       setWhatsappResult({ success: false, message: err.message || 'Erro ao conectar à API de WhatsApp.' });
@@ -414,6 +432,15 @@ export default function EntregaDocumento({
           errorCode: data.errorCode,
           message: data.errorMessage || 'Não foi possível preparar o e-mail no Gmail. Verifique se sua conta Google está conectada com permissão Gmail.'
         });
+        if (data.errorCode === 'GOOGLE_DOCS_TOKEN_EXPIRED' || data.errorCode === 'GOOGLE_AUTH_UNAUTHORIZED') {
+          try {
+            localStorage.removeItem('oauth_google_access_token');
+            localStorage.removeItem('portal_boss_google_accessToken');
+            sessionStorage.removeItem('google_access_token');
+          } catch (e) {
+            console.warn("Could not clean expired tokens:", e);
+          }
+        }
       }
     } catch (err: any) {
       setGmailResult({

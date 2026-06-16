@@ -6,6 +6,7 @@ import * as admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import { google } from "googleapis";
 import fs from "fs";
+import { Readable } from "stream";
 
 // Load placeholder builders
 import {
@@ -206,8 +207,9 @@ async function initializeFirebaseAdmin() {
 // Perform initial boot trigger
 initializeFirebaseAdmin();
 
-// Parse JSON payloads
-app.use(express.json());
+// Parse JSON payloads with increased limits for file base64 uploads
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 
 async function getCloudRunIdToken(targetAudience: string): Promise<string | null> {
@@ -1264,17 +1266,6 @@ async function createGoogleDocsJwtClient(req: any) {
     const host = (req && typeof req.get === "function") ? req.get("host") : "";
     const isAiStudioPreview = (host && (host.includes("ais-dev") || host.includes("ais-pre") || host.includes("localhost") || host.includes("127.0.0.1"))) || process.env.DISABLE_HMR === "true" || process.env.NODE_ENV !== "production";
 
-    if (isAiStudioPreview) {
-      if (tokenWasPassedAndExpired) {
-        const err = new Error(`Sua sessão do Google Docs expirou ou é inválida (${tokenErrorMessage}). Por favor, clique em 'Conectar com Google' ou 'Renovar Google Token' para reautorizar a integração de forma rápida em 1-clique sem sair do sistema.`) as any;
-        err.errorCode = "GOOGLE_DOCS_TOKEN_EXPIRED";
-        throw err;
-      }
-      const err = new Error("Sua sessão do Google Docs não possui autorização fática ativa ou suas credenciais de Service Account estão ausentes. Para corrigir: \n1. Clique em 'Conectar com Google' para autorizar a integração fática e criar seu token ativo (Google OAuth);\nOU\n2. Cole as chaves JSON PEM de sua Conta de Serviço (Service Account) própria do seu projeto Google Cloud na Central de Integrações do BOSS.") as any;
-      err.errorCode = "GOOGLE_DOCS_CREDENTIALS_MISSING";
-      throw err;
-    }
-
     try {
       console.log("[GoogleDocsEngine] Google Service Account keys not configured. Attempting fallback to Application Default Credentials (ADC)...");
       const adcAuth = new google.auth.GoogleAuth({
@@ -1284,6 +1275,7 @@ async function createGoogleDocsJwtClient(req: any) {
         ]
       });
       const jwtClient = await adcAuth.getClient();
+      console.log("[GoogleDocsEngine] Fallback to GCP ADC succeeded!");
       return {
         jwtClient,
         serviceAccountEmail: "application-default-credentials",
@@ -1292,6 +1284,16 @@ async function createGoogleDocsJwtClient(req: any) {
       };
     } catch (adcError: any) {
       console.warn("[GoogleDocsEngine] Fallback to GCP ADC failed:", adcError.message);
+      if (isAiStudioPreview) {
+        if (tokenWasPassedAndExpired) {
+          const err = new Error(`Sua sessão do Google Docs expirou ou é inválida (${tokenErrorMessage}). Por favor, clique em 'Conectar com Google' ou 'Renovar Google Token' para reautorizar a integração de forma rápida em 1-clique sem sair do sistema.`) as any;
+          err.errorCode = "GOOGLE_DOCS_TOKEN_EXPIRED";
+          throw err;
+        }
+        const err = new Error("Sua sessão do Google Docs não possui autorização fática ativa ou suas credenciais de Service Account estão ausentes. Para corrigir: \n1. Clique em 'Conectar com Google' para autorizar a integração fática e criar seu token ativo (Google OAuth);\nOU\n2. Cole as chaves JSON PEM de sua Conta de Serviço (Service Account) própria do seu projeto Google Cloud na Central de Integrações do BOSS.") as any;
+        err.errorCode = "GOOGLE_DOCS_CREDENTIALS_MISSING";
+        throw err;
+      }
       const err = new Error("Nenhuma credencial Google Docs/Drive foi encontrada. Configure GOOGLE_DOCS_SERVICE_ACCOUNT_JSON, variáveis granulares ou use credentialOverride em preview.") as any;
       err.errorCode = "GOOGLE_DOCS_CREDENTIALS_MISSING";
       throw err;
@@ -2091,6 +2093,62 @@ app.post("/api/google-docs/test-drive-api", async (req: any, res: any) => {
       success: false,
       errorCode: code,
       errorMessage: `A Google Drive API não está habilitada ou a Service Account não possui permissão suficiente: ${msg}`
+    });
+  }
+});
+
+app.post("/api/google-docs/upload-file", async (req: any, res: any) => {
+  try {
+    const { folderId, fileName, fileBase64, mimeType } = req.body || {};
+    
+    if (!folderId) {
+      return res.status(400).json({ success: false, errorMessage: "O campo folderId é de preenchimento obrigatório." });
+    }
+    if (!fileName) {
+      return res.status(400).json({ success: false, errorMessage: "O campo fileName é de preenchimento obrigatório." });
+    }
+    if (!fileBase64) {
+      return res.status(400).json({ success: false, errorMessage: "O arquivo (fileBase64) é de preenchimento obrigatório." });
+    }
+
+    console.log(`[GoogleDocsUpload] Preparando upload para pasta ${folderId}, nome: ${fileName}`);
+    
+    const { jwtClient } = await createGoogleDocsJwtClient(req);
+    const drive = google.drive({ version: "v3", auth: jwtClient });
+
+    const buffer = Buffer.from(fileBase64, 'base64');
+    const stream = new Readable();
+    stream.push(buffer);
+    stream.push(null);
+
+    const driveRes = await drive.files.create({
+      requestBody: {
+        name: fileName,
+        parents: [folderId],
+      },
+      media: {
+        mimeType: mimeType || 'application/octet-stream',
+        body: stream,
+      },
+      fields: 'id, name, mimeType, webViewLink'
+    });
+
+    console.log(`[GoogleDocsUpload] Sucesso! ID do arquivo criado: ${driveRes.data.id}`);
+
+    return res.status(200).json({
+      success: true,
+      fileId: driveRes.data.id,
+      name: driveRes.data.name,
+      mimeType: driveRes.data.mimeType,
+      webViewLink: driveRes.data.webViewLink,
+      message: "Arquivo encaminhado com sucesso para o Google Drive."
+    });
+  } catch (err: any) {
+    console.error("[GoogleDocsUpload] Erro durante o upload:", err);
+    return res.status(err.errorCode === "GOOGLE_DOCS_TOKEN_EXPIRED" ? 401 : 500).json({
+      success: false,
+      errorCode: err.errorCode || "GOOGLE_DRIVE_UPLOAD_FAILED",
+      errorMessage: err.message || `Falha no upload para o Google Drive: ${err}`
     });
   }
 });
