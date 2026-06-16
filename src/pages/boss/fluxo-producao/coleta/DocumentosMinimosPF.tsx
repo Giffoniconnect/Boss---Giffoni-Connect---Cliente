@@ -91,9 +91,23 @@ export default function DocumentosMinimosPF() {
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!e.target.files || e.target.files.length === 0) return;
       const file = e.target.files[0];
-      const name = file.name;
+      const originalName = file.name;
       const sizeBytes = file.size;
       const sizeStr = (sizeBytes / 1024 / 1024).toFixed(2) + ' MB';
+
+      const lastDotIndex = originalName.lastIndexOf('.');
+      const extension = lastDotIndex !== -1 ? originalName.substring(lastDotIndex) : '';
+
+      let finalName = originalName;
+      const cleanedClientName = clientName ? clientName.trim() : 'Cliente';
+
+      if (field === 'rgFiles') {
+        finalName = `Doc. 03 - RG - ${cleanedClientName}${extension}`;
+      } else if (field === 'cpfFiles') {
+        finalName = `Doc. 04 - CPF - ${cleanedClientName}${extension}`;
+      } else if (field === 'residenciaFiles') {
+        finalName = `Doc. 04 - Comprovante de Residência - ${cleanedClientName}${extension}`;
+      }
 
       setUploading(true);
       setUploadError(null);
@@ -112,7 +126,7 @@ export default function DocumentosMinimosPF() {
           },
           body: JSON.stringify({
             folderId: targetFolder,
-            fileName: name,
+            fileName: finalName,
             fileBase64: base64,
             mimeType: file.type,
             googleAccessToken: googleAccessToken || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken')
@@ -125,7 +139,7 @@ export default function DocumentosMinimosPF() {
         }
 
         // Successfully uploaded! Add it to Local Wizard State
-        await addWizardFile(field, name, sizeStr);
+        await addWizardFile(field, finalName, sizeStr);
         setUploadSuccessMsg(`Arquivo enviado com sucesso para a pasta do Google Drive!`);
       } catch (err: any) {
         console.error("[FileUpload] Error detail:", err);
@@ -573,6 +587,13 @@ export default function DocumentosMinimosPF() {
                           <div className="mt-2 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-900 text-xs font-medium flex gap-2 items-center animate-in slide-in-from-top-1 duration-150">
                             <AlertCircle size={14} className="text-rose-600 shrink-0" />
                             <span>{dateError}</span>
+                          </div>
+                        )}
+
+                        {!dateError && wizardState.q4_residencia_data && (
+                          <div className="mt-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 text-xs font-bold flex gap-2 items-center animate-in slide-in-from-top-1 duration-150">
+                            <Check size={14} className="text-emerald-600 shrink-0" />
+                            <span>Comprovante de residência encontra-se dentro dos parâmetros com prazo inferior a 90 dias.</span>
                           </div>
                         )}
                       </div>
