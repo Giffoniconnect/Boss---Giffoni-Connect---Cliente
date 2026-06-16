@@ -5190,14 +5190,17 @@ app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
     addLog("error", errorCode, errorMessage, details);
 
     if (req.body?.caseId) {
+      const prevTaskId = req.body?.previousTodoistTaskId || "";
+      const prevTaskUrl = req.body?.previousTodoistTaskUrl || "";
+
       await appendTodoistLogs(req.body.caseId, logs).catch(() => {});
       await saveTodoistStatusToFirestore(req.body.caseId, {
         todoistAutomationStatus: "falha",
-        todoistTaskId: "",
-        todoistTaskUrl: "",
+        todoistTaskId: prevTaskId,
+        todoistTaskUrl: prevTaskUrl,
         todoistTaskLogFalha: errorMessage,
-        todoistProjectId: "__TODOIST_INBOX__",
-        todoistProjectName: "Caixa de Entrada (Inbox)",
+        todoistProjectId: req.body?.projectId || "__TODOIST_INBOX__",
+        todoistProjectName: req.body?.projectName || "Caixa de Entrada (Inbox)",
         todoistFormula: req.body?.content || "",
         todoistUpdatedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -5235,8 +5238,23 @@ app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
       dueDate,
       priority,
       labels,
-      assignee
+      assignee,
+      previousTodoistTaskId,
+      previousTodoistTaskUrl,
+      isDuplicateCreationAttempt
     } = req.body || {};
+
+    if (isDuplicateCreationAttempt) {
+      addLog(
+        "warning",
+        "BACKEND_DUPLICATE_CREATION_ACCEPTED",
+        "Backend recebeu tentativa confirmada de criação de nova tarefa para caso que já possuía tarefa anterior.",
+        {
+          previousTodoistTaskId,
+          previousTodoistTaskUrl
+        }
+      );
+    }
 
     if (!caseId) {
       return fail(400, "TODOIST_CASE_ID_MISSING", "caseId é obrigatório.");
@@ -5463,8 +5481,8 @@ app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
       todoistTaskId,
       todoistTaskUrl,
       todoistTaskLogFalha: "",
-      todoistProjectId: "__TODOIST_INBOX__",
-      todoistProjectName: "Caixa de Entrada (Inbox)",
+      todoistProjectId: projectId || "__TODOIST_INBOX__",
+      todoistProjectName: projectName || "Caixa de Entrada (Inbox)",
       todoistFormula: contentText,
       todoistCreatedAt: now,
       todoistUpdatedAt: now,

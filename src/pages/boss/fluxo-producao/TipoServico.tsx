@@ -666,32 +666,6 @@ export default function TipoServico() {
     }
   };
 
-  const isTodoistButtonDisabled = (): boolean => {
-    if (todoistAutomationStatus === "gerando") return true;
-    if (!todoistProjectId) return true;
-
-    if (subTypeRoute === "peticao-inicial") {
-      const currentFormula = getTodoistFormula();
-      const hasRequiredFields = !!(
-        safeCaseId &&
-        currentFormula &&
-        currentFormula.trim() &&
-        clientName &&
-        clientName.trim() &&
-        oppositeParty &&
-        oppositeParty.trim() &&
-        assunto &&
-        assunto.trim() &&
-        comarca &&
-        comarca.trim()
-      );
-      return !hasRequiredFields;
-    }
-
-    const currentFormula = getTodoistFormula();
-    return !currentFormula || !currentFormula.trim();
-  };
-
   const handleCreateTodoistTask = async () => {
     if (!safeCaseId) {
       setError("Erro ao criar tarefa: O ID do caso (caseId) está ausente.");
@@ -725,10 +699,65 @@ export default function TipoServico() {
       }
     }
 
-    // prevent duplicate task creation
-    if (todoistTaskId && todoistAutomationStatus === "criado" && !isInvalidTodoistTaskIdentity(todoistTaskId, todoistTaskUrl)) {
-      const ok = window.confirm("Esta tarefa já foi cadastrada no Todoist. Deseja criar outra tarefa mesmo assim?");
-      if (!ok) return;
+    // detect and prepare duplicate creation factors
+    const isDuplicateCreationAttempt = !!(
+      todoistTaskId &&
+      todoistAutomationStatus === "criado" &&
+      !isInvalidTodoistTaskIdentity(todoistTaskId, todoistTaskUrl)
+    );
+
+    const previousTodoistTaskId = isDuplicateCreationAttempt ? (todoistTaskId || "") : "";
+    const previousTodoistTaskUrl = isDuplicateCreationAttempt ? (todoistTaskUrl || "") : "";
+
+    if (isDuplicateCreationAttempt) {
+      await appendFrontendLogs([
+        {
+          timestamp: new Date().toISOString(),
+          level: "warning",
+          step: "DUPLICATE_CREATION_WARNING",
+          message: "Sistema detectou que já existe tarefa Todoist criada para este caso.",
+          details: {
+            existingTodoistTaskId: todoistTaskId,
+            existingTodoistTaskUrl: todoistTaskUrl
+          }
+        }
+      ]);
+
+      const confirmed = window.confirm(
+        `Já existe uma tarefa criada no Todoist para este caso.\n\n` +
+        `ID atual: ${todoistTaskId}\n\n` +
+        `Deseja criar outra tarefa igual no Todoist?\n\n` +
+        `A nova tarefa substituirá o ID e o link exibidos neste painel, mas o histórico ficará registrado nos logs.`
+      );
+
+      if (!confirmed) {
+        await appendFrontendLogs([
+          {
+            timestamp: new Date().toISOString(),
+            level: "warning",
+            step: "DUPLICATE_CREATION_CANCELLED",
+            message: "Operador cancelou a criação de tarefa duplicada no Todoist.",
+            details: {
+              existingTodoistTaskId: todoistTaskId,
+              existingTodoistTaskUrl: todoistTaskUrl
+            }
+          }
+        ]);
+        return;
+      }
+
+      await appendFrontendLogs([
+        {
+          timestamp: new Date().toISOString(),
+          level: "warning",
+          step: "DUPLICATE_CREATION_CONFIRMED",
+          message: "Operador confirmou criação de nova tarefa mesmo já existindo tarefa anterior.",
+          details: {
+            previousTodoistTaskId: todoistTaskId,
+            previousTodoistTaskUrl: todoistTaskUrl
+          }
+        }
+      ]);
     }
 
     setTodoistAutomationStatus("gerando");
@@ -755,7 +784,10 @@ export default function TipoServico() {
           dueDate: todoistDueDate,
           priority: todoistPriority,
           labelsCount: todoistLabels ? todoistLabels.split(',').length : 0,
-          assignee: todoistAssignee
+          assignee: todoistAssignee,
+          previousTodoistTaskId,
+          previousTodoistTaskUrl,
+          isDuplicateCreationAttempt
         }
       }
     ];
@@ -770,7 +802,10 @@ export default function TipoServico() {
       dueDate: todoistDueDate,
       priority: todoistPriority,
       labels: todoistLabels ? todoistLabels.split(',').map(l => l.trim()).filter(Boolean) : [],
-      assignee: todoistAssignee
+      assignee: todoistAssignee,
+      previousTodoistTaskId,
+      previousTodoistTaskUrl,
+      isDuplicateCreationAttempt
     };
 
     try {
@@ -816,8 +851,10 @@ export default function TipoServico() {
       } else {
         const errMsg = data.errorMessage || "A API não confirmou a criação real da tarefa no Todoist.";
         setTodoistAutomationStatus("falha");
-        setTodoistTaskId("");
-        setTodoistTaskUrl("");
+        if (!previousTodoistTaskId) {
+          setTodoistTaskId("");
+          setTodoistTaskUrl("");
+        }
         setTodoistTaskLogFalha(errMsg);
         setError(`Falha na criação da tarefa Todoist: ${errMsg}`);
 
@@ -837,8 +874,10 @@ export default function TipoServico() {
       console.error("[Todoist Create Task Failed]", err);
       const errStr = err.message || err;
       setTodoistAutomationStatus("falha");
-      setTodoistTaskId("");
-      setTodoistTaskUrl("");
+      if (!previousTodoistTaskId) {
+        setTodoistTaskId("");
+        setTodoistTaskUrl("");
+      }
       setTodoistTaskLogFalha(`Erro de rede / conexão: ${errStr}`);
       setError(`Erro ao criar tarefa no Todoist: ${errStr}`);
 
@@ -1588,12 +1627,12 @@ export default function TipoServico() {
 
                     <button
                       type="button"
-                      disabled={isTodoistButtonDisabled()}
+                      disabled={todoistAutomationStatus === "gerando"}
                       onClick={handleCreateTodoistTask}
                       className="w-full inline-flex items-center justify-center gap-2 bg-[#e44332] hover:bg-[#c53222] text-white font-extrabold px-4 py-2.5 rounded-xl transition-all text-xs cursor-pointer shadow-xs disabled:opacity-50"
                     >
                       {todoistAutomationStatus === 'gerando' && "Criando tarefa real..."}
-                      {todoistAutomationStatus === 'criado' && "Criar Tarefa no Todoist"}
+                      {todoistAutomationStatus === 'criado' && "Criar outra tarefa no Todoist"}
                       {todoistAutomationStatus === 'falha' && "Tentar criar novamente"}
                       {todoistAutomationStatus === 'aguardando' && "Criar Tarefa no Todoist"}
                       {todoistAutomationStatus !== 'gerando' && todoistAutomationStatus !== 'criado' && todoistAutomationStatus !== 'falha' && todoistAutomationStatus !== 'aguardando' && "Criar Tarefa no Todoist"}

@@ -173,7 +173,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile(matchedProfile);
     } catch (error: any) {
       console.error("Login falhou:", error);
-      setErrorMsg(error.message || "Falha na autenticação via Google");
+      let friendlyMessage = error.message || "Falha na autenticação via Google";
+      if (
+        error.code === 'auth/popup-closed-by-user' ||
+        String(error).includes('popup-closed-by-user') ||
+        (error.message && String(error.message).includes('popup-closed-by-user'))
+      ) {
+        friendlyMessage = "A janela de login do Google foi fechada antes de concluir a autenticação. Por favor, tente novamente clicando no botão para entrar.";
+      }
+      setErrorMsg(friendlyMessage);
       // Clean up auth session if it failed profile check
       await signOut(auth);
       setProfile(null);

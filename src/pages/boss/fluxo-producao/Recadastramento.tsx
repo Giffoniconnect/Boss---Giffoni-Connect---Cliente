@@ -106,7 +106,15 @@ export default function Recadastramento() {
       }
     } catch (err: any) {
       console.error('Google Drive Connection Error:', err);
-      setConversionError(`Erro de conexão com o Drive: ${err.message || err}`);
+      let friendlyMessage = err.message || err;
+      if (
+        err.code === 'auth/popup-closed-by-user' ||
+        String(err).includes('popup-closed-by-user') ||
+        (err.message && String(err.message).includes('popup-closed-by-user'))
+      ) {
+        friendlyMessage = "A janela de conexão do Google foi fechada antes de concluir. Por favor, tente novamente.";
+      }
+      setConversionError(`Erro de conexão com o Drive: ${friendlyMessage}`);
     } finally {
       setIsConnecting(false);
     }
