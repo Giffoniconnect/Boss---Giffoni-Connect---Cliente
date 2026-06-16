@@ -53,9 +53,10 @@ const NACIONALIDADES_SUGESTOES = [
 interface PFFormProps {
   data: any;
   onChange: (data: any) => void;
+  isVerticalFlow?: boolean;
 }
 
-export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
+export const PFForm: React.FC<PFFormProps> = ({ data, onChange, isVerticalFlow = false }) => {
   const lastFetchedCep = React.useRef('');
 
   React.useEffect(() => {
@@ -132,55 +133,110 @@ export const PFForm: React.FC<PFFormProps> = ({ data, onChange }) => {
     <div className="space-y-6">
       <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
         <h3 className="text-[18px] font-bold text-blue-600 uppercase tracking-wider mb-6">BLOCO pfDadosPessoais</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input label="Nome Completo" name="pf_nomeCompleto" value={data.pf_nomeCompleto || ''} onChange={handleChange} className="uppercase" required />
-          <AutocompleteInput 
-            label="Nacionalidade" 
-            name="pf_nacionalidade" 
-            value={data.pf_nacionalidade || 'Brasileira'} 
-            onChange={handleChange} 
-            suggestions={NACIONALIDADES_SUGESTOES}
-          />
-          <div className="md:col-span-1">
+        {isVerticalFlow ? (
+          <div className="flex flex-col gap-4">
+            <Input label="Nome completo" name="pf_nomeCompleto" value={data.pf_nomeCompleto || ''} onChange={handleChange} className="uppercase" required />
+            
+            <AutocompleteInput 
+              label="Nacionalidade" 
+              name="pf_nacionalidade" 
+              value={data.pf_nacionalidade || 'Brasileira'} 
+              onChange={handleChange} 
+              suggestions={NACIONALIDADES_SUGESTOES}
+            />
+            
             <Select label="Estado Civil" name="pf_estadoCivil" value={data.pf_estadoCivil || ''} onChange={handleChange} options={ESTADOS_CIVIS} />
-          </div>
-          <ProfessionAutocompleteInput 
-            label="Profissão" 
-            name="pf_profissao" 
-            value={data.pf_profissao || ''} 
-            onChange={handleChange} 
-          />
-          
-          <Input label="CPF (com máscara)" name="pf_cpf" value={data.pf_cpf || ''} onChange={handleChange} placeholder="000.000.000-00" required />
-          
-          <div className="flex flex-col gap-1">
-            <label className="block text-[15px] font-bold text-gray-500 ml-1">RG</label>
-            <div className="flex items-center gap-3 w-full">
-              <div className="relative flex-1 min-w-0">
-                <input
-                  name="pf_rg"
-                  value={data.pf_rg || ''}
-                  onChange={handleChange}
-                  disabled={data.pf_rg === 'RG novo'}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-100 focus:bg-white outline-none transition-all placeholder:text-gray-300 disabled:opacity-60"
-                />
+            
+            <ProfessionAutocompleteInput 
+              label="Profissão" 
+              name="pf_profissao" 
+              value={data.pf_profissao || ''} 
+              onChange={handleChange} 
+            />
+            
+            <Input label="CPF com mascara" name="pf_cpf" value={data.pf_cpf || ''} onChange={handleChange} placeholder="000.000.000-00" required />
+            
+            <div className="flex flex-col gap-1">
+              <label className="block text-[15px] font-bold text-gray-500 ml-1">RG</label>
+              <div className="flex items-center gap-3 w-full">
+                <div className="relative flex-1 min-w-0">
+                  <input
+                    name="pf_rg"
+                    value={data.pf_rg || ''}
+                    onChange={handleChange}
+                    disabled={data.pf_rg === 'RG novo'}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-105 focus:bg-white outline-none transition-all placeholder:text-gray-300 disabled:opacity-60"
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-xs font-bold text-blue-600 cursor-pointer select-none shrink-0 border border-blue-105 bg-blue-50/50 hover:bg-blue-50 px-3.5 py-3 rounded-xl transition-all h-[52px]">
+                  <input 
+                    type="checkbox" 
+                    checked={data.pf_rg === 'RG novo'} 
+                    onChange={handleRGNew}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                  />
+                  RG novo
+                </label>
               </div>
-              <label className="flex items-center gap-2 text-xs font-bold text-blue-600 cursor-pointer select-none shrink-0 border border-blue-100 bg-blue-50/50 hover:bg-blue-50 px-3.5 py-3 rounded-xl transition-all">
-                <input 
-                  type="checkbox" 
-                  checked={data.pf_rg === 'RG novo'} 
-                  onChange={handleRGNew}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
-                />
-                RG novo
-              </label>
             </div>
-          </div>
 
-          <Input label="Data de Nascimento" name="pf_dataNascimento" type="text" placeholder="DD/MM/AAAA" value={data.pf_dataNascimento || data.pf_nascimento || ''} onChange={handleChange} />
-          <Input label="Nome Completo do Pai" name="pf_nomePai" value={data.pf_nomePai || ''} onChange={handleChange} className="uppercase" />
-          <Input label="Nome Completo da Mãe" name="pf_nomeMae" value={data.pf_nomeMae || ''} onChange={handleChange} className="uppercase" />
-        </div>
+            <Input label="Data de Nascimento" name="pf_dataNascimento" type="text" placeholder="DD/MM/AAAA" value={data.pf_dataNascimento || data.pf_nascimento || ''} onChange={handleChange} />
+            
+            <Input label="Nome completo do pai" name="pf_nomePai" value={data.pf_nomePai || ''} onChange={handleChange} className="uppercase" />
+            
+            <Input label="Nome completo da mãe" name="pf_nomeMae" value={data.pf_nomeMae || ''} onChange={handleChange} className="uppercase" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input label="Nome Completo" name="pf_nomeCompleto" value={data.pf_nomeCompleto || ''} onChange={handleChange} className="uppercase" required />
+            <AutocompleteInput 
+              label="Nacionalidade" 
+              name="pf_nacionalidade" 
+              value={data.pf_nacionalidade || 'Brasileira'} 
+              onChange={handleChange} 
+              suggestions={NACIONALIDADES_SUGESTOES}
+            />
+            <div className="md:col-span-1">
+              <Select label="Estado Civil" name="pf_estadoCivil" value={data.pf_estadoCivil || ''} onChange={handleChange} options={ESTADOS_CIVIS} />
+            </div>
+            <ProfessionAutocompleteInput 
+              label="Profissão" 
+              name="pf_profissao" 
+              value={data.pf_profissao || ''} 
+              onChange={handleChange} 
+            />
+            
+            <Input label="CPF (com máscara)" name="pf_cpf" value={data.pf_cpf || ''} onChange={handleChange} placeholder="000.000.000-00" required />
+            
+            <div className="flex flex-col gap-1">
+              <label className="block text-[15px] font-bold text-gray-500 ml-1">RG</label>
+              <div className="flex items-center gap-3 w-full">
+                <div className="relative flex-1 min-w-0">
+                  <input
+                    name="pf_rg"
+                    value={data.pf_rg || ''}
+                    onChange={handleChange}
+                    disabled={data.pf_rg === 'RG novo'}
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-blue-105 focus:bg-white outline-none transition-all placeholder:text-gray-300 disabled:opacity-60"
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-xs font-bold text-blue-600 cursor-pointer select-none shrink-0 border border-blue-105 bg-blue-50/50 hover:bg-blue-50 px-3.5 py-3 rounded-xl transition-all">
+                  <input 
+                    type="checkbox" 
+                    checked={data.pf_rg === 'RG novo'} 
+                    onChange={handleRGNew}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                  />
+                  RG novo
+                </label>
+              </div>
+            </div>
+
+            <Input label="Data de Nascimento" name="pf_dataNascimento" type="text" placeholder="DD/MM/AAAA" value={data.pf_dataNascimento || data.pf_nascimento || ''} onChange={handleChange} />
+            <Input label="Nome Completo do Pai" name="pf_nomePai" value={data.pf_nomePai || ''} onChange={handleChange} className="uppercase" />
+            <Input label="Nome Completo da Mãe" name="pf_nomeMae" value={data.pf_nomeMae || ''} onChange={handleChange} className="uppercase" />
+          </div>
+        )}
       </div>
 
       <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">

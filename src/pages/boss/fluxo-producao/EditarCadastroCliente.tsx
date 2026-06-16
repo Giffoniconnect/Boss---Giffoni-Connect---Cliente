@@ -932,7 +932,7 @@ export default function EditarCadastroCliente() {
               )}
 
               {clientType === 'PF' ? (
-                <PFForm data={formData} onChange={(d) => setFormData(d)} />
+                <PFForm data={formData} onChange={(d) => setFormData(d)} isVerticalFlow={true} />
               ) : (
                 <div className="space-y-8">
                   <PJForm data={formData} onChange={(d) => setFormData(d)} />

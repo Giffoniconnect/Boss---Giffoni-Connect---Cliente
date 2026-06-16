@@ -2,6 +2,7 @@ import React from 'react';
 import { BossLayout } from '../../../../components/Layout';
 import FluxoSidebar from './FluxoSidebar';
 import ColetaProvasSubetapasCard from './ColetaProvasSubetapasCard';
+import TipoProducaoSubetapasCard from './TipoProducaoSubetapasCard';
 
 interface FluxoStepLayoutProps {
   children: React.ReactNode;
@@ -11,6 +12,11 @@ interface FluxoStepLayoutProps {
   coletaSubetapasStep?: 'procuracao' | 'declaracao' | 'documentos-minimos' | 'documentos-necessidade' | 'documentos-auditoria' | 'inicio';
   wizardState?: any;
   tipoPessoa?: 'PF' | 'PJ';
+  tipoProducaoSubetapasStep?: 'natureza' | 'judicial' | 'extrajudicial' | 'form';
+  serviceMacroType?: 'judicial' | 'extrajudicial' | null;
+  serviceSubtype?: string | null;
+  todoistAutomationStatus?: string;
+  todoistTaskId?: string;
 }
 
 export default function FluxoStepLayout({
@@ -20,7 +26,12 @@ export default function FluxoStepLayout({
   statusText = 'estrutura preparada',
   coletaSubetapasStep,
   wizardState,
-  tipoPessoa
+  tipoPessoa,
+  tipoProducaoSubetapasStep,
+  serviceMacroType,
+  serviceSubtype,
+  todoistAutomationStatus,
+  todoistTaskId
 }: FluxoStepLayoutProps) {
   return (
     <BossLayout>
@@ -34,6 +45,17 @@ export default function FluxoStepLayout({
             tipoPessoa={tipoPessoa}
             wizardState={wizardState}
             currentStep={coletaSubetapasStep}
+          />
+        )}
+
+        {tipoProducaoSubetapasStep && (
+          <TipoProducaoSubetapasCard
+            caseId={caseId}
+            currentStep={tipoProducaoSubetapasStep}
+            serviceMacroType={serviceMacroType}
+            serviceSubtype={serviceSubtype}
+            todoistAutomationStatus={todoistAutomationStatus}
+            todoistTaskId={todoistTaskId}
           />
         )}
         

@@ -896,7 +896,15 @@ export default function TipoServico() {
   };
 
   return (
-    <FluxoStepLayout stepName="Tipo de Serviço" caseId={safeCaseId || undefined}>
+    <FluxoStepLayout
+      stepName="Tipo de Serviço"
+      caseId={safeCaseId || undefined}
+      tipoProducaoSubetapasStep={currentStep}
+      serviceMacroType={macroTypeSelection}
+      serviceSubtype={serviceSubtype}
+      todoistAutomationStatus={todoistAutomationStatus}
+      todoistTaskId={todoistTaskId}
+    >
       <div className="space-y-8 text-xs md:text-sm">
         
         {/* HEADER INFORMATION BLOCK */}

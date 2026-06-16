@@ -316,12 +316,43 @@ export function resolvePfClientData(clientData: any) {
   };
 }
 
+function cleanHtmlToPlainText(html: string): string {
+  if (!html) return "";
+  let text = html;
+  
+  // Replace custom styling tags
+  text = text.replace(/<br\s*\/?>/gi, "\n");
+  text = text.replace(/<\/p>/gi, "\n");
+  text = text.replace(/<p[^>]*>/gi, "");
+  text = text.replace(/<\/div>/gi, "\n");
+  text = text.replace(/<div[^>]*>/gi, "");
+  text = text.replace(/<\/li>/gi, "\n");
+  text = text.replace(/<li[^>]*>/gi, "• ");
+  
+  // Strip any remaining html tags
+  text = text.replace(/<[^>]*>/g, "");
+  
+  // HTML entity decode basics
+  text = text
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+    
+  return text.trim();
+}
+
 export function buildPrimeiroAtendimentoPlaceholders(clientData: any, caseData: any): Record<string, string> {
   const global = buildGlobalPlaceholders();
   const client = buildClientCommonPlaceholders(clientData);
   const casePls = buildCaseCommonPlaceholders(caseData);
   const solved = resolvePfClientData(clientData);
   
+  const rawEntrevista = caseData?.entrevistaPadrao || caseData?.entrevista_padrao || "";
+  const cleanEntrevista = cleanHtmlToPlainText(rawEntrevista);
+
   return {
     ...global,
     ...client,
@@ -334,7 +365,7 @@ export function buildPrimeiroAtendimentoPlaceholders(clientData: any, caseData: 
     "{{OUTORGANTE_PROFISSAO}}": solved.profissao || client["{{PROFISSAO}}"] || "",
     "{{OUTORGANTE_RG}}": solved.rg || client["{{RG}}"] || "",
     "{{OUTORGANTE_CPF}}": solved.cpf || client["{{CPF}}"] || "",
-    "{{OUTORGANTE_ENDERECO}}": solved.endereco || client["{{ENDERECO_COMPLETO}}"] || "",
+    "{{OUTORGANTE_ENDERECO}}": solved.endereco || client["{{ENTERECO_COMPLETO}}"] || "",
     "{{OUTORGANTE_NUMERO}}": solved.numero || "",
     "{{OUTORGANTE_COMPLEMENTO}}": solved.complemento || "",
     "{{OUTORGANTE_BAIRRO}}": solved.bairro || "",
@@ -343,7 +374,15 @@ export function buildPrimeiroAtendimentoPlaceholders(clientData: any, caseData: 
     "{{OUTORGANTE_CEP}}": solved.cep || "",
     "{{OUTORGANTE_TELEFONE}}": solved.telefone || client["{{TELEFONE}}"] || "",
     "{{OUTORGANTE_WHATSAPP}}": solved.whatsapp || client["{{WHATSAPP}}"] || "",
-    "{{OUTORGANTE_EMAIL}}": solved.email || client["{{EMAIL}}"] || ""
+    "{{OUTORGANTE_EMAIL}}": solved.email || client["{{EMAIL}}"] || "",
+
+    // Interview placeholders
+    "<< Registro_da_Entrevista_Padrão>>": cleanEntrevista,
+    "<<Registro_da_Entrevista_Padrão>>": cleanEntrevista,
+    "<< Registro_da_Entrevista_Padrao>>": cleanEntrevista,
+    "<<Registro_da_Entrevista_Padrao>>": cleanEntrevista,
+    "{{REGISTRO_DA_ENTREVISTA_PADRAO}}": cleanEntrevista,
+    "{{Registro_da_Entrevista_Padrão}}": cleanEntrevista
   };
 }
 
