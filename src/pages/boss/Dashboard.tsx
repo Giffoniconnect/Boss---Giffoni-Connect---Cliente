@@ -496,7 +496,10 @@ export default function Dashboard() {
             </div>
             
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-              <div className="bg-white border border-gray-150 rounded-2xl p-5 shadow-3xs hover:shadow-2xs transition-all">
+              <div 
+                onClick={() => navigate('/boss/leads/private/dashboard')}
+                className="bg-white border border-gray-150 rounded-2xl p-5 shadow-3xs hover:shadow-2xs hover:border-indigo-300 transition-all cursor-pointer"
+              >
                 <div className="text-xs font-bold uppercase text-gray-400 tracking-wider">Clientes em Potencial</div>
                 <div className="text-2xl font-black text-indigo-650 mt-1.5">{metrics.potentialClients}</div>
                 <p className="text-xs text-gray-500 mt-1 leading-normal">Leads sem portal ativo</p>

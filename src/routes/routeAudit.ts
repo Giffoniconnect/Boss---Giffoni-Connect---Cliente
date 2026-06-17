@@ -103,6 +103,7 @@ export const expectedRoutes = [
 
   // GRUPO 7 — LEADS / MARKETING
   '/boss/leads/private/dashboard',
+  '/boss/leads/private/dashboard/repositorio-excluidos',
   '/boss/cadastrar.leads/private',
   '/boss/cadastrar.leads/private/lead-pf',
   '/boss/cadastrar.leads/private/lead-pj',

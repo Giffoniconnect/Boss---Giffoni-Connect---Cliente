@@ -5506,9 +5506,10 @@ app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
       todoistTaskId
     });
 
-    // Criar comentário: "Tarefa criada automaticamente através da Giffoni Connect"
+    // Criar comentário: "Tarefa criada automaticamente através da Giffoni Connect" ou comentário customizado via commentText
     try {
       addLog("info", "TODOIST_COMMENT_STARTED", "Adicionando comentário institucional na tarefa do Todoist.");
+      const commentContent = req.body?.commentText || "Tarefa criada automaticamente através da Giffoni Connect";
       const commentRes = await fetch(`${TODOIST_API_BASE_URL}/comments`, {
         method: "POST",
         headers: {
@@ -5518,7 +5519,7 @@ app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
         },
         body: JSON.stringify({
           task_id: todoistTaskId,
-          content: "Tarefa criada automaticamente através da Giffoni Connect"
+          content: commentContent
         })
       });
       const commentRaw = await commentRes.text();

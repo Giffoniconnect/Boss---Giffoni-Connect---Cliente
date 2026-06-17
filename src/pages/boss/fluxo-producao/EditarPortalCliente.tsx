@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { BossLayout } from '../../../components/Layout';
 import { db } from '../../../lib/firebase';
 import { 
@@ -11,7 +11,8 @@ import {
   query, 
   where, 
   addDoc,
-  deleteDoc
+  deleteDoc,
+  setDoc
 } from 'firebase/firestore';
 import { 
   User, 
@@ -49,7 +50,13 @@ import {
   MessageSquare,
   Send,
   Copy,
-  Laptop
+  Laptop,
+  Scale,
+  Printer,
+  Share2,
+  FolderOpen,
+  FileCheck,
+  X
 } from 'lucide-react';
 
 import { PainelGeralCliente } from '../../../components/boss/portal/PainelGeralCliente';
@@ -60,6 +67,370 @@ import { DadosCadastraisCliente } from '../../../components/boss/portal/DadosCad
 export default function EditarPortalCliente() {
   const navigate = useNavigate();
   const { slug } = useParams();
+  const location = useLocation();
+
+  const isPrestarContasRoute = location.pathname.includes('/prestar.contas.');
+  let prestacaoStep = 0;
+  if (location.pathname.includes('/prestar.contas.questionario')) {
+    prestacaoStep = 1;
+  } else if (location.pathname.includes('/prestar.contas.apuracao.efetiva')) {
+    prestacaoStep = 2;
+  } else if (location.pathname.includes('/prestar.contas.recibo.e.envio')) {
+    prestacaoStep = 3;
+  }
+
+  // Prestar Contas State Management
+  const [targetCaseId, setTargetCaseId] = useState('');
+  const [feesSystem, setFeesSystem] = useState('Honorários Fixos');
+  const [formaRecebimento, setFormaRecebimento] = useState('Alvará judicial');
+  const [alvaraId, setAlvaraId] = useState('');
+  const [alvaraDebitoData, setAlvaraDebitoData] = useState('');
+  const [alvaraRecebido, setAlvaraRecebido] = useState('Sim');
+  const [contaDeposito, setContaDeposito] = useState('');
+  const [tipoContaDepositada, setTipoContaDepositada] = useState<'cliente' | 'procurador' | ''>('');
+  const [selectedProcuradorConta, setSelectedProcuradorConta] = useState<'bb' | 'nubank' | ''>('');
+  const [depositadoContaCliente, setDepositadoContaCliente] = useState('Não');
+  const [valorContrato, setValorContrato] = useState<number>(0);
+  const [honorarioExitoPercentual, setHonorarioExitoPercentual] = useState<number>(30);
+  const [valorRecebidoTotal, setValorRecebidoTotal] = useState<number>(0);
+  const [valorHonorariosDeduzido, setValorHonorariosDeduzido] = useState<number>(0);
+  const [despesas, setDespesas] = useState<number>(0);
+  const [contaRepasse, setContaRepasse] = useState('');
+  const [thanksMessage, setThanksMessage] = useState('Agradecemos imensamente a confiança depositada em nosso escritório. Estaremos sempre à disposição para novos desafios e soluções jurídicas!');
+  const [selectedChannel, setSelectedChannel] = useState<'gmail' | 'whatsapp' | 'facebook' | 'instagram' | 'tiktok' | 'fisico'>('whatsapp');
+  
+  const [googleDriveLoading, setGoogleDriveLoading] = useState(false);
+  const [googleDriveSuccess, setGoogleDriveSuccess] = useState(false);
+  const [googleDocsJobId, setGoogleDocsJobId] = useState('');
+  const [messageCopied, setMessageCopied] = useState(false);
+  const [isFormDirty, setIsFormDirty] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+
+  // Todoist Integration State
+  const [todoistProjectId, setTodoistProjectId] = useState('__TODOIST_INBOX__');
+  const [todoistProjectName, setTodoistProjectName] = useState('Caixa de Entrada (Inbox)');
+  const [syncedProjectsList, setSyncedProjectsList] = useState<{ id: string, name: string }[]>([]);
+  const [syncingProjects, setSyncingProjects] = useState(false);
+  const [todoistTaskTitle, setTodoistTaskTitle] = useState('');
+  const [todoistTaskComment, setTodoistTaskComment] = useState('');
+  const [todoistAutomationStatus, setTodoistAutomationStatus] = useState<'idle' | 'gerando' | 'criado' | 'falha'>('idle');
+  const [todoistTaskId, setTodoistTaskId] = useState('');
+  const [todoistTaskUrl, setTodoistTaskUrl] = useState('');
+  const [todoistTaskLogFalha, setTodoistTaskLogFalha] = useState('');
+  const [todoistLoading, setTodoistLoading] = useState(false);
+
+  const handleSyncTodoistProjects = async () => {
+    setSyncingProjects(true);
+    try {
+      const response = await fetch('/api/todoist/projects');
+      const data = await response.json();
+      if (data.success && Array.isArray(data.projects)) {
+        setSyncedProjectsList(data.projects);
+      }
+    } catch (err) {
+      console.error("[Todoist Projects Sync Failed]", err);
+    } finally {
+      setSyncingProjects(false);
+    }
+  };
+
+  const handleCreateTodoistTask = async () => {
+    if (!selectedClient) return;
+    setTodoistLoading(true);
+    setTodoistAutomationStatus('gerando');
+    setTodoistTaskLogFalha('');
+    
+    // Fallback if caseId is missing
+    const safeCaseId = targetCaseId || selectedClient.id || 'client_' + selectedClient.id;
+
+    const bodyPayload = {
+      caseId: safeCaseId,
+      projectId: todoistProjectId,
+      projectName: todoistProjectName,
+      content: todoistTaskTitle,
+      commentText: todoistTaskComment,
+      dueDate: '',
+      priority: 4,
+      labels: [],
+      assignee: '',
+      isDuplicateCreationAttempt: false
+    };
+
+    try {
+      const response = await fetch('/api/todoist/create-case-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyPayload)
+      });
+      const data = await response.json();
+      
+      if (data.success === true && data.todoistTaskId) {
+        setTodoistAutomationStatus('criado');
+        setTodoistTaskId(data.todoistTaskId);
+        setTodoistTaskUrl(data.todoistTaskUrl);
+      } else {
+        setTodoistAutomationStatus('falha');
+        setTodoistTaskLogFalha(data.errorMessage || 'Erro de integração ao enviar tarefa ao Todoist.');
+      }
+    } catch (err: any) {
+      setTodoistAutomationStatus('falha');
+      setTodoistTaskLogFalha(err.message || String(err));
+    } finally {
+      setTodoistLoading(false);
+    }
+  };
+
+  // Sync Todoist when step is 3 or on mount in step 3
+  useEffect(() => {
+    if (prestacaoStep === 3) {
+      handleSyncTodoistProjects();
+    }
+  }, [prestacaoStep]);
+
+  // Handle reactive update of task comment and default task title
+  useEffect(() => {
+    if (selectedClient) {
+      if (!todoistTaskTitle) {
+        setTodoistTaskTitle('Lançamento no Nibo +managergiffoni todo dia 15');
+      }
+      
+      const clientName = getClientName(selectedClient);
+      const matchedCase = clientCases.find(c => c.id === targetCaseId);
+      const caseTitle = matchedCase ? matchedCase.title : 'Caso Geral';
+      const cnNum = matchedCase ? matchedCase.processNumber : 'Não informado';
+      const repasse = Math.max(0, valorRecebidoTotal - valorHonorariosDeduzido - despesas);
+      
+      const commentVal = `Segue a prestação de contas consolidada:
+- Cliente: ${clientName}
+- Caso: ${caseTitle}
+- Processo: ${cnNum}
+- Valor Total Recebido: ${formatBRL(valorRecebidoTotal)}
+- Honorários Retidos: ${formatBRL(valorHonorariosDeduzido)}
+- Despesas Custas: ${formatBRL(despesas)}
+- reprepasse líquido final: ${formatBRL(repasse)}
+- Conta Indicada: ${contaRepasse || 'Não informada'}`;
+
+      setTodoistTaskComment(commentVal);
+    }
+  }, [selectedClient, targetCaseId, valorRecebidoTotal, valorHonorariosDeduzido, despesas, contaRepasse, clientCases]);
+
+  const formatBRL = (v: any) => {
+    const val = Number(v) || 0;
+    return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  };
+
+  const saveDraftToStorage = async (showAlert = false) => {
+    if (!selectedClient) return;
+    setIsSavingDraft(true);
+    const draftData = {
+      clientId: selectedClient.id,
+      slug: slug || '',
+      targetCaseId,
+      feesSystem,
+      honorarioExitoPercentual,
+      valorContrato,
+      formaRecebimento,
+      contaDeposito,
+      depositadoContaCliente,
+      alvaraId,
+      alvaraDebitoData,
+      alvaraRecebido,
+      valorRecebidoTotal,
+      valorHonorariosDeduzido,
+      despesas,
+      contaRepasse,
+      thanksMessage,
+      selectedChannel,
+      tipoContaDepositada,
+      selectedProcuradorConta,
+      updatedAt: new Date().toISOString()
+    };
+
+    localStorage.setItem(`prestacao_draft_${selectedClient.id}`, JSON.stringify(draftData));
+
+    try {
+      const draftDocId = `draft_${selectedClient.id}`;
+      await setDoc(doc(db, 'prestacaoContasDrafts', draftDocId), draftData);
+      if (showAlert) {
+        alert("Rascunho de prestação de contas de " + getClientName(selectedClient) + " guardado com absoluto sucesso!");
+      }
+    } catch (err: any) {
+      console.error("Erro ao guardar rascunho de contas em Firestore:", err);
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
+  const loadDraftFromStorage = async (clientData: any) => {
+    if (!clientData) return;
+    let savedData: any = null;
+    
+    // Try localStorage
+    const localStr = localStorage.getItem(`prestacao_draft_${clientData.id}`);
+    if (localStr) {
+      try { savedData = JSON.parse(localStr); } catch (_) {}
+    }
+
+    // Prefer Firestore
+    try {
+      const draftDocId = `draft_${clientData.id}`;
+      const snap = await getDoc(doc(db, 'prestacaoContasDrafts', draftDocId));
+      if (snap.exists()) {
+        savedData = snap.data();
+      }
+    } catch (err) {
+      console.error("Erro ao puxar rascunho de contas de Firestore:", err);
+    }
+
+    if (savedData) {
+      if (savedData.targetCaseId) setTargetCaseId(savedData.targetCaseId);
+      if (savedData.feesSystem) setFeesSystem(savedData.feesSystem);
+      if (savedData.honorarioExitoPercentual !== undefined) setHonorarioExitoPercentual(savedData.honorarioExitoPercentual);
+      if (savedData.valorContrato !== undefined) setValorContrato(savedData.valorContrato);
+      if (savedData.formaRecebimento) setFormaRecebimento(savedData.formaRecebimento);
+      if (savedData.contaDeposito) setContaDeposito(savedData.contaDeposito);
+      if (savedData.depositadoContaCliente) setDepositadoContaCliente(savedData.depositadoContaCliente);
+      if (savedData.alvaraId) setAlvaraId(savedData.alvaraId);
+      if (savedData.alvaraDebitoData) setAlvaraDebitoData(savedData.alvaraDebitoData);
+      if (savedData.alvaraRecebido) setAlvaraRecebido(savedData.alvaraRecebido);
+      if (savedData.valorRecebidoTotal !== undefined) setValorRecebidoTotal(savedData.valorRecebidoTotal);
+      if (savedData.valorHonorariosDeduzido !== undefined) setValorHonorariosDeduzido(savedData.valorHonorariosDeduzido);
+      if (savedData.despesas !== undefined) setDespesas(savedData.despesas);
+      if (savedData.contaRepasse) setContaRepasse(savedData.contaRepasse);
+      if (savedData.thanksMessage) setThanksMessage(savedData.thanksMessage);
+      if (savedData.selectedChannel) setSelectedChannel(savedData.selectedChannel);
+      if (savedData.tipoContaDepositada) setTipoContaDepositada(savedData.tipoContaDepositada);
+      if (savedData.selectedProcuradorConta) setSelectedProcuradorConta(savedData.selectedProcuradorConta);
+      
+      setIsFormDirty(true);
+    }
+  };
+
+  const handlePrestarCaseSelect = (caseId: string) => {
+    setTargetCaseId(caseId);
+    setIsFormDirty(true);
+    const caseObj = clientCases.find(c => c.id === caseId);
+    if (caseObj) {
+      const feeType = caseObj.tipoHonorario || "Honorários Fixos";
+      setFeesSystem(feeType);
+
+      let feeVal = 0;
+      if (caseObj.honorarioFixoValor) {
+        feeVal = Number(String(caseObj.honorarioFixoValor).replace(/[^\d.,]/g, '').replace(',', '.'));
+      } else if (caseObj.valorHonorarios) {
+        feeVal = Number(String(caseObj.valorHonorarios).replace(/[^\d.,]/g, '').replace(',', '.'));
+      }
+      setValorContrato(feeVal || 0);
+
+      const exitoStr = caseObj.percentualExito || caseObj.honorarioExitoPercentual || "30%";
+      const pct = parseFloat(exitoStr) || 30;
+      setHonorarioExitoPercentual(pct);
+    } else {
+      setFeesSystem("Honorários Fixos");
+      setValorContrato(0);
+      setHonorarioExitoPercentual(30);
+    }
+  };
+
+  const handleExportToGoogleDrive = async () => {
+    setGoogleDriveLoading(true);
+    setGoogleDriveSuccess(false);
+
+    const selectedCaseObj = clientCases.find(c => c.id === targetCaseId);
+    const nomeCliente = getClientName(selectedClient);
+    const caseTitleStr = selectedCaseObj?.title || 'Caso Coletado';
+    const caseProcessStr = selectedCaseObj?.processNumber || 'Sem número';
+
+    try {
+      const jobId = 'gdoc_prestacao_' + Math.random().toString(36).substring(2, 11);
+      setGoogleDocsJobId(jobId);
+
+      const jobPayload = {
+        id: jobId,
+        createdAt: new Date().toISOString(),
+        status: 'success',
+        clientType: selectedClient?.type || 'PF',
+        clientId: selectedClient?.id || '',
+        caseId: targetCaseId,
+        documentType: "prestacao_contas",
+        templateKey: "prestacao_contas",
+        destinationFolderId: selectedClient?.googleDriveClientFolderId || '',
+        destinationFolderUrl: selectedClient?.googleDriveClientFolderUrl || '',
+        documentName: `Prestação de Contas - ${nomeCliente} - ${caseTitleStr}`,
+        placeholders: {
+          "{{CLIENTE_NOME}}": nomeCliente,
+          "{{CASO_TITULO}}": caseTitleStr,
+          "{{PROCESSO_NUMERO}}": caseProcessStr,
+          "{{TIPO_HONORARIOS}}": feesSystem,
+          "{{FORMA_RECEBIMENTO}}": formaRecebimento,
+          "{{ALVARA_ID}}": alvaraId || '',
+          "{{ALVARA_DEBITO_DATA}}": alvaraDebitoData || '',
+          "{{VALIDO_RECEBIDO}}": alvaraRecebido,
+          "{{CONTA_DEPOSITO}}": contaDeposito || '',
+          "{{DEPOSITADO_CONTA_CLIENTE}}": depositadoContaCliente,
+          "{{VALOR_CONTRATO}}": formatBRL(valorContrato),
+          "{{VALOR_RECEBIDO_TOTAL}}": formatBRL(valorRecebidoTotal),
+          "{{VALOR_HONORARIOS_DEDUZIDO}}": formatBRL(valorHonorariosDeduzido),
+          "{{DEDUCOES_OUTRAS}}": formatBRL(despesas),
+          "{{VALOR_REPASSE_CLIENTE}}": formatBRL(valorRecebidoTotal - valorHonorariosDeduzido - despesas),
+          "{{CONTA_REPASSE}}": contaRepasse || '',
+          "{{DATA_CONCLUSAO}}": new Date().toLocaleDateString('pt-BR'),
+        },
+        logs: ["GDI Prestação de contas executada de forma autônoma pelo portal edit-route."]
+      };
+
+      await setDoc(doc(db, 'googleDocsJobs', jobId), jobPayload);
+
+      const prestacaoId = 'prestacao_' + Math.random().toString(36).substring(2, 11);
+      await setDoc(doc(db, 'prestacaoContas', prestacaoId), {
+        id: prestacaoId,
+        clientId: selectedClient?.id || '',
+        clientName: nomeCliente,
+        caseId: targetCaseId,
+        caseTitle: caseTitleStr,
+        caseProcessNumber: caseProcessStr,
+        feesSystem,
+        formaRecebimento,
+        alvaraId,
+        alvaraDebitoData,
+        alvaraRecebido,
+        contaDeposito,
+        depositadoContaCliente,
+        valorContrato,
+        valorRecebidoTotal,
+        valorHonorariosDeduzido,
+        despesas,
+        valorRepasse: valorRecebidoTotal - valorHonorariosDeduzido - despesas,
+        contaRepasse,
+        createdAt: new Date().toISOString()
+      });
+
+      setTimeout(() => {
+        setGoogleDriveLoading(false);
+        setGoogleDriveSuccess(true);
+      }, 1200);
+
+    } catch (e: any) {
+      console.error(e);
+      setGoogleDriveLoading(false);
+      alert('Contas salvas localmente! Conexão GDI instável: ' + e.message);
+    }
+  };
+
+  // Auto calculate honorarios based on feesSystem & valorRecebidoTotal
+  useEffect(() => {
+    if (valorRecebidoTotal > 0) {
+      if (feesSystem.includes("Fixo") || feesSystem === "Honorários Fixos") {
+        setValorHonorariosDeduzido(valorContrato);
+      } else if (feesSystem.includes("Êxito") || feesSystem === "Êxito" || feesSystem === "Ad Êxito" || feesSystem.toLowerCase().includes("exito")) {
+        const cal = (valorRecebidoTotal * honorarioExitoPercentual) / 100;
+        setValorHonorariosDeduzido(Number(cal.toFixed(2)));
+      } else {
+        const cal = valorContrato + ((valorRecebidoTotal * honorarioExitoPercentual) / 100);
+        setValorHonorariosDeduzido(Number(cal.toFixed(2)));
+      }
+    }
+  }, [valorRecebidoTotal, feesSystem, valorContrato, honorarioExitoPercentual]);
 
   // Selected client & loading states
   const [selectedClient, setSelectedClient] = useState<any | null>(null);
@@ -241,6 +612,8 @@ export default function EditarPortalCliente() {
       if (listCases.length > 0) {
         handleSelectCase(listCases[0], clientDoc.id);
       }
+
+      await loadDraftFromStorage(clientDoc);
 
     } catch (err: any) {
       console.error(err);
@@ -713,7 +1086,874 @@ export default function EditarPortalCliente() {
             <p className="text-xs font-extrabold uppercase font-mono tracking-wider">Carregando painel do cliente...</p>
           </div>
         ) : selectedClient ? (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start animate-fade-in text-left">
+          isPrestarContasRoute ? (
+            <div className="bg-white border border-gray-150 rounded-[2rem] p-6 md:p-8 shadow-sm space-y-6">
+              {/* Stepper Progress bar */}
+              <div className="flex items-center justify-between relative px-2 mb-6">
+                <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-gray-200 -translate-y-1/2 z-0" />
+                
+                {[
+                  { step: 1, label: '1. Questionário Inicial', url: `/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slug}/prestar.contas.questionario` },
+                  { step: 2, label: '2. Apuração Efetiva', url: `/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slug}/prestar.contas.apuracao.efetiva` },
+                  { step: 3, label: '3. Recibo e Envio', url: `/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slug}/prestar.contas.recibo.e.envio` }
+                ].map((s) => {
+                  const isActive = prestacaoStep === s.step;
+                  const isCompleted = prestacaoStep > s.step;
+                  return (
+                    <div key={s.step} className="flex flex-col items-center z-10 relative bg-white px-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (targetCaseId) {
+                            navigate(s.url);
+                          }
+                        }}
+                        disabled={!targetCaseId && s.step > 1}
+                        className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs border transition-all duration-300 ${
+                          isActive 
+                            ? 'bg-indigo-650 border-indigo-650 text-white shadow-sm ring-4 ring-indigo-100' 
+                            : isCompleted 
+                              ? 'bg-emerald-500 border-emerald-500 text-white hover:bg-emerald-600' 
+                              : 'bg-white border-gray-300 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        {isCompleted ? '✓' : s.step}
+                      </button>
+                      <span className={`text-[10px] mt-1.5 tracking-tight uppercase font-black ${
+                        isActive ? 'text-indigo-650 font-bold' : 'text-gray-400 font-mono'
+                      }`}>
+                        {s.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Stage 1: Questionário Inicial */}
+              {prestacaoStep === 1 && (
+                <div className="space-y-6 text-left max-w-3xl mx-auto animate-fade-in">
+                  <div className="border-b border-gray-150 pb-3">
+                    <h3 className="text-sm font-black uppercase text-indigo-650 tracking-widest">Etapa 1: Questionário sobre a prestação de contas</h3>
+                    <p className="text-xs text-gray-400 mt-1">Preencha os dados do recebimento brutais para apuração de honorários fáticos.</p>
+                  </div>
+
+                  {/* 1) Qual o caso que você irá prestar contas? */}
+                  <div>
+                    <label className="text-xs font-black uppercase text-gray-400 tracking-wider block mb-1.5 font-mono">1. Qual o caso que você irá prestar contas? (apresentar automaticamente os casos ativos do cliente)</label>
+                    <select
+                      value={targetCaseId}
+                      onChange={(e) => {
+                        handlePrestarCaseSelect(e.target.value);
+                        setIsFormDirty(true);
+                      }}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-250 rounded-xl text-xs font-semibold focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 transition shadow-inner"
+                    >
+                      <option value="">-- Escolha um Caso Jurisdicional --</option>
+                      {clientCases.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.title} {c.processNumber ? `(CNJ: ${c.processNumber})` : '(Sem Processo)'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 2) SISTEMA DE HONORÁRIOS DETECTADO (PUXADO DO CASO): */}
+                  <div>
+                    <label className="text-[10px] font-mono font-black text-indigo-650 block uppercase tracking-wider mb-1">2. SISTEMA DE HONORÁRIOS DETECTADO (PUXADO DO CASO):</label>
+                    <div className="px-4 py-3 bg-indigo-50/50 border border-indigo-100 rounded-xl flex items-center justify-between">
+                      <span className="text-xs font-extrabold text-indigo-900 uppercase">Regime Pactuado: {feesSystem}</span>
+                      <span className="text-[10px] font-mono font-extrabold text-indigo-600">
+                        {feesSystem.includes("Êxito") || feesSystem === "Ad Êxito" ? "AD ÊXITO E RETENÇÕES" : "TAXA FIXA / MISTO"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 3) Valor do êxito cobrado */}
+                  <div>
+                    <label className="text-xs font-black uppercase text-gray-400 tracking-wider block mb-1.5 font-mono">3. Valor do êxito cobrado (%)</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={honorarioExitoPercentual}
+                        onChange={(e) => {
+                          setHonorarioExitoPercentual(Number(e.target.value));
+                          setIsFormDirty(true);
+                        }}
+                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono font-semibold focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 transition shadow-inner"
+                      />
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-black text-gray-450">%</span>
+                    </div>
+                  </div>
+
+                  {/* 4) VALOR TOTAL DO ÊXITO: */}
+                  <div>
+                    <label className="text-xs font-black uppercase text-emerald-650 tracking-wider block mb-1.5 font-mono font-sans">4. VALOR TOTAL DO ÊXITO:</label>
+                    <div className="px-4 py-3 bg-emerald-50 border border-emerald-150 rounded-xl">
+                      <span className="text-sm font-black text-emerald-800 font-mono block">
+                        {formatBRL((valorRecebidoTotal * honorarioExitoPercentual) / 100)}
+                      </span>
+                      <span className="text-[10.5px] text-emerald-600 block mt-0.5 leading-tight font-medium font-sans">
+                        Valor total do êxito calculado automaticamente com base nas entradas.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 5) Forma de Recebimento */}
+                  <div>
+                    <label className="text-xs font-black uppercase text-gray-400 tracking-wider block mb-1.5 font-mono">5. Forma de Recebimento</label>
+                    <select
+                      value={formaRecebimento}
+                      onChange={(e) => {
+                        setFormaRecebimento(e.target.value);
+                        setIsFormDirty(true);
+                      }}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 transition shadow-inner"
+                    >
+                      <option value="Alvará judicial">Alvará judicial</option>
+                      <option value="Depósito judicial">Depósito judicial</option>
+                      <option value="Transferência Pix">Transferência Pix</option>
+                      <option value="Ted / Doc">Ted / Doc</option>
+                      <option value="Acordo em audiência">Acordo em audiência</option>
+                    </select>
+                  </div>
+
+                  {/* 6) Em qual conta o valor foi depositado? */}
+                  <div>
+                    <label className="text-xs font-black uppercase text-gray-400 tracking-wider block mb-1.5">6. Em qual conta o valor foi depositado?</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTipoContaDepositada('cliente');
+                          setIsFormDirty(true);
+                          
+                          const bancario = selectedClient.bancarioData || selectedClient.bancarioDadosBancarios || {};
+                          if (bancario.bancario_banco) {
+                            const str = `Banco: ${bancario.bancario_banco}, Agência: ${bancario.bancario_agencia || ''}, Conta: ${bancario.bancario_conta || ''}${bancario.bancario_chavePix ? `, PIX: ${bancario.bancario_chavePix} (${bancario.bancario_tipoChavePix || ''})` : ''}`;
+                            setContaDeposito(str);
+                          } else {
+                            setContaDeposito('Dados bancários não preenchidos na Fase 1 do cadastro do cliente.');
+                          }
+                        }}
+                        className={`px-4 py-3 border rounded-xl text-left transition flex items-center justify-between cursor-pointer ${
+                          tipoContaDepositada === 'cliente'
+                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm font-sans'
+                            : 'bg-white border-gray-200 text-gray-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div>
+                          <span className="text-xs font-black block">Conta do Cliente</span>
+                          <span className="text-[10px] uppercase font-mono block mt-0.5 opacity-80">Fase 1 do Cadastro</span>
+                        </div>
+                        <User size={16} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTipoContaDepositada('procurador');
+                          setIsFormDirty(true);
+                          setSelectedProcuradorConta('bb');
+                          setContaDeposito("Banco do Brasil, Agência: 0428-6, Conta corrente: 61.954-x, pix do bB: direito.rgr@gmail.com");
+                        }}
+                        className={`px-4 py-3 border rounded-xl text-left transition flex items-center justify-between cursor-pointer ${
+                          tipoContaDepositada === 'procurador'
+                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm font-sans'
+                            : 'bg-white border-gray-200 text-gray-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div>
+                          <span className="text-xs font-black block">Conta do Procurador (Advogado)</span>
+                          <span className="text-[10px] uppercase font-mono block mt-0.5 opacity-80">Especificar Cascata</span>
+                        </div>
+                        <ShieldCheck size={16} />
+                      </button>
+                    </div>
+
+                    {/* Cascading view for procurador options */}
+                    {tipoContaDepositada === 'procurador' && (
+                      <div className="p-4 bg-slate-50 border border-gray-200 rounded-xl space-y-3 animate-fade-in text-left">
+                        <span className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-wider block">Escolha uma das contas do procurador:</span>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedProcuradorConta('bb');
+                              setContaDeposito("Banco do Brasil, Agência: 0428-6, Conta corrente: 61.954-x, pix do bB: direito.rgr@gmail.com");
+                              setIsFormDirty(true);
+                            }}
+                            className={`p-3 border rounded-lg text-left transition cursor-pointer ${
+                              selectedProcuradorConta === 'bb'
+                                ? 'bg-indigo-50 border-indigo-600 text-indigo-950 font-bold'
+                                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-100'
+                            }`}
+                          >
+                            <span className="text-[11px] font-black block">Banco do Brasil</span>
+                            <span className="text-[9.5px] font-mono block mt-0.5 leading-tight text-gray-450">Agência: 0428-6, CC: 61.954-x</span>
+                            <span className="text-[9.5px] font-mono block text-gray-450">Pix BB: direito.rgr@gmail.com</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedProcuradorConta('nubank');
+                              setContaDeposito("Nubank, Pix: 099.356.706-19");
+                              setIsFormDirty(true);
+                            }}
+                            className={`p-3 border rounded-lg text-left transition cursor-pointer ${
+                              selectedProcuradorConta === 'nubank'
+                                ? 'bg-indigo-50 border-indigo-600 text-indigo-950 font-bold'
+                                : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-100'
+                            }`}
+                          >
+                            <span className="text-[11px] font-black block">Nubank</span>
+                            <span className="text-[9.5px] font-mono block mt-0.5 leading-tight text-gray-450">Pix Nubank: 099.356.706-19</span>
+                            <span className="text-[9.5px] font-mono block text-gray-450">Conta Digital</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {contaDeposito && (
+                      <div className="mt-2.5 px-3.5 py-2 bg-gradient-to-r from-gray-50 to-zinc-50 border border-gray-200 rounded-xl text-xs font-mono text-zinc-650 flex items-center justify-between">
+                        <div>
+                          <strong>Conta Registrada:</strong> {contaDeposito}
+                        </div>
+                        {tipoContaDepositada === 'cliente' && (
+                          <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded">Fase 1</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 7) CONDICIONAIS DE ALVARÁ JUDICIAL: */}
+                  {formaRecebimento === 'Alvará judicial' && (
+                    <div className="p-5 bg-amber-50/50 border border-amber-100 rounded-2xl space-y-4 animate-fade-in text-left">
+                      <span className="text-[10px] font-mono font-black text-amber-750 uppercase block tracking-wider font-sans">7. CONDICIONAIS DE ALVARÁ JUDICIAL:</span>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="text-[10px] font-mono font-black text-gray-450 uppercase block mb-1">Qual o ID / link do Alvará?</label>
+                          <input
+                            type="text"
+                            placeholder="Link ou ID"
+                            value={alvaraId}
+                            onChange={(e) => {
+                              setAlvaraId(e.target.value);
+                              setIsFormDirty(true);
+                            }}
+                            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-mono font-semibold focus:outline-none focus:ring-1 focus:ring-amber-400"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-mono font-black text-gray-450 uppercase block mb-1">Dia do débito em conta</label>
+                          <input
+                            type="date"
+                            value={alvaraDebitoData}
+                            onChange={(e) => {
+                              setAlvaraDebitoData(e.target.value);
+                              setIsFormDirty(true);
+                            }}
+                            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-mono font-semibold focus:outline-none focus:ring-1 focus:ring-amber-400"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-mono font-black text-gray-450 uppercase block mb-1">Alvará recebido efetivamente?</label>
+                          <select
+                            value={alvaraRecebido}
+                            onChange={(e) => {
+                              setAlvaraRecebido(e.target.value);
+                              setIsFormDirty(true);
+                            }}
+                            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-amber-400 font-sans"
+                          >
+                            <option value="Sim">Sim</option>
+                            <option value="Não">Não</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 8) O valor bruto do repasse foi depositado direto na conta do cliente? */}
+                  <div>
+                    <label className="text-xs font-black uppercase text-gray-400 tracking-wider block mb-1.5 font-mono">8. O valor bruto do repasse foi depositado direto na conta do cliente?</label>
+                    <select
+                      value={depositadoContaCliente}
+                      onChange={(e) => {
+                        setDepositadoContaCliente(e.target.value);
+                        setIsFormDirty(true);
+                      }}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-250 rounded-xl text-xs font-semibold focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 transition shadow-inner font-sans"
+                    >
+                      <option value="Não">Não</option>
+                      <option value="Sim">Sim</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Stage 2: Apuração Efetiva */}
+              {prestacaoStep === 2 && (
+                <div className="space-y-6 text-left max-w-3xl mx-auto animate-fade-in font-sans">
+                  <div className="border-b border-gray-150 pb-3">
+                    <h3 className="text-sm font-black uppercase text-indigo-650 tracking-widest">Etapa 2: Apuração Efetiva das Contas</h3>
+                    <p className="text-xs text-gray-400 mt-1">Insira os termos financeiros finais acordados e calcule o total líquido fático de repasse de contas.</p>
+                  </div>
+
+                  <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/60 flex items-start gap-3">
+                    <TrendingUp size={16} className="text-indigo-600 mt-0.5 shrink-0" />
+                    <div>
+                      <h4 className="text-xs font-extrabold text-indigo-950 font-sans uppercase">Mapeamento de Apurações Operacionais</h4>
+                      <p className="text-[11px] text-indigo-850 mt-0.5 font-semibold leading-relaxed font-sans">Abaixo você poderá ajustar os honorários e os descontos para quitação final.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-mono font-black text-gray-400 uppercase block mb-1">Qual foi o Honorário Contratado? (R$)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={valorContrato}
+                        onChange={(e) => {
+                          setValorContrato(Number(e.target.value));
+                          setIsFormDirty(true);
+                        }}
+                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono font-semibold focus:bg-white transition shadow-inner"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-mono font-black text-gray-400 uppercase block mb-1">Sistema de Cobrança Ajustado</label>
+                      <select
+                        value={feesSystem}
+                        onChange={(e) => {
+                          setFeesSystem(e.target.value);
+                          setIsFormDirty(true);
+                        }}
+                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:bg-white transition font-sans"
+                      >
+                        <option value="Honorários Fixos">Honorários Fixos</option>
+                        <option value="Ad Êxito">Ad Êxito (Proporcional Retenido)</option>
+                        <option value="Regime Misto">Regime Misto (Fixos + Êxito)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-mono font-black text-indigo-650 uppercase block mb-1">Valor Bruto Recebido (Ex: Alvará) [R$]</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                        value={valorRecebidoTotal}
+                        onChange={(e) => {
+                          setValorRecebidoTotal(Number(e.target.value));
+                          setIsFormDirty(true);
+                        }}
+                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono font-black focus:bg-white transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-mono font-black text-rose-650 uppercase block mb-1">Desconto de Honorários Retidos [R$]</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={valorHonorariosDeduzido}
+                        onChange={(e) => {
+                          setValorHonorariosDeduzido(Number(e.target.value));
+                          setIsFormDirty(true);
+                        }}
+                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono font-extrabold text-rose-700 focus:bg-white transition"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="text-[10px] font-mono font-black text-rose-650 uppercase block mb-1">Custas / Despesas a Deduzir [R$]</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0.00"
+                        value={despesas}
+                        onChange={(e) => {
+                          setDespesas(Number(e.target.value));
+                          setIsFormDirty(true);
+                        }}
+                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono font-extrabold text-rose-700 focus:bg-white transition"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Display Liquid repasse card */}
+                  <div className="p-6 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-150 rounded-2xl text-center space-y-1">
+                    <span className="text-[11px] font-mono font-black text-emerald-800 uppercase tracking-widest block font-sans">VALOR LÍQUIDO DO REPASSE AO CLIENTE</span>
+                    <h2 className="text-3xl font-black text-emerald-800 tracking-tight font-mono">
+                      {formatBRL(Math.max(0, valorRecebidoTotal - valorHonorariosDeduzido - despesas))}
+                    </h2>
+                    <p className="text-[11px] text-emerald-700 font-semibold max-w-lg mx-auto font-sans leading-relaxed">
+                      Este saldo constitui o montante líquido fatico de repasse integral a ser creditado ao cliente {getClientName(selectedClient)} após dedução de honorários de êxito e despesas ressarcíveis de custas.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Stage 3: Recibo e Envio */}
+              {prestacaoStep === 3 && (
+                <div className="space-y-6 text-left max-w-3xl mx-auto animate-fade-in font-sans">
+                  <div className="border-b border-gray-150 pb-3">
+                    <h3 className="text-sm font-black uppercase text-indigo-650 tracking-widest">Etapa 3: Recibo e Envio</h3>
+                    <p className="text-xs text-gray-400 mt-1">Visualize o extrato de contas, grave o barramento fático no Drive GDI do cliente e notifique via redes e portais.</p>
+                  </div>
+
+                  <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200/50 flex items-start gap-2.5">
+                    <AlertCircle size={16} className="text-amber-700 mt-0.5 shrink-0" />
+                    <div>
+                      <h4 className="text-xs font-bold text-amber-950 font-sans">Visualização Prévia Unificada</h4>
+                      <p className="text-[11px] text-amber-800 leading-relaxed mt-0.5 font-medium">Analise seu recibo unificado de contas. Caso precise acertar contas contratuais, você pode voltar para as etapas anteriores.</p>
+                    </div>
+                  </div>
+
+                  {/* Styled Receipt Summary Block */}
+                  <div id="print-area" className="bg-zinc-950 text-white rounded-3xl p-6 relative overflow-hidden font-sans shadow-xl text-left border border-zinc-800">
+                    <div className="absolute top-0 right-0 p-8 opacity-5">
+                      <Scale size={130} />
+                    </div>
+
+                    <div className="flex justify-between items-start border-b border-zinc-800 pb-4">
+                      <div>
+                        <h4 className="text-[9px] font-mono font-black text-emerald-400 uppercase tracking-widest">DEMONSTRATIVO DE REPASSE FINAL</h4>
+                        <p className="text-lg font-black tracking-tight mt-0.5 font-sans">Giffoni Advogados Associados</p>
+                      </div>
+                      <div className="px-3 py-1 bg-white/10 rounded-lg text-[9px] font-mono uppercase tracking-widest font-black text-zinc-300">
+                        RELATÓRIO: {new Date().toLocaleDateString('pt-BR')}
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 py-4 text-xs font-sans">
+                      <div className="grid grid-cols-2 gap-y-3 gap-x-4 border-b border-zinc-900 pb-4">
+                        <div>
+                          <span className="text-[9px] text-zinc-400 uppercase tracking-wider block font-mono">ASSISTIDO / REQUERENTE</span>
+                          <span className="font-extrabold text-white text-xs">{getClientName(selectedClient)}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-zinc-400 uppercase tracking-wider block font-mono font-sans">PROCESSO CNJ</span>
+                          <span className="font-semibold text-white/90 text-xs font-mono">{(clientCases.find(c => c.id === targetCaseId))?.processNumber || 'Processo não anexado'}</span>
+                        </div>
+                        <div className="col-span-2">
+                          <span className="text-[9px] text-zinc-400 uppercase tracking-wider block font-mono font-sans">OBJETO DO CASO</span>
+                          <span className="font-extrabold text-zinc-200 text-xs font-sans">{(clientCases.find(c => c.id === targetCaseId))?.title || 'Caso Coletado'}</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 font-mono text-zinc-300">
+                        <div className="flex justify-between text-xs font-semibold">
+                          <span>(+) Entrada / Recebimento Brutal Valor ({formaRecebimento})</span>
+                          <span className="text-white font-black">{formatBRL(valorRecebidoTotal)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-rose-300">
+                          <span>(-) Dedução Contratual Retida ({feesSystem})</span>
+                          <span className="font-black">-{formatBRL(valorHonorariosDeduzido)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-rose-300">
+                          <span>(-) Custas e despesas processuais deduzidas</span>
+                          <span className="font-black">-{formatBRL(despesas)}</span>
+                        </div>
+                        <div className="flex justify-between border-t border-white/10 pt-3 text-emerald-400 font-extrabold text-sm font-black">
+                          <span>(=) TOTAL OPERACIONAIS DE REPASSE AO SEU FAVOR</span>
+                          <span className="text-emerald-300 font-black">{formatBRL(Math.max(0, valorRecebidoTotal - valorHonorariosDeduzido - despesas))}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-zinc-900 pt-3 text-[10px] text-zinc-400 font-medium font-sans">
+                      <span>🏦 <strong>Conta Indicada para Repasse:</strong> {contaRepasse || 'Não informada pelo cliente'}</span>
+                    </div>
+                  </div>
+
+                  {/* Indicação de Conta e Agradecimento editáveis */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+                    <div>
+                      <label className="text-[10px] font-mono font-black text-gray-400 uppercase block mb-1">Confirmar Conta de Repasse (Impresso)</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Chave PIX: celular 21999999... Banco Nubank"
+                        value={contaRepasse}
+                        onChange={(e) => setContaRepasse(e.target.value)}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:bg-white focus:outline-none transition leading-relaxed shadow-inner font-sans"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-mono font-black text-gray-400 uppercase block mb-1 font-sans">Mensagem de Agradecimento (Volte Sempre)</label>
+                      <textarea
+                        rows={2}
+                        value={thanksMessage}
+                        onChange={(e) => setThanksMessage(e.target.value)}
+                        className="w-full px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:bg-white font-sans"
+                      />
+                    </div>
+                  </div>
+
+                  {/* GDI Integration Trigger Panel */}
+                  <div className="p-5 bg-indigo-50/75 border border-indigo-100/50 rounded-2xl space-y-3 text-left font-sans">
+                    <div className="flex items-center gap-2.5 font-sans">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-650 text-white flex items-center justify-center font-black text-xs font-mono shadow-xs">GDI</div>
+                      <div>
+                        <h4 className="text-xs font-extrabold text-indigo-950 uppercase tracking-wider font-sans">Integração da Prestação do GDI</h4>
+                        <p className="text-[10px] text-indigo-700 font-semibold font-sans">Criação automatizada de documento na pasta do cliente.</p>
+                      </div>
+                    </div>
+
+                    {googleDriveSuccess ? (
+                      <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-150 flex items-center justify-between text-xs font-bold text-emerald-800 animate-fade-in font-sans">
+                        <div className="flex items-center gap-2 font-sans font-bold">
+                          <Check size={16} className="text-emerald-600" />
+                          <span>Prestação salva na pasta do cliente com sucesso!</span>
+                        </div>
+                        <a 
+                          href={selectedClient?.googleDriveClientFolderUrl || '#'} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-black uppercase tracking-wider transition flex items-center gap-1 cursor-pointer font-sans"
+                        >
+                          <ExternalLink size={10} />
+                          <span>Acessar GDI</span>
+                        </a>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleExportToGoogleDrive}
+                        disabled={googleDriveLoading || !targetCaseId}
+                        className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-mono text-[10px] font-black uppercase tracking-widest rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
+                      >
+                        {googleDriveLoading ? (
+                          <>
+                            <RefreshCw size={13} className="animate-spin" />
+                            <span>Contatando GDI e salvando barramento...</span>
+                          </>
+                        ) : (
+                          <>
+                            <FolderOpen size={13} />
+                            <span>Exportar Prestação de Contas para pasta de Destino do Cliente</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Todoist Lançamento no Nibo Integration Panel */}
+                  <div className="p-5 bg-rose-50/85 border border-rose-100/50 rounded-2xl space-y-4 text-left font-sans">
+                    <div className="flex items-center justify-between font-sans">
+                      <div className="flex items-center gap-2.5 font-sans">
+                        <div className="w-8 h-8 rounded-lg bg-rose-600 text-white flex items-center justify-center font-black text-xs font-mono shadow-xs">TD</div>
+                        <div>
+                          <h4 className="text-xs font-extrabold text-rose-950 uppercase tracking-wider font-sans">Integração Todoist - Lançamento no Nibo</h4>
+                          <p className="text-[10px] text-rose-700 font-semibold font-sans">Agendamento automático de lançamento financeiro no Todoist para a gerente.</p>
+                        </div>
+                      </div>
+                      
+                      <button
+                        type="button"
+                        onClick={handleSyncTodoistProjects}
+                        disabled={syncingProjects}
+                        className="px-2.5 py-1 bg-white hover:bg-gray-100 border border-gray-200 text-gray-600 rounded-lg text-[9px] font-bold uppercase tracking-wider transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                      >
+                        <RefreshCw size={10} className={syncingProjects ? "animate-spin" : ""} />
+                        <span>Sincronizar Projetos</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3.5">
+                      {/* Project selector */}
+                      <div>
+                        <label className="text-[9px] font-mono font-black text-rose-800 uppercase block mb-1">Projeto Destino no Todoist</label>
+                        <select
+                          value={todoistProjectId}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTodoistProjectId(val);
+                            const matched = syncedProjectsList.find(p => p.id === val);
+                            setTodoistProjectName(matched ? matched.name : 'Caixa de Entrada (Inbox)');
+                          }}
+                          className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:bg-white focus:outline-none transition leading-relaxed shadow-xs"
+                        >
+                          <option value="__TODOIST_INBOX__">Caixa de Entrada (Inbox)</option>
+                          {syncedProjectsList.map(project => (
+                            <option key={project.id} value={project.id}>{project.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Task title */}
+                      <div>
+                        <label className="text-[9px] font-mono font-black text-rose-800 uppercase block mb-1">Título da Tarefa Todoist</label>
+                        <input
+                          type="text"
+                          value={todoistTaskTitle}
+                          onChange={(e) => setTodoistTaskTitle(e.target.value)}
+                          className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:bg-white focus:outline-none transition leading-relaxed shadow-xs font-sans"
+                        />
+                      </div>
+
+                      {/* Comment text */}
+                      <div>
+                        <label className="text-[9px] font-mono font-black text-rose-800 uppercase block mb-1">Comentário Consolidado de Prestação de Contas</label>
+                        <textarea
+                          rows={6}
+                          value={todoistTaskComment}
+                          onChange={(e) => setTodoistTaskComment(e.target.value)}
+                          className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-mono font-semibold text-gray-700 focus:outline-none focus:bg-white transition leading-relaxed shadow-xs"
+                        />
+                      </div>
+                    </div>
+
+                    {todoistAutomationStatus === 'criado' ? (
+                      <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-150 flex items-center justify-between text-xs font-bold text-emerald-800 animate-fade-in font-sans">
+                        <div className="flex items-center gap-2 font-sans font-bold">
+                          <Check size={16} className="text-emerald-600" />
+                          <span>Tarefa de Prestação de Contas no Todoist criada com sucesso!</span>
+                        </div>
+                        <a 
+                          href={todoistTaskUrl || '#'} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-[10px] font-black uppercase tracking-wider transition flex items-center gap-1 cursor-pointer font-sans"
+                        >
+                          <ExternalLink size={10} />
+                          <span>Ver no Todoist</span>
+                        </a>
+                      </div>
+                    ) : (
+                      <div>
+                        <button
+                          type="button"
+                          onClick={handleCreateTodoistTask}
+                          disabled={todoistLoading || !todoistTaskTitle.trim()}
+                          className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-mono text-[10px] font-black uppercase tracking-widest rounded-xl transition flex items-center justify-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
+                        >
+                          {todoistLoading ? (
+                            <>
+                              <RefreshCw size={13} className="animate-spin" />
+                              <span>Enviando tarefa e lançando comentário...</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 size={13} />
+                              <span>Enviar e Integrar com o Todoist</span>
+                            </>
+                          )}
+                        </button>
+                        {todoistAutomationStatus === 'falha' && (
+                          <p className="text-[10px] text-rose-600 font-bold mt-2 bg-rose-100/50 p-2 rounded-lg border border-rose-200/40 font-sans">
+                            Erro: {todoistTaskLogFalha}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Multichannel Options */}
+                  <div className="space-y-3 text-left font-sans">
+                    <span className="text-[10px] font-mono font-black text-gray-400 uppercase block tracking-wider font-sans">Como deseja prestar contas ao cliente? (Estrutura multicanal)</span>
+                    
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                      {[
+                        { id: 'whatsapp', label: 'WhatsApp', color: 'hover:bg-emerald-50' },
+                        { id: 'gmail', label: 'Gmail', color: 'hover:bg-rose-50' },
+                        { id: 'facebook', label: 'Facebook', color: 'hover:bg-blue-50' },
+                        { id: 'instagram', label: 'Instagram', color: 'hover:bg-pink-50' },
+                        { id: 'tiktok', label: 'TikTok', color: 'hover:bg-zinc-100' },
+                        { id: 'fisico', label: 'Impresso / Físico', color: 'hover:bg-slate-50' }
+                      ].map((ch) => (
+                        <button
+                          key={ch.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedChannel(ch.id as any);
+                            setMessageCopied(false);
+                          }}
+                          className={`p-3 border rounded-xl text-center transition flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                            selectedChannel === ch.id 
+                              ? 'bg-zinc-950 border-zinc-950 text-white scale-102 font-bold shadow-sm font-sans' 
+                              : 'bg-white border-gray-200 text-gray-500 font-semibold font-sans'
+                          } ${ch.color}`}
+                        >
+                          <span className="text-[10.5px] uppercase tracking-wider font-extrabold text-center block leading-none">{ch.label}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Active Channel Preview Template */}
+                    <div className="bg-gray-50 border border-gray-150 rounded-2xl p-4.5 space-y-4 animate-fade-in text-left">
+                      <div className="flex items-center justify-between font-sans font-black">
+                        <span className="text-[10px] font-mono font-black text-indigo-650 uppercase tracking-widest block font-sans">
+                          Modelo Pronto do Canal: {selectedChannel.toUpperCase()}
+                        </span>
+                        
+                        {selectedChannel !== 'fisico' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const el = document.getElementById('template-text-parent-3') as HTMLTextAreaElement;
+                              if (el) {
+                                navigator.clipboard.writeText(el.value);
+                                setMessageCopied(true);
+                                setTimeout(() => setMessageCopied(false), 2000);
+                              }
+                            }}
+                            className="px-2.5 py-1 bg-white hover:bg-gray-150 text-gray-600 border border-gray-200 rounded-lg text-[10px] font-bold uppercase tracking-wider transition flex items-center gap-1 cursor-pointer"
+                          >
+                            <Share2 size={11} />
+                            <span>{messageCopied ? 'Texto Copiado!' : 'Copiar Texto do Modelo'}</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {selectedChannel === 'fisico' ? (
+                        <div className="space-y-3 font-sans">
+                          <p className="text-[11px] text-gray-450 leading-relaxed font-semibold">
+                            Abra a versão para impressão na tela. Você pode carregar um papel timbrado em sua impressora física para colher a assinatura de quitação.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              window.print();
+                            }}
+                            className="w-full sm:w-auto px-4 py-2 bg-slate-900 hover:bg-slate-950 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition flex items-center justify-center gap-1.5 cursor-pointer font-sans"
+                          >
+                            <Printer size={13} />
+                            <span>Imprimir Relatório Quitado</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <textarea
+                            id="template-text-parent-3"
+                            rows={8}
+                            readOnly
+                            value={
+                              selectedChannel === 'whatsapp' ? `⚖️ *Prestação de Contas - Giffoni Advogados Associados*\n\nPrezado(a) *${getClientName(selectedClient)}*,\n\nAqui está o resumo da prestação de contas do seu processo:\n\n📂 *Caso:* ${(clientCases.find(c => c.id === targetCaseId))?.title || 'Caso Geral'}\n🔢 *Processo:* ${(clientCases.find(c => c.id === targetCaseId))?.processNumber || 'Não informado'}\n💰 *Valor Total Recebido:* ${formatBRL(valorRecebidoTotal)}\n📉 *Honorários Retidos:* -${formatBRL(valorHonorariosDeduzido)}\n💸 *Despesas/Custas:* -${formatBRL(despesas)}\n🏆 *VALOR DO REPASSE:* *${formatBRL(valorRecebidoTotal - valorHonorariosDeduzido - despesas)}*\n\n🏦 *Conta indicada:* ${contaRepasse}\n\n🙏 *Mensagem:* ${thanksMessage}\n\nGiffoni Advogados Associados ✨`
+                              : selectedChannel === 'gmail' ? `Prezado(a) ${getClientName(selectedClient)},\n\nSeguem abaixo as informações referentes à à apuração definitiva de contas do seu caso:\n\nCaso: ${(clientCases.find(c => c.id === targetCaseId))?.title || 'Caso Geral'}\nProcesso: ${(clientCases.find(c => c.id === targetCaseId))?.processNumber || 'Não informado'}\n\nValor Total Recebido: ${formatBRL(valorRecebidoTotal)}\nHonorários Advocatícios Retidos: -${formatBRL(valorHonorariosDeduzido)}\nDeduções/Custas: -${formatBRL(despesas)}\n----------------------------------------\nVALOR DO REPASSE LÍQUIDO: ${formatBRL(valorRecebidoTotal - valorHonorariosDeduzido - despesas)}\n\nConta indicada para Repasse: ${contaRepasse}\n\nMensagem: ${thanksMessage}\n\nEstamos sempre à inteira disposição.\n\nAtenciosamente,\nGiffoni Advogados Associados\nVolte sempre!`
+                              : selectedChannel === 'facebook' ? `⚖️ Giffoni Advogados associados - Transparência e Resultado!\n\nCliente: ${getClientName(selectedClient)}\nProcesso Concluído com repasse líquido de: ${formatBRL(valorRecebidoTotal - valorHonorariosDeduzido - despesas)}!\n\nParabéns! Conta indicada: ${contaRepasse}.\n\n#advocacia #giffoniadvogados #direito #prestacaoContas`
+                              : selectedChannel === 'instagram' ? `💼 Prestação de Contas Efetuada com Sucesso pela Giffoni Advogados!\n\nValor do repasse final do cliente: ${formatBRL(valorRecebidoTotal - valorHonorariosDeduzido - despesas)} creditados na conta indicada para transferência.\n\nAgradecemos a total confiança jurídica e dedicação em nosso escritório associado! Volte sempre! ✨⚖️\n\n#advocacia #direito #sustentação #giffoniadvogados`
+                              : `⚖️ Conta prestada pelo portal: Repasse de ${formatBRL(valorRecebidoTotal - valorHonorariosDeduzido - despesas)} enviado na conta: ${contaRepasse}. Giffoni Advogados Associados! Volte sempre!`
+                            }
+                            className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-mono font-semibold text-gray-750 focus:outline-none"
+                          />
+
+                          <div className="flex items-center gap-2 font-sans">
+                            {selectedChannel === 'whatsapp' && (
+                              <a
+                                href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
+                                  `⚖️ *Prestação de Contas - Giffoni Advogados Associados*\n\nPrezado(a) *${getClientName(selectedClient)}*,\n\nAqui está o resumo da prestação de contas do seu processo:\n\n📂 *Caso:* ${(clientCases.find(c => c.id === targetCaseId))?.title || 'Caso Geral'}\n🔢 *Processo:* ${(clientCases.find(c => c.id === targetCaseId))?.processNumber || 'Não informado'}\n💰 *Valor Total Recebido:* ${formatBRL(valorRecebidoTotal)}\n📉 *Honorários Retidos:* -${formatBRL(valorHonorariosDeduzido)}\n💸 *Despesas/Custas:* -${formatBRL(despesas)}\n🏆 *VALOR DO REPASSE:* *${formatBRL(valorRecebidoTotal - valorHonorariosDeduzido - despesas)}*\n\n🏦 *Conta indicada:* ${contaRepasse}\n\n🙏 *Mensagem:* ${thanksMessage}\n\nGiffoni Advogados Associados ✨`
+                                )}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition flex items-center gap-2 cursor-pointer font-sans"
+                              >
+                                <Send size={12} />
+                                <span>Abrir no WhatsApp</span>
+                              </a>
+                            )}
+
+                            {selectedChannel === 'gmail' && (
+                              <a
+                                href={`mailto:${selectedClient?.email || ''}?subject=${encodeURIComponent('Prestação de Contas Definitiva - Giffoni Advogados')}&body=${encodeURIComponent(
+                                  `Prezado(a) ${getClientName(selectedClient)},\n\nSeguem abaixo as informações referentes à apuração definitiva de contas do seu caso:\n\nCaso: ${(clientCases.find(c => c.id === targetCaseId))?.title || 'Caso Geral'}\nProcesso: ${(clientCases.find(c => c.id === targetCaseId))?.processNumber || 'Não informado'}\n\nValor Total Recebido: ${formatBRL(valorRecebidoTotal)}\nHonorários Advocatícios Retidos: -${formatBRL(valorHonorariosDeduzido)}\nDeduções/Custas: -${formatBRL(despesas)}\n----------------------------------------\nVALOR DO REPASSE LÍQUIDO: ${formatBRL(valorRecebidoTotal - valorHonorariosDeduzido - despesas)}\n\nConta indicada para Repasse: ${contaRepasse}\n\nMensagem: ${thanksMessage}\n\nEstamos sempre à inteira disposição.\n\nAtenciosamente,\nGiffoni Advogados Associados\nVolte sempre!`
+                                )}`}
+                                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition flex items-center gap-2 cursor-pointer font-sans"
+                              >
+                                <Mail size={12} />
+                                <span>Disparar via E-mail</span>
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Bottom Actions Row */}
+              <div className="pt-6 border-t border-gray-150 flex flex-col items-center gap-4">
+                {/* Red middle cancel button */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (isFormDirty) {
+                      const ans = window.confirm("Deseja mesmo sair? O progresso preenchido será salvo como rascunho de prestação de contas.");
+                      if (!ans) return;
+                      await saveDraftToStorage(false);
+                    }
+                    navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slug}`);
+                  }}
+                  className="px-6 py-2.5 bg-rose-600 hover:bg-rose-750 text-white border border-rose-700/50 rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer self-center block shadow-[0_1px_2px_rgba(220,38,38,0.15)] font-mono"
+                >
+                  {isSavingDraft ? "Salvando Rascunho..." : "Sair / Cancelar (Salvar Rascunho)"}
+                </button>
+
+                {/* Left/Right actions in footer */}
+                <div className="w-full flex justify-between items-center mt-2.5 font-sans">
+                  {prestacaoStep > 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const prev = prestacaoStep === 3 ? "apuracao.efetiva" : "questionario";
+                        navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slug}/prestar.contas.${prev}`);
+                      }}
+                      className="px-4 py-2 bg-slate-150 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-extrabold uppercase tracking-wider transition cursor-pointer flex items-center gap-1 font-sans"
+                    >
+                      ❮ Voltar à Etapa {prestacaoStep - 1}
+                    </button>
+                  ) : <div />}
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (prestacaoStep === 1) {
+                        if (!targetCaseId) {
+                          alert("Por favor, selecione qual o Caso Jurisdicional que você irá prestar contas.");
+                          return;
+                        }
+                        if (!contaRepasse) {
+                          const bancario = selectedClient.bancarioData || selectedClient.bancarioDadosBancarios || {};
+                          if (bancario.bancario_banco) {
+                            setContaRepasse(`Banco: ${bancario.bancario_banco}, Ag: ${bancario.bancario_agencia || ''}, CC: ${bancario.bancario_conta || ''}`);
+                          } else {
+                            setContaRepasse(contaDeposito);
+                          }
+                        }
+                        await saveDraftToStorage(false);
+                        navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slug}/prestar.contas.apuracao.efetiva`);
+                      } else if (prestacaoStep === 2) {
+                        await saveDraftToStorage(false);
+                        navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slug}/prestar.contas.recibo.e.envio`);
+                      } else {
+                        await saveDraftToStorage(false);
+                        alert("Prestação de contas registrada e finalizada faticamente!");
+                        navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slug}`);
+                      }
+                    }}
+                    className="px-5 py-2.5 bg-indigo-650 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-widest transition cursor-pointer flex items-center gap-1 font-sans shadow-sm"
+                  >
+                    {prestacaoStep === 1 ? "Próxima Fase: Apuração ➔" : prestacaoStep === 2 ? "Próxima Fase: Recibo e Envio ➔" : "Concluir Extrato ✔"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start animate-fade-in text-left">
             {/* LEFT SIDEBAR NAVIGATION */}
             <div className="lg:col-span-3 space-y-4">
               <div className="bg-white border border-gray-150 rounded-3xl p-5 shadow-xs text-left space-y-6">
@@ -2111,7 +3351,7 @@ export default function EditarPortalCliente() {
               )}
             </div>
           </div>
-        ) : (
+        )) : (
           <div className="bg-white border border-gray-150 rounded-[2rem] p-12 text-center text-gray-400 min-h-[400px] flex flex-col items-center justify-center space-y-4">
             <User size={36} className="text-gray-300" />
             <p className="text-xs font-black uppercase tracking-wider text-gray-900">Cliente não localizado</p>

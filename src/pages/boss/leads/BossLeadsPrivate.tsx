@@ -47,7 +47,9 @@ import {
   Globe,
   Award,
   Store,
-  HelpCircle
+  HelpCircle,
+  FileCheck,
+  FileText
 } from 'lucide-react';
 
 const FUNNEL_STATUSES = [
@@ -808,8 +810,8 @@ export default function BossLeadsPrivate() {
               return (
                 <div key={idx} className={`bg-white border border-gray-150 rounded-2xl p-3.5 shadow-3xs flex flex-col justify-between gap-2.5 group transition-all duration-300 ${srcItem.hoverBorder} hover:shadow-2xs`}>
                   <div className="flex justify-between items-start gap-1">
-                    <div className="min-w-0">
-                      <span className={`block text-[8.5px] uppercase tracking-wider font-extrabold truncate ${srcItem.colorClass} mb-0.5`} title={srcItem.label}>
+                    <div className="flex-1">
+                      <span className={`block text-[9px] uppercase tracking-wider font-extrabold whitespace-normal break-words leading-tight ${srcItem.colorClass} mb-1`} title={srcItem.label}>
                         {srcItem.label}
                       </span>
                       <div className="flex items-baseline gap-1">
@@ -1497,6 +1499,15 @@ export default function BossLeadsPrivate() {
                   ))}
                 </select>
               )}
+
+              <button
+                type="button"
+                onClick={() => navigate('/boss/leads/private/dashboard/repositorio-excluidos')}
+                className="px-3 py-1.5 bg-rose-50 border border-rose-150 hover:bg-rose-600 hover:text-white text-[10.5px] font-black uppercase text-rose-650 rounded-xl transition duration-150 flex items-center gap-1.5 cursor-pointer shadow-3xs"
+              >
+                <XOctagon size={11.5} />
+                <span>Lixeira ({excludedLeads.length})</span>
+              </button>
             </div>
           </div>
 
@@ -1519,14 +1530,9 @@ export default function BossLeadsPrivate() {
             <button
               type="button"
               onClick={() => {
-                setActiveTab('excluidos');
-                setSelectedLeadForDetail(null);
+                navigate('/boss/leads/private/dashboard/repositorio-excluidos');
               }}
-              className={`pb-2 px-4 text-xs font-black uppercase tracking-wider transition-all duration-205 border-b-2 cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'excluidos'
-                  ? 'border-rose-650 text-rose-650'
-                  : 'border-transparent text-gray-400 hover:text-rose-650'
-              }`}
+              className={`pb-2 px-4 text-xs font-black uppercase tracking-wider transition-all duration-205 border-b-2 cursor-pointer flex items-center gap-1.5 border-transparent text-gray-400 hover:text-rose-650`}
             >
               <XOctagon size={13} />
               <span>Repositório de Excluídos ({filteredExcludedLeads.length})</span>
@@ -1700,6 +1706,159 @@ export default function BossLeadsPrivate() {
               </table>
             </div>
           )}
+        </div>
+
+        {/* NEW CARD: ANÁLISE DE VIABILIDADE */}
+        <div className="bg-white border border-gray-150 rounded-[2rem] p-6 shadow-3xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-5">
+            <div>
+              <h2 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                <span className="p-1.5 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-650 flex items-center justify-center shrink-0">
+                  <FileCheck size={18} />
+                </span>
+                Análise de Viabilidade
+              </h2>
+              <p className="text-[11px] text-gray-400 font-bold mt-0.5">Diagnósticos jurídicos, viabilidade técnica e probabilidade de êxito dos leads</p>
+            </div>
+          </div>
+
+          {/* Viability statistics counters */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-2xl flex flex-col justify-between">
+              <span className="text-[9px] uppercase tracking-wider font-extrabold text-emerald-700">Viabilidade Alta</span>
+              <div className="flex items-baseline gap-1.5 mt-2">
+                <span className="text-2xl font-black text-emerald-800">
+                  {leads.filter(l => l.analiseViabilidade?.viabilidadeTecnica === 'Alta').length}
+                </span>
+                <span className="text-[10px] text-emerald-600 font-bold">leads</span>
+              </div>
+            </div>
+
+            <div className="bg-amber-50/50 border border-amber-100 p-4 rounded-2xl flex flex-col justify-between">
+              <span className="text-[9px] uppercase tracking-wider font-extrabold text-amber-700">Viabilidade Média</span>
+              <div className="flex items-baseline gap-1.5 mt-2">
+                <span className="text-2xl font-black text-amber-800">
+                  {leads.filter(l => l.analiseViabilidade?.viabilidadeTecnica === 'Média').length}
+                </span>
+                <span className="text-[10px] text-amber-600 font-bold">leads</span>
+              </div>
+            </div>
+
+            <div className="bg-rose-50/50 border border-rose-100 p-4 rounded-2xl flex flex-col justify-between">
+              <span className="text-[9px] uppercase tracking-wider font-extrabold text-rose-750">Viabilidade Baixa</span>
+              <div className="flex items-baseline gap-1.5 mt-2">
+                <span className="text-2xl font-black text-rose-800">
+                  {leads.filter(l => l.analiseViabilidade?.viabilidadeTecnica === 'Baixa').length}
+                </span>
+                <span className="text-[10px] text-rose-600 font-bold">leads</span>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex flex-col justify-between">
+              <span className="text-[9px] uppercase tracking-wider font-extrabold text-gray-500">Viabilidade Pendente</span>
+              <div className="flex items-baseline gap-1.5 mt-2">
+                <span className="text-2xl font-black text-gray-700">
+                  {leads.filter(l => !l.analiseViabilidade).length}
+                </span>
+                <span className="text-[10px] text-gray-500 font-bold font-mono">não realizada</span>
+              </div>
+            </div>
+          </div>
+
+          {/* List of Leads with viability details or options */}
+          <div className="overflow-x-auto pt-2">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-gray-150 text-[10px] font-black uppercase tracking-wider text-gray-400 h-9 bg-slate-50/50 rounded-lg">
+                  <th className="px-3 py-2">Lead</th>
+                  <th className="px-3 py-2">Classificação</th>
+                  <th className="px-3 py-2">Probabilidade Êxito</th>
+                  <th className="px-3 py-2">Parecer Técnico</th>
+                  <th className="px-3 py-2 text-right">Ação</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 text-[11.5px] font-medium leading-normal">
+                {leads.slice(0, 10).map((lead) => {
+                  const isPf = lead.tipoPessoa === 'PF';
+                  const name = isPf 
+                    ? (lead.pessoaFisica?.nomeCompleto || 'Sem nome')
+                    : (lead.pessoaJuridica?.razaoSocial || 'Sem razão social');
+
+                  const viability = lead.analiseViabilidade?.viabilidadeTecnica;
+                  const prob = lead.analiseViabilidade?.probabilidadeExito || '—';
+                  const parecer = lead.analiseViabilidade?.parecerViabilidade || 'Nenhum parecer técnico registrado ainda.';
+
+                  return (
+                    <tr key={lead.id} className="hover:bg-slate-50/60 transition duration-150">
+                      <td className="px-3 py-2.5 font-bold text-gray-800">
+                        <div className="flex flex-col">
+                          <span>{name}</span>
+                          <span className="text-[9.5px] text-gray-400 font-bold uppercase tracking-wider mt-0.5">
+                            {isPf ? 'Pessoa Física' : 'Pessoa Jurídica'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        {viability === 'Alta' ? (
+                          <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-250">
+                            Alta
+                          </span>
+                        ) : viability === 'Média' ? (
+                          <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase bg-amber-50 text-amber-700 border border-amber-250">
+                            Média
+                          </span>
+                        ) : viability === 'Baixa' ? (
+                          <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase bg-rose-50 text-rose-750 border border-rose-250">
+                            Baixa
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full text-[9px] font-black uppercase bg-slate-50 text-gray-500 border border-slate-200">
+                            Pendente
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 font-bold text-gray-700">
+                        {prob}
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-500 max-w-xs truncate" title={parecer}>
+                        {parecer}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedLeadForDetail(lead);
+                              setIsEditing(false);
+                            }}
+                            className="p-1 px-2.5 bg-slate-50 border border-gray-200 hover:border-indigo-200 text-slate-700 hover:text-indigo-650 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                          >
+                            <Eye size={12} />
+                            Ficha
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/boss/cadastrar.leads/private/etapa02/${lead.id}/viabilidade`)}
+                            className="p-1 px-2.5 bg-indigo-50 border border-indigo-150 hover:bg-indigo-600 hover:text-white text-indigo-700 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                          >
+                            <FileText size={12} />
+                            Analisar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {leads.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-gray-400 italic">
+                      Nenhum lead disponível para análise de viabilidade.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* DETAILS / QUICK DIAGNOSTIC VIEW AND EDIT SLIDE-OVER OR MODAL PANEL */}

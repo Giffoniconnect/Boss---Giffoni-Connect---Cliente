@@ -412,6 +412,63 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["leadId", "title", "date", "time"]
+    },
+    "PrestacaoContas": {
+      "title": "Prestação de Contas",
+      "description": "Submitted accountability statement for a client's process.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "caseId": { "type": "string" },
+        "caseTitle": { "type": "string" },
+        "caseProcessNumber": { "type": "string" },
+        "feesSystem": { "type": "string" },
+        "formaRecebimento": { "type": "string" },
+        "alvaraId": { "type": "string" },
+        "alvaraDebitoData": { "type": "string" },
+        "alvaraRecebido": { "type": "string" },
+        "contaDeposito": { "type": "string" },
+        "depositadoContaCliente": { "type": "string" },
+        "valorContrato": { "type": "number" },
+        "valorRecebidoTotal": { "type": "number" },
+        "valorHonorariosDeduzido": { "type": "number" },
+        "despesas": { "type": "number" },
+        "valorRepasse": { "type": "number" },
+        "contaRepasse": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clientId", "caseId", "valorRecebidoTotal", "valorRepasse", "createdAt"]
+    },
+    "PrestacaoContasDraft": {
+      "title": "Rascunho de Prestação de Contas",
+      "description": "Draft of accountability statement saved by admin.",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string" },
+        "slug": { "type": "string" },
+        "targetCaseId": { "type": "string" },
+        "feesSystem": { "type": "string" },
+        "honorarioExitoPercentual": { "type": "number" },
+        "valorContrato": { "type": "number" },
+        "formaRecebimento": { "type": "string" },
+        "contaDeposito": { "type": "string" },
+        "depositadoContaCliente": { "type": "string" },
+        "alvaraId": { "type": "string" },
+        "alvaraDebitoData": { "type": "string" },
+        "alvaraRecebido": { "type": "string" },
+        "valorRecebidoTotal": { "type": "number" },
+        "valorHonorariosDeduzido": { "type": "number" },
+        "despesas": { "type": "number" },
+        "contaRepasse": { "type": "string" },
+        "thanksMessage": { "type": "string" },
+        "selectedChannel": { "type": "string" },
+        "tipoContaDepositada": { "type": "string" },
+        "selectedProcuradorConta": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientId", "updatedAt"]
     }
   },
   "firestore": {
@@ -486,6 +543,14 @@
     "leadsMeetings": {
       "schema": "LeadMeeting",
       "description": "Meetings and appointments scheduled for marketing leads."
+    },
+    "prestacaoContas": {
+      "schema": "PrestacaoContas",
+      "description": "Submitted accountability statements."
+    },
+    "prestacaoContasDrafts": {
+      "schema": "PrestacaoContasDraft",
+      "description": "Draft storage for accountability statements."
     }
   }
 }

@@ -169,6 +169,7 @@ const DocumentosAuditoriaPJ = React.lazy(() => import('./pages/boss/fluxo-produc
 
 // Leads / Marketing step views
 const BossLeadsPrivate = React.lazy(() => import('./pages/boss/leads/BossLeadsPrivate'));
+const RepositorioLeadsExcluidos = React.lazy(() => import('./pages/boss/leads/RepositorioLeadsExcluidos'));
 const CadastrarLeadsPrivate = React.lazy(() => import('./pages/boss/leads/CadastrarLeadsPrivate'));
 const CadastrarLeadsPF = React.lazy(() => import('./pages/boss/leads/CadastrarLeadsPF'));
 const CadastrarLeadsPJ = React.lazy(() => import('./pages/boss/leads/CadastrarLeadsPJ'));
@@ -261,6 +262,9 @@ const bossRouter = createBrowserRouter(
       <Route path="/boss-giffoni-clientes/portal-cliente-preview/:clientId" element={<SafeRoute children={<PortalClientePreview />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/portal-cliente" element={<SafeRoute children={<PortalClienteFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug" element={<SafeRoute children={<EditarPortalCliente />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug/prestar.contas.questionario" element={<SafeRoute children={<EditarPortalCliente />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug/prestar.contas.apuracao.efetiva" element={<SafeRoute children={<EditarPortalCliente />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug/prestar.contas.recibo.e.envio" element={<SafeRoute children={<EditarPortalCliente />} />} />
       <Route path="/portal-cliente-giffoni/:slug/login" element={<SafeRoute children={<ClientLogin />} />} />
       <Route path="/portal-cliente-giffoni/:slug/casos" element={<SafeRoute children={<ClientCasosList />} />} />
       <Route path="/portal-cliente-giffoni/:slug/casos/:caseId" element={<SafeRoute children={<ClientCaseDetail />} />} />
@@ -321,6 +325,7 @@ const bossRouter = createBrowserRouter(
           GRUPO 7 — LEADS / MARKETING:
          ======================================================== */}
       <Route path="/boss/leads/private/dashboard" element={<SafeRoute children={<BossLeadsPrivate />} />} />
+      <Route path="/boss/leads/private/dashboard/repositorio-excluidos" element={<SafeRoute children={<RepositorioLeadsExcluidos />} />} />
       <Route path="/boss/CRM/private/dashboard" element={<SafeRoute children={<CrmDashboard />} />} />
       <Route path="/boss/cadastrar.leads/private" element={<SafeRoute children={<CadastrarLeadsPrivate />} />} />
       <Route path="/boss/cadastrar.leads/private/lead-pf" element={<SafeRoute children={<CadastrarLeadsPF />} />} />
