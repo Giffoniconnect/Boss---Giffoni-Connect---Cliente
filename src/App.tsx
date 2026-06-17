@@ -150,6 +150,7 @@ const ArquivamentoFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/A
 const Recadastramento = React.lazy(() => import('./pages/boss/fluxo-producao/Recadastramento'));
 const PortalClienteFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/PortalClienteFluxo'));
 const EditarPortalCliente = React.lazy(() => import('./pages/boss/fluxo-producao/EditarPortalCliente'));
+const DigitalizacaoUpload = React.lazy(() => import('./pages/boss/fluxo-producao/DigitalizacaoUpload'));
 
 // Coleta / Documents step views (FASE 3 - Lazy Imports)
 const CardIniciarColeta = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/CardIniciarColeta'));
@@ -173,6 +174,9 @@ const CadastrarLeadsPF = React.lazy(() => import('./pages/boss/leads/CadastrarLe
 const CadastrarLeadsPJ = React.lazy(() => import('./pages/boss/leads/CadastrarLeadsPJ'));
 const CadastrarLeadsEtapa2 = React.lazy(() => import('./pages/boss/leads/CadastrarLeadsEtapa2'));
 const RegulamentarViabilidade = React.lazy(() => import('./pages/boss/leads/RegulamentarViabilidade'));
+const ManagingPrivateLeads = React.lazy(() => import('./pages/boss/leads/ManagingPrivateLeads'));
+const MarcarMeet = React.lazy(() => import('./pages/boss/leads/MarcarMeet'));
+const RemarcarMeet = React.lazy(() => import('./pages/boss/leads/RemarcarMeet'));
 
 // Client Portal Pages
 const ClientLogin = React.lazy(() => import('./pages/client/Login'));
@@ -283,6 +287,7 @@ const bossRouter = createBrowserRouter(
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/dados-caso" element={<SafeRoute children={<DadosCaso />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacoes-informacoes" element={<SafeRoute children={<SolicitacoesInformacoes />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacoes-provas" element={<SafeRoute children={<SolicitacoesProvas />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/digitalizacao-upload" element={<SafeRoute children={<DigitalizacaoUpload />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/card-iniciar-coleta-obrigatoria" element={<SafeRoute children={<CardIniciarColeta />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/financeiro" element={<SafeRoute children={<FinanceiroFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/edrp" element={<SafeRoute children={<EDRPFluxo />} />} />
@@ -321,6 +326,9 @@ const bossRouter = createBrowserRouter(
       <Route path="/boss/cadastrar.leads/private/lead-pj" element={<SafeRoute children={<CadastrarLeadsPJ />} />} />
       <Route path="/boss/cadastrar.leads/private/etapa02/:leadId" element={<SafeRoute children={<CadastrarLeadsEtapa2 />} />} />
       <Route path="/boss/cadastrar.leads/private/etapa02/:leadId/viabilidade" element={<SafeRoute children={<RegulamentarViabilidade />} />} />
+      <Route path="/boss/leads/private/dashboard/managing.private.leads" element={<SafeRoute children={<ManagingPrivateLeads />} />} />
+      <Route path="/boss/leads/private/dashboard/managing.private.leads/marcar.meet" element={<SafeRoute children={<MarcarMeet />} />} />
+      <Route path="/boss/leads/private/dashboard/managing.private.leads/remarcar.meet" element={<SafeRoute children={<RemarcarMeet />} />} />
 
       {/* Rota de Fallback 404 Detect (FASE 12) */}
       <Route path="*" element={<NotFoundRoute />} />

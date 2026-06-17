@@ -1718,10 +1718,14 @@ export default function FinanceiroFluxo() {
             className="hidden"
             onChange={(e) => {
               if (e.target.files && e.target.files.length > 0) {
-                const name = e.target.files[0].name;
+                const file = e.target.files[0];
+                const originalName = file.name;
                 const size =
-                  (e.target.files[0].size / 1024 / 1024).toFixed(2) + " MB";
-                addWizardFile(field, name, size);
+                  (file.size / 1024 / 1024).toFixed(2) + " MB";
+                const lastDotIndex = originalName.lastIndexOf('.');
+                const extension = lastDotIndex !== -1 ? originalName.substring(lastDotIndex) : '';
+                const finalName = `Doc. 03 - Contrato de Honorários - ${clientName || 'Cliente'}${extension}`;
+                addWizardFile(field, finalName, size);
               }
             }}
           />

@@ -200,6 +200,21 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
       return isOk ? 'complete' : 'uninitiated';
     }
 
+    if (stepId === 'digitalizacao-upload') {
+      if (!caseObj) return 'uninitiated';
+      const wiz = caseObj.solicitacoesProvasWizardState || {};
+      const isComplete = !!(wiz.digitalizacao_upload_completed || caseObj.digitalizacaoUploadCompleted);
+      if (isComplete) return 'complete';
+      const isStarted = !!(
+        wiz.contratoFiles?.length ||
+        wiz.procuracaoFiles?.length ||
+        wiz.declaracaoFiles?.length ||
+        wiz.documentosMinimosFiles?.length ||
+        wiz.documentosNecessidadeFiles?.length
+      );
+      return isStarted ? 'incomplete' : 'uninitiated';
+    }
+
     if (stepId === 'solicitacoes-informacoes') {
       if (!caseObj) return 'uninitiated';
       if (caseObj.solicitarInfoComp === false) {

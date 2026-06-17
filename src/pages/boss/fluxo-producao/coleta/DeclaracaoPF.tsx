@@ -35,6 +35,7 @@ export default function DeclaracaoPF() {
     success,
     clientName,
     client,
+    driveFolderId,
     caseObj,
     wizardState,
     saveWizardStateUpdate,
@@ -481,21 +482,73 @@ export default function DeclaracaoPF() {
     }
   };
 
+  const [uploading, setUploading] = React.useState(false);
+
   const FileUploadBox = ({ field }: { field: string }) => {
     const files = wizardState[field] || [];
     return (
       <div className="space-y-2 mt-1">
         <label className="group flex flex-col items-center justify-center border border-dashed border-gray-300 hover:border-indigo-500 rounded-xl p-3 bg-gray-50/50 hover:bg-gray-50 transition-all cursor-pointer">
-          <UploadCloud className="text-gray-400 group-hover:text-indigo-600 mb-1" size={20} />
-          <span className="text-[11px] font-bold text-gray-750">Anexar Declaração de Hipossuficiência (PDF)</span>
+          {uploading ? (
+            <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mb-1"></div>
+          ) : (
+            <UploadCloud className="text-gray-400 group-hover:text-indigo-600 mb-1" size={20} />
+          )}
+          <span className="text-[11px] font-bold text-gray-750">
+            {uploading ? "Enviando para o Google Drive..." : "Anexar Declaração de Hipossuficiência (PDF/Imagem)"}
+          </span>
           <input 
             type="file" 
             className="hidden" 
-            onChange={(e) => {
+            disabled={uploading}
+            onChange={async (e) => {
               if (e.target.files && e.target.files.length > 0) {
-                const name = e.target.files[0].name;
-                const size = (e.target.files[0].size / 1024 / 1024).toFixed(2) + ' MB';
-                addWizardFile(field, name, size);
+                const file = e.target.files[0];
+                const originalName = file.name;
+                const sizeStr = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+                const lastDotIndex = originalName.lastIndexOf('.');
+                const extension = lastDotIndex !== -1 ? originalName.substring(lastDotIndex) : '';
+                const finalName = `Doc. 02 - Declaração de Pobreza - ${clientName || 'Cliente'}${extension}`;
+
+                setUploading(true);
+                setError(null);
+                try {
+                  const base64Promise = new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = err => reject(err);
+                  });
+                  const base64 = await base64Promise;
+
+                  const targetFolder = (driveFolderId || '1YUl0Z3hbptBaXfdp0vSnvGTQv0ChsPMs').trim();
+
+                  const response = await fetch('/api/google-docs/upload-file', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      folderId: targetFolder,
+                      fileName: finalName,
+                      fileBase64: base64,
+                      mimeType: file.type,
+                      googleAccessToken: googleAccessToken || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken')
+                    })
+                  });
+
+                  const data = await response.json();
+                  if (!response.ok || !data.success) {
+                    throw new Error(data.errorMessage || 'Falha ao enviar arquivo para o Google Drive');
+                  }
+
+                  await addWizardFile(field, finalName, sizeStr);
+                  setSuccess("Declaração enviada e salva no Google Drive: " + finalName);
+                } catch (err: any) {
+                  setError(err.message || 'Erro ao realizar upload da declaração');
+                } finally {
+                  setUploading(false);
+                }
               }
             }}
           />
@@ -776,7 +829,7 @@ export default function DeclaracaoPF() {
 
                       {wizardState.q2_3 && wizardState.q2_3.length > 0 && (
                         <div className="space-y-1 animate-in fade-in duration-300">
-                          <p className="text-xs font-extrabold text-gray-800">2.4 O cliente assinou a declaração?</p>
+                          <p className="text-xs font-extrabold text-gray-800">2.4 Você recebeu a declaração do cliente?</p>
                           <div className="flex gap-4 mt-1.5">
                             {['sim', 'nao'].map(o => (
                               <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
@@ -784,7 +837,13 @@ export default function DeclaracaoPF() {
                                   type="radio" 
                                   name="q2_4" 
                                   checked={wizardState.q2_4 === o} 
-                                  onChange={() => saveWizardStateUpdate({ q2_4: o })} 
+                                  onChange={() => {
+                                    saveWizardStateUpdate({ 
+                                      q2_4: o,
+                                      q2_como_d_recebida: '',
+                                      q2_deseja_digitalizar_d: ''
+                                    });
+                                  }} 
                                 />
                                 <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                               </label>
@@ -793,61 +852,70 @@ export default function DeclaracaoPF() {
                         </div>
                       )}
 
-                      {wizardState.q2_3 && wizardState.q2_3.length > 0 && (wizardState.q2_4 === 'sim' || wizardState.q2_4 === 'nao') && (
-                        <div className="space-y-1 animate-in fade-in duration-300">
-                          <p className="text-xs font-extrabold text-gray-805">2.5 Você solicitou a digitalização da declaração?</p>
-                          <div className="flex gap-4 mt-1.5">
-                            {['sim', 'nao'].map(o => (
-                              <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
-                                <input 
-                                  type="radio" 
-                                  name="q2_5" 
-                                  checked={wizardState.q2_5 === o} 
-                                  onChange={() => saveWizardStateUpdate({ q2_5: o })} 
-                                />
-                                <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {wizardState.q2_3 && wizardState.q2_3.length > 0 && (wizardState.q2_4 === 'sim' || wizardState.q2_4 === 'nao') && (wizardState.q2_5 === 'sim' || wizardState.q2_5 === 'nao') && (
-                        <div className="space-y-1 animate-in fade-in duration-300">
-                          <p className="text-xs font-extrabold text-gray-805">2.6 Você recebeu a declaração assinada digitalizada?</p>
-                          <div className="flex gap-4 mt-1.5">
-                            {['sim', 'nao'].map(o => (
-                              <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
-                                <input 
-                                  type="radio" 
-                                  name="q2_6" 
-                                  checked={wizardState.q2_6 === o} 
-                                  onChange={() => saveWizardStateUpdate({ q2_6: o })} 
-                                />
-                                <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {wizardState.q2_3 && wizardState.q2_3.length > 0 && (wizardState.q2_4 === 'sim' || wizardState.q2_4 === 'nao') && (wizardState.q2_5 === 'sim' || wizardState.q2_5 === 'nao') && (wizardState.q2_6 === 'sim' || wizardState.q2_6 === 'nao') && (
+                      {wizardState.q2_3 && wizardState.q2_3.length > 0 && wizardState.q2_4 === 'sim' && (
                         <div className="space-y-2 animate-in fade-in duration-300">
-                          <p className="text-xs font-extrabold text-gray-805">2.7 Deseja anexar a declaração digitalizada de hipossuficiência agora?</p>
+                          <p className="text-xs font-extrabold text-gray-800">2.5 Como a Declaração de Pobreza foi recebida?</p>
+                          <div className="flex flex-wrap gap-4 mt-1.5">
+                            {[
+                              { val: 'fisico', label: 'Físico' },
+                              { val: 'whatsapp', label: 'What’s App' },
+                              { val: 'email', label: 'Email' },
+                              { val: 'outro', label: 'Outro' }
+                            ].map(opt => (
+                              <label key={opt.val} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
+                                <input 
+                                  type="radio" 
+                                  name="q2_como_d_recebida" 
+                                  checked={wizardState.q2_como_d_recebida === opt.val} 
+                                  onChange={() => {
+                                    saveWizardStateUpdate({ 
+                                      q2_como_d_recebida: opt.val,
+                                      q2_deseja_digitalizar_d: ''
+                                    });
+                                  }} 
+                                />
+                                <span>{opt.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {wizardState.q2_3 && wizardState.q2_3.length > 0 && wizardState.q2_4 === 'sim' && wizardState.q2_como_d_recebida === 'fisico' && (
+                        <div className="space-y-2 animate-in fade-in duration-300">
+                          <p className="text-xs font-extrabold text-gray-800">2.6 Deseja digitalizar a declaração do cliente agora?</p>
                           <div className="flex gap-4 mt-1.5">
                             {['sim', 'nao'].map(o => (
                               <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
                                 <input 
                                   type="radio" 
-                                  name="q2_7" 
-                                  checked={wizardState.q2_7 === o} 
-                                  onChange={() => saveWizardStateUpdate({ q2_7: o })} 
+                                  name="q2_deseja_digitalizar_d" 
+                                  checked={wizardState.q2_deseja_digitalizar_d === o} 
+                                  onChange={() => saveWizardStateUpdate({ q2_deseja_digitalizar_d: o })} 
                                 />
                                 <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                               </label>
                             ))}
                           </div>
-                          {wizardState.q2_7 === 'sim' && <FileUploadBox field="declaracaoFiles" />}
+                        </div>
+                      )}
+
+                      {/* If yes to digitalize physically OR if received digitally */}
+                      {wizardState.q2_3 && wizardState.q2_3.length > 0 && wizardState.q2_4 === 'sim' && (
+                        (wizardState.q2_como_d_recebida === 'fisico' && wizardState.q2_deseja_digitalizar_d === 'sim') ||
+                        (wizardState.q2_como_d_recebida && wizardState.q2_como_d_recebida !== 'fisico')
+                      ) && (
+                        <div className="space-y-2 animate-in fade-in duration-300 bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100">
+                          <p className="text-xs font-black text-indigo-950 uppercase tracking-wider block">Anexar e upload automático para Google Drive</p>
+                          <FileUploadBox field="declaracaoFiles" />
+                        </div>
+                      )}
+
+                      {/* If no to digitalize physically */}
+                      {wizardState.q2_3 && wizardState.q2_3.length > 0 && wizardState.q2_4 === 'sim' && wizardState.q2_como_d_recebida === 'fisico' && wizardState.q2_deseja_digitalizar_d === 'nao' && (
+                        <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-300">
+                          <span className="text-base">⚠️</span>
+                          <span>Colocado automaticamente como pendência no setor de digitalização.</span>
                         </div>
                       )}
                     </>

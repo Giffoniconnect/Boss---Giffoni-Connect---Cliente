@@ -348,7 +348,7 @@ export default function ComplianceFluxo() {
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[10px] bg-indigo-50 border border-indigo-200 text-indigo-700 font-extrabold px-2.5 py-1 rounded-lg uppercase tracking-wider font-mono">
-                  Etapa 12 — Compliance Geral
+                  Etapa 11 — Compliance Geral
                 </span>
                 <span className="text-[10px] bg-slate-100 text-slate-700 font-semibold px-2 py-1 rounded-lg font-mono">
                   Caso: #{caseId?.slice(0, 8)}

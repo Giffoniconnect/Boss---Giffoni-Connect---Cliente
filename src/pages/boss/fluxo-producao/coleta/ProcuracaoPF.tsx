@@ -907,21 +907,73 @@ export default function ProcuracaoPF() {
     }
   };
 
+  const [uploading, setUploading] = React.useState(false);
+
   const FileUploadBox = ({ field }: { field: string }) => {
     const files = wizardState[field] || [];
     return (
       <div className="space-y-2 mt-1">
         <label className="group flex flex-col items-center justify-center border border-dashed border-gray-300 hover:border-indigo-500 rounded-xl p-3 bg-gray-50/50 hover:bg-gray-50 transition-all cursor-pointer">
-          <UploadCloud className="text-gray-400 group-hover:text-indigo-600 mb-1" size={20} />
-          <span className="text-[11px] font-bold text-gray-700">Anexar Procuração Assinada (PDF)</span>
+          {uploading ? (
+            <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mb-1"></div>
+          ) : (
+            <UploadCloud className="text-gray-400 group-hover:text-indigo-600 mb-1" size={20} />
+          )}
+          <span className="text-[11px] font-bold text-gray-700">
+            {uploading ? "Enviando arquivo ao Google Drive..." : "Anexar arquivo de Procuração (PDF/Imagem)"}
+          </span>
           <input 
             type="file" 
             className="hidden" 
-            onChange={(e) => {
+            disabled={uploading}
+            onChange={async (e) => {
               if (e.target.files && e.target.files.length > 0) {
-                const name = e.target.files[0].name;
-                const size = (e.target.files[0].size / 1024 / 1024).toFixed(2) + ' MB';
-                addWizardFile(field, name, size);
+                const file = e.target.files[0];
+                const originalName = file.name;
+                const sizeStr = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+                const lastDotIndex = originalName.lastIndexOf('.');
+                const extension = lastDotIndex !== -1 ? originalName.substring(lastDotIndex) : '';
+                const finalName = `Doc. 01 - Procuração - ${clientName || 'Cliente'}${extension}`;
+
+                setUploading(true);
+                setError(null);
+                try {
+                  const base64Promise = new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = err => reject(err);
+                  });
+                  const base64 = await base64Promise;
+
+                  const targetFolder = (driveFolderId || '1YUl0Z3hbptBaXfdp0vSnvGTQv0ChsPMs').trim();
+
+                  const response = await fetch('/api/google-docs/upload-file', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      folderId: targetFolder,
+                      fileName: finalName,
+                      fileBase64: base64,
+                      mimeType: file.type,
+                      googleAccessToken: googleAccessToken || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken')
+                    })
+                  });
+
+                  const data = await response.json();
+                  if (!response.ok || !data.success) {
+                    throw new Error(data.errorMessage || 'Falha ao enviar arquivo para o Google Drive');
+                  }
+
+                  await addWizardFile(field, finalName, sizeStr);
+                  setSuccess("Procuração enviada e salva com sucesso no Google Drive: " + finalName);
+                } catch (err: any) {
+                  setError(err.message || 'Erro ao realizar upload do arquivo');
+                } finally {
+                  setUploading(false);
+                }
               }
             }}
           />
@@ -1405,7 +1457,7 @@ export default function ProcuracaoPF() {
 
                   {wizardState.q1_2 && wizardState.q1_2.length > 0 && (
                     <div className="space-y-1 animate-in fade-in duration-300">
-                      <p className="text-xs font-extrabold text-gray-800">1.3 O cliente assinou a procuração?</p>
+                      <p className="text-xs font-extrabold text-gray-800">1.3 Você recebeu a procuração do cliente?</p>
                       <div className="flex gap-4 mt-1.5">
                         {['sim', 'nao'].map(o => (
                           <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-750">
@@ -1413,7 +1465,14 @@ export default function ProcuracaoPF() {
                               type="radio" 
                               name="q1_3" 
                               checked={wizardState.q1_3 === o} 
-                              onChange={() => saveWizardStateUpdate({ q1_3: o })} 
+                              onChange={() => {
+                                // Also clear downstream states to avoid stale UI state
+                                saveWizardStateUpdate({ 
+                                  q1_3: o,
+                                  q1_como_p_recebida: '',
+                                  q1_deseja_digitalizar_p: ''
+                                });
+                              }} 
                             />
                             <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                           </label>
@@ -1422,61 +1481,70 @@ export default function ProcuracaoPF() {
                     </div>
                   )}
 
-                  {wizardState.q1_2 && wizardState.q1_2.length > 0 && (wizardState.q1_3 === 'sim' || wizardState.q1_3 === 'nao') && (
-                    <div className="space-y-1 animate-in fade-in duration-300">
-                      <p className="text-xs font-extrabold text-gray-800">1.4 Você solicitou a digitalização da procuração?</p>
-                      <div className="flex gap-4 mt-1.5">
-                        {['sim', 'nao'].map(o => (
-                          <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-750">
-                            <input 
-                              type="radio" 
-                              name="q1_4" 
-                              checked={wizardState.q1_4 === o} 
-                              onChange={() => saveWizardStateUpdate({ q1_4: o })} 
-                            />
-                            <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {wizardState.q1_2 && wizardState.q1_2.length > 0 && (wizardState.q1_3 === 'sim' || wizardState.q1_3 === 'nao') && (wizardState.q1_4 === 'sim' || wizardState.q1_4 === 'nao') && (
-                    <div className="space-y-1 animate-in fade-in duration-300">
-                      <p className="text-xs font-extrabold text-gray-800">1.5 Você recebeu a procuração digitalizada?</p>
-                      <div className="flex gap-4 mt-1.5">
-                        {['sim', 'nao'].map(o => (
-                          <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-750">
-                            <input 
-                              type="radio" 
-                              name="q1_5" 
-                              checked={wizardState.q1_5 === o} 
-                              onChange={() => saveWizardStateUpdate({ q1_5: o })} 
-                            />
-                            <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {wizardState.q1_2 && wizardState.q1_2.length > 0 && (wizardState.q1_3 === 'sim' || wizardState.q1_3 === 'nao') && (wizardState.q1_4 === 'sim' || wizardState.q1_4 === 'nao') && (wizardState.q1_5 === 'sim' || wizardState.q1_5 === 'nao') && (
+                  {wizardState.q1_2 && wizardState.q1_2.length > 0 && wizardState.q1_3 === 'sim' && (
                     <div className="space-y-2 animate-in fade-in duration-300">
-                      <p className="text-xs font-extrabold text-gray-800">1.6 Deseja anexar a procuração digitalizada no sistema agora?</p>
+                      <p className="text-xs font-extrabold text-gray-800">1.4 Como a Procuração foi recebida?</p>
+                      <div className="flex flex-wrap gap-4 mt-1.5">
+                        {[
+                          { val: 'fisico', label: 'Físico' },
+                          { val: 'whatsapp', label: 'What’s App' },
+                          { val: 'email', label: 'Email' },
+                          { val: 'outro', label: 'Outro' }
+                        ].map(opt => (
+                          <label key={opt.val} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-750">
+                            <input 
+                              type="radio" 
+                              name="q1_como_p_recebida" 
+                              checked={wizardState.q1_como_p_recebida === opt.val} 
+                              onChange={() => {
+                                saveWizardStateUpdate({ 
+                                  q1_como_p_recebida: opt.val,
+                                  q1_deseja_digitalizar_p: ''
+                                });
+                              }} 
+                            />
+                            <span>{opt.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {wizardState.q1_2 && wizardState.q1_2.length > 0 && wizardState.q1_3 === 'sim' && wizardState.q1_como_p_recebida === 'fisico' && (
+                    <div className="space-y-2 animate-in fade-in duration-300">
+                      <p className="text-xs font-extrabold text-gray-800">1.5 Deseja digitalizar a procuração do cliente agora?</p>
                       <div className="flex gap-4 mt-1.5">
                         {['sim', 'nao'].map(o => (
                           <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-750">
                             <input 
                               type="radio" 
-                              name="q1_6" 
-                              checked={wizardState.q1_6 === o} 
-                              onChange={() => saveWizardStateUpdate({ q1_6: o })} 
+                              name="q1_deseja_digitalizar_p" 
+                              checked={wizardState.q1_deseja_digitalizar_p === o} 
+                              onChange={() => saveWizardStateUpdate({ q1_deseja_digitalizar_p: o })} 
                             />
                             <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                           </label>
                         ))}
                       </div>
-                      {wizardState.q1_6 === 'sim' && <FileUploadBox field="procuracaoFiles" />}
+                    </div>
+                  )}
+
+                  {/* If yes to digitalize physically OR if received digitally (whatsapp, email, outro) */}
+                  {wizardState.q1_2 && wizardState.q1_2.length > 0 && wizardState.q1_3 === 'sim' && (
+                    (wizardState.q1_como_p_recebida === 'fisico' && wizardState.q1_deseja_digitalizar_p === 'sim') ||
+                    (wizardState.q1_como_p_recebida && wizardState.q1_como_p_recebida !== 'fisico')
+                  ) && (
+                    <div className="space-y-2 animate-in fade-in duration-300 bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100">
+                      <p className="text-xs font-black text-indigo-950 uppercase tracking-wider block">Anexar e upload automático para Google Drive</p>
+                      <FileUploadBox field="procuracaoFiles" />
+                    </div>
+                  )}
+
+                  {/* If no to digitalize physically */}
+                  {wizardState.q1_2 && wizardState.q1_2.length > 0 && wizardState.q1_3 === 'sim' && wizardState.q1_como_p_recebida === 'fisico' && wizardState.q1_deseja_digitalizar_p === 'nao' && (
+                    <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-300">
+                      <span className="text-base">⚠️</span>
+                      <span>Colocado automaticamente como pendência no setor de digitalização.</span>
                     </div>
                   )}
 

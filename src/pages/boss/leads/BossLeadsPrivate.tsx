@@ -75,6 +75,7 @@ export default function BossLeadsPrivate() {
   const [formType, setFormType] = useState<'PF' | 'PJ'>('PF');
   const [selectedLeadForDetail, setSelectedLeadForDetail] = useState<any | null>(null);
   const [isEditing, setIsEditing] = useState<boolean>(false);
+  const [leadIdToDelete, setLeadIdToDelete] = useState<string | null>(null);
 
   // Form Fields State
   const [leadFormData, setLeadFormData] = useState<any>({
@@ -376,18 +377,25 @@ export default function BossLeadsPrivate() {
   };
 
   // Delete Lead
-  const handleDeleteLead = async (leadId: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir permanentemente este Lead?')) return;
+  const handleDeleteLead = (leadId: string) => {
+    setLeadIdToDelete(leadId);
+  };
+
+  // Confirm delete handler
+  const confirmDeleteLead = async () => {
+    if (!leadIdToDelete) return;
     try {
-      await deleteDoc(doc(db, 'marketingLeads', leadId));
-      const filtered = leads.filter(l => l.id !== leadId);
+      await deleteDoc(doc(db, 'marketingLeads', leadIdToDelete));
+      const filtered = leads.filter(l => l.id !== leadIdToDelete);
       setLeads(filtered);
       syncLocalBackup(filtered);
-      setSuccess('Lead excluído permanentemente.');
+      setSuccess('Lead excluído permanentemente do sistema!');
       setSelectedLeadForDetail(null);
+      setLeadIdToDelete(null);
     } catch (e: any) {
       console.error(e);
       setError('Falha ao excluir lead: ' + (e.message || e));
+      setLeadIdToDelete(null);
     }
   };
 
@@ -454,6 +462,14 @@ export default function BossLeadsPrivate() {
               </p>
             </div>
             <div className="flex gap-2.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => navigate('/boss/leads/private/dashboard/managing.private.leads')}
+                className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-4 py-2.5 rounded-xl shadow-4xs transition hover:bg-indigo-150 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Sliders size={14} />
+                <span>Gestão de Leads Particulares</span>
+              </button>
               <button
                 type="button"
                 onClick={() => navigate('/boss/cadastrar.leads/private')}
@@ -2041,6 +2057,49 @@ export default function BossLeadsPrivate() {
                     )}
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* EXCLUSION CONFIRMATION MODAL */}
+        {leadIdToDelete && (
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in animate-duration-200" id="delete-lead-modal">
+            <div className="bg-white rounded-[2rem] border-2 border-rose-100 p-6 max-w-sm w-full shadow-2xl space-y-5 animate-scale-in">
+              <div className="flex items-center gap-3">
+                <span className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-150 text-rose-650 flex items-center justify-center shrink-0">
+                  <AlertCircle size={22} className="text-rose-600 animate-pulse" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-black text-gray-900 uppercase tracking-wide">Excluir Lead definitvo</h3>
+                  <span className="text-[10px] uppercase font-mono tracking-widest text-slate-400 font-extrabold">Aviso de Segurança</span>
+                </div>
+              </div>
+
+              <div className="space-y-3 font-semibold text-xxs leading-relaxed text-gray-700">
+                <p className="bg-rose-550/10 border border-rose-100 p-3.5 rounded-2xl text-rose-900 font-black text-center text-xs">
+                  “Deseja Excluir definitivamente o LEAD do sistema”
+                </p>
+                <p className="text-gray-500 font-medium">
+                  Esta exclusão excluirá o LEAD apenas da Firestore do Portal BOSS. Caso clique em <strong className="text-rose-600">Confirmo</strong> abaixo, aquele LEAD será de imediato e definitivamente excluído.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setLeadIdToDelete(null)}
+                  className="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-gray-700 text-[10px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer text-center"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteLead}
+                  className="py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl shadow-4xs shadow-rose-250 transition-colors cursor-pointer text-center font-bold"
+                >
+                  Confirmo
+                </button>
               </div>
             </div>
           </div>

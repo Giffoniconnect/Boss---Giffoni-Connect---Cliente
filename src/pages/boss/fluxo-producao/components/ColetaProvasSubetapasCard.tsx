@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
-import { FileText, Coins, CheckSquare, FolderOpen, ShieldCheck, Check } from 'lucide-react';
+import { FileText, Coins, CheckSquare, FolderOpen, ShieldCheck, Check, ClipboardCheck } from 'lucide-react';
 
 interface ColetaProvasSubetapasCardProps {
   caseId?: string;
@@ -73,6 +73,13 @@ export default function ColetaProvasSubetapasCard({
 
   const steps = [
     {
+      key: 'inicio',
+      label: 'Abertura de Protocolo Documental',
+      path: `${basePath}/card-iniciar-coleta-obrigatoria`,
+      icon: ClipboardCheck,
+      completed: true,
+    },
+    {
       key: 'procuracao',
       label: 'Criar Procuração',
       path: `${basePath}/solicitacao-procuracao-${suffix}`,
@@ -121,7 +128,7 @@ export default function ColetaProvasSubetapasCard({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         {steps.map((step, index) => {
           const IconComponent = step.icon;
           const isCurrent = currentStep === step.key;
@@ -146,9 +153,9 @@ export default function ColetaProvasSubetapasCard({
                 <div className={`p-2 rounded-xl shrink-0 ${isCurrent ? 'bg-indigo-500 text-white' : step.completed ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-150 text-gray-500'}`}>
                   <IconComponent size={15} />
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 font-sans">
                   <span className={`text-[10px] uppercase font-black tracking-widest block font-mono ${isCurrent ? 'text-indigo-200' : 'text-gray-400'}`}>
-                    0{index + 1} / 05
+                    0{index + 1} / 06
                   </span>
                   <span className="text-[12px] font-extrabold tracking-tight block leading-tight mt-0.5">
                     {step.label}

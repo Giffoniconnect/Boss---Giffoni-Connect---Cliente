@@ -148,6 +148,7 @@ export default function FluxoHome() {
       case 'dados-caso': return FileText;
       case 'solicitacoes-informacoes': return FileQuestion;
       case 'solicitacoes-provas': return CheckSquare;
+      case 'digitalizacao-upload': return Cloud;
       case 'financeiro': return CreditCard;
       case 'edrp': return Lock;
       case 'revisao': return Eye;
@@ -167,6 +168,7 @@ export default function FluxoHome() {
       case 'dados-caso': return 'bg-amber-50 text-amber-600';
       case 'solicitacoes-informacoes': return 'bg-teal-50 text-teal-600';
       case 'solicitacoes-provas': return 'bg-emerald-50 text-emerald-600';
+      case 'digitalizacao-upload': return 'bg-sky-50 text-sky-600 border border-sky-100';
       case 'financeiro': return 'bg-rose-50 text-rose-600';
       case 'edrp': return 'bg-red-50 text-red-600';
       case 'revisao': return 'bg-cyan-50 text-cyan-600';
@@ -205,6 +207,9 @@ export default function FluxoHome() {
         break;
       case 'solicitacoes-provas':
         navigate(flowRoutes.solicitacoesProvas(caseIdParam));
+        break;
+      case 'digitalizacao-upload':
+        navigate(flowRoutes.digitalizacaoUpload(caseIdParam));
         break;
       case 'solicitacoes-informacoes':
         navigate(flowRoutes.solicitacoesInformacoes(caseIdParam));
@@ -414,7 +419,7 @@ export default function FluxoHome() {
                             </div>
                             <div>
                               <span className="text-[8.5px] font-mono font-black text-gray-400 block uppercase h-3">
-                                ETAPA 12
+                                ETAPA {String(step.order).padStart(2, '0')}
                               </span>
                               <h5 className="font-black text-gray-900 text-xs mt-0.5 tracking-tight">
                                 Compliance & Requisitos

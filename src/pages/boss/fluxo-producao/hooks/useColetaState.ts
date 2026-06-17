@@ -132,12 +132,29 @@ export function useColetaState() {
   }, [caseId]);
 
   // Save State and sync in Firestore
+  const removeUndefinedKeys = (obj: any): any => {
+    if (obj === null || typeof obj !== 'object') {
+      return obj;
+    }
+    if (Array.isArray(obj)) {
+      return obj.map(removeUndefinedKeys);
+    }
+    const clean: any = {};
+    for (const key of Object.keys(obj)) {
+      if (obj[key] !== undefined) {
+        clean[key] = removeUndefinedKeys(obj[key]);
+      }
+    }
+    return clean;
+  };
+
   const saveWizardStateUpdate = async (updates: Partial<typeof wizardState>) => {
     setWizardState((prev: any) => {
       const next = { ...prev, ...updates };
+      const cleanedNext = removeUndefinedKeys(next);
       // Async update caseObj and firestore
       updateDoc(doc(db, 'cases', caseId!), { 
-        solicitacoesProvasWizardState: next,
+        solicitacoesProvasWizardState: cleanedNext,
         procuracaoStatus: next.q1_3 === 'sim' ? 'criada' : 'pendente',
         desejaRecolherCustas: next.q2_1 === 'nao',
         declaracaoPobrezaStatus: next.q2_4 === 'sim' ? 'criada' : 'pendente',

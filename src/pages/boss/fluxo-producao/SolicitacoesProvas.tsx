@@ -64,6 +64,9 @@ export default function SolicitacoesProvas() {
     step1_completed: false, step2_completed: false, step3_completed: false, step4_completed: false, step5_completed: false, step6_completed: false
   });
 
+  const [currentUploadingField, setCurrentUploadingField] = useState<string | null>(null);
+  const [uploadErrorMsg, setUploadErrorMsg] = useState<string | null>(null);
+
   // Adding Custom Evidence Form
   const [formTitle, setFormTitle] = useState('');
   const [formDesc, setFormDesc] = useState('');
@@ -371,24 +374,101 @@ export default function SolicitacoesProvas() {
   // FileUpload drop/click simulator component
   const FileUploadBox = ({ field, allowedTypes = ['PDF'] }: { field: string, allowedTypes?: string[] }) => {
     const files = wizardState[field] || [];
+    const isUploading = currentUploadingField === field;
+
     return (
       <div className="space-y-2 mt-1">
-        <label className="group flex flex-col items-center justify-center border-2 border-dashed border-gray-200 hover:border-indigo-500 rounded-xl p-3 bg-gray-50/50 hover:bg-gray-50 transition-all cursor-pointer">
-          <UploadCloud className="text-gray-400 group-hover:text-indigo-600 mb-1" size={20} />
-          <span className="text-[11px] font-bold text-gray-700">Clique para simular anexo</span>
-          <span className="text-[9px] text-gray-400">Suporta {allowedTypes.join(', ')}</span>
+        <label className="group flex flex-col items-center justify-center border border-dashed border-gray-300 hover:border-indigo-500 rounded-xl p-3 bg-gray-50/50 hover:bg-gray-50 transition-all cursor-pointer">
+          {isUploading ? (
+            <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mb-1"></div>
+          ) : (
+            <UploadCloud className="text-gray-400 group-hover:text-indigo-600 mb-1" size={20} />
+          )}
+          <span className="text-[11px] font-bold text-gray-750">
+            {isUploading ? "Uploading to Google Drive..." : "Clique para anexar arquivo real ou simular"}
+          </span>
+          <span className="text-[9px] text-gray-400">O arquivo será enviado e renomeado automaticamente</span>
           <input 
             type="file" 
             className="hidden" 
-            onChange={(e) => {
+            disabled={isUploading}
+            onChange={async (e) => {
               if (e.target.files && e.target.files.length > 0) {
-                const name = e.target.files[0].name;
-                const size = (e.target.files[0].size / 1024 / 1024).toFixed(2) + ' MB';
-                addWizardFile(field, name, size);
+                const file = e.target.files[0];
+                const originalName = file.name;
+                const sizeStr = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+                const lastDotIndex = originalName.lastIndexOf('.');
+                const extension = lastDotIndex !== -1 ? originalName.substring(lastDotIndex) : '';
+
+                let finalName = originalName;
+                const cleanedClientName = clientName ? clientName.trim() : 'Cliente';
+
+                if (field === 'procuracaoFiles') {
+                  finalName = `Doc. 01 - Procuração - ${cleanedClientName}${extension}`;
+                } else if (field === 'declaracaoFiles') {
+                  finalName = `Doc. 02 - Declaração de Pobreza - ${cleanedClientName}${extension}`;
+                } else if (field === 'contratoFiles') {
+                  finalName = `Doc. $$$ - Contrato de Honorários - ${cleanedClientName}${extension}`;
+                } else if (field === 'rgFiles') {
+                  finalName = `Doc. 03 - RG - ${cleanedClientName}${extension}`;
+                } else if (field === 'cpfFiles') {
+                  finalName = `Doc. 04 - CPF - ${cleanedClientName}${extension}`;
+                } else if (field === 'residenciaFiles') {
+                  finalName = `Doc. 04 - Comprovante de Residência - ${cleanedClientName}${extension}`;
+                }
+
+                setCurrentUploadingField(field);
+                setUploadErrorMsg(null);
+
+                try {
+                  const base64Promise = new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = err => reject(err);
+                  });
+                  const base64 = await base64Promise;
+
+                  const targetFolder = (driveFolderId || '1YUl0Z3hbptBaXfdp0vSnvGTQv0ChsPMs').trim();
+                  const token = localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken');
+
+                  const response = await fetch('/api/google-docs/upload-file', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      folderId: targetFolder,
+                      fileName: finalName,
+                      fileBase64: base64,
+                      mimeType: file.type,
+                      googleAccessToken: token
+                    })
+                  });
+
+                  const data = await response.json();
+                  if (!response.ok || !data.success) {
+                    throw new Error(data.errorMessage || 'Falha ao enviar arquivo para o Google Drive');
+                  }
+
+                  await addWizardFile(field, finalName, sizeStr);
+                } catch (err: any) {
+                  console.error("Erro no upload do arquivo:", err);
+                  setUploadErrorMsg(err.message || "Erro no upload do arquivo");
+                  // Fallback to local simulate to support offline preview smoothly
+                  await addWizardFile(field, finalName, sizeStr);
+                } finally {
+                  setCurrentUploadingField(null);
+                }
               }
             }}
           />
         </label>
+        {uploadErrorMsg && (
+          <div className="text-[10px] text-rose-600 font-bold bg-rose-50 p-2 rounded-lg border border-rose-100">
+            {uploadErrorMsg}
+          </div>
+        )}
         {files.length > 0 && (
           <div className="space-y-1">
             {files.map((f: any, idx: number) => (

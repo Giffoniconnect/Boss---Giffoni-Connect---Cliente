@@ -176,7 +176,7 @@ export default function ArquivamentoFluxo() {
         <div className="bg-gray-50/70 border border-gray-100 rounded-[1.5rem] p-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="space-y-1">
-              <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase">Etapa 13</span>
+              <span className="text-[10px] font-black tracking-wider text-slate-400 uppercase">Etapa 15</span>
               <h4 className="text-base font-black text-gray-900 leading-tight">
                 {resolvedClientName}
               </h4>

@@ -104,6 +104,8 @@ export default function ContratoHonorariosPF() {
   // Active step manager
   const [activeSubStep, setActiveSubStep] = useState<1 | 2 | 3>(1);
 
+  const [uploading, setUploading] = React.useState(false);
+
   // Sync service types from caseObj
   useEffect(() => {
     if (caseObj) {
@@ -684,16 +686,67 @@ export default function ContratoHonorariosPF() {
     return (
       <div className="space-y-2 mt-1">
         <label className="group flex flex-col items-center justify-center border border-dashed border-gray-300 hover:border-indigo-500 rounded-xl p-3 bg-gray-50/50 hover:bg-gray-50 transition-all cursor-pointer">
-          <UploadCloud className="text-gray-400 group-hover:text-indigo-600 mb-1" size={20} />
-          <span className="text-[11px] font-bold text-gray-750">Anexar Contrato de Honorários Assinado (PDF)</span>
+          {uploading ? (
+            <div className="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mb-1"></div>
+          ) : (
+            <UploadCloud className="text-gray-400 group-hover:text-indigo-600 mb-1" size={20} />
+          )}
+          <span className="text-[11px] font-bold text-gray-750">
+            {uploading ? "Enviando para o Google Drive..." : "Anexar Contrato de Honorários Assinado (PDF/Imagem)"}
+          </span>
           <input 
             type="file" 
             className="hidden" 
-            onChange={(e) => {
+            disabled={uploading}
+            onChange={async (e) => {
               if (e.target.files && e.target.files.length > 0) {
-                const name = e.target.files[0].name;
-                const size = (e.target.files[0].size / 1024 / 1024).toFixed(2) + ' MB';
-                addWizardFile(field, name, size);
+                const file = e.target.files[0];
+                const originalName = file.name;
+                const sizeStr = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+                const lastDotIndex = originalName.lastIndexOf('.');
+                const extension = lastDotIndex !== -1 ? originalName.substring(lastDotIndex) : '';
+                const finalName = `Doc. $$$ - Contrato de Honorários - ${clientName || 'Cliente'}${extension}`;
+
+                setUploading(true);
+                setError(null);
+                try {
+                  const base64Promise = new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = err => reject(err);
+                  });
+                  const base64 = await base64Promise;
+
+                  const targetFolder = (client?.googleDriveClientFolderId || client?.gdriveFolderId || localCaseObj?.gdriveFolderId || '1YUl0Z3hbptBaXfdp0vSnvGTQv0ChsPMs').trim();
+
+                  const response = await fetch('/api/google-docs/upload-file', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      folderId: targetFolder,
+                      fileName: finalName,
+                      fileBase64: base64,
+                      mimeType: file.type,
+                      googleAccessToken: googleAccessToken || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken')
+                    })
+                  });
+
+                  const data = await response.json();
+                  if (!response.ok || !data.success) {
+                    throw new Error(data.errorMessage || 'Falha ao enviar arquivo para o Google Drive');
+                  }
+
+                  await addWizardFile(field, finalName, sizeStr);
+                  setSuccess("Contrato enviado e salvo no Google Drive: " + finalName);
+                  setTimeout(() => setSuccess(null), 4000);
+                } catch (err: any) {
+                  setError(err.message || 'Erro ao realizar upload do contrato');
+                } finally {
+                  setUploading(false);
+                }
               }
             }}
           />
@@ -1428,7 +1481,7 @@ export default function ContratoHonorariosPF() {
                     {/* Question 3.4 */}
                     {wizardState.q3_2 && wizardState.q3_3 && wizardState.q3_3.length > 0 && (
                       <div className="space-y-1 animate-in fade-in duration-300">
-                        <p className="text-xs font-extrabold text-gray-800">3.4 O cliente assinou o contrato?</p>
+                        <p className="text-xs font-extrabold text-gray-800">3.4 Você recebeu o contrato do cliente?</p>
                         <div className="flex gap-4 mt-1.5">
                           {['sim', 'nao'].map(o => (
                             <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
@@ -1436,7 +1489,13 @@ export default function ContratoHonorariosPF() {
                                 type="radio" 
                                 name="q3_4" 
                                 checked={wizardState.q3_4 === o} 
-                                onChange={() => saveWizardStateUpdate({ q3_4: o })} 
+                                onChange={() => {
+                                  saveWizardStateUpdate({ 
+                                    q3_4: o,
+                                    q3_como_c_recebida: '',
+                                    q3_deseja_digitalizar_c: ''
+                                  });
+                                }} 
                               />
                               <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                             </label>
@@ -1446,19 +1505,29 @@ export default function ContratoHonorariosPF() {
                     )}
 
                     {/* Question 3.5 */}
-                    {wizardState.q3_2 && wizardState.q3_3 && wizardState.q3_3.length > 0 && (wizardState.q3_4 === 'sim' || wizardState.q3_4 === 'nao') && (
-                      <div className="space-y-1 animate-in fade-in duration-300">
-                        <p className="text-xs font-extrabold text-gray-800">3.5 Você solicitou a digitalização do contrato?</p>
-                        <div className="flex gap-4 mt-1.5">
-                          {['sim', 'nao'].map(o => (
-                            <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
+                    {wizardState.q3_2 && wizardState.q3_3 && wizardState.q3_3.length > 0 && wizardState.q3_4 === 'sim' && (
+                      <div className="space-y-2 animate-in fade-in duration-300">
+                        <p className="text-xs font-extrabold text-gray-800">3.5 Como o Contrato de Honorários foi recebido?</p>
+                        <div className="flex flex-wrap gap-4 mt-1.55">
+                          {[
+                            { val: 'fisico', label: 'Físico' },
+                            { val: 'whatsapp', label: 'What’s App' },
+                            { val: 'email', label: 'Email' },
+                            { val: 'outro', label: 'Outro' }
+                          ].map(opt => (
+                            <label key={opt.val} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
                               <input 
                                 type="radio" 
-                                name="q3_5" 
-                                checked={wizardState.q3_5 === o} 
-                                onChange={() => saveWizardStateUpdate({ q3_5: o })} 
+                                name="q3_como_c_recebida" 
+                                checked={wizardState.q3_como_c_recebida === opt.val} 
+                                onChange={() => {
+                                  saveWizardStateUpdate({ 
+                                    q3_como_c_recebida: opt.val,
+                                    q3_deseja_digitalizar_c: ''
+                                  });
+                                }} 
                               />
-                              <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
+                              <span>{opt.label}</span>
                             </label>
                           ))}
                         </div>
@@ -1466,17 +1535,17 @@ export default function ContratoHonorariosPF() {
                     )}
 
                     {/* Question 3.6 */}
-                    {wizardState.q3_2 && wizardState.q3_3 && wizardState.q3_3.length > 0 && (wizardState.q3_4 === 'sim' || wizardState.q3_4 === 'nao') && (wizardState.q3_5 === 'sim' || wizardState.q3_5 === 'nao') && (
-                      <div className="space-y-1 animate-in fade-in duration-300">
-                        <p className="text-xs font-extrabold text-gray-800">3.6 Você recebeu o contrato digitalizado?</p>
+                    {wizardState.q3_2 && wizardState.q3_3 && wizardState.q3_3.length > 0 && wizardState.q3_4 === 'sim' && wizardState.q3_como_c_recebida === 'fisico' && (
+                      <div className="space-y-2 animate-in fade-in duration-300">
+                        <p className="text-xs font-extrabold text-gray-800">3.6 Deseja digitalizar o contrato do cliente agora?</p>
                         <div className="flex gap-4 mt-1.5">
                           {['sim', 'nao'].map(o => (
                             <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
                               <input 
                                 type="radio" 
-                                name="q3_6" 
-                                checked={wizardState.q3_6 === o} 
-                                onChange={() => saveWizardStateUpdate({ q3_6: o })} 
+                                name="q3_deseja_digitalizar_c" 
+                                checked={wizardState.q3_deseja_digitalizar_c === o} 
+                                onChange={() => saveWizardStateUpdate({ q3_deseja_digitalizar_c: o })} 
                               />
                               <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
                             </label>
@@ -1485,8 +1554,27 @@ export default function ContratoHonorariosPF() {
                       </div>
                     )}
 
+                    {/* If yes to digitalize physically OR if received digitally */}
+                    {wizardState.q3_2 && wizardState.q3_3 && wizardState.q3_3.length > 0 && wizardState.q3_4 === 'sim' && (
+                      (wizardState.q3_como_c_recebida === 'fisico' && wizardState.q3_deseja_digitalizar_c === 'sim') ||
+                      (wizardState.q3_como_c_recebida && wizardState.q3_como_c_recebida !== 'fisico')
+                    ) && (
+                      <div className="space-y-2 animate-in fade-in duration-300 bg-indigo-50/30 p-4 rounded-2xl border border-indigo-150 animate-in fade-in">
+                        <p className="text-xs font-black text-indigo-950 uppercase tracking-wider block">Anexar e upload automático para Google Drive</p>
+                        <FileUploadBox field="contratoFiles" />
+                      </div>
+                    )}
+
+                    {/* If no to digitalize physically */}
+                    {wizardState.q3_2 && wizardState.q3_3 && wizardState.q3_3.length > 0 && wizardState.q3_4 === 'sim' && wizardState.q3_como_c_recebida === 'fisico' && wizardState.q3_deseja_digitalizar_c === 'nao' && (
+                      <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-300">
+                        <span className="text-base">⚠️</span>
+                        <span>Colocado automaticamente como pendência no setor de digitalização.</span>
+                      </div>
+                    )}
+
                     {/* Question 3.7 */}
-                    {wizardState.q3_2 && wizardState.q3_3 && wizardState.q3_3.length > 0 && (wizardState.q3_4 === 'sim' || wizardState.q3_4 === 'nao') && (wizardState.q3_5 === 'sim' || wizardState.q3_5 === 'nao') && (wizardState.q3_6 === 'sim' || wizardState.q3_6 === 'nao') && (
+                    {wizardState.q3_2 && wizardState.q3_3 && wizardState.q3_3.length > 0 && wizardState.q3_4 === 'sim' && (
                       <div className="space-y-1 animate-in fade-in duration-300">
                         <p className="text-xs font-extrabold text-gray-800">3.7 Você informou o setor financeiro sobre o contrato?</p>
                         <div className="flex gap-4 mt-1.5 items-center">
@@ -1515,27 +1603,6 @@ export default function ContratoHonorariosPF() {
                             </button>
                           )}
                         </div>
-                      </div>
-                    )}
-
-                    {/* Question 3.8 */}
-                    {wizardState.q3_2 && wizardState.q3_3 && wizardState.q3_3.length > 0 && (wizardState.q3_4 === 'sim' || wizardState.q3_4 === 'nao') && (wizardState.q3_5 === 'sim' || wizardState.q3_5 === 'nao') && (wizardState.q3_6 === 'sim' || wizardState.q3_6 === 'nao') && (wizardState.q3_7 === 'sim' || wizardState.q3_7 === 'nao') && (
-                      <div className="space-y-2 animate-in fade-in duration-300">
-                        <p className="text-xs font-extrabold text-gray-800">3.8 Deseja anexar o contrato assinado digitalizado no sistema agora?</p>
-                        <div className="flex gap-4 mt-1.5">
-                          {['sim', 'nao'].map(o => (
-                            <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
-                              <input 
-                                type="radio" 
-                                name="q3_8" 
-                                checked={wizardState.q3_8 === o} 
-                                onChange={() => saveWizardStateUpdate({ q3_8: o })} 
-                              />
-                              <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
-                            </label>
-                          ))}
-                        </div>
-                        {wizardState.q3_8 === 'sim' && <FileUploadBox field="contratoFiles" />}
                       </div>
                     )}
 

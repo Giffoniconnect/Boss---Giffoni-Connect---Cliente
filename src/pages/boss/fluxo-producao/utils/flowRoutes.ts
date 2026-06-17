@@ -11,6 +11,7 @@ export const flowRoutes = {
   tipoServicoOutroServicoAdministrativo: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/tipo-producao/outro-servico-administrativo`,
   dadosCaso: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/dados-caso`,
   solicitacoesInformacoes: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/solicitacoes-informacoes`,
+  digitalizacaoUpload: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/digitalizacao-upload`,
   solicitacoesProvas: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/card-iniciar-coleta-obrigatoria`,
   financeiro: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/financeiro`,
   edrp: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp`,
