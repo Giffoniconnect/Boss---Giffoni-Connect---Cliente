@@ -1419,7 +1419,7 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                               Editar
                             </button>
                             <button
-                              onClick={() => navigate(`/boss-giffoni-clientes/editor-painel-cliente/${c.id}`)}
+                              onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/viviane-correa-medina-giffoni-rodrigues-pf-77759b')}
                               className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-[15px] text-white rounded-xl font-extrabold cursor-pointer transition-colors shadow-sm shadow-indigo-100"
                             >
                               Editar Painel do Cliente

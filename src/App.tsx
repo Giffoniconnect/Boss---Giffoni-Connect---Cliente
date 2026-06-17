@@ -177,6 +177,7 @@ const RegulamentarViabilidade = React.lazy(() => import('./pages/boss/leads/Regu
 const ManagingPrivateLeads = React.lazy(() => import('./pages/boss/leads/ManagingPrivateLeads'));
 const MarcarMeet = React.lazy(() => import('./pages/boss/leads/MarcarMeet'));
 const RemarcarMeet = React.lazy(() => import('./pages/boss/leads/RemarcarMeet'));
+const CrmDashboard = React.lazy(() => import('./pages/boss/crm/CrmDashboard'));
 
 // Client Portal Pages
 const ClientLogin = React.lazy(() => import('./pages/client/Login'));
@@ -258,7 +259,6 @@ const bossRouter = createBrowserRouter(
       <Route path="/boss-giffoni-clientes/portal-editor/:clientId" element={<SafeRoute children={<EditorPainelCliente />} />} />
       <Route path="/boss-giffoni-clientes/portal-preview/:clientSlug" element={<SafeRoute children={<PortalClientePreview />} />} />
       <Route path="/boss-giffoni-clientes/portal-cliente-preview/:clientId" element={<SafeRoute children={<PortalClientePreview />} />} />
-      <Route path="/boss-giffoni-clientes/editor-painel-cliente/:clientId" element={<SafeRoute children={<EditorPainelCliente />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/portal-cliente" element={<SafeRoute children={<PortalClienteFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug" element={<SafeRoute children={<EditarPortalCliente />} />} />
       <Route path="/portal-cliente-giffoni/:slug/login" element={<SafeRoute children={<ClientLogin />} />} />
@@ -321,6 +321,7 @@ const bossRouter = createBrowserRouter(
           GRUPO 7 — LEADS / MARKETING:
          ======================================================== */}
       <Route path="/boss/leads/private/dashboard" element={<SafeRoute children={<BossLeadsPrivate />} />} />
+      <Route path="/boss/CRM/private/dashboard" element={<SafeRoute children={<CrmDashboard />} />} />
       <Route path="/boss/cadastrar.leads/private" element={<SafeRoute children={<CadastrarLeadsPrivate />} />} />
       <Route path="/boss/cadastrar.leads/private/lead-pf" element={<SafeRoute children={<CadastrarLeadsPF />} />} />
       <Route path="/boss/cadastrar.leads/private/lead-pj" element={<SafeRoute children={<CadastrarLeadsPJ />} />} />

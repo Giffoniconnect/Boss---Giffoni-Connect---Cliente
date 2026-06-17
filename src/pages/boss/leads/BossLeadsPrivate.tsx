@@ -40,7 +40,8 @@ import {
   Instagram,
   Share2,
   Sparkles,
-  UserCheck
+  UserCheck,
+  RotateCcw
 } from 'lucide-react';
 
 const FUNNEL_STATUSES = [
@@ -61,6 +62,8 @@ export default function BossLeadsPrivate() {
 
   // Core State
   const [leads, setLeads] = useState<any[]>([]);
+  const [excludedLeads, setExcludedLeads] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'ativos' | 'excluidos'>('ativos');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -134,17 +137,51 @@ export default function BossLeadsPrivate() {
     try {
       setLoading(true);
       setError(null);
-      const q = query(collection(db, 'marketingLeads'), orderBy('createdAt', 'desc'));
-      const snap = await getDocs(q);
-      const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let list: any[] = [];
+      try {
+        const q = query(collection(db, 'marketingLeads'), orderBy('createdAt', 'desc'));
+        const snap = await getDocs(q);
+        list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      } catch (orderError) {
+        console.warn('Failing ordered query, trying simple query...', orderError);
+        const snap = await getDocs(collection(db, 'marketingLeads'));
+        list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        list.sort((a, b) => {
+          const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return tB - tA;
+        });
+      }
       setLeads(list);
+
+      // Load excluded leads
+      let delList: any[] = [];
+      try {
+        const snapDel = await getDocs(collection(db, 'marketingLeadsDeleted'));
+        delList = snapDel.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        delList.sort((a, b) => {
+          const tA = a.excludedAt ? new Date(a.excludedAt).getTime() : 0;
+          const tB = b.excludedAt ? new Date(b.excludedAt).getTime() : 0;
+          return tB - tA;
+        });
+      } catch (delError) {
+        console.warn('Error loading deleted leads, trying local backup:', delError);
+        const localDel = localStorage.getItem('local_deleted_marketing_leads');
+        if (localDel) {
+          delList = JSON.parse(localDel);
+        }
+      }
+      setExcludedLeads(delList);
     } catch (e: any) {
       console.error(e);
-      setError('Erro ao carregar leads do Firestore. Carregando dados locais do localStorage.');
-      // Local check
+      // Soften warning and load local backups
       const local = localStorage.getItem('local_marketing_leads');
       if (local) {
         setLeads(JSON.parse(local));
+      }
+      const localDel = localStorage.getItem('local_deleted_marketing_leads');
+      if (localDel) {
+        setExcludedLeads(JSON.parse(localDel));
       }
     } finally {
       setLoading(false);
@@ -158,6 +195,10 @@ export default function BossLeadsPrivate() {
   // Save changes back to localStorage for hybrid reliability
   const syncLocalBackup = (updatedList: any[]) => {
     localStorage.setItem('local_marketing_leads', JSON.stringify(updatedList));
+  };
+
+  const syncLocalExcludedBackup = (updatedDelList: any[]) => {
+    localStorage.setItem('local_deleted_marketing_leads', JSON.stringify(updatedDelList));
   };
 
   // Status Handlers
@@ -381,20 +422,85 @@ export default function BossLeadsPrivate() {
     setLeadIdToDelete(leadId);
   };
 
-  // Confirm delete handler
+  // Restore Lead
+  const handleRestoreLead = async (leadId: string) => {
+    setError(null);
+    setSuccess(null);
+    try {
+      const leadToRestore = excludedLeads.find(l => l.id === leadId);
+      if (leadToRestore) {
+        const { excludedAt, ...restoredPayload } = leadToRestore;
+        restoredPayload.statusFunil = 'Novo Lead';
+        restoredPayload.updatedAt = new Date().toISOString();
+
+        // Write back to active collection
+        await setDoc(doc(db, 'marketingLeads', leadId), restoredPayload);
+        // Delete from deleted collection
+        await deleteDoc(doc(db, 'marketingLeadsDeleted', leadId));
+
+        // Update states
+        const filteredDel = excludedLeads.filter(l => l.id !== leadId);
+        setExcludedLeads(filteredDel);
+        syncLocalExcludedBackup(filteredDel);
+
+        const updatedActive = [restoredPayload, ...leads];
+        setLeads(updatedActive);
+        syncLocalBackup(updatedActive);
+
+        setSuccess('Lead restaurado com sucesso! Voltando ao painel de ativos.');
+      }
+    } catch (e: any) {
+      console.error(e);
+      setError('Erro ao restaurar lead: ' + (e.message || e));
+    }
+  };
+
+  // Confirm delete handler (moves to Excluded Repository if active, deletes permanently if already excluded)
   const confirmDeleteLead = async () => {
     if (!leadIdToDelete) return;
     try {
-      await deleteDoc(doc(db, 'marketingLeads', leadIdToDelete));
-      const filtered = leads.filter(l => l.id !== leadIdToDelete);
-      setLeads(filtered);
-      syncLocalBackup(filtered);
-      setSuccess('Lead excluído permanentemente do sistema!');
+      const leadToExclude = leads.find(l => l.id === leadIdToDelete);
+      if (leadToExclude) {
+        // Enforce the requirement: todo LEAD que for excluído deverá ir para este repositório
+        const excludedPayload = {
+          ...leadToExclude,
+          excludedAt: new Date().toISOString(),
+          statusFunil: 'Excluído'
+        };
+
+        // Save to marketingLeadsDeleted
+        await setDoc(doc(db, 'marketingLeadsDeleted', leadIdToDelete), excludedPayload);
+
+        // Delete from marketingLeads
+        await deleteDoc(doc(db, 'marketingLeads', leadIdToDelete));
+
+        // Update states
+        const filtered = leads.filter(l => l.id !== leadIdToDelete);
+        setLeads(filtered);
+        syncLocalBackup(filtered);
+
+        const updatedExcluded = [excludedPayload, ...excludedLeads];
+        setExcludedLeads(updatedExcluded);
+        syncLocalExcludedBackup(updatedExcluded);
+
+        setSuccess('Lead enviado para o Repositório de Excluídos com sucesso!');
+      } else {
+        // It's already in the excluded repository
+        const leadInDeleted = excludedLeads.find(l => l.id === leadIdToDelete);
+        if (leadInDeleted) {
+          await deleteDoc(doc(db, 'marketingLeadsDeleted', leadIdToDelete));
+          const filteredDel = excludedLeads.filter(l => l.id !== leadIdToDelete);
+          setExcludedLeads(filteredDel);
+          syncLocalExcludedBackup(filteredDel);
+          setSuccess('Lead excluído permanentemente do Repositório!');
+        }
+      }
+
       setSelectedLeadForDetail(null);
       setLeadIdToDelete(null);
     } catch (e: any) {
       console.error(e);
-      setError('Falha ao excluir lead: ' + (e.message || e));
+      setError('Falha ao processar exclusão do lead: ' + (e.message || e));
       setLeadIdToDelete(null);
     }
   };
@@ -409,11 +515,20 @@ export default function BossLeadsPrivate() {
         updatedAt: parentNow
       };
 
-      await setDoc(doc(db, 'marketingLeads', selectedLeadForDetail.id), payload);
+      const isLeadInExcluded = excludedLeads.some(l => l.id === selectedLeadForDetail.id);
+      const targetCollection = isLeadInExcluded ? 'marketingLeadsDeleted' : 'marketingLeads';
+
+      await setDoc(doc(db, targetCollection, selectedLeadForDetail.id), payload);
       
-      const updated = leads.map(l => l.id === selectedLeadForDetail.id ? payload : l);
-      setLeads(updated);
-      syncLocalBackup(updated);
+      if (isLeadInExcluded) {
+        const updated = excludedLeads.map(l => l.id === selectedLeadForDetail.id ? payload : l);
+        setExcludedLeads(updated);
+        syncLocalExcludedBackup(updated);
+      } else {
+        const updated = leads.map(l => l.id === selectedLeadForDetail.id ? payload : l);
+        setLeads(updated);
+        syncLocalBackup(updated);
+      }
 
       setSuccess('Lead atualizado com sucesso!');
       setIsEditing(false);
@@ -446,6 +561,29 @@ export default function BossLeadsPrivate() {
     const statusMatch = selectedStatusFilter === 'All' || l.statusFunil === selectedStatusFilter;
 
     return searchMatch && typeMatch && statusMatch;
+  });
+
+  // Filter Excluded List
+  const filteredExcludedLeads = excludedLeads.filter(l => {
+    const nameStr = l.tipoPessoa === 'PF' 
+      ? (l.pessoaFisica?.nomeCompleto || '') 
+      : (l.pessoaJuridica?.razaoSocial || l.pessoaJuridica?.nomeFantasia || '');
+
+    const contactStr = l.tipoPessoa === 'PF'
+      ? (l.pessoaFisica?.email || l.pessoaFisica?.telefone || l.pessoaFisica?.cpf || '')
+      : (l.pessoaJuridica?.email || l.pessoaJuridica?.telefone || l.pessoaJuridica?.cnpj || '');
+
+    const searchMatch = (
+      nameStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      contactStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (l.areaJuridica || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (l.origemLead || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (l.responsavelInterno || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const typeMatch = selectedTypeFilter === 'All' || l.tipoPessoa === selectedTypeFilter;
+
+    return searchMatch && typeMatch;
   });
 
   return (
@@ -1336,23 +1474,60 @@ export default function BossLeadsPrivate() {
                 <option value="PJ">Pessoa Jurídica</option>
               </select>
 
-              <select 
-                value={selectedStatusFilter}
-                onChange={(e) => setSelectedStatusFilter(e.target.value)}
-                className="px-3 py-1.5 bg-slate-50 border border-gray-200 rounded-xl text-[10.5px] font-bold text-gray-600 focus:outline-none focus:ring-1"
-              >
-                <option value="All">Todos Status</option>
-                {FUNNEL_STATUSES.map(st => (
-                  <option key={st} value={st}>{st}</option>
-                ))}
-              </select>
+              {activeTab === 'ativos' && (
+                <select 
+                  value={selectedStatusFilter}
+                  onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                  className="px-3 py-1.5 bg-slate-50 border border-gray-200 rounded-xl text-[10.5px] font-bold text-gray-600 focus:outline-none focus:ring-1"
+                >
+                  <option value="All">Todos Status</option>
+                  {FUNNEL_STATUSES.map(st => (
+                    <option key={st} value={st}>{st}</option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 
+          {/* TABS SELECTOR */}
+          <div className="flex border-b border-gray-100 pb-2 gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('ativos');
+                setSelectedLeadForDetail(null);
+              }}
+              className={`pb-2 px-4 text-xs font-black uppercase tracking-wider transition-all duration-205 border-b-2 cursor-pointer ${
+                activeTab === 'ativos'
+                  ? 'border-indigo-650 text-indigo-650'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              Leads Ativos ({filteredLeads.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('excluidos');
+                setSelectedLeadForDetail(null);
+              }}
+              className={`pb-2 px-4 text-xs font-black uppercase tracking-wider transition-all duration-205 border-b-2 cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'excluidos'
+                  ? 'border-rose-650 text-rose-650'
+                  : 'border-transparent text-gray-400 hover:text-rose-650'
+              }`}
+            >
+              <XOctagon size={13} />
+              <span>Repositório de Excluídos ({filteredExcludedLeads.length})</span>
+            </button>
+          </div>
+
           {/* LEADS LIST / KANBAN COMPATIBLE TABLE */}
-          {filteredLeads.length === 0 ? (
+          {(activeTab === 'ativos' ? filteredLeads : filteredExcludedLeads).length === 0 ? (
             <div className="p-12 text-center text-gray-400 italic font-medium text-xs border border-dashed border-gray-200 rounded-2xl bg-gray-50/50">
-              Nenhum lead encontrado nas condições selecionadas.
+              {activeTab === 'ativos' 
+                ? 'Nenhum lead encontrado nas condições selecionadas.' 
+                : 'O Repositório de Leads excluídos está vazio.'}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -1369,7 +1544,7 @@ export default function BossLeadsPrivate() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-[11.5px] font-medium leading-normal">
-                  {filteredLeads.map((lead) => {
+                  {(activeTab === 'ativos' ? filteredLeads : filteredExcludedLeads).map((lead) => {
                     const isPf = lead.tipoPessoa === 'PF';
                     const name = isPf 
                       ? (lead.pessoaFisica?.nomeCompleto || 'Sem nome')
@@ -1420,36 +1595,61 @@ export default function BossLeadsPrivate() {
                               <span>Ver</span>
                             </button>
 
-                            <button
-                              type="button"
-                              onClick={() => navigate(`/boss/cadastrar.leads/private/etapa02/${lead.id}`)}
-                              className="p-1 px-2 bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100/70 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
-                              title="Progredir para Etapa 02: Relacionamento"
-                            >
-                              <Sparkles size={11} className="text-indigo-650" />
-                              <span>Etapa 02</span>
-                            </button>
+                            {activeTab === 'ativos' ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => navigate(`/boss/cadastrar.leads/private/etapa02/${lead.id}`)}
+                                  className="p-1 px-2 bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100/70 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                                  title="Progredir para Etapa 02: Relacionamento"
+                                >
+                                  <Sparkles size={11} className="text-indigo-650" />
+                                  <span>Etapa 02</span>
+                                </button>
 
-                            {!lead.convertidoEmCliente && lead.statusFunil !== 'Convertido em Cliente' && (
-                              <button
-                                type="button"
-                                onClick={() => handleConvertLead(lead)}
-                                className="p-1 px-2.5 bg-emerald-50 text-emerald-800 border border-emerald-100 hover:bg-emerald-100 rounded-lg text-[10px] font-black tracking-wide uppercase transition flex items-center gap-0.5 cursor-pointer"
-                                title="Converter em Caso no Fluxo de Produção"
-                              >
-                                <ArrowLeftRight size={12} />
-                                <span>Converter</span>
-                              </button>
+                                {!lead.convertidoEmCliente && lead.statusFunil !== 'Convertido em Cliente' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleConvertLead(lead)}
+                                    className="p-1 px-2.5 bg-emerald-50 text-emerald-800 border border-emerald-100 hover:bg-emerald-100 rounded-lg text-[10px] font-black tracking-wide uppercase transition flex items-center gap-0.5 cursor-pointer"
+                                    title="Converter em Caso no Fluxo de Produção"
+                                  >
+                                    <ArrowLeftRight size={12} />
+                                    <span>Converter</span>
+                                  </button>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteLead(lead.id)}
+                                  className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                  title="Excluir"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRestoreLead(lead.id)}
+                                  className="p-1 px-2.5 bg-indigo-50 text-indigo-850 border border-indigo-100 hover:bg-indigo-100 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
+                                  title="Restaurar Lead para Ativo"
+                                >
+                                  <RotateCcw size={12} className="text-indigo-700 animate-spin" style={{ animationIterationCount: 1, animationDuration: '0.8s' }} />
+                                  <span>Restaurar</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteLead(lead.id)}
+                                  className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                  title="Excluir Permanentemente"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </>
                             )}
-
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteLead(lead.id)}
-                              className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                              title="Excluir"
-                            >
-                              <Trash2 size={13} />
-                            </button>
                           </div>
                         </td>
                       </tr>

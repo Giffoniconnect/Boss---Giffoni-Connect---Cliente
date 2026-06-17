@@ -19,7 +19,10 @@ import {
   CloudLightning,
   AlertTriangle,
   History,
-  QrCode
+  QrCode,
+  FolderOpen,
+  ShieldCheck,
+  ExternalLink
 } from 'lucide-react';
 
 interface DocItem {
@@ -51,6 +54,7 @@ export default function DigitalizacaoUpload() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [localComments, setLocalComments] = useState<string>('');
+  const [activeSubetapa, setActiveSubetapa] = useState<'digitalizacao' | 'auditoria'>('digitalizacao');
 
   const isPJ = client?.type === 'PJ';
   const suffix = isPJ ? 'PJ' : 'PF';
@@ -72,6 +76,20 @@ export default function DigitalizacaoUpload() {
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err: any) {
       setErrorMsg("Erro ao salvar observações: " + err.message);
+    }
+  };
+
+  // Toggle audit validation checklist
+  const handleToggleAuditVerification = async (itemId: string) => {
+    const currentVal = wizardState?.[`audit_verified_${itemId}`] || false;
+    try {
+      await saveWizardStateUpdate({
+        [`audit_verified_${itemId}`]: !currentVal
+      });
+      setSuccessMsg(`Situação do documento alterada com sucesso!`);
+      setTimeout(() => setSuccessMsg(null), 3050);
+    } catch (err: any) {
+      setErrorMsg("Falha ao salvar auditoria de conformidade: " + err.message);
     }
   };
 
@@ -151,7 +169,7 @@ export default function DigitalizacaoUpload() {
       }
 
       // Add to local wizard files list
-      await addWizardFile(item.field, finalName, sizeStr);
+      await addWizardFile(item.field, finalName, sizeStr, resData.webViewLink || '');
       setSuccessMsg(`Documento incorporado e sincronizado com o Drive: "${finalName}"`);
       setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {
@@ -260,6 +278,9 @@ export default function DigitalizacaoUpload() {
 
   const pctCompleted = Math.round((numUploaded / totalDocsCount) * 100) || 0;
 
+  const numAudited = docs.filter(d => wizardState?.[`audit_verified_${d.id}`] === true).length;
+  const pctAudited = Math.round((numAudited / totalDocsCount) * 100) || 0;
+
   // Complete Step
   const handleToggleStepCompleted = async () => {
     const currentStatus = wizardState?.digitalizacao_upload_completed || false;
@@ -341,8 +362,102 @@ export default function DigitalizacaoUpload() {
           </div>
         )}
 
-        {/* Bento Grid layout containing global statistics & workflow metadata */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* 2 Subetapas Selector */}
+        <div className="bg-white border border-gray-150 rounded-[2rem] p-6 shadow-xs space-y-4">
+          <div className="text-left font-sans">
+            <h3 className="text-sm font-black text-gray-900 tracking-tight flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse"></span>
+              Subetapas do Setor de Digitalização e Uploads
+            </h3>
+            <p className="text-[12px] text-gray-400 font-semibold mt-0.5">
+              Gerencie de forma independente cada fase do processamento digital de ativos e auditoria da Giffoni Advogados.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Subetapa 1 Button */}
+            <button
+              type="button"
+              onClick={() => setActiveSubetapa('digitalizacao')}
+              className={`flex items-center justify-between p-4.5 border rounded-2xl text-left cursor-pointer outline-none relative overflow-hidden group transition-all ${
+                activeSubetapa === 'digitalizacao'
+                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs scale-[1.01]'
+                  : numUploaded > 0
+                  ? 'bg-emerald-50/55 border-emerald-150 text-emerald-800 hover:bg-emerald-50 hover:border-emerald-250 hover:shadow-xs'
+                  : 'bg-gray-50/50 border-gray-150 text-gray-655 hover:bg-gray-100 hover:border-gray-250 hover:text-gray-950'
+              }`}
+            >
+              <div className="flex items-center gap-3.5 min-w-0 font-sans">
+                <div className={`p-2.5 rounded-xl shrink-0 ${
+                  activeSubetapa === 'digitalizacao' ? 'bg-indigo-500 text-white' : numUploaded > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-150 text-gray-400'
+                }`}>
+                  <Upload size={18} />
+                </div>
+                <div className="min-w-0">
+                  <span className={`text-[10px] uppercase font-black tracking-widest block font-mono ${activeSubetapa === 'digitalizacao' ? 'text-indigo-200' : 'text-gray-450'}`}>
+                    Subetapa 01 / 02
+                  </span>
+                  <span className="text-[13px] font-extrabold tracking-tight block leading-tight mt-0.5">
+                    Setor de Digitalização e Uploads
+                  </span>
+                  <span className={`text-[11px] block mt-0.5 opacity-85 ${activeSubetapa === 'digitalizacao' ? 'text-indigo-150' : 'text-gray-500'}`}>
+                    {numUploaded} de {totalDocsCount} sincronizados
+                  </span>
+                </div>
+              </div>
+              
+              {numUploaded === totalDocsCount && (
+                <div className="w-5 h-5 bg-emerald-500 text-white rounded-full flex items-center justify-center text-[10px] shrink-0 font-black shadow-xs">
+                  ✓
+                </div>
+              )}
+            </button>
+
+            {/* Subetapa 2 Button */}
+            <button
+              type="button"
+              onClick={() => setActiveSubetapa('auditoria')}
+              className={`flex items-center justify-between p-4.5 border rounded-2xl text-left cursor-pointer outline-none relative overflow-hidden group transition-all ${
+                activeSubetapa === 'auditoria'
+                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs scale-[1.01]'
+                  : wizardState?.digitalizacao_upload_completed === true
+                  ? 'bg-emerald-50/55 border-emerald-150 text-emerald-800 hover:bg-emerald-50 hover:border-emerald-250 hover:shadow-xs'
+                  : 'bg-gray-50/50 border-gray-150 text-gray-655 hover:bg-gray-100 hover:border-gray-250 hover:text-gray-950'
+              }`}
+            >
+              <div className="flex items-center gap-3.5 min-w-0 font-sans">
+                <div className={`p-2.5 rounded-xl shrink-0 ${
+                  activeSubetapa === 'auditoria' ? 'bg-indigo-500 text-white' : wizardState?.digitalizacao_upload_completed === true ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-150 text-gray-400'
+                }`}>
+                  <ShieldCheck size={18} />
+                </div>
+                <div className="min-w-0">
+                  <span className={`text-[10px] uppercase font-black tracking-widest block font-mono ${activeSubetapa === 'auditoria' ? 'text-indigo-200' : 'text-gray-450'}`}>
+                    Subetapa 02 / 02
+                  </span>
+                  <span className="text-[13px] font-extrabold tracking-tight block leading-tight mt-0.5">
+                    Auditoria do Setor de Digitalização
+                  </span>
+                  <span className={`text-[11px] block mt-0.5 opacity-85 ${activeSubetapa === 'auditoria' ? 'text-indigo-150' : 'text-gray-500'}`}>
+                    {numAudited} de {totalDocsCount} auditados
+                  </span>
+                </div>
+              </div>
+
+              {numAudited === totalDocsCount && (
+                <div className="w-5 h-5 bg-emerald-500 text-white rounded-full flex items-center justify-center text-[10px] shrink-0 font-black shadow-xs">
+                  ✓
+                </div>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* SUBETAPA 01 - Setor de Digitalização e Uploads */}
+        {activeSubetapa === 'digitalizacao' && (
+          <div className="space-y-6 animate-fade-in text-left">
+            {/* Bento Grid layout containing global statistics & workflow metadata */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-white border border-gray-150 rounded-[2rem] p-5 shadow-xs flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
               <FileCheck2 size={22} />
@@ -630,10 +745,198 @@ export default function DigitalizacaoUpload() {
             </div>
           </div>
         </div>
+          </div>
+        )}
+
+        {/* SUBETAPA 02: AUDITORIA DO SETOR DE DIGITALIZAÇÃO E UPLOADS */}
+        {activeSubetapa === 'auditoria' && (
+          <div className="space-y-6 animate-fade-in text-left">
+            
+            {/* Integrated Drive and Folder Information box */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 text-left">
+              
+              {/* Folder Access Card */}
+              <div className="lg:col-span-2 bg-[#5cb85c]/5 border border-[#5cb85c]/25 hover:border-[#5cb85c]/45 rounded-3xl p-6 transition flex flex-col sm:flex-row items-center justify-between gap-6">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center border border-emerald-100 shadow-3xs shrink-0">
+                    <FolderOpen size={26} className="stroke-[2px]" />
+                  </div>
+                  <div className="min-w-0 text-left">
+                    <span className="text-[10px] font-black uppercase text-emerald-600 tracking-wider font-mono">Repositório Geral Integrado</span>
+                    <h4 className="font-extrabold text-gray-900 text-sm mt-0.5 truncate max-w-sm">
+                      Pasta do Caso no Google Drive
+                    </h4>
+                    <span className="text-[11px] font-mono font-medium text-gray-450 block truncate max-w-xs sm:max-w-md">
+                      Google Drive Folder ID: {client?.googleDriveClientFolderId || client?.gdriveFolderId || caseObj?.gdriveFolderId || '1YUl0Z3hbptBaXfdp0vSnvGTQv0ChsPMs'}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetFolder = (client?.googleDriveClientFolderId || client?.gdriveFolderId || caseObj?.gdriveFolderId || '').trim();
+                    const folderLink = `https://drive.google.com/drive/folders/${targetFolder || '1YUl0Z3hbptBaXfdp0vSnvGTQv0ChsPMs'}`;
+                    window.open(folderLink, '_blank', 'noopener,noreferrer');
+                  }}
+                  className="py-3 px-5 bg-[#5cb85c] hover:bg-[#4cae4c] hover:shadow-xs text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                >
+                  <span>Abrir pasta de destino</span>
+                  <ExternalLink size={13} />
+                </button>
+              </div>
+
+              {/* Audit Progress Card */}
+              <div className="bg-white border border-gray-150 rounded-3xl p-6 flex flex-col justify-between text-left">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider">Aprovação da Auditoria</span>
+                  <span className="text-xs font-black text-indigo-600 font-mono">
+                    {pctAudited}% completo
+                  </span>
+                </div>
+                
+                <div className="mt-2.5">
+                  <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                    <div
+                      className="bg-indigo-600 h-full rounded-full transition-all duration-550"
+                      style={{ width: `${pctAudited}%` }}
+                    />
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-gray-400 font-semibold mt-3 leading-relaxed">
+                  {numAudited} de {totalDocsCount} documentos assinados e certificados pelo auditor de integridade.
+                </p>
+              </div>
+
+            </div>
+
+            {/* Audit Ledger table */}
+            <div className="bg-white border border-gray-150 rounded-[2rem] shadow-xs overflow-hidden">
+              <div className="p-6 border-b border-gray-150 bg-gray-50/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-left">
+                <div>
+                  <h2 className="text-base font-black text-gray-900 tracking-tight">Painel de Coleta & Auditoria de Ativos Estendida</h2>
+                  <p className="text-xs text-gray-400 font-semibold mt-0.5">Validação visual e acionamento direto de cada arquivo digitalizado e armazenado na nuvem.</p>
+                </div>
+
+                <div className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-1.5 text-[11px] text-indigo-800 font-bold">
+                  <ShieldCheck size={14} className="text-indigo-600 animate-pulse" />
+                  <span>Controle Criptográfico Ativo</span>
+                </div>
+              </div>
+
+              <div className="divide-y divide-gray-150 text-left font-sans">
+                {docs.map((docItem, index) => {
+                  const status = getDocStatuses(docItem);
+                  const isVerified = wizardState?.[`audit_verified_${docItem.id}`] === true;
+
+                  return (
+                    <div key={docItem.id} className="p-6 bg-white hover:bg-gray-50/30 transition-colors flex flex-col md:flex-row items-start md:items-center justify-between gap-6 text-left">
+                      {/* Document Info */}
+                      <div className="space-y-1 block text-left md:max-w-xs lg:max-w-md w-full">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-6 h-6 rounded-lg text-xs font-bold font-mono flex items-center justify-center ${isVerified ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-500'}`}>
+                            0{index + 1}
+                          </span>
+                          <h4 className="text-sm font-black text-gray-850 tracking-tight leading-snug">{docItem.label}</h4>
+                        </div>
+                        <p className="text-[11px] font-mono text-gray-400 tracking-tight truncate">
+                          {docItem.prefix} - {clientName || 'Cliente'}
+                        </p>
+                      </div>
+
+                      {/* Files details and Link */}
+                      <div className="flex-1 w-full min-w-0 block text-left">
+                        {status.fileList.length > 0 ? (
+                          <div className="space-y-1.5 w-full">
+                            {status.fileList.map((file: any, fIdx: number) => {
+                              // construct search URL if url missing
+                              const openUrl = file.url || `https://drive.google.com/drive/search?q=${encodeURIComponent(file.name)}`;
+                              return (
+                                <div key={fIdx} className="flex items-center justify-between p-2.5 bg-slate-50 border border-gray-150 rounded-xl gap-3 text-xs w-full text-left">
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    <FileText size={15} className="text-indigo-650 shrink-0" />
+                                    <span className="font-mono text-gray-750 font-bold truncate max-w-xs">{file.name}</span>
+                                    <span className="text-[10px] text-gray-400 font-semibold shrink-0">({file.size})</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => window.open(openUrl, '_blank', 'noopener,noreferrer')}
+                                    className="px-3 py-1.5 bg-white hover:bg-indigo-50 hover:text-indigo-700 border border-gray-250 text-gray-655 rounded-lg font-bold font-sans text-[10px] uppercase tracking-wider transition-colors cursor-pointer flex items-center gap-1 shrink-0"
+                                  >
+                                    <span>Acessar no Drive</span>
+                                    <ExternalLink size={10} />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-xs font-semibold text-gray-450 bg-gray-50 p-2.5 rounded-xl border border-dashed border-gray-200 block text-left">
+                            {status.received ? (
+                              <span className="text-amber-600 font-bold">● Pendente de upload definitivo pelo Setor</span>
+                            ) : (
+                              <span>Aguardando coleta documental</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Verification action */}
+                      <div className="shrink-0 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleAuditVerification(docItem.id)}
+                          className={`px-4 py-2 text-[11px] font-black uppercase tracking-wider rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${
+                            isVerified
+                              ? 'bg-emerald-500 border-emerald-500 text-white hover:bg-emerald-600 shadow-3xs'
+                              : 'bg-white border-gray-250 text-gray-650 hover:bg-orange-50 hover:text-orange-700 hover:border-orange-200'
+                          }`}
+                        >
+                          {isVerified ? (
+                            <>
+                              <CheckCircle2 size={13} />
+                              <span>Auditado ✓</span>
+                            </>
+                          ) : (
+                            <>
+                              <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></div>
+                              <span>Aprovar Auditoria</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* POP procedures */}
+            <div className="bg-indigo-50/40 border border-indigo-150 p-5 rounded-[1.5rem] text-xs font-medium text-indigo-900 grid grid-cols-1 md:grid-cols-4 gap-4 text-left">
+              <div className="md:col-span-3 space-y-1 block text-left">
+                <p className="font-bold text-indigo-950 flex items-center gap-1.5 text-sm">
+                  <ShieldCheck className="text-indigo-655" size={16} />
+                  Procedimento Operacional Padrão (POP) de Auditoria
+                </p>
+                <p className="leading-relaxed font-semibold text-gray-500">
+                  A subetapa de auditoria garante a fidelidade de todos os documentos anexados pelo setor de digitalização. Cada documento aprovado é marcado no Ledger Auditável. Ao auditar todos os documentos, marque a atividade como finalizada no botão do painel inferior.
+                </p>
+              </div>
+              <div className="bg-white border border-indigo-100 rounded-xl p-3 flex flex-col justify-center text-center">
+                <span className="text-[10px] font-extrabold uppercase text-gray-400 block font-mono">Status da Auditoria</span>
+                <span className={`text-base font-black uppercase tracking-tight block mt-1 ${pctAudited === 100 ? 'text-emerald-600' : 'text-gray-700'}`}>
+                  {pctAudited === 100 ? '✓ COMPLIANTE' : `${numAudited} / ${totalDocsCount}`}
+                </span>
+              </div>
+            </div>
+
+          </div>
+        )}
 
         {/* Action Controls for step locking and advancing */}
-        <div className="bg-white border border-gray-150 rounded-[2rem] p-6 shadow-xs flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="space-y-1">
+        <div className="bg-white border border-gray-150 rounded-[2rem] p-6 shadow-xs flex flex-col md:flex-row items-center justify-between gap-6 font-sans">
+          <div className="space-y-1 text-left">
             <h3 className="text-sm font-black text-gray-900 tracking-tight flex items-center gap-2">
               <FolderLock size={16} className="text-indigo-600" />
               Finalizar Atividade do Fluxo
@@ -659,19 +962,29 @@ export default function DigitalizacaoUpload() {
                 </>
               ) : (
                 <>
-                  <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+                  <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
                   <span>Marcar Atividade como Finalizada</span>
                 </>
               )}
             </button>
 
-            <button
-              onClick={() => navigate(flowRoutes.solicitacoesInformacoes(caseId!))}
-              className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black tracking-tight shadow-xs flex items-center gap-2 cursor-pointer transition-colors"
-            >
-              <span>Avançar para Info. Complementares</span>
-              <ArrowRight size={15} />
-            </button>
+            {activeSubetapa === 'digitalizacao' ? (
+              <button
+                onClick={() => setActiveSubetapa('auditoria')}
+                className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black tracking-tight shadow-xs flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <span>Avançar para Auditoria (Subetapa 02)</span>
+                <ArrowRight size={15} />
+              </button>
+            ) : (
+              <button
+                onClick={() => navigate(flowRoutes.solicitacoesInformacoes(caseId!))}
+                className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black tracking-tight shadow-xs flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <span>Avançar para Info. Complementares</span>
+                <ArrowRight size={15} />
+              </button>
+            )}
           </div>
         </div>
 

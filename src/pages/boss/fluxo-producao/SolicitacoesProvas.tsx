@@ -26,6 +26,7 @@ interface EvidenceRequest {
   expectedFileTypes: string[];
   maxFiles: number;
   documentNumber?: string;
+  justification?: string;
   documentType?: string;
   generatedFileName?: string;
   createdAt: string;

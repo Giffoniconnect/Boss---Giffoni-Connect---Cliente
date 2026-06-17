@@ -48,7 +48,6 @@ export const expectedRoutes = [
   '/boss-giffoni-clientes/portal-editor/:clientId',
   '/boss-giffoni-clientes/portal-preview/:clientSlug',
   '/boss-giffoni-clientes/portal-cliente-preview/:clientId',
-  '/boss-giffoni-clientes/editor-painel-cliente/:clientId',
   '/boss-giffoni-clientes/fluxo-producao/portal-cliente',
   '/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug',
   '/portal-cliente-giffoni/:slug/login',

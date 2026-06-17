@@ -307,5 +307,19 @@ service cloud.firestore {
     match /marketingLeads/{leadId} {
       allow read, write: if isAdmin() && isValidId(leadId);
     }
+
+    // -------------------------------------------------------------------------
+    // MARKETING LEADS DELETED COLLECTION (Repositório de Excluídos)
+    // -------------------------------------------------------------------------
+    match /marketingLeadsDeleted/{leadId} {
+      allow read, write: if isAdmin() && isValidId(leadId);
+    }
+
+    // -------------------------------------------------------------------------
+    // LEADS MEETINGS COLLECTION (Agendamentos Comerciais de Leads)
+    // -------------------------------------------------------------------------
+    match /leadsMeetings/{meetId} {
+      allow read, write: if isAdmin() && isValidId(meetId);
+    }
   }
 }

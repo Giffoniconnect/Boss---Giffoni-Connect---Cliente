@@ -397,6 +397,21 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["origemLead", "statusFunil", "tipoPessoa"]
+    },
+    "LeadMeeting": {
+      "title": "Lead Meeting",
+      "description": "Meetings and appointments scheduled for marketing leads.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "leadId": { "type": "string" },
+        "title": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["leadId", "title", "date", "time"]
     }
   },
   "firestore": {
@@ -467,6 +482,10 @@
     "marketingLeads": {
       "schema": "MarketingLead",
       "description": "Leads collected and managed by the marketing sector."
+    },
+    "leadsMeetings": {
+      "schema": "LeadMeeting",
+      "description": "Meetings and appointments scheduled for marketing leads."
     }
   }
 }

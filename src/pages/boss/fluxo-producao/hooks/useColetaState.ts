@@ -17,6 +17,7 @@ export interface EvidenceRequest {
   expectedFileTypes: string[];
   maxFiles: number;
   documentNumber?: string;
+  justification?: string;
   documentType?: string;
   generatedFileName?: string;
   createdAt: string;
@@ -229,9 +230,9 @@ export function useColetaState() {
     }
   };
 
-  const addWizardFile = (field: string, name: string, size: string) => {
+  const addWizardFile = (field: string, name: string, size: string, url?: string) => {
     const list = wizardState[field] || [];
-    const updated = [...list, { name, size, date: new Date().toLocaleDateString('pt-BR') }];
+    const updated = [...list, { name, size, url: url || '', date: new Date().toLocaleDateString('pt-BR') }];
     saveWizardStateUpdate({ [field]: updated });
   };
 

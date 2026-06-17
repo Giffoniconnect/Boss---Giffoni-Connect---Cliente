@@ -33,6 +33,7 @@ export default function DocumentosNecessidadePF() {
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newDocNum, setNewDocNum] = useState('');
+  const [newJustification, setNewJustification] = useState('');
 
   const handleNextPhase = () => {
     saveWizardStateUpdate({ step5_completed: true }).then(() => {
@@ -56,6 +57,7 @@ export default function DocumentosNecessidadePF() {
         title: newTitle.trim(),
         description: newDesc.trim(),
         documentNumber: newDocNum.trim(),
+        justification: newJustification.trim(),
         status: 'pendente',
         visibleToClient: true,
         allowUpload: true,
@@ -73,6 +75,7 @@ export default function DocumentosNecessidadePF() {
       setNewTitle('');
       setNewDesc('');
       setNewDocNum('');
+      setNewJustification('');
     } catch (err: any) {
       setError(`Erro ao criar solicitação: ${err.message}`);
     } finally {
@@ -194,22 +197,12 @@ export default function DocumentosNecessidadePF() {
 
               {wizardState.q5_1 === 'sim' && (
                 <div className="space-y-6 border-l-2 border-indigo-200 pl-4 animate-in fade-in duration-200">
-                  
-                  {/* FORM TO ADD NEW CUSTOM REQUEST */}
-                  <form onSubmit={handleAddEvidence} className="bg-gray-50 border rounded-2xl p-4 space-y-3">
-                    <span className="text-[9px] font-bold uppercase tracking-wider font-mono text-indigo-700 block">Cadastrar Novo Pedido Documental</span>
+                    {/* FORM TO ADD NEW CUSTOM REQUEST */}
+                  <form onSubmit={handleAddEvidence} className="bg-gray-50 border border-gray-150 rounded-2xl p-4 space-y-4">
+                    <span className="text-[10px] font-black uppercase tracking-wider font-mono text-indigo-700 block">Cadastrar Novo Pedido Documental</span>
                     
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-[10px] uppercase font-bold text-gray-500">Título do Documento</label>
-                        <input 
-                          type="text" 
-                          placeholder="Ex: Prontuário Médico, Extrato Bancário" 
-                          value={newTitle}
-                          onChange={(e) => setNewTitle(e.target.value)}
-                          className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
-                        />
-                      </div>
+                    <div className="space-y-3.5">
+                      {/* 1. Identificador / Número do Documento */}
                       <div className="space-y-1">
                         <label className="text-[10px] uppercase font-bold text-gray-500">Identificador / Número do Documento</label>
                         <input 
@@ -217,124 +210,402 @@ export default function DocumentosNecessidadePF() {
                           placeholder="Ex: Doc. 05, Doc. Complementar" 
                           value={newDocNum}
                           onChange={(e) => setNewDocNum(e.target.value)}
-                          className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                          className="w-full px-3 py-1.5 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
                         />
                       </div>
-                    </div>
 
-                    <div className="space-y-1">
-                      <label className="text-[10px] uppercase font-bold text-gray-500">Descrição / Instruções p/ obtenção</label>
-                      <textarea 
-                        placeholder="Descreva detalhes ou caminhos onde o cliente físico consiga obter este documento." 
-                        value={newDesc}
-                        onChange={(e) => setNewDesc(e.target.value)}
-                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500 min-h-[60px]"
-                      />
+                      {/* 2. Título do Documento */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] uppercase font-bold text-gray-500">Título do Documento</label>
+                        <input 
+                          type="text" 
+                          placeholder="Ex: Prontuário Médico, Extrato Bancário" 
+                          value={newTitle}
+                          onChange={(e) => setNewTitle(e.target.value)}
+                          className="w-full px-3 py-1.5 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                        />
+                      </div>
+
+                      {/* 3. Descrição / Instruções p/ obtenção */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] uppercase font-bold text-gray-500">Descrição de instruções para Obtenção</label>
+                        <textarea 
+                          placeholder="Descreva detalhes ou caminhos onde o cliente físico consiga obter este documento." 
+                          value={newDesc}
+                          onChange={(e) => setNewDesc(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500 min-h-[60px]"
+                        />
+                      </div>
+
+                      {/* 4. Justificativa para exigir a prova */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] uppercase font-bold text-gray-500">Justificativa para exigir a prova</label>
+                        <textarea 
+                          placeholder="Informe a fundamentação técnica ou justificativa jurídica para exigir esta prova." 
+                          value={newJustification}
+                          onChange={(e) => setNewJustification(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500 min-h-[60px]"
+                        />
+                      </div>
                     </div>
 
                     <button 
                       type="submit"
                       disabled={saving}
-                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
+                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                     >
                       <PlusCircle size={14} />
                       <span>Adicionar Solicitação</span>
                     </button>
                   </form>
 
-                  {/* RENDER CUSTOM REQUESTS CHECKBOXES */}
-                  {requests.length > 0 && (
-                    <div className="space-y-4">
-                      <span className="text-[10px] font-black uppercase text-indigo-950 font-mono tracking-widest block border-b pb-1">Checklist de Provas Custodiadas</span>
-                      <div className="space-y-4">
-                        {requests.map((req) => {
-                          const valState = wizardState.q5_provas?.[req.id] || { received: 'nao' };
-                          const setVal = (updatesSub: any) => {
-                            const nextProvas = {
-                              ...wizardState.q5_provas,
-                              [req.id]: { ...valState, ...updatesSub }
-                            };
-                            saveWizardStateUpdate({ q5_provas: nextProvas });
-                          };
+                  {/* CHECKLIST DE PROVAS CUSTODIADAS */}
+                  <div className="space-y-5">
+                    <div className="border-b border-gray-150 pb-2 flex items-center justify-between">
+                      <span className="text-[11px] font-black uppercase text-indigo-950 font-mono tracking-wider block">
+                        Checklist de Provas Custodiadas
+                      </span>
+                      <span className="text-[10px] text-gray-400 font-bold uppercase">
+                        Controle de Integridade e Custódia
+                      </span>
+                    </div>
 
-                          return (
-                            <div key={req.id} className="p-4 bg-white border border-gray-150 rounded-xl space-y-3">
-                              <div className="flex justify-between items-start gap-2">
-                                <div>
-                                  <span className="text-[9px] bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded font-mono font-bold block w-max uppercase mb-1">{req.documentNumber || 'Doc. Adicional'}</span>
-                                  <h4 className="text-xs font-black text-gray-900">{req.title}</h4>
-                                  <p className="text-[11px] text-gray-500 font-semibold leading-relaxed">{req.description}</p>
+                    <div className="space-y-6">
+                      
+                      {/* Card - Documentos Básicos do Escritório */}
+                      <div className="bg-white border border-gray-150 rounded-2xl p-5 shadow-3xs space-y-4">
+                        <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
+                          <div className="w-2.5 h-2.5 rounded-full bg-indigo-600"></div>
+                          <h4 className="text-xs font-black text-gray-900 uppercase tracking-tight">
+                            Card - Documentos Básicos do Escritório
+                          </h4>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          {/* procuração */}
+                          <div className="p-3 bg-gray-50/50 hover:bg-gray-55 border border-gray-150 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors">
+                            <div className="text-left">
+                              <span className="text-[10px] font-black text-indigo-600 uppercase font-mono tracking-wide block">Básico 01</span>
+                              <h5 className="text-[12px] font-black text-gray-800">Procuração</h5>
+                              <p className="text-[11px] font-semibold text-gray-400">Representação outorgada pelo cliente ao escritório.</p>
+                            </div>
+                            <div className="shrink-0 flex items-center gap-2">
+                              {(wizardState.procuracaoFiles || []).length > 0 ? (
+                                <div className="text-[10px] bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg font-black uppercase tracking-wider border border-emerald-150 flex items-center gap-1">
+                                  <span>✓ Custodiado</span>
+                                  <span className="font-mono">({(wizardState.procuracaoFiles || []).length} fl)</span>
                                 </div>
-                              </div>
-
-                              <div className="space-y-2 border-t pt-2.5">
-                                <div className="space-y-1">
-                                  <p className="text-[11px] font-black text-gray-850">Você já recebeu esse documento?</p>
-                                  <div className="flex gap-4">
-                                    {['sim', 'nao'].map(o => (
-                                      <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-700">
-                                        <input type="radio" checked={valState.received === o} onChange={() => setVal({ received: o })} />
-                                        <span>{o}</span>
-                                      </label>
-                                    ))}
-                                  </div>
+                              ) : (
+                                <span className="text-[10px] bg-red-50 text-red-700 px-2.5 py-1 rounded-lg font-black uppercase tracking-wider border border-red-150">
+                                  ✗ Ausente
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {(wizardState.procuracaoFiles || []).length > 0 && (
+                            <div className="pl-4 space-y-1">
+                              {(wizardState.procuracaoFiles || []).map((f: any, idx: number) => (
+                                <div key={idx} className="flex items-center justify-between p-1.5 px-2 bg-indigo-50/60 border border-indigo-150 rounded-xl text-xs">
+                                  <span className="truncate font-semibold text-indigo-900 flex items-center gap-1 min-w-0 max-w-xs">
+                                    <FileText size={12} className="shrink-0" /> <span className="truncate">{f.name}</span>
+                                  </span>
+                                  <span className="text-[10px] text-indigo-400 font-mono shrink-0">({f.size})</span>
                                 </div>
+                              ))}
+                            </div>
+                          )}
 
-                                {valState.received === 'sim' && (
-                                  <div className="space-y-2 pl-3 border-l-2 border-indigo-200">
-                                    <p className="text-[11px] font-bold text-gray-800">Deseja anexar esse documento agora?</p>
-                                    <div className="flex gap-4">
-                                      {['sim', 'nao'].map(o => (
-                                        <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-700">
-                                          <input type="radio" checked={valState.anexar === o} onChange={() => setVal({ anexar: o })} />
-                                          <span>{o}</span>
-                                        </label>
-                                      ))}
+                          {/* Declaração */}
+                          <div className="p-3 bg-gray-50/50 hover:bg-gray-55 border border-gray-150 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors">
+                            <div className="text-left">
+                              <span className="text-[10px] font-black text-indigo-600 uppercase font-mono tracking-wide block">Básico 02</span>
+                              <h5 className="text-[12px] font-black text-gray-800">Declaração</h5>
+                              <p className="text-[11px] font-semibold text-gray-400 font-sans">Declaração de hipossuficiência assinada.</p>
+                            </div>
+                            <div className="shrink-0 flex items-center gap-2">
+                              {(wizardState.declaracaoFiles || []).length > 0 ? (
+                                <div className="text-[10px] bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg font-black uppercase tracking-wider border border-emerald-150 flex items-center gap-1">
+                                  <span>✓ Custodiado</span>
+                                  <span className="font-mono">({(wizardState.declaracaoFiles || []).length} fl)</span>
+                                </div>
+                              ) : (
+                                <span className="text-[10px] bg-red-50 text-red-700 px-2.5 py-1 rounded-lg font-black uppercase tracking-wider border border-red-150">
+                                  ✗ Ausente
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {(wizardState.declaracaoFiles || []).length > 0 && (
+                            <div className="pl-4 space-y-1">
+                              {(wizardState.declaracaoFiles || []).map((f: any, idx: number) => (
+                                <div key={idx} className="flex items-center justify-between p-1.5 px-2 bg-indigo-50/60 border border-indigo-150 rounded-xl text-xs">
+                                  <span className="truncate font-semibold text-indigo-900 flex items-center gap-1 min-w-0 max-w-xs">
+                                    <FileText size={12} className="shrink-0" /> <span className="truncate">{f.name}</span>
+                                  </span>
+                                  <span className="text-[10px] text-indigo-400 font-mono shrink-0">({f.size})</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Contrato */}
+                          <div className="p-3 bg-gray-50/50 hover:bg-gray-55 border border-gray-150 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors">
+                            <div className="text-left">
+                              <span className="text-[10px] font-black text-indigo-600 uppercase font-mono tracking-wide block">Básico 03</span>
+                              <h5 className="text-[12px] font-black text-gray-800">Contrato</h5>
+                              <p className="text-[11px] font-semibold text-gray-400">Contrato de Prestação de Serviços Jurídicos.</p>
+                            </div>
+                            <div className="shrink-0 flex items-center gap-2">
+                              {(wizardState.contratoFiles || []).length > 0 ? (
+                                <div className="text-[10px] bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg font-black uppercase tracking-wider border border-emerald-150 flex items-center gap-1">
+                                  <span>✓ Custodiado</span>
+                                  <span className="font-mono">({(wizardState.contratoFiles || []).length} fl)</span>
+                                </div>
+                              ) : (
+                                <span className="text-[10px] bg-red-50 text-red-700 px-2.5 py-1 rounded-lg font-black uppercase tracking-wider border border-red-150">
+                                  ✗ Ausente
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {(wizardState.contratoFiles || []).length > 0 && (
+                            <div className="pl-4 space-y-1">
+                              {(wizardState.contratoFiles || []).map((f: any, idx: number) => (
+                                <div key={idx} className="flex items-center justify-between p-1.5 px-2 bg-indigo-50/60 border border-indigo-150 rounded-xl text-xs">
+                                  <span className="truncate font-semibold text-indigo-900 flex items-center gap-1 min-w-0 max-w-xs">
+                                    <FileText size={12} className="shrink-0" /> <span className="truncate">{f.name}</span>
+                                  </span>
+                                  <span className="text-[10px] text-indigo-400 font-mono shrink-0">({f.size})</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                        </div>
+                      </div>
+
+                      {/* Card - Provas Mínimas Obrigatórias */}
+                      <div className="bg-white border border-gray-150 rounded-2xl p-5 shadow-3xs space-y-4">
+                        <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
+                          <div className="w-2.5 h-2.5 rounded-full bg-blue-600"></div>
+                          <h4 className="text-xs font-black text-gray-900 uppercase tracking-tight">
+                            Card - Provas Mínimas Obrigatórias
+                          </h4>
+                        </div>
+
+                        <div className="space-y-3">
+                          {/* RG */}
+                          <div className="p-3 bg-gray-50/50 hover:bg-gray-55 border border-gray-150 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors">
+                            <div className="text-left">
+                              <span className="text-[10px] font-black text-indigo-650 uppercase font-mono tracking-wide block">Mínimo 01</span>
+                              <h5 className="text-[12px] font-black text-gray-800">Cédula de Identidade (RG)</h5>
+                              <p className="text-[11px] font-semibold text-gray-400">Documento oficial de identificação civil.</p>
+                            </div>
+                            <div className="shrink-0">
+                              {(wizardState.rgFiles || []).length > 0 ? (
+                                <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg font-black uppercase tracking-wider border border-emerald-150">
+                                  ✓ Custodiado ({(wizardState.rgFiles || []).length} fl)
+                                </span>
+                              ) : (
+                                <span className="text-[10px] bg-red-50 text-red-700 px-2.5 py-1 rounded-lg font-black uppercase tracking-wider border border-red-150">
+                                  ✗ Ausente
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {(wizardState.rgFiles || []).length > 0 && (
+                            <div className="pl-4 space-y-1">
+                              {(wizardState.rgFiles || []).map((f: any, idx: number) => (
+                                <div key={idx} className="flex items-center justify-between p-1.5 px-2 bg-indigo-50/60 border border-indigo-150 rounded-xl text-xs">
+                                  <span className="truncate font-semibold text-indigo-900 flex items-center gap-1 min-w-0 max-w-xs">
+                                    <FileText size={12} /> <span className="truncate">{f.name}</span>
+                                  </span>
+                                  <span className="text-[10px] text-indigo-400 font-mono shrink-0">({f.size})</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* CPF / CNH */}
+                          <div className="p-3 bg-gray-50/50 hover:bg-gray-55 border border-gray-150 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors">
+                            <div className="text-left">
+                              <span className="text-[10px] font-black text-indigo-655 uppercase font-mono tracking-wide block">Mínimo 02</span>
+                              <h5 className="text-[12px] font-black text-gray-800">Documento CPF / CNH</h5>
+                              <p className="text-[11px] font-semibold text-gray-400 font-sans">Identificação fiscal e/ou habilitação nacional.</p>
+                            </div>
+                            <div className="shrink-0">
+                              {(wizardState.cpfFiles || []).length > 0 ? (
+                                <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg font-black uppercase tracking-wider border border-emerald-150">
+                                  ✓ Custodiado ({(wizardState.cpfFiles || []).length} fl)
+                                </span>
+                              ) : (
+                                <span className="text-[10px] bg-red-50 text-red-700 px-2.5 py-1 rounded-lg font-black uppercase tracking-wider border border-red-150">
+                                  ✗ Ausente
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {(wizardState.cpfFiles || []).length > 0 && (
+                            <div className="pl-4 space-y-1">
+                              {(wizardState.cpfFiles || []).map((f: any, idx: number) => (
+                                <div key={idx} className="flex items-center justify-between p-1.5 px-2 bg-indigo-50/60 border border-indigo-150 rounded-xl text-xs">
+                                  <span className="truncate font-semibold text-indigo-900 flex items-center gap-1 min-w-0 max-w-xs">
+                                    <FileText size={12} /> <span className="truncate">{f.name}</span>
+                                  </span>
+                                  <span className="text-[10px] text-indigo-400 font-mono shrink-0">({f.size})</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Comprovante de Residência */}
+                          <div className="p-3 bg-gray-50/50 hover:bg-gray-55 border border-gray-150 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors">
+                            <div className="text-left">
+                              <span className="text-[10px] font-black text-indigo-650 uppercase font-mono tracking-wide block">Mínimo 03</span>
+                              <h5 className="text-[12px] font-black text-gray-800">Comprovante de Residência</h5>
+                              <p className="text-[11px] font-semibold text-gray-400">Fatura de serviço com emissão inferior a 90 dias.</p>
+                            </div>
+                            <div className="shrink-0">
+                              {(wizardState.residenciaFiles || []).length > 0 ? (
+                                <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg font-black uppercase tracking-wider border border-emerald-150">
+                                  ✓ Custodiado ({(wizardState.residenciaFiles || []).length} fl)
+                                </span>
+                              ) : (
+                                <span className="text-[10px] bg-red-50 text-red-700 px-2.5 py-1 rounded-lg font-black uppercase tracking-wider border border-red-150">
+                                  ✗ Ausente
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {(wizardState.residenciaFiles || []).length > 0 && (
+                            <div className="pl-4 space-y-1">
+                              {(wizardState.residenciaFiles || []).map((f: any, idx: number) => (
+                                <div key={idx} className="flex items-center justify-between p-1.5 px-2 bg-indigo-50/60 border border-indigo-150 rounded-xl text-xs">
+                                  <span className="truncate font-semibold text-indigo-900 flex items-center gap-1 min-w-0 max-w-xs">
+                                    <FileText size={12} /> <span className="truncate">{f.name}</span>
+                                  </span>
+                                  <span className="text-[10px] text-indigo-400 font-mono shrink-0">({f.size})</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                        </div>
+                      </div>
+
+                      {/* Card - Outras Provas do cliente */}
+                      <div className="bg-white border border-gray-150 rounded-2xl p-5 shadow-3xs space-y-4">
+                        <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
+                          <div className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></div>
+                          <h4 className="text-xs font-black text-gray-900 uppercase tracking-tight">
+                            Card - Outras Provas do cliente
+                          </h4>
+                        </div>
+
+                        {requests.length > 0 ? (
+                          <div className="space-y-4">
+                            {requests.map((req) => {
+                              const valState = wizardState.q5_provas?.[req.id] || { received: 'nao' };
+                              const setVal = (updatesSub: any) => {
+                                const nextProvas = {
+                                  ...wizardState.q5_provas,
+                                  [req.id]: { ...valState, ...updatesSub }
+                                };
+                                saveWizardStateUpdate({ q5_provas: nextProvas });
+                              };
+
+                              return (
+                                <div key={req.id} className="p-4 bg-white border border-gray-150 rounded-xl space-y-3 shadow-4xs text-left">
+                                  <div className="flex justify-between items-start gap-2">
+                                    <div>
+                                      <span className="text-[9px] bg-indigo-100 text-indigo-805 px-1.5 py-0.5 rounded font-mono font-bold block w-max uppercase mb-1">
+                                        {req.documentNumber || 'Doc. Adicional'}
+                                      </span>
+                                      <h4 className="text-xs font-black text-gray-900">{req.title}</h4>
+                                      <p className="text-[11px] text-gray-500 font-semibold leading-relaxed">{req.description}</p>
+                                      {req.justification && (
+                                        <p className="text-[11px] text-gray-400 font-semibold italic mt-1.5 leading-relaxed bg-gray-50/55 p-2 rounded-lg border border-gray-100/55">
+                                          <strong>Justificativa para exigir a prova:</strong> {req.justification}
+                                        </p>
+                                      )}
                                     </div>
-                                    {valState.anexar === 'sim' && <FileUploadBox field={`custom_${req.id}`} />}
                                   </div>
-                                )}
 
-                                {valState.received === 'nao' && (
-                                  <div className="p-3 bg-red-50/50 rounded-xl space-y-2 animate-in fade-in">
-                                    <p className="text-[10px] font-bold text-red-800 uppercase font-mono">Solicitar Diligência de Pendência</p>
-                                    <div className="flex flex-wrap gap-2">
-                                      {['portal_cliente', 'whatsapp', 'email', 'outro'].map(ch => (
-                                        <label key={ch} className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-700 cursor-pointer">
+                                  <div className="space-y-2 border-t border-gray-100 pt-2.5">
+                                    <div className="space-y-1">
+                                      <p className="text-[11px] font-black text-gray-855">Você já recebeu esse documento?</p>
+                                      <div className="flex gap-4">
+                                        {['sim', 'nao'].map(o => (
+                                          <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-700">
+                                            <input type="radio" checked={valState.received === o} onChange={() => setVal({ received: o })} />
+                                            <span>{o}</span>
+                                          </label>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {valState.received === 'sim' && (
+                                      <div className="space-y-2 pl-3 border-l-2 border-indigo-200">
+                                        <p className="text-[11px] font-bold text-gray-800">Deseja anexar esse documento agora?</p>
+                                        <div className="flex gap-4">
+                                          {['sim', 'nao'].map(o => (
+                                            <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-semibold text-gray-700">
+                                              <input type="radio" checked={valState.anexar === o} onChange={() => setVal({ anexar: o })} />
+                                              <span>{o}</span>
+                                            </label>
+                                          ))}
+                                        </div>
+                                        {valState.anexar === 'sim' && <FileUploadBox field={`custom_${req.id}`} />}
+                                      </div>
+                                    )}
+
+                                    {valState.received === 'nao' && (
+                                      <div className="p-3 bg-red-50/50 rounded-xl space-y-2 animate-in fade-in">
+                                        <p className="text-[10px] font-bold text-red-800 uppercase font-mono">Solicitar Diligência de Pendência</p>
+                                        <div className="flex flex-wrap gap-2">
+                                          {['portal_cliente', 'whatsapp', 'email', 'outro'].map(ch => (
+                                            <label key={ch} className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-700 cursor-pointer">
+                                              <input 
+                                                type="checkbox"
+                                                checked={valState.channels?.includes(ch)}
+                                                onChange={() => {
+                                                  const currentList = valState.channels || [];
+                                                  const nextList = currentList.includes(ch)
+                                                    ? currentList.filter((x: string) => x !== ch)
+                                                    : [...currentList, ch];
+                                                  setVal({ channels: nextList });
+                                                }}
+                                                className="rounded text-red-500 focus:ring-0"
+                                              />
+                                              <span>{ch === 'portal_cliente' ? 'Portal do Cliente' : ch.toUpperCase()}</span>
+                                            </label>
+                                          ))}
+                                        </div>
+                                        {valState.channels?.includes('outro') && (
                                           <input 
-                                            type="checkbox"
-                                            checked={valState.channels?.includes(ch)}
-                                            onChange={() => {
-                                              const currentList = valState.channels || [];
-                                              const nextList = currentList.includes(ch)
-                                                ? currentList.filter((x: string) => x !== ch)
-                                                : [...currentList, ch];
-                                              setVal({ channels: nextList });
-                                            }}
-                                            className="rounded text-red-500 focus:ring-0"
+                                            type="text" 
+                                            placeholder="Falar outro canal" 
+                                            value={valState.outro || ''}
+                                            onChange={(e) => setVal({ outro: e.target.value })}
+                                            className="w-full px-2 py-1 bg-white border rounded text-xs font-semibold outline-none"
                                           />
-                                          <span>{ch === 'portal_cliente' ? 'Portal do Cliente' : ch.toUpperCase()}</span>
-                                        </label>
-                                      ))}
-                                    </div>
-                                    {valState.channels?.includes('outro') && (
-                                      <input 
-                                        type="text" 
-                                        placeholder="Falar outro canal" 
-                                        value={valState.outro || ''}
-                                        onChange={(e) => setVal({ outro: e.target.value })}
-                                        className="w-full px-2 py-1 bg-white border rounded text-xs font-semibold outline-none"
-                                      />
+                                        )}
+                                      </div>
                                     )}
                                   </div>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="p-4 bg-gray-50/50 border border-dashed border-gray-200 rounded-xl text-center text-xs text-gray-400 font-semibold leading-relaxed font-sans">
+                            Nenhum pedido de prova complementar elaborado nesta etapa.
+                          </div>
+                        )}
                       </div>
+
                     </div>
-                  )}
+                  </div>
 
                   {/* ACTIVE PENDENCIES PANEL */}
                   <div className="space-y-1 border-t pt-3">

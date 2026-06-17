@@ -42,7 +42,14 @@ import {
   Coins,
   Check,
   TrendingUp,
-  Wallet
+  Wallet,
+  HeartHandshake,
+  Gift,
+  Cake,
+  MessageSquare,
+  Send,
+  Copy,
+  Laptop
 } from 'lucide-react';
 
 import { PainelGeralCliente } from '../../../components/boss/portal/PainelGeralCliente';
@@ -108,7 +115,7 @@ export default function EditarPortalCliente() {
   const [allClientFinancials, setAllClientFinancials] = useState<any[]>([]);
   const [loadingDashboard, setLoadingDashboard] = useState(false);
 
-  const [activeSidebarSection, setActiveSidebarSection] = useState<'painel_geral' | 'dados_cadastrais' | 'relacao_casos' | 'audiencias' | 'pericias' | 'reunioes' | 'solicitacao_provas' | 'solicitacao_informacoes' | 'financeiro'>('painel_geral');
+  const [activeSidebarSection, setActiveSidebarSection] = useState<'painel_geral' | 'dados_cadastrais' | 'crm_cliente' | 'relacao_casos' | 'audiencias' | 'pericias' | 'reunioes' | 'solicitacao_provas' | 'solicitacao_informacoes' | 'financeiro'>('painel_geral');
 
   // Event creation form local states
   const [addingEvent, setAddingEvent] = useState(false);
@@ -119,6 +126,25 @@ export default function EditarPortalCliente() {
   const [newEventLocation, setNewEventLocation] = useState('');
   const [newEventDesc, setNewEventDesc] = useState('');
   const [newEventVisible, setNewEventVisible] = useState(true);
+
+  // CRM client states
+  const [bdayChannel, setBdayChannel] = useState<'email' | 'whatsapp' | 'facebook' | 'instagram' | 'tiktok'>('whatsapp');
+  const [bdayMessage, setBdayMessage] = useState('');
+  const [profChannel, setProfChannel] = useState<'email' | 'whatsapp' | 'facebook' | 'instagram' | 'tiktok'>('whatsapp');
+  const [profMessage, setProfMessage] = useState('');
+  const [bdayCopied, setBdayCopied] = useState(false);
+  const [profCopied, setProfCopied] = useState(false);
+
+  useEffect(() => {
+    if (selectedClient) {
+      const clientName = getClientName(selectedClient);
+      const pf = selectedClient?.pfData || selectedClient?.pfDadosPessoais || {};
+      const job = pf.pf_profissao || pf.profissao || 'sua profissão';
+
+      setBdayMessage(`Olá, ${clientName}! Nós da Giffoni Advogados Associados desejamos a você um feliz aniversário! Que seu ano seja repleto de realizações, saúde, sucesso e paz. É uma honra ter você como parceiro e cliente em nossa jornada jurídica. Parabéns! 🎉`);
+      setProfMessage(`Olá, ${clientName}! Hoje, celebramos e parabenizamos você pela sua excelente dedicação em ${job === 'sua profissão' ? 'sua carreira' : job}. Nós da Giffoni Advogados Associados temos orgulho de contar com sua parceria fática e dedicação profissional. Sucesso e conquistas sempre em sua jornada! 💼⚖️`);
+    }
+  }, [selectedClient]);
 
   // Fetch client by slug or fallback to ID
   const fetchClientData = async () => {
@@ -703,6 +729,7 @@ export default function EditarPortalCliente() {
                   {[
                     { id: 'painel_geral', label: 'Painel Geral do Cliente', icon: Activity, desc: 'Métricas, processos e status fáticos' },
                     { id: 'dados_cadastrais', label: 'Dados Cadastrais do Cliente', icon: User, desc: 'Ficha de identificação integrada' },
+                    { id: 'crm_cliente', label: 'CRM do Cliente', icon: HeartHandshake, desc: 'Ações comerciais e relacionamento fático' },
                     { id: 'relacao_casos', label: 'Relação de Casos do Cliente', icon: Briefcase, desc: 'Processos e coletas fáticas por caso' },
                     { id: 'audiencias', label: 'Audiências do Cliente', icon: Calendar, desc: 'Gestão de sessões e audiências' },
                     { id: 'pericias', label: 'Perícias do Cliente', icon: UserCheck, desc: 'Gestão de exames e perícias técnicas' },
@@ -785,6 +812,253 @@ export default function EditarPortalCliente() {
                   navigate={navigate}
                 />
               )}
+
+              {/* VIEW: CRM DO CLIENTE */}
+              {activeSidebarSection === 'crm_cliente' && (() => {
+                const isPf = selectedClient?.type === 'PF';
+                const pf = selectedClient?.pfData || selectedClient?.pfDadosPessoais || {};
+                
+                const contactEmail = 
+                  selectedClient?.pfContato?.pf_email || 
+                  selectedClient?.pfContato?.email || 
+                  pf.pf_email || 
+                  pf.email || 
+                  selectedClient?.portalMirror?.pfContato?.email || 
+                  '—';
+
+                const rawPhone = 
+                  selectedClient?.pfContato?.pf_telefoneCelular || 
+                  selectedClient?.pfContato?.pf_telefone || 
+                  selectedClient?.pfContato?.telefone || 
+                  pf.pf_telefoneCelular || 
+                  pf.pf_telefone || 
+                  pf.telefone || 
+                  selectedClient?.portalMirror?.pfContato?.telefone || 
+                  '—';
+
+                const cleanedPhone = rawPhone.replace(/\D/g, '');
+
+                const handleOpenChannel = (type: 'bday' | 'prof', channel: string, text: string) => {
+                  if (channel === 'whatsapp') {
+                    const waLink = cleanedPhone 
+                      ? `https://wa.me/${cleanedPhone}?text=${encodeURIComponent(text)}`
+                      : `https://wa.me/?text=${encodeURIComponent(text)}`;
+                    window.open(waLink, '_blank', 'noopener,noreferrer');
+                  } else if (channel === 'email') {
+                    const subject = type === 'bday' 
+                      ? 'Feliz Aniversário! — Giffoni Advogados Associados' 
+                      : 'Parabéns pela sua dedicação profissional! — Giffoni Advogados Associados';
+                    const emailLink = `mailto:${contactEmail === '—' ? '' : contactEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+                    window.location.href = emailLink;
+                  } else if (channel === 'facebook') {
+                    window.open('https://facebook.com', '_blank', 'noopener,noreferrer');
+                  } else if (channel === 'instagram') {
+                    window.open('https://instagram.com', '_blank', 'noopener,noreferrer');
+                  } else if (channel === 'tiktok') {
+                    window.open('https://tiktok.com', '_blank', 'noopener,noreferrer');
+                  }
+                };
+
+                const handleCopy = (type: 'bday' | 'prof', text: string) => {
+                  navigator.clipboard.writeText(text);
+                  if (type === 'bday') {
+                    setBdayCopied(true);
+                    setTimeout(() => setBdayCopied(false), 2000);
+                  } else {
+                    setProfCopied(true);
+                    setTimeout(() => setProfCopied(false), 2000);
+                  }
+                };
+
+                return (
+                  <div className="bg-white border border-gray-150 rounded-3xl p-6 md:p-8 shadow-xs relative overflow-hidden text-left space-y-8 animate-fade-in">
+                    {/* Header */}
+                    <div className="flex items-center gap-3 border-b border-gray-100 pb-5">
+                      <div className="w-12 h-12 bg-indigo-50 border border-indigo-100 text-indigo-650 rounded-2xl flex items-center justify-center shadow-3xs shrink-0">
+                        <HeartHandshake size={22} className="stroke-[2px]" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] font-mono font-black text-indigo-400 uppercase tracking-widest block">RELACIONAMENTO FIDELIZAÇÃO</span>
+                          <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-lg font-mono border bg-indigo-50 text-indigo-700 border-indigo-200">CRM ATIVO</span>
+                        </div>
+                        <h2 className="text-xl font-black text-gray-900 tracking-tight mt-0.5">CRM do Cliente — Portal Integrado</h2>
+                      </div>
+                    </div>
+
+                    {/* Client Information Summary Badge */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 border border-gray-100 p-4 rounded-2xl">
+                      <div>
+                        <span className="text-[10px] font-sans font-extrabold text-gray-400 uppercase tracking-wider block">Nome do Cliente</span>
+                        <span className="text-xs font-black text-gray-905 block truncate">{getClientName(selectedClient)}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-sans font-extrabold text-gray-400 uppercase tracking-wider block">Aniversário / Nascimento</span>
+                        <span className="text-xs font-black text-gray-850 block truncate">
+                          {pf.pf_dataNascimento || pf.dataNascimento || 'Não informada'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-sans font-extrabold text-gray-400 uppercase tracking-wider block">Profissão / Atividade</span>
+                        <span className="text-xs font-black text-[#5850ec] block truncate">
+                          {pf.pf_profissao || pf.profissao || 'Não informada'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                      {/* CARD 1: HAPPY BIRTHDAY */}
+                      <div className="bg-white border-2 border-slate-100 rounded-[2rem] p-6 shadow-sm flex flex-col justify-between space-y-5 hover:border-indigo-100 transition-colors">
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-3">
+                            <span className="w-10 h-10 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
+                              <Cake size={20} />
+                            </span>
+                            <div>
+                              <h3 className="text-xs font-extrabold text-gray-900 uppercase tracking-wide">Felicitar por Aniversário 🎈</h3>
+                              <span className="text-[9px] uppercase font-mono tracking-wider text-slate-400 font-extrabold">Data de nascimento cadastrada</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <p className="text-xxs font-black text-gray-500 uppercase tracking-widest">Como deseja enviar feliz aniversário ao seu cliente?</p>
+                            <div className="flex flex-wrap gap-1">
+                              {(['email', 'whatsapp', 'facebook', 'instagram', 'tiktok'] as const).map((ch) => (
+                                <button
+                                  key={ch}
+                                  type="button"
+                                  onClick={() => setBdayChannel(ch)}
+                                  className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
+                                    bdayChannel === ch
+                                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                                      : 'bg-white border-gray-200 text-gray-650 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  {ch === 'email' && 'E-mail'}
+                                  {ch === 'whatsapp' && 'WhatsApp'}
+                                  {ch === 'facebook' && 'Facebook'}
+                                  {ch === 'instagram' && 'Instagram'}
+                                  {ch === 'tiktok' && 'TikTok'}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="block text-xxs font-black text-slate-400 uppercase tracking-widest">Visualizar / Editar Mensagem integrada</label>
+                            <textarea
+                              rows={5}
+                              value={bdayMessage}
+                              onChange={(e) => setBdayMessage(e.target.value)}
+                              className="w-full text-xs font-medium text-gray-700 bg-slate-50 border border-gray-150 p-3.5 rounded-2xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 transition"
+                              placeholder="Escreva sua mensagem personalizada..."
+                            />
+                          </div>
+                        </div>
+
+                        <div className="pt-2 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleCopy('bday', bdayMessage)}
+                            className="flex items-center justify-center gap-1.5 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-gray-700 text-[10px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer"
+                          >
+                            <Copy size={13} />
+                            <span>{bdayCopied ? 'Copiado!' : 'Copiar'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenChannel('bday', bdayChannel, bdayMessage)}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer"
+                          >
+                            <Send size={13} />
+                            <span>Enviar via {bdayChannel === 'email' ? 'E-mail' : bdayChannel === 'whatsapp' ? 'WhatsApp' : bdayChannel.toUpperCase()}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* CARD 2: PROFESSION DAY */}
+                      <div className="bg-white border-2 border-slate-100 rounded-[2rem] p-6 shadow-sm flex flex-col justify-between space-y-5 hover:border-indigo-100 transition-colors">
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-3">
+                            <span className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                              <Gift size={20} />
+                            </span>
+                            <div>
+                              <h3 className="text-xs font-extrabold text-gray-900 uppercase tracking-wide">Comemorar Dia da Profissão 💼</h3>
+                              <span className="text-[9px] uppercase font-mono tracking-wider text-slate-400 font-extrabold">Felicite a atividade comercial</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <p className="text-xxs font-black text-gray-500 uppercase tracking-widest">Como deseja enviar felicitações pelo dia da profissão ao seu cliente?</p>
+                            <div className="flex flex-wrap gap-1">
+                              {(['email', 'whatsapp', 'facebook', 'instagram', 'tiktok'] as const).map((ch) => (
+                                <button
+                                  key={ch}
+                                  type="button"
+                                  onClick={() => setProfChannel(ch)}
+                                  className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
+                                    profChannel === ch
+                                      ? 'bg-indigo-600 border-indigo-600 text-white'
+                                      : 'bg-white border-gray-200 text-gray-650 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  {ch === 'email' && 'E-mail'}
+                                  {ch === 'whatsapp' && 'WhatsApp'}
+                                  {ch === 'facebook' && 'Facebook'}
+                                  {ch === 'instagram' && 'Instagram'}
+                                  {ch === 'tiktok' && 'TikTok'}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="block text-xxs font-black text-slate-400 uppercase tracking-widest">Visualizar / Editar Mensagem integrada</label>
+                            <textarea
+                              rows={5}
+                              value={profMessage}
+                              onChange={(e) => setProfMessage(e.target.value)}
+                              className="w-full text-xs font-medium text-gray-700 bg-slate-50 border border-gray-150 p-3.5 rounded-2xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 transition"
+                              placeholder="Escreva sua mensagem personalizada..."
+                            />
+                          </div>
+                        </div>
+
+                        <div className="pt-2 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleCopy('prof', profMessage)}
+                            className="flex items-center justify-center gap-1.5 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-gray-700 text-[10px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer"
+                          >
+                            <Copy size={13} />
+                            <span>{profCopied ? 'Copiado!' : 'Copiar'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenChannel('prof', profChannel, profMessage)}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer"
+                          >
+                            <Send size={13} />
+                            <span>Enviar via {profChannel === 'email' ? 'E-mail' : profChannel === 'whatsapp' ? 'WhatsApp' : profChannel.toUpperCase()}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Integrated messaging notice with custom formatting instructions */}
+                    <div className="bg-indigo-50/50 border border-indigo-100 p-4 rounded-2xl text-xs text-indigo-950 flex flex-col gap-2">
+                      <p className="font-bold flex items-center gap-1.5">
+                        <Laptop size={14} className="text-indigo-650" />
+                        <span>Instruções de CRM & Comunicação Multi-Canal</span>
+                      </p>
+                      <p className="leading-relaxed font-medium text-indigo-900">
+                        O sistema preencheu de forma inteligente os contatos cadastrados. Ao acionar o botão <strong>Enviar</strong> para <strong className="text-indigo-750">WhatsApp</strong> ou <strong className="text-indigo-750">E-mail</strong>, o BOSS abrirá os respectivos aplicativos com o destinatário e texto devidamente integrados. Para as redes facebook, instagram e tiktok, copie a mensagem clicando no respectivo botão e cole diretamente no chat ou postagem do canal desejado.
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* VIEW 4: AUDIÊNCIAS */}
               {activeSidebarSection === 'audiencias' && (

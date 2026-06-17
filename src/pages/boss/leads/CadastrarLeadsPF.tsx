@@ -9,7 +9,10 @@ import {
   CheckCircle2, 
   AlertCircle, 
   Save, 
-  Sparkles
+  Sparkles,
+  Phone,
+  Instagram,
+  Facebook
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -29,11 +32,10 @@ export default function CadastrarLeadsPF() {
     urgencia: 'Média',
     existePrazo: false,
     dataPrazo: '',
-    possuiProcesso: false,
-    numeroProcesso: '',
-    parteContraria: '',
+    jaCliente: 'Caso Novo', // Já é Cliente do Escritório ou caso é novo?
+    solicitarReuniao: false, // Permitindo Solicitar Agendamento de Reunião
     documentosRecebidos: false,
-    responsavelInterno: '',
+    responsavelInterno: 'Comercial Interno',
     valorPotencial: '',
     statusFunil: 'Novo Lead',
     classificacao: 'Geral',
@@ -42,17 +44,12 @@ export default function CadastrarLeadsPF() {
 
     pessoaFisica: {
       nomeCompleto: '',
-      cpf: '',
-      rg: '',
-      dataNascimento: '',
-      estadoCivil: 'Solteiro(a)',
-      profissao: '',
-      telefone: '',
-      whatsapp: '',
       email: '',
-      endereco: '',
-      cidade: '',
-      uf: ''
+      telefone: '',
+      possuiWhatsapp: false,
+      instagram: '',
+      tiktok: '',
+      facebook: ''
     }
   };
 
@@ -78,9 +75,20 @@ export default function CadastrarLeadsPF() {
         convertidoEmCliente: false,
         createdAt: now,
         updatedAt: now,
+        // Compatibilidade com os campos antigos do banco
+        possuiProcesso: leadFormData.jaCliente === 'Já é Cliente',
         pessoaFisica: {
           ...leadFormData.pessoaFisica,
-          nomeCompleto: name
+          nomeCompleto: name,
+          // Preencher campos vazios obrigatórios estruturais antigos para evitar nulos
+          cpf: '',
+          rg: '',
+          dataNascimento: '',
+          estadoCivil: 'Não fornecido',
+          profissao: '',
+          endereco: '',
+          cidade: '',
+          uf: ''
         }
       };
 
@@ -109,14 +117,14 @@ export default function CadastrarLeadsPF() {
 
   return (
     <BossLayout>
-      <div className="max-w-4xl mx-auto px-4 md:px-0 space-y-8 animate-fade-in pb-16">
+      <div className="max-w-xl mx-auto px-4 md:px-0 space-y-8 animate-fade-in pb-16">
         
         {/* HEADER */}
         <div className="border-b border-gray-150 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <span className="text-[10px] uppercase font-black tracking-widest text-[#2563ea] font-mono">Etapa 01 — Identificação do Cliente em Potencial</span>
             <h1 className="text-xl font-black text-gray-900 tracking-tight leading-snug">
-              Funil de Vendas de Serviços Jurídicos da Giffoni Advogados Associados - Identificação do Cliente em Potencial - Ficha LEAD PF
+              Ficha LEAD PF - Identificação do Cliente em Potencial
             </h1>
           </div>
           
@@ -126,7 +134,7 @@ export default function CadastrarLeadsPF() {
             className="text-xs font-bold text-gray-650 bg-white border border-gray-200 px-4 py-2.5 rounded-xl shadow-4xs transition hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto shrink-0"
           >
             <ArrowLeft size={14} />
-            <span>Voltar à Seleção</span>
+            <span>Voltar</span>
           </button>
         </div>
 
@@ -186,12 +194,12 @@ export default function CadastrarLeadsPF() {
                 <h3 className="font-extrabold text-sm uppercase tracking-wide">
                   Dados Cadastrais de LEAD da Pessoa Física
                 </h3>
-                <p className="text-[10px] text-white/90">Insira as informações cadastrais e comerciais para formalizar a ficha.</p>
+                <p className="text-[10px] text-white/90">Insira as informações cadastrais essenciais e de qualificação comercial.</p>
               </div>
             </div>
           </div>
 
-          <form onSubmit={handleSubmitLead} className="p-6 space-y-8">
+          <form onSubmit={handleSubmitLead} className="p-6 space-y-6">
             
             {/* SECTION 1: CADASTRO BASICO */}
             <div className="space-y-4">
@@ -199,11 +207,13 @@ export default function CadastrarLeadsPF() {
                 1. Informações Cadastrais Básicas (Pessoa Física)
               </span>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="sm:col-span-2">
+              <div className="flex flex-col gap-4">
+                {/* 1. Nome Completo */}
+                <div>
                   <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Nome Completo</label>
                   <input 
                     type="text" 
+                    required
                     value={leadFormData.pessoaFisica.nomeCompleto}
                     onChange={(e) => setLeadFormData({
                       ...leadFormData,
@@ -213,102 +223,10 @@ export default function CadastrarLeadsPF() {
                     placeholder="Nome Completo do interessado"
                   />
                 </div>
+
+                {/* 2. Email */}
                 <div>
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">CPF</label>
-                  <input 
-                    type="text" 
-                    value={leadFormData.pessoaFisica.cpf}
-                    onChange={(e) => setLeadFormData({
-                      ...leadFormData,
-                      pessoaFisica: { ...leadFormData.pessoaFisica, cpf: e.target.value }
-                    })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition font-mono"
-                    placeholder="000.000.000-00"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">RG</label>
-                  <input 
-                    type="text" 
-                    value={leadFormData.pessoaFisica.rg}
-                    onChange={(e) => setLeadFormData({
-                      ...leadFormData,
-                      pessoaFisica: { ...leadFormData.pessoaFisica, rg: e.target.value }
-                    })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                    placeholder="0000000-0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Data Nascimento</label>
-                  <input 
-                    type="date" 
-                    value={leadFormData.pessoaFisica.dataNascimento}
-                    onChange={(e) => setLeadFormData({
-                      ...leadFormData,
-                      pessoaFisica: { ...leadFormData.pessoaFisica, dataNascimento: e.target.value }
-                    })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Estado Civil</label>
-                  <select 
-                    value={leadFormData.pessoaFisica.estadoCivil}
-                    onChange={(e) => setLeadFormData({
-                      ...leadFormData,
-                      pessoaFisica: { ...leadFormData.pessoaFisica, estadoCivil: e.target.value }
-                    })}
-                    className="w-full text-xs font-semibold px-4 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition cursor-pointer"
-                  >
-                    <option>Solteiro(a)</option>
-                    <option>Casado(a)</option>
-                    <option>Divorciado(a)</option>
-                    <option>Viúvo(a)</option>
-                    <option>União Estável</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Profissão</label>
-                  <input 
-                    type="text" 
-                    value={leadFormData.pessoaFisica.profissao}
-                    onChange={(e) => setLeadFormData({
-                      ...leadFormData,
-                      pessoaFisica: { ...leadFormData.pessoaFisica, profissao: e.target.value }
-                    })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                    placeholder="Ex: Engenheiro"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Telefone Particular</label>
-                  <input 
-                    type="text" 
-                    value={leadFormData.pessoaFisica.telefone}
-                    onChange={(e) => setLeadFormData({
-                      ...leadFormData,
-                      pessoaFisica: { ...leadFormData.pessoaFisica, telefone: e.target.value }
-                    })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition font-sans"
-                    placeholder="(00) 0000-0000"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">WhatsApp de Contato</label>
-                  <input 
-                    type="text" 
-                    value={leadFormData.pessoaFisica.whatsapp}
-                    onChange={(e) => setLeadFormData({
-                      ...leadFormData,
-                      pessoaFisica: { ...leadFormData.pessoaFisica, whatsapp: e.target.value }
-                    })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition font-sans"
-                    placeholder="(00) 90000-0000"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">E-mail</label>
+                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Email</label>
                   <input 
                     type="email" 
                     value={leadFormData.pessoaFisica.email}
@@ -320,48 +238,108 @@ export default function CadastrarLeadsPF() {
                     placeholder="contato@exemplo.com"
                   />
                 </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Endereço Residencial</label>
-                  <input 
-                    type="text" 
-                    value={leadFormData.pessoaFisica.endereco}
-                    onChange={(e) => setLeadFormData({
-                      ...leadFormData,
-                      pessoaFisica: { ...leadFormData.pessoaFisica, endereco: e.target.value }
-                    })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                    placeholder="Rua, Número, Bairro, Complemento"
-                  />
-                </div>
+
+                {/* 3. Telefone (botão se possui WhatsApp) */}
                 <div>
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Cidade / UF</label>
+                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Telefone</label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input 
+                      type="text" 
+                      value={leadFormData.pessoaFisica.telefone}
+                      onChange={(e) => setLeadFormData({
+                        ...leadFormData,
+                        pessoaFisica: { ...leadFormData.pessoaFisica, telefone: e.target.value }
+                      })}
+                      className="flex-1 text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                      placeholder="(00) 90000-0000"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setLeadFormData({
+                        ...leadFormData,
+                        pessoaFisica: { ...leadFormData.pessoaFisica, possuiWhatsapp: !leadFormData.pessoaFisica.possuiWhatsapp }
+                      })}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5 border cursor-pointer ${
+                        leadFormData.pessoaFisica.possuiWhatsapp 
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-700 font-extrabold shadow-sm'
+                          : 'bg-white border-gray-200 text-gray-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className={leadFormData.pessoaFisica.possuiWhatsapp ? 'text-emerald-600 font-black' : 'text-gray-400'}>
+                        💬
+                      </span>
+                      <span>Possui WhatsApp</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 4. Instagram */}
+                <div>
+                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Instagram</label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-2.5 text-gray-400 text-xs font-bold">@</span>
+                    <input 
+                      type="text" 
+                      value={leadFormData.pessoaFisica.instagram}
+                      onChange={(e) => setLeadFormData({
+                        ...leadFormData,
+                        pessoaFisica: { ...leadFormData.pessoaFisica, instagram: e.target.value }
+                      })}
+                      className="w-full text-xs font-semibold pl-8 pr-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500"
+                      placeholder="usuario"
+                    />
+                  </div>
+                </div>
+
+                {/* 5. Tik Tok */}
+                <div>
+                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Tik Tok</label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-2.5 text-gray-400 text-xs font-bold">@</span>
+                    <input 
+                      type="text" 
+                      value={leadFormData.pessoaFisica.tiktok}
+                      onChange={(e) => setLeadFormData({
+                        ...leadFormData,
+                        pessoaFisica: { ...leadFormData.pessoaFisica, tiktok: e.target.value }
+                      })}
+                      className="w-full text-xs font-semibold pl-8 pr-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500"
+                      placeholder="usuario.tiktok"
+                    />
+                  </div>
+                </div>
+
+                {/* 6. Facebook */}
+                <div>
+                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Facebook</label>
                   <input 
                     type="text" 
-                    value={leadFormData.pessoaFisica.cidade}
+                    value={leadFormData.pessoaFisica.facebook}
                     onChange={(e) => setLeadFormData({
                       ...leadFormData,
-                      pessoaFisica: { ...leadFormData.pessoaFisica, cidade: e.target.value }
+                      pessoaFisica: { ...leadFormData.pessoaFisica, facebook: e.target.value }
                     })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                    placeholder="Ex: Curitiba / PR"
+                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500"
+                    placeholder="Link ou nome do perfil"
                   />
                 </div>
               </div>
             </div>
 
-            {/* SECTION 2: NEGOCIO E SOLUCAO */}
-            <div className="space-y-4">
+            {/* SECTION 2: QUALIFICACAO */}
+            <div className="space-y-4 pt-2">
               <span className="block text-[10px] font-black uppercase tracking-wider text-slate-450 border-b border-gray-100 pb-1.5">
                 2. Informações de Negócio & Qualificação da Demanda
               </span>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="flex flex-col gap-4">
+                {/* 1. Origem do LEAD */}
                 <div>
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Origem do Lead</label>
+                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Origem do LEAD</label>
                   <select 
                     value={leadFormData.origemLead}
                     onChange={(e) => setLeadFormData({ ...leadFormData, origemLead: e.target.value })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition cursor-pointer"
+                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white outline-none transition cursor-pointer"
                   >
                     <option>WhatsApp</option>
                     <option>Indicação Direta</option>
@@ -378,12 +356,13 @@ export default function CadastrarLeadsPF() {
                   </select>
                 </div>
 
+                {/* 2. Área Jurídica de Interesse */}
                 <div>
                   <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Área Jurídica de Interesse</label>
                   <select 
                     value={leadFormData.areaJuridica}
                     onChange={(e) => setLeadFormData({ ...leadFormData, areaJuridica: e.target.value })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition cursor-pointer"
+                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white outline-none transition cursor-pointer"
                   >
                     <option>Trabalhista</option>
                     <option>Previdenciário (INSS)</option>
@@ -397,12 +376,13 @@ export default function CadastrarLeadsPF() {
                   </select>
                 </div>
 
+                {/* 3. Classificação Comercial */}
                 <div>
                   <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Classificação Comercial</label>
                   <select 
                     value={leadFormData.classificacao}
                     onChange={(e) => setLeadFormData({ ...leadFormData, classificacao: e.target.value })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition cursor-pointer"
+                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white outline-none transition cursor-pointer"
                   >
                     <option>Geral</option>
                     <option>Grandes Contas</option>
@@ -411,62 +391,99 @@ export default function CadastrarLeadsPF() {
                   </select>
                 </div>
 
-                <div className="sm:col-span-2">
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Assunto / Do que se trata?</label>
+                {/* 4. Assunto */}
+                <div>
+                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Assunto</label>
                   <input 
                     type="text" 
                     value={leadFormData.assunto}
                     onChange={(e) => setLeadFormData({ ...leadFormData, assunto: e.target.value })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white outline-none transition"
                     placeholder="Ex: Cobrança de Horas Extras de FGTS acumulado"
                   />
                 </div>
 
+                {/* 5. Valor em Potencial estimado */}
                 <div>
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Valor Potencial Estimado (R$)</label>
+                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Valor em Potencial estimado (R$)</label>
                   <input 
                     type="number" 
                     value={leadFormData.valorPotencial}
                     onChange={(e) => setLeadFormData({ ...leadFormData, valorPotencial: e.target.value })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition font-sans"
+                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white outline-none font-sans"
                     placeholder="Ex: 15000"
                   />
                 </div>
 
-                <div className="sm:col-span-3">
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Dor Principal Relatada pelo Lead</label>
+                {/* 6. Resumo da Dor Relatada pelo cliente */}
+                <div>
+                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Resumo da Dor Relatada pelo cliente</label>
                   <textarea 
-                    rows={2}
+                    rows={3}
                     value={leadFormData.dorPrincipal}
                     onChange={(e) => setLeadFormData({ ...leadFormData, dorPrincipal: e.target.value })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white outline-none transition"
                     placeholder="O que motivou o contato? Qual o problema central dele?"
                   />
                 </div>
-              </div>
 
-              {/* ADVANCED CRITERIA GRID */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-3">
-                <div className="bg-slate-50/70 p-4 border border-gray-200/50 rounded-2xl space-y-3">
-                  <span className="block text-[10px] font-black uppercase tracking-wider text-indigo-950 font-sans">Fatores Temporais (Prazos)</span>
-                  
+                {/* 7. Já é Cliente do Escritório ou caso é novo? */}
+                <div>
+                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                    Já é Cliente do Escritório ou caso é novo?
+                  </label>
+                  <div className="flex flex-col gap-2">
+                    {[
+                      { value: 'Já é Cliente', label: 'Já é Cliente da Giffoni Advogados' },
+                      { value: 'Caso Novo', label: 'Não, é um Caso Novo (Inédito)' }
+                    ].map(opt => (
+                      <label 
+                        key={opt.value} 
+                        className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                          leadFormData.jaCliente === opt.value
+                            ? 'bg-blue-50/50 border-blue-500 text-blue-950 font-bold'
+                            : 'bg-slate-50/50 border-gray-200 text-gray-650 hover:bg-slate-50'
+                        }`}
+                      >
+                        <input 
+                          type="radio"
+                          name="jaCliente"
+                          value={opt.value}
+                          checked={leadFormData.jaCliente === opt.value}
+                          onChange={() => setLeadFormData({ ...leadFormData, jaCliente: opt.value })}
+                          className="text-blue-600 focus:ring-blue-500 cursor-pointer h-4 w-4 shrink-0"
+                        />
+                        <span className="text-xs">{opt.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 8. Existe Prazo em andamento? */}
+                <div className="bg-slate-50/50 p-4 border border-gray-200 rounded-2xl space-y-3">
+                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                    Existe Prazo em andamento?
+                  </label>
                   <div className="flex gap-4">
-                    {['sim', 'nao'].map(o => (
-                      <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs font-bold uppercase text-gray-700">
+                    {[
+                      { value: true, label: 'Sim' },
+                      { value: false, label: 'Não' }
+                    ].map(o => (
+                      <label key={o.value.toString()} className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-gray-700">
                         <input 
                           type="radio" 
                           name="existePrazo" 
-                          checked={leadFormData.existePrazo === (o === 'sim')} 
-                          onChange={() => setLeadFormData({ ...leadFormData, existePrazo: o === 'sim' })}
-                          className="text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                          checked={leadFormData.existePrazo === o.value} 
+                          onChange={() => setLeadFormData({ ...leadFormData, existePrazo: o.value })}
+                          className="text-blue-600 focus:ring-blue-500 cursor-pointer h-4 w-4"
                         />
-                        <span>{o === 'sim' ? 'Existe Prazo Imcorrente' : 'Sem prazo fatal urgente'}</span>
+                        <span>{o.label}</span>
                       </label>
                     ))}
                   </div>
 
                   {leadFormData.existePrazo && (
-                    <div className="animate-fade-in">
+                    <div className="animate-fade-in pt-1">
                       <label className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Data Limite do Prazo</label>
                       <input 
                         type="date" 
@@ -478,130 +495,61 @@ export default function CadastrarLeadsPF() {
                   )}
                 </div>
 
-                <div className="bg-slate-50/70 p-4 border border-gray-200/50 rounded-2xl space-y-3">
-                  <span className="block text-[10px] font-black uppercase tracking-wider text-indigo-950 font-sans">Processos Prévios</span>
-                  
-                  <div className="flex gap-4">
-                    {['sim', 'nao'].map(o => (
-                      <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs font-bold uppercase text-gray-700">
-                        <input 
-                          type="radio" 
-                          name="possuiProcesso" 
-                          checked={leadFormData.possuiProcesso === (o === 'sim')} 
-                          onChange={() => setLeadFormData({ ...leadFormData, possuiProcesso: o === 'sim' })}
-                          className="text-indigo-600 focus:ring-indigo-500 cursor-pointer"
-                        />
-                        <span>{o === 'sim' ? 'Sim, já possui processo ativo' : 'Não, é caso inédito'}</span>
-                      </label>
-                    ))}
+                {/* 9. Ações Recomendadas terá a interface com a Gestão de LEADS (Permitindo Solicitar Agendamento de Reunião) */}
+                <div className="bg-indigo-50/50 p-4 border border-indigo-150 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="block text-[10px] font-black uppercase tracking-wider text-indigo-950">
+                      Ações Recomendadas (Interface Gestão de LEADS)
+                    </span>
                   </div>
 
-                  {leadFormData.possuiProcesso && (
-                    <div className="grid grid-cols-2 gap-2 animate-fade-in">
-                      <div>
-                        <label className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Número do Processo</label>
-                        <input 
-                          type="text" 
-                          value={leadFormData.numeroProcesso}
-                          onChange={(e) => setLeadFormData({ ...leadFormData, numeroProcesso: e.target.value })}
-                          className="w-full text-xs font-semibold px-3 py-1.5 bg-white border border-gray-200 rounded-xl font-sans"
-                          placeholder="0000000-00.0000.0.00.0000"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Parte Contrária</label>
-                        <input 
-                          type="text" 
-                          value={leadFormData.parteContraria}
-                          onChange={(e) => setLeadFormData({ ...leadFormData, parteContraria: e.target.value })}
-                          className="w-full text-xs font-semibold px-3 py-1.5 bg-white border border-gray-200 rounded-xl"
-                          placeholder="Ex: Banco S.A."
-                        />
-                      </div>
+                  <label className="flex items-start gap-2.5 cursor-pointer p-2.5 bg-white border border-indigo-100 rounded-xl hover:bg-white/85 transition shadow-4xs">
+                    <input 
+                      type="checkbox" 
+                      checked={leadFormData.solicitarReuniao}
+                      onChange={(e) => setLeadFormData({ ...leadFormData, solicitarReuniao: e.target.checked })}
+                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-550 w-4.5 h-4.5 mt-0.5 cursor-pointer"
+                    />
+                    <div>
+                      <strong className="block text-xs text-indigo-950 font-extrabold">Solicitar Agendamento de Reunião</strong>
+                      <span className="block text-[10px] text-indigo-650 leading-relaxed font-semibold">
+                        Sinaliza no Painel que este lead precisa de uma chamada de alinhamento imediata.
+                      </span>
                     </div>
-                  )}
-                </div>
-              </div>
-            </div>
+                  </label>
 
-            {/* SECTION 3: RESPONSABILIDADE E FUNIL */}
-            <div className="space-y-4">
-              <span className="block text-[10px] font-black uppercase tracking-wider text-slate-450 border-b border-gray-100 pb-1.5">
-                3. Distribuição de Responsáveis e Próximos Passos
-              </span>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Urgência Comercial</label>
-                  <select 
-                    value={leadFormData.urgencia}
-                    onChange={(e) => setLeadFormData({ ...leadFormData, urgencia: e.target.value })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white outline-none transition cursor-pointer"
-                  >
-                    <option>Baixa</option>
-                    <option>Média</option>
-                    <option>Alta / Iminente</option>
-                  </select>
+                  <div className="pt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => alert("As opções para agendar Reuniões Comerciais estarão disponíveis no Painel de Ações de cada Lead cadastrado!")}
+                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[10.5px] font-black flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm"
+                    >
+                      <span>Permitir Solicitar Agendamento de Reunião 📅</span>
+                    </button>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Responsável Comercial Interno</label>
-                  <input 
-                    type="text" 
-                    value={leadFormData.responsavelInterno}
-                    onChange={(e) => setLeadFormData({ ...leadFormData, responsavelInterno: e.target.value })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white outline-none transition"
-                    placeholder="Nome do Atendente comercial"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Status no Funil Comercial</label>
-                  <select 
-                    value={leadFormData.statusFunil}
-                    onChange={(e) => setLeadFormData({ ...leadFormData, statusFunil: e.target.value })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white outline-none transition cursor-pointer"
-                  >
-                    <option>Novo Lead</option>
-                    <option>Primeiro Contato</option>
-                    <option>Aguardando Documentos</option>
-                    <option>Aguardando Reunião</option>
-                    <option>Em Análise Jurídica</option>
-                    <option>Proposta Enviada</option>
-                    <option>Follow-up</option>
-                  </select>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Ações recomendadas / Próximo Passo do Lead</label>
-                  <input 
-                    type="text" 
-                    value={leadFormData.proximoPasso}
-                    onChange={(e) => setLeadFormData({ ...leadFormData, proximoPasso: e.target.value })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white"
-                    placeholder="Ex: Ligar amanhã para propor nova proposta de honorários"
-                  />
-                </div>
-
-                <div className="flex items-center pt-3 sm:pt-6">
-                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700">
+                {/* 10. Documentos Prévios Recebidos? */}
+                <div className="flex items-center">
+                  <label className="flex items-center gap-2.5 cursor-pointer text-xs font-black text-slate-700">
                     <input 
                       type="checkbox" 
                       checked={leadFormData.documentosRecebidos}
                       onChange={(e) => setLeadFormData({ ...leadFormData, documentosRecebidos: e.target.checked })}
-                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4.5 h-4.5 cursor-pointer"
                     />
                     <span>Documentos Prévios Recebidos?</span>
                   </label>
                 </div>
 
-                <div className="sm:col-span-3">
+                {/* 11. Observações Gerais */}
+                <div>
                   <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Observações Gerais</label>
                   <textarea 
                     rows={3}
                     value={leadFormData.observacoes}
                     onChange={(e) => setLeadFormData({ ...leadFormData, observacoes: e.target.value })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white"
+                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white outline-none transition"
                     placeholder="Adicione quaisquer anotações adicionais..."
                   />
                 </div>
@@ -613,7 +561,7 @@ export default function CadastrarLeadsPF() {
               <button
                 type="button"
                 onClick={() => navigate('/boss/cadastrar.leads/private')}
-                className="px-5 py-3 border border-gray-250 text-gray-600 hover:bg-slate-50 rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer animate-fade-in"
+                className="px-5 py-3 border border-gray-250 text-gray-600 hover:bg-slate-50 rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer"
               >
                 Cancelar
               </button>
