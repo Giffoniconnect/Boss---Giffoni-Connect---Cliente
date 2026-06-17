@@ -586,6 +586,109 @@ export default function CadastrarLeadsEtapa2() {
                       )}
                     </div>
                   )}
+
+                  {/* SECTION 3: CONTROLE COMERCIAL & INFORMAÇÕES DE CONTATO ADICIONAIS (ETAPA 01) */}
+                  <div className="space-y-4 pt-6 mt-6 border-t border-gray-150">
+                    <span className="block text-[10px] font-black uppercase tracking-wider text-slate-450 border-b border-gray-100 pb-1.5">
+                      3. Controle Comercial e Redes Sociais Integradas (Etapa 01)
+                    </span>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-semibold">
+                      {/* Classificação */}
+                      <div className="bg-slate-50/50 p-3 rounded-xl border border-gray-150">
+                        <span className="block text-[9px] uppercase tracking-wider font-extrabold text-gray-400 font-sans">Classificação</span>
+                        <span className="font-bold text-gray-800 block mt-0.5 font-sans">{lead?.classificacao || 'Geral'}</span>
+                      </div>
+
+                      {/* Já é Cliente? */}
+                      <div className="bg-slate-50/50 p-3 rounded-xl border border-gray-150">
+                        <span className="block text-[9px] uppercase tracking-wider font-extrabold text-gray-400 font-sans">Vínculo com Escritório</span>
+                        <span className="font-bold text-gray-800 block mt-0.5 font-sans">{lead?.jaCliente || (lead?.possuiProcesso ? 'Já é Cliente' : 'Caso Novo')}</span>
+                      </div>
+
+                      {/* Agendamento de Reunião solicitado? */}
+                      <div className="bg-slate-50/50 p-3 rounded-xl border border-gray-150">
+                        <span className="block text-[9px] uppercase tracking-wider font-extrabold text-gray-400 font-sans">Agendar Reunião</span>
+                        <span className={`inline-block px-2 py-0.5 text-[9px] rounded font-black uppercase mt-1 font-sans ${lead?.solicitarReuniao ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-gray-100 text-gray-650'}`}>
+                          {lead?.solicitarReuniao ? 'Sim (Solicitada)' : 'Não'}
+                        </span>
+                      </div>
+
+                      {/* Documentação Inicial */}
+                      <div className="bg-slate-50/50 p-3 rounded-xl border border-gray-150">
+                        <span className="block text-[9px] uppercase tracking-wider font-extrabold text-gray-400 font-sans">Documentação Comercial</span>
+                        <span className={`inline-block px-2 py-0.5 text-[9px] rounded font-black uppercase mt-1 font-sans ${lead?.documentosRecebidos ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-gray-100 text-gray-650'}`}>
+                          {lead?.documentosRecebidos ? 'Recebida' : 'Pendente e em cobrança'}
+                        </span>
+                      </div>
+
+                      {/* Redes Sociais */}
+                      <div className="md:col-span-2 bg-slate-50/50 p-3 rounded-xl border border-gray-150">
+                        <span className="block text-[9px] uppercase tracking-wider font-extrabold text-gray-400 font-sans">Redes Sociais e Perfis Associados</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1.5 text-[11px] font-sans">
+                          {lead?.tipoPessoa === 'PF' ? (
+                            <>
+                              <div>
+                                <span className="text-gray-400 font-bold">Instagram:</span>{' '}
+                                <span className="font-black text-gray-800">{lead?.pessoaFisica?.instagram || 'Não informado'}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-400 font-bold">TikTok:</span>{' '}
+                                <span className="font-black text-gray-800">{lead?.pessoaFisica?.tiktok || 'Não informado'}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-400 font-bold">Facebook:</span>{' '}
+                                <span className="font-black text-gray-800">{lead?.pessoaFisica?.facebook || 'Não informado'}</span>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="sm:col-span-3 border-b border-gray-200/50 pb-1 mb-1 space-y-1">
+                                <span className="text-[10px] uppercase font-black tracking-widest text-indigo-650 font-mono block">Empresa</span>
+                                <div className="grid grid-cols-3 gap-2">
+                                  <div>
+                                    <span className="text-gray-400 font-bold">Instagram:</span>{' '}
+                                    <span className="font-semibold text-gray-800">{lead?.pessoaJuridica?.instagramEmpresa || 'Não informado'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-400 font-bold">TikTok:</span>{' '}
+                                    <span className="font-semibold text-gray-800">{lead?.pessoaJuridica?.tiktokEmpresa || 'Não informado'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-400 font-bold">Facebook:</span>{' '}
+                                    <span className="font-semibold text-gray-800">{lead?.pessoaJuridica?.facebookEmpresa || 'Não informado'}</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="sm:col-span-3 space-y-1">
+                                <span className="text-[10px] uppercase font-black tracking-widest text-red-650 font-mono block">Representante</span>
+                                <div className="grid grid-cols-3 gap-2">
+                                  <div>
+                                    <span className="text-gray-400 font-bold">Instagram:</span>{' '}
+                                    <span className="font-semibold text-gray-800">{lead?.pessoaJuridica?.instagramRepresentante || 'Não informado'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-400 font-bold">TikTok:</span>{' '}
+                                    <span className="font-semibold text-gray-800">{lead?.pessoaJuridica?.tiktokRepresentante || 'Não informado'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-400 font-bold">Facebook:</span>{' '}
+                                    <span className="font-semibold text-gray-800">{lead?.pessoaJuridica?.facebookRepresentante || 'Não informado'}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Observações Gerais */}
+                      <div className="md:col-span-3 bg-slate-50/50 p-4.5 rounded-xl border border-gray-150">
+                        <span className="block text-[9px] uppercase tracking-wider font-extrabold text-gray-400 font-sans">Observações Gerais - Etapa 01</span>
+                        <p className="text-gray-800 text-xs mt-1.5 italic font-black leading-relaxed whitespace-pre-wrap bg-white p-3 border border-gray-100 rounded-lg shadow-3xs font-sans">{lead?.observacoes || 'Sem observações gerais cadastradas na etapa 01.'}</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 /* EDIT MODE (FORM COMPONENT CONSOLIDATED) */
@@ -932,6 +1035,196 @@ export default function CadastrarLeadsEtapa2() {
                         value={editFormData?.dorPrincipal || ''}
                         onChange={(e) => setEditFormData({ ...editFormData, dorPrincipal: e.target.value })}
                         className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-250 rounded-xl"
+                      />
+                    </div>
+
+                    {/* EDITABLE DADOS ADICIONAIS FROM ETAPA 01 */}
+                    <div className="sm:col-span-1">
+                      <label className="block text-[9.5px] font-bold text-gray-400 uppercase mb-1">Classificação do Lead</label>
+                      <select 
+                        value={editFormData?.classificacao || 'Geral'}
+                        onChange={(e) => setEditFormData({ ...editFormData, classificacao: e.target.value })}
+                        className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-250 rounded-xl cursor-pointer"
+                      >
+                        <option>Geral</option>
+                        <option>Alta Prioridade</option>
+                        <option>Estratégico</option>
+                        <option>Parceria</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-1">
+                      <label className="block text-[9.5px] font-bold text-gray-400 uppercase mb-1">Já é Cliente / Vínculo</label>
+                      <select 
+                        value={editFormData?.jaCliente || 'Caso Novo'}
+                        onChange={(e) => setEditFormData({ ...editFormData, jaCliente: e.target.value, possuiProcesso: e.target.value === 'Já é Cliente' })}
+                        className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-250 rounded-xl cursor-pointer"
+                      >
+                        <option>Caso Novo</option>
+                        <option>Já é Cliente</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-1 flex flex-col justify-center">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-650 select-none">
+                        <input 
+                          type="checkbox"
+                          checked={!!editFormData?.solicitarReuniao}
+                          onChange={(e) => setEditFormData({ ...editFormData, solicitarReuniao: e.target.checked })}
+                          className="w-4 h-4 rounded border-gray-250 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>Solicitar Reunião</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-650 select-none mt-2">
+                        <input 
+                          type="checkbox"
+                          checked={!!editFormData?.documentosRecebidos}
+                          onChange={(e) => setEditFormData({ ...editFormData, documentosRecebidos: e.target.checked })}
+                          className="w-4 h-4 rounded border-gray-250 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>Documentos Iniciais Recebidos</span>
+                      </label>
+                    </div>
+
+                    {/* Edit Social Profiles */}
+                    {editFormData?.tipoPessoa === 'PF' ? (
+                      <div className="sm:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-gray-100/60 pt-3 mt-1">
+                        <div>
+                          <label className="block text-[9.5px] font-bold text-gray-400 uppercase mb-1">Instagram</label>
+                          <input 
+                            type="text"
+                            value={editFormData?.pessoaFisica?.instagram || ''}
+                            onChange={(e) => setEditFormData({
+                              ...editFormData,
+                              pessoaFisica: { ...(editFormData?.pessoaFisica || {}), instagram: e.target.value }
+                            })}
+                            className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-250 rounded-xl focus:bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9.5px] font-bold text-gray-400 uppercase mb-1">TikTok</label>
+                          <input 
+                            type="text"
+                            value={editFormData?.pessoaFisica?.tiktok || ''}
+                            onChange={(e) => setEditFormData({
+                              ...editFormData,
+                              pessoaFisica: { ...(editFormData?.pessoaFisica || {}), tiktok: e.target.value }
+                            })}
+                            className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-250 rounded-xl focus:bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9.5px] font-bold text-gray-400 uppercase mb-1">Facebook</label>
+                          <input 
+                            type="text"
+                            value={editFormData?.pessoaFisica?.facebook || ''}
+                            onChange={(e) => setEditFormData({
+                              ...editFormData,
+                              pessoaFisica: { ...(editFormData?.pessoaFisica || {}), facebook: e.target.value }
+                            })}
+                            className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-250 rounded-xl focus:bg-white"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="sm:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-gray-100/60 pt-4 mt-1">
+                        {/* Empresa Socials */}
+                        <div className="space-y-3.5 bg-slate-50/40 p-3 rounded-xl border border-gray-100">
+                          <span className="text-[10px] font-extrabold uppercase text-indigo-700 block tracking-widest font-mono border-b border-gray-100 pb-1">Redes Sociais da Empresa</span>
+                          <div className="grid grid-cols-1 gap-2">
+                            <div>
+                              <label className="block text-[9px] font-bold text-gray-500 uppercase mb-0.5">Instagram Empresa</label>
+                              <input 
+                                type="text"
+                                value={editFormData?.pessoaJuridica?.instagramEmpresa || ''}
+                                onChange={(e) => setEditFormData({
+                                  ...editFormData,
+                                  pessoaJuridica: { ...(editFormData?.pessoaJuridica || {}), instagramEmpresa: e.target.value }
+                                })}
+                                className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold text-gray-500 uppercase mb-0.5">TikTok Empresa</label>
+                              <input 
+                                type="text"
+                                value={editFormData?.pessoaJuridica?.tiktokEmpresa || ''}
+                                onChange={(e) => setEditFormData({
+                                  ...editFormData,
+                                  pessoaJuridica: { ...(editFormData?.pessoaJuridica || {}), tiktokEmpresa: e.target.value }
+                                })}
+                                className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold text-gray-500 uppercase mb-0.5">Facebook Empresa</label>
+                              <input 
+                                type="text"
+                                value={editFormData?.pessoaJuridica?.facebookEmpresa || ''}
+                                onChange={(e) => setEditFormData({
+                                  ...editFormData,
+                                  pessoaJuridica: { ...(editFormData?.pessoaJuridica || {}), facebookEmpresa: e.target.value }
+                                })}
+                                className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Representante Socials */}
+                        <div className="space-y-3.5 bg-rose-50/10 p-3 rounded-xl border border-gray-100">
+                          <span className="text-[10px] font-extrabold uppercase text-red-700 block tracking-widest font-mono border-b border-gray-100 pb-1">Redes Sociais do Representante</span>
+                          <div className="grid grid-cols-1 gap-2">
+                            <div>
+                              <label className="block text-[9px] font-bold text-gray-500 uppercase mb-0.5">Instagram Representante</label>
+                              <input 
+                                type="text"
+                                value={editFormData?.pessoaJuridica?.instagramRepresentante || ''}
+                                onChange={(e) => setEditFormData({
+                                  ...editFormData,
+                                  pessoaJuridica: { ...(editFormData?.pessoaJuridica || {}), instagramRepresentante: e.target.value }
+                                })}
+                                className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold text-gray-500 uppercase mb-0.5">TikTok Representante</label>
+                              <input 
+                                type="text"
+                                value={editFormData?.pessoaJuridica?.tiktokRepresentante || ''}
+                                onChange={(e) => setEditFormData({
+                                  ...editFormData,
+                                  pessoaJuridica: { ...(editFormData?.pessoaJuridica || {}), tiktokRepresentante: e.target.value }
+                                })}
+                                className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[9px] font-bold text-gray-500 uppercase mb-0.5">Facebook Representante</label>
+                              <input 
+                                type="text"
+                                value={editFormData?.pessoaJuridica?.facebookRepresentante || ''}
+                                onChange={(e) => setEditFormData({
+                                  ...editFormData,
+                                  pessoaJuridica: { ...(editFormData?.pessoaJuridica || {}), facebookRepresentante: e.target.value }
+                                })}
+                                className="w-full text-xs font-semibold px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Observações Gerais editable */}
+                    <div className="sm:col-span-3 pt-3 border-t border-gray-100/50 mt-1">
+                      <label className="block text-[9.5px] font-bold text-gray-400 uppercase mb-1">Observações Gerais - Etapa 01</label>
+                      <textarea
+                        rows={3}
+                        value={editFormData?.observacoes || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, observacoes: e.target.value })}
+                        className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-250 rounded-xl"
+                        placeholder="Digite ou atualize observações gerais, anotações de ligações e particularidades do prospect."
                       />
                     </div>
                   </div>

@@ -305,21 +305,27 @@ service cloud.firestore {
     // MARKETING LEADS COLLECTION
     // -------------------------------------------------------------------------
     match /marketingLeads/{leadId} {
-      allow read, write: if isAdmin() && isValidId(leadId);
+      allow get: if isAdmin() && isValidId(leadId);
+      allow list: if isAdmin();
+      allow write: if isAdmin() && isValidId(leadId);
     }
 
     // -------------------------------------------------------------------------
     // MARKETING LEADS DELETED COLLECTION (Repositório de Excluídos)
     // -------------------------------------------------------------------------
     match /marketingLeadsDeleted/{leadId} {
-      allow read, write: if isAdmin() && isValidId(leadId);
+      allow get: if isAdmin() && isValidId(leadId);
+      allow list: if isAdmin();
+      allow write: if isAdmin() && isValidId(leadId);
     }
 
     // -------------------------------------------------------------------------
     // LEADS MEETINGS COLLECTION (Agendamentos Comerciais de Leads)
     // -------------------------------------------------------------------------
     match /leadsMeetings/{meetId} {
-      allow read, write: if isAdmin() && isValidId(meetId);
+      allow get: if isAdmin() && isValidId(meetId);
+      allow list: if isAdmin();
+      allow write: if isAdmin() && isValidId(meetId);
     }
   }
 }

@@ -41,7 +41,13 @@ import {
   Share2,
   Sparkles,
   UserCheck,
-  RotateCcw
+  RotateCcw,
+  MessageSquare,
+  Megaphone,
+  Globe,
+  Award,
+  Store,
+  HelpCircle
 } from 'lucide-react';
 
 const FUNNEL_STATUSES = [
@@ -238,24 +244,76 @@ export default function BossLeadsPrivate() {
       return isNaN(val) ? sum : sum + val;
     }, 0);
 
+    const whatsappCount = leads.filter(l => {
+      const src = (l.origemLead || '').toLowerCase();
+      return src === 'whatsapp';
+    }).length;
+
     const indicacaoCount = leads.filter(l => {
       const src = (l.origemLead || '').toLowerCase();
-      return src.includes('indica') || src.includes('indicacao');
-    }).length;
-    
-    const facebookCount = leads.filter(l => {
-      const src = (l.origemLead || '').toLowerCase();
-      return src.includes('facebook') || src === 'fb';
+      return src.includes('indica') || src.includes('indicacao') || src.includes('indicação');
     }).length;
 
     const instagramCount = leads.filter(l => {
       const src = (l.origemLead || '').toLowerCase();
-      return src.includes('instagram') || src.includes('insta') || src === 'ig';
+      return (src.includes('instagram') || src === 'insta' || src === 'ig') && !src.includes('ads');
+    }).length;
+
+    const facebookCount = leads.filter(l => {
+      const src = (l.origemLead || '').toLowerCase();
+      return (src.includes('facebook') || src === 'fb') && !src.includes('ads');
     }).length;
 
     const tiktokCount = leads.filter(l => {
       const src = (l.origemLead || '').toLowerCase();
       return src.includes('tiktok') || src.includes('tik tok') || src.includes('tik-tok');
+    }).length;
+
+    const googleAdsCount = leads.filter(l => {
+      const src = (l.origemLead || '').toLowerCase();
+      return src.includes('google') || src.includes('gads');
+    }).length;
+
+    const socialAdsCount = leads.filter(l => {
+      const src = (l.origemLead || '').toLowerCase();
+      return src.includes('ads') && (src.includes('instagram') || src.includes('facebook'));
+    }).length;
+
+    const redesSociaisCount = leads.filter(l => {
+      const src = (l.origemLead || '').toLowerCase();
+      return src === 'redes sociais' || src === 'rede social' || src === 'redes_sociais';
+    }).length;
+
+    const balcaoCount = leads.filter(l => {
+      const src = (l.origemLead || '').toLowerCase();
+      return src.includes('balcão') || src.includes('atendimento') || src.includes('físico') || src.includes('fisico');
+    }).length;
+
+    const eventosCount = leads.filter(l => {
+      const src = (l.origemLead || '').toLowerCase();
+      return src.includes('evento') || src.includes('palestra');
+    }).length;
+
+    const parceriaCount = leads.filter(l => {
+      const src = (l.origemLead || '').toLowerCase();
+      return src.includes('parceria');
+    }).length;
+
+    const outrosCount = leads.filter(l => {
+      const src = (l.origemLead || '').toLowerCase();
+      if (src.includes('outros') || src === 'outro' || src === '') return true;
+      const matched = src === 'whatsapp' ||
+        src.includes('indica') || src.includes('indicacao') || src.includes('indicação') ||
+        ((src.includes('instagram') || src === 'insta' || src === 'ig') && !src.includes('ads')) ||
+        ((src.includes('facebook') || src === 'fb') && !src.includes('ads')) ||
+        src.includes('tiktok') || src.includes('tik tok') || src.includes('tik-tok') ||
+        src.includes('google') || src.includes('gads') ||
+        (src.includes('ads') && (src.includes('instagram') || src.includes('facebook'))) ||
+        src === 'redes sociais' || src === 'rede social' || src === 'redes_sociais' ||
+        src.includes('balcão') || src.includes('atendimento') || src.includes('físico') || src.includes('fisico') ||
+        src.includes('evento') || src.includes('palestra') ||
+        src.includes('parceria');
+      return !matched;
     }).length;
 
     return {
@@ -269,10 +327,18 @@ export default function BossLeadsPrivate() {
       lostLeads,
       conversionRate,
       estimatedPotential,
+      whatsappCount,
       indicacaoCount,
-      facebookCount,
       instagramCount,
-      tiktokCount
+      facebookCount,
+      tiktokCount,
+      googleAdsCount,
+      socialAdsCount,
+      redesSociaisCount,
+      balcaoCount,
+      eventosCount,
+      parceriaCount,
+      outrosCount
     };
   }, [leads]);
 
@@ -723,102 +789,47 @@ export default function BossLeadsPrivate() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Indicação Card */}
-            <div className="bg-white border border-gray-150 rounded-2xl p-4.5 shadow-[0_1.5px_4px_rgb(0,0,0,0.015)] flex flex-col justify-between gap-3 group hover:border-blue-300 hover:shadow-xs transition-all duration-300">
-              <div className="flex justify-between items-start">
-                <div>
-                  <span className="block text-[9px] uppercase tracking-wider font-extrabold text-blue-600 mb-1">Indicação</span>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-black text-gray-950 font-mono tracking-tight">{stats.indicacaoCount}</span>
-                    <span className="text-[10px] text-gray-400 font-bold font-mono">
-                      ({stats.totalLeads > 0 ? Math.round((stats.indicacaoCount / stats.totalLeads) * 100) : 0}%)
-                    </span>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3.5">
+            {[
+              { label: 'WhatsApp', count: stats.whatsappCount, colorClass: 'text-emerald-650', bgClass: 'bg-emerald-50 border-emerald-100/70', barBg: 'bg-emerald-550', hoverBorder: 'hover:border-emerald-300', icon: <MessageSquare size={15} /> },
+              { label: 'Indicação Direta', count: stats.indicacaoCount, colorClass: 'text-blue-600', bgClass: 'bg-blue-50 border-blue-100/70', barBg: 'bg-blue-500', hoverBorder: 'hover:border-blue-300', icon: <UserCheck size={15} /> },
+              { label: 'Instagram', count: stats.instagramCount, colorClass: 'text-pink-600', bgClass: 'bg-pink-50 border-pink-100/70', barBg: 'bg-pink-500', hoverBorder: 'hover:border-pink-300', icon: <Instagram size={15} /> },
+              { label: 'Facebook', count: stats.facebookCount, colorClass: 'text-indigo-600', bgClass: 'bg-indigo-50 border-indigo-100/70', barBg: 'bg-indigo-500', hoverBorder: 'hover:border-indigo-300', icon: <Facebook size={15} /> },
+              { label: 'TikTok', count: stats.tiktokCount, colorClass: 'text-slate-800', bgClass: 'bg-slate-50 border-slate-200', barBg: 'bg-slate-800', hoverBorder: 'hover:border-slate-400', icon: <Share2 size={15} /> },
+              { label: 'Google Ads', count: stats.googleAdsCount, colorClass: 'text-amber-600', bgClass: 'bg-amber-50 border-amber-100/70', barBg: 'bg-amber-500', hoverBorder: 'hover:border-amber-300', icon: <Globe size={15} /> },
+              { label: 'Insta/FB Ads', count: stats.socialAdsCount, colorClass: 'text-rose-600', bgClass: 'bg-rose-50 border-rose-100/70', barBg: 'bg-rose-500', hoverBorder: 'hover:border-rose-300', icon: <Megaphone size={15} /> },
+              { label: 'Redes Sociais', count: stats.redesSociaisCount, colorClass: 'text-violet-600', bgClass: 'bg-violet-50 border-violet-100/70', barBg: 'bg-violet-500', hoverBorder: 'hover:border-violet-300', icon: <Users size={15} /> },
+              { label: 'Balcão / Físico', count: stats.balcaoCount, colorClass: 'text-teal-650', bgClass: 'bg-teal-50 border-teal-100/70', barBg: 'bg-teal-550', hoverBorder: 'hover:border-teal-300', icon: <Store size={15} /> },
+              { label: 'Eventos / Palestras', count: stats.eventosCount, colorClass: 'text-purple-650', bgClass: 'bg-purple-50 border-purple-100/70', barBg: 'bg-purple-550', hoverBorder: 'hover:border-purple-300', icon: <Award size={15} /> },
+              { label: 'Parceria Externa', count: stats.parceriaCount, colorClass: 'text-teal-700', bgClass: 'bg-teal-50/70 border-teal-100/70', barBg: 'bg-teal-600', hoverBorder: 'hover:border-teal-400', icon: <Briefcase size={15} /> },
+              { label: 'Outros', count: stats.outrosCount, colorClass: 'text-gray-600', bgClass: 'bg-gray-50 border-gray-200', barBg: 'bg-gray-500', hoverBorder: 'hover:border-gray-400', icon: <HelpCircle size={15} /> }
+            ].map((srcItem, idx) => {
+              const perc = stats.totalLeads > 0 ? Math.round((srcItem.count / stats.totalLeads) * 100) : 0;
+              return (
+                <div key={idx} className={`bg-white border border-gray-150 rounded-2xl p-3.5 shadow-3xs flex flex-col justify-between gap-2.5 group transition-all duration-300 ${srcItem.hoverBorder} hover:shadow-2xs`}>
+                  <div className="flex justify-between items-start gap-1">
+                    <div className="min-w-0">
+                      <span className={`block text-[8.5px] uppercase tracking-wider font-extrabold truncate ${srcItem.colorClass} mb-0.5`} title={srcItem.label}>
+                        {srcItem.label}
+                      </span>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-xl font-black text-gray-950 font-mono tracking-tight">{srcItem.count}</span>
+                        <span className="text-[8.5px] text-gray-400 font-bold font-mono">({perc}%)</span>
+                      </div>
+                    </div>
+                    <div className={`w-7.5 h-7.5 rounded-lg flex items-center justify-center shrink-0 border transition ${srcItem.bgClass} ${srcItem.colorClass}`}>
+                      {srcItem.icon}
+                    </div>
+                  </div>
+                  <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+                    <div 
+                      className={`${srcItem.barBg} h-full rounded-full transition-all duration-500`} 
+                      style={{ width: `${perc}%` }}
+                    />
                   </div>
                 </div>
-                <div className="w-10 h-10 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-center text-blue-600 group-hover:bg-blue-100 group-hover:text-blue-700 transition">
-                  <UserCheck size={18} />
-                </div>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
-                <div 
-                  className="bg-blue-500 h-full rounded-full transition-all duration-500" 
-                  style={{ width: `${stats.totalLeads > 0 ? (stats.indicacaoCount / stats.totalLeads) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Facebook Card */}
-            <div className="bg-white border border-gray-150 rounded-2xl p-4.5 shadow-[0_1.5px_4px_rgb(0,0,0,0.015)] flex flex-col justify-between gap-3 group hover:border-indigo-300 hover:shadow-xs transition-all duration-300">
-              <div className="flex justify-between items-start">
-                <div>
-                  <span className="block text-[9px] uppercase tracking-wider font-extrabold text-indigo-600 mb-1">Facebook</span>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-black text-gray-950 font-mono tracking-tight">{stats.facebookCount}</span>
-                    <span className="text-[10px] text-gray-400 font-bold font-mono">
-                      ({stats.totalLeads > 0 ? Math.round((stats.facebookCount / stats.totalLeads) * 100) : 0}%)
-                    </span>
-                  </div>
-                </div>
-                <div className="w-10 h-10 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-center text-indigo-600 group-hover:bg-indigo-100 group-hover:text-indigo-700 transition">
-                  <Facebook size={18} />
-                </div>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
-                <div 
-                  className="bg-indigo-500 h-full rounded-full transition-all duration-500" 
-                  style={{ width: `${stats.totalLeads > 0 ? (stats.facebookCount / stats.totalLeads) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Instagram Card */}
-            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-4.5 shadow-[0_1.5px_4px_rgb(0,0,0,0.015)] flex flex-col justify-between gap-3 group hover:border-pink-300 hover:shadow-xs transition-all duration-300">
-              <div className="flex justify-between items-start">
-                <div>
-                  <span className="block text-[9px] uppercase tracking-wider font-extrabold text-pink-600 mb-1">Instagram</span>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-black text-gray-950 font-mono tracking-tight">{stats.instagramCount}</span>
-                    <span className="text-[10px] text-gray-400 font-bold font-mono">
-                      ({stats.totalLeads > 0 ? Math.round((stats.instagramCount / stats.totalLeads) * 100) : 0}%)
-                    </span>
-                  </div>
-                </div>
-                <div className="w-10 h-10 bg-pink-50 border border-pink-100 rounded-xl flex items-center justify-center text-pink-600 group-hover:bg-pink-100 group-hover:text-pink-700 transition">
-                  <Instagram size={18} />
-                </div>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
-                <div 
-                  className="bg-pink-500 h-full rounded-full transition-all duration-500" 
-                  style={{ width: `${stats.totalLeads > 0 ? (stats.instagramCount / stats.totalLeads) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-
-            {/* TikTok Card */}
-            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-4.5 shadow-[0_1.5px_4px_rgb(0,0,0,0.015)] flex flex-col justify-between gap-3 group hover:border-slate-800 hover:shadow-xs transition-all duration-300">
-              <div className="flex justify-between items-start">
-                <div>
-                  <span className="block text-[9px] uppercase tracking-wider font-extrabold text-slate-800 mb-1">Tik Tok</span>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-black text-gray-950 font-mono tracking-tight">{stats.tiktokCount}</span>
-                    <span className="text-[10px] text-gray-400 font-bold font-mono">
-                      ({stats.totalLeads > 0 ? Math.round((stats.tiktokCount / stats.totalLeads) * 100) : 0}%)
-                    </span>
-                  </div>
-                </div>
-                <div className="w-10 h-10 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-center text-slate-900 group-hover:bg-slate-200 transition">
-                  <Share2 size={18} />
-                </div>
-              </div>
-              <div className="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
-                <div 
-                  className="bg-slate-800 h-full rounded-full transition-all duration-500" 
-                  style={{ width: `${stats.totalLeads > 0 ? (stats.tiktokCount / stats.totalLeads) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
+              );
+            })}
           </div>
         </div>
 
@@ -1621,6 +1632,21 @@ export default function BossLeadsPrivate() {
 
                                 <button
                                   type="button"
+                                  onClick={() => {
+                                    if (lead.tipoPessoa === 'PF') {
+                                      navigate(`/boss/cadastrar.leads/private/lead-pf?edit=${lead.id}`);
+                                    } else {
+                                      navigate(`/boss/cadastrar.leads/private/lead-pj?edit=${lead.id}`);
+                                    }
+                                  }}
+                                  className="p-1 text-slate-500 hover:text-indigo-650 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                                  title="Editar Cadastro do Cliente (Etapa 01)"
+                                >
+                                  <Edit size={13} />
+                                </button>
+
+                                <button
+                                  type="button"
                                   onClick={() => handleDeleteLead(lead.id)}
                                   className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer"
                                   title="Excluir"
@@ -1638,6 +1664,21 @@ export default function BossLeadsPrivate() {
                                 >
                                   <RotateCcw size={12} className="text-indigo-700 animate-spin" style={{ animationIterationCount: 1, animationDuration: '0.8s' }} />
                                   <span>Restaurar</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (lead.tipoPessoa === 'PF') {
+                                      navigate(`/boss/cadastrar.leads/private/lead-pf?edit=${lead.id}`);
+                                    } else {
+                                      navigate(`/boss/cadastrar.leads/private/lead-pj?edit=${lead.id}`);
+                                    }
+                                  }}
+                                  className="p-1 text-slate-500 hover:text-indigo-650 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                                  title="Editar Cadastro do Cliente (Etapa 01)"
+                                >
+                                  <Edit size={13} />
                                 </button>
 
                                 <button
