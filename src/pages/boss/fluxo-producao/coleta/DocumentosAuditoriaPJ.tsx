@@ -370,6 +370,71 @@ export default function DocumentosAuditoriaPJ() {
                 </div>
               </div>
 
+              {/* Card 6.5 — Outras Provas Solicitadas */}
+              <div className="bg-white border border-gray-150 p-5 rounded-2xl space-y-4 text-left">
+                <div className="flex items-center justify-between border-b pb-1">
+                  <h4 className="text-xs font-black text-indigo-950 uppercase font-mono font-semibold">6.5 — Outras Provas Solicitadas</h4>
+                  <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                    Outras Provas do Cliente (Etapa 4)
+                  </span>
+                </div>
+                
+                {requests && requests.length > 0 ? (
+                  <div className="space-y-3">
+                    {requests.map((req) => {
+                      const proofState = wizardState.q5_provas?.[req.id] || { received: 'nao' };
+                      const isReceived = proofState.received === 'sim';
+                      
+                      return (
+                        <div key={req.id} className="p-3.5 bg-gray-50/60 border border-gray-150 rounded-xl space-y-2 text-xs">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[9px] bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded font-mono font-black uppercase">
+                                  {req.evidenceType || 'PROVA'}
+                                </span>
+                                {req.documentNumber && (
+                                  <span className="text-[9px] bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded font-mono font-bold">
+                                    {req.documentNumber}
+                                  </span>
+                                )}
+                              </div>
+                              <h5 className="font-extrabold text-gray-900 mt-1">{req.title}</h5>
+                              {req.description && (
+                                <p className="text-[11px] text-gray-500 font-medium leading-relaxed mt-0.5">{req.description}</p>
+                              )}
+                            </div>
+                            
+                            {/* Status Badge */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextProvas = {
+                                  ...wizardState.q5_provas,
+                                  [req.id]: { ...proofState, received: isReceived ? 'nao' : 'sim' }
+                                };
+                                saveWizardStateUpdate({ q5_provas: nextProvas });
+                              }}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors shrink-0 cursor-pointer ${
+                                isReceived 
+                                  ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200' 
+                                  : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                              }`}
+                            >
+                              {isReceived ? 'Recebido ✅' : 'Pendente ❌'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-3.5 bg-gray-50 text-gray-400 font-bold text-center rounded-xl text-[11px]">
+                    Nenhuma outra prova adicional foi solicitada para este caso.
+                  </div>
+                )}
+              </div>
+
             </div>
 
             {/* INTEGRITY AND DISPATCH REMINDERS */}
@@ -377,7 +442,7 @@ export default function DocumentosAuditoriaPJ() {
               <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-3">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="text-amber-500 shrink-0" size={16} />
-                  <span className="text-[10px] font-black uppercase text-amber-850 tracking-wider font-mono">6.5 — Cobrança de Dependências Corporativas Ativas</span>
+                  <span className="text-[10px] font-black uppercase text-amber-850 tracking-wider font-mono">6.6 — Cobrança de Dependências Corporativas Ativas</span>
                 </div>
                 
                 <div className="bg-white border rounded-lg p-2.5 font-mono text-[10px] text-gray-700 block select-all whitespace-pre-wrap">

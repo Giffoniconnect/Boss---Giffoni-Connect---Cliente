@@ -47,6 +47,11 @@ export default function DocumentosNecessidadePF() {
   const [periciaType, setPericiaType] = useState('Trabalhista');
   const [hireTechnicalAssistant, setHireTechnicalAssistant] = useState('nao');
 
+  // Auto Collector States
+  const [showAutoCollectorModal, setShowAutoCollectorModal] = useState(false);
+  const [newCollectorName, setNewCollectorName] = useState('');
+  const [showAddCollectorForm, setShowAddCollectorForm] = useState(false);
+
   // Witness (Art. 450 CPC) Fields
   const [witnessNome, setWitnessNome] = useState('');
   const [witnessProfissao, setWitnessProfissao] = useState('');
@@ -458,12 +463,12 @@ export default function DocumentosNecessidadePF() {
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
-                Subetapa 05 — Outras Provas do Cliente — Pessoa Física (PF)
+                Subetapa 04 — Outras Provas do Cliente — Pessoa Física (PF)
               </span>
               <span className="text-xs text-gray-400">Cliente: <strong>{client?.pfDadosPessoais?.pf_nomeCompleto || 'PF'}</strong></span>
             </div>
             <h1 className="text-lg font-black text-gray-900 tracking-tight leading-none pt-1">
-              Subetapa 05 — Outras Provas do Cliente
+              Subetapa 04 — Outras Provas do Cliente
             </h1>
           </div>
           <button
@@ -516,6 +521,51 @@ export default function DocumentosNecessidadePF() {
                     </label>
                   ))}
                 </div>
+              </div>
+
+              <div className="space-y-1 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
+                <p className="text-xs font-extrabold text-gray-800">5.2 — Deseja utilizar o sistema de coletores automáticos de Prova?</p>
+                <div className="flex gap-4 mt-2">
+                  {['sim', 'nao'].map(o => (
+                    <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs font-black uppercase text-gray-700">
+                      <input 
+                        type="radio" 
+                        name="q5_2_use_auto_collector" 
+                        checked={wizardState.q5_2_use_auto_collector === o} 
+                        onChange={() => saveWizardStateUpdate({ q5_2_use_auto_collector: o })} 
+                        className="text-indigo-600"
+                      />
+                      <span>{o === 'sim' ? 'Sim' : 'Não'}</span>
+                    </label>
+                  ))}
+                </div>
+
+                {wizardState.q5_2_use_auto_collector === 'sim' && (
+                  <div className="mt-3.5 pt-3 border-t border-gray-200/60 animate-in fade-in duration-200 flex flex-col items-start gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowAutoCollectorModal(true)}
+                      className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                    >
+                      <Sparkles size={13} className="animate-pulse text-blue-200" />
+                      <span>Ver Coletores automáticos</span>
+                    </button>
+                    
+                    {/* Showing selected types for visual feedback */}
+                    {wizardState.q5_2_selected_collectors && Object.keys(wizardState.q5_2_selected_collectors).some(k => wizardState.q5_2_selected_collectors[k]) && (
+                      <div className="p-3 bg-blue-50/60 border border-blue-150 rounded-xl space-y-1 text-xs w-full text-left">
+                        <span className="text-[9px] uppercase tracking-wider text-blue-500 font-extrabold font-mono block">Coletores Selecionados Ativos</span>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {Object.keys(wizardState.q5_2_selected_collectors).filter(k => wizardState.q5_2_selected_collectors[k]).map((colType) => (
+                            <span key={colType} className="px-2 py-0.5 bg-white text-blue-800 rounded-md border border-blue-200 font-bold text-[10px] uppercase font-mono shadow-5xs">
+                              🤖 {colType}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {wizardState.q5_1 === 'sim' && (
@@ -1517,6 +1567,232 @@ export default function DocumentosNecessidadePF() {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {showAutoCollectorModal && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl border border-gray-150 shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="bg-blue-900 text-white p-5 flex items-center justify-between">
+              <div className="space-y-0.5 animate-in fade-in slide-in-from-top-1">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-blue-200 block font-bold">Portal BOSS</span>
+                <h2 className="text-sm font-black uppercase tracking-tight">Coletores Automáticos de Prova</h2>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowAutoCollectorModal(false);
+                  setShowAddCollectorForm(false);
+                  setNewCollectorName('');
+                }}
+                className="text-blue-200 hover:text-white bg-blue-800 p-1.5 rounded-lg transition-colors cursor-pointer"
+                type="button"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            {/* Modal Body - SCROLLABLE */}
+            <div className="p-6 overflow-y-auto space-y-5">
+              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
+                Ative ou adicione coletores automáticos para que a inteligência artificial do Portal BOSS busque e processe de forma autônoma as provas do cliente.
+              </p>
+
+              {/* Standard Collectors Section */}
+              <div className="space-y-3">
+                <span className="text-[10px] font-black uppercase text-blue-600 tracking-wider font-mono block">
+                  Selecione o Tipo de Serviço
+                </span>
+
+                {['Bancário', 'Consumidor', 'Trabalhista', 'Direito Administrativo'].map((service) => {
+                  const isSelected = !!wizardState.q5_2_selected_collectors?.[service];
+                  return (
+                    <div 
+                      key={service}
+                      onClick={() => {
+                        const current = wizardState.q5_2_selected_collectors || {};
+                        const updated = {
+                          ...current,
+                          [service]: !current[service]
+                        };
+                        saveWizardStateUpdate({ q5_2_selected_collectors: updated });
+                      }}
+                      className={`p-4 border rounded-2xl cursor-pointer transition-all duration-200 flex items-center justify-between ${
+                        isSelected 
+                          ? 'bg-blue-50/60 border-blue-500 shadow-3xs' 
+                          : 'bg-white border-gray-200 hover:border-blue-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">
+                          {service === 'Bancário' ? '🏦' : service === 'Consumidor' ? '🛍️' : service === 'Trabalhista' ? '💼' : '🏛️'}
+                        </span>
+                        <div>
+                          <h4 className="text-xs font-black text-gray-900 uppercase tracking-tight">{service}</h4>
+                          <p className="text-[10px] text-gray-400 font-semibold">Rotinas estruturadas automatizadas para {service}</p>
+                        </div>
+                      </div>
+                      
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center border font-sans font-extrabold ${
+                        isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300'
+                      }`}>
+                        {isSelected && <Check size={11} className="stroke-[3]" />}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Custom/user defined Collectors */}
+                {(wizardState.q5_2_custom_collectors || []).map((service: string) => {
+                  const isSelected = !!wizardState.q5_2_selected_collectors?.[service];
+                  return (
+                    <div 
+                      key={service}
+                      onClick={() => {
+                        const current = wizardState.q5_2_selected_collectors || {};
+                        const updated = {
+                          ...current,
+                          [service]: !current[service]
+                        };
+                        saveWizardStateUpdate({ q5_2_selected_collectors: updated });
+                      }}
+                      className={`p-4 border rounded-2xl cursor-pointer transition-all duration-200 flex items-center justify-between ${
+                        isSelected 
+                          ? 'bg-blue-50/60 border-blue-500 shadow-3xs' 
+                          : 'bg-white border-gray-200 hover:border-blue-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xl">🤖</span>
+                        <div>
+                          <h4 className="text-xs font-black text-gray-900 uppercase tracking-tight">{service}</h4>
+                          <p className="text-[10px] text-gray-400 font-semibold">Coletor customizado do Portal BOSS</p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const currentList = wizardState.q5_2_custom_collectors || [];
+                            const updatedList = currentList.filter((x: string) => x !== service);
+                            
+                            const currentSel = wizardState.q5_2_selected_collectors || {};
+                            const updatedSel = { ...currentSel };
+                            delete updatedSel[service];
+
+                            saveWizardStateUpdate({
+                              q5_2_custom_collectors: updatedList,
+                              q5_2_selected_collectors: updatedSel
+                            });
+                          }}
+                          className="p-1 px-2 text-rose-600 hover:bg-rose-50 rounded-lg text-[9px] font-bold border border-rose-200 uppercase flex items-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <Trash2 size={9} /> Excluir
+                        </button>
+                        
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center border font-sans font-extrabold ${
+                          isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300'
+                        }`}>
+                          {isSelected && <Check size={11} className="stroke-[3]" />}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Form to add a new custom collector */}
+              {showAddCollectorForm ? (
+                <div className="p-4 bg-gray-50 border border-gray-200 rounded-2xl space-y-3 text-left animate-in fade-in duration-200">
+                  <span className="text-[9px] uppercase font-black text-gray-500 block font-mono">
+                    Criar Novo Coletor Personalizado
+                  </span>
+                  
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-650 block">Nome do Coletor</label>
+                    <input 
+                      type="text"
+                      value={newCollectorName}
+                      onChange={(e) => setNewCollectorName(e.target.value)}
+                      placeholder="Ex: Previdenciário, Tributário..."
+                      className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div className="flex gap-2 justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddCollectorForm(false);
+                        setNewCollectorName('');
+                      }}
+                      className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-[10px] font-bold text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const trimmed = newCollectorName.trim();
+                        if (!trimmed) return;
+                        
+                        const currentList = wizardState.q5_2_custom_collectors || [];
+                        if (currentList.includes(trimmed)) {
+                          setError("Já existe um Coletor de Provas com este nome.");
+                          setTimeout(() => setError(null), 3000);
+                          return;
+                        }
+
+                        const updatedList = [...currentList, trimmed];
+                        const currentSel = wizardState.q5_2_selected_collectors || {};
+                        const updatedSel = {
+                          ...currentSel,
+                          [trimmed]: true // Auto select after creation
+                        };
+
+                        saveWizardStateUpdate({
+                          q5_2_custom_collectors: updatedList,
+                          q5_2_selected_collectors: updatedSel
+                        });
+
+                        setNewCollectorName('');
+                        setShowAddCollectorForm(false);
+                      }}
+                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded-lg text-[10px] font-black uppercase text-white tracking-wider transition-colors cursor-pointer"
+                    >
+                      Adicionar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowAddCollectorForm(true)}
+                  className="w-full py-3 border-2 border-dashed border-gray-300 hover:border-blue-400 rounded-2xl flex items-center justify-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 transition-colors cursor-pointer font-bold bg-gray-50/20"
+                >
+                  <PlusCircle size={14} className="text-blue-500" />
+                  <span>+Add novo Coletor de Provas</span>
+                </button>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="p-4 bg-gray-50 border-t border-gray-150 flex justify-end">
+              <button 
+                onClick={() => {
+                  setShowAutoCollectorModal(false);
+                  setShowAddCollectorForm(false);
+                  setNewCollectorName('');
+                }}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-colors cursor-pointer shadow-sm"
+                type="button"
+              >
+                Concluir Configuração
+              </button>
+            </div>
           </div>
         </div>
       )}
