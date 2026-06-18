@@ -166,54 +166,196 @@ export default function DocumentosAuditoriaPJ() {
             <div className="space-y-4">
               
               {/* Procuracao PJ Summary */}
-              <div className="bg-white border border-gray-150 p-4 rounded-2xl space-y-2">
-                <h4 className="text-xs font-black text-indigo-950 uppercase font-mono border-b pb-1">6.1 — Procuração Jurídica PJ (Compilado)</h4>
-                <div className="text-xs font-semibold space-y-1">
-                  <div className="flex items-center gap-1.5">
-                    <span>{wizardState.q1_1 === 'sim' ? '✅' : '❌'}</span>
-                    <span>Procuração PJ gerada {wizardState.q1_1 === 'sim' ? '(Docx Ativo)' : 'pendente'}</span>
+              <div className="bg-white border border-gray-150 p-5 rounded-2xl space-y-4 text-left">
+                <h4 className="text-xs font-black text-indigo-950 uppercase font-mono border-b pb-1">6.1 — Procuração Jurídica (Compilado)</h4>
+                <div className="space-y-3.5 text-xs">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-gray-400 font-bold">Procuração foi gerada? (varia de acordo com a resposta no item 1.1 )</span>
+                    <span className="font-extrabold text-gray-800">
+                      {wizardState.q1_1 === 'sim' ? 'Sim ✅' : wizardState.q1_1 === 'nao' ? 'Não ❌' : 'Não preenchido ➖'}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span>{wizardState.q1_3 === 'sim' ? '✅' : '❌'}</span>
-                    <span>Assinatura coletada do representante PJ</span>
+
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-gray-400 font-bold">Entregue ao cliente (varia de acordo com a resposta no item 1.2 )</span>
+                    <span className="font-extrabold text-gray-800">
+                      {Array.isArray(wizardState?.q1_2) && wizardState.q1_2.length > 0 
+                        ? `Sim (Canais: ${wizardState.q1_2.join(' / ').toUpperCase()}) ✅` 
+                        : 'Não entregue ❌'}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-gray-400 font-bold">Assinado pelo cliente? (varia de acordo com a resposta no item 1.3 )</span>
+                    <span className="font-extrabold text-gray-800">
+                      {wizardState.q1_3 === 'sim' ? 'Sim ✅' : wizardState.q1_3 === 'nao' ? 'Não ❌' : 'Não preenchido ➖'}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-gray-400 font-bold">Meio de recebimento da procuração do cliente: (varia de acordo com a resposta no item 1.4 )</span>
+                    <span className="font-extrabold text-gray-805 uppercase font-bold">
+                      {wizardState.q1_como_p_recebida 
+                        ? (wizardState.q1_como_p_recebida === 'fisico' ? 'Físico 📦' : wizardState.q1_como_p_recebida.toUpperCase()) 
+                        : 'Não preenchido ➖'}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-gray-404 font-bold">Digitalização ou Upload foi realizado (varia de acordo com a resposta no item 1.5 )</span>
+                    <span className="font-extrabold text-gray-800 font-bold">
+                      {(wizardState.procuracaoFiles && wizardState.procuracaoFiles.length > 0) 
+                        ? 'Sim ✅' 
+                        : (wizardState.q1_deseja_digitalizar_p === 'sim' ? 'Sim (Pendente upload) ⏳' : 'Não realizado ❌')}
+                    </span>
                   </div>
                 </div>
               </div>
 
               {/* Declaracao PJ Summary */}
-              <div className="bg-white border border-gray-150 p-4 rounded-2xl space-y-2">
-                <h4 className="text-xs font-black text-indigo-950 uppercase font-mono border-b pb-1 font-semibold">6.2 — Assistência Gratuita de Judiciário PJ</h4>
+              <div className="bg-white border border-gray-150 p-5 rounded-2xl space-y-4 text-left">
+                <h4 className="text-xs font-black text-indigo-950 uppercase font-mono border-b pb-1">6.2 — Declaração de Hipossuficiência / Guia de Custas</h4>
                 {wizardState.q2_1 === 'nao' ? (
-                  <div className="text-xs font-semibold text-gray-500 italic">Sociedade empresária isenta de atestado de hipossuficiência (taxas pagas)</div>
-                ) : (
-                  <div className="text-xs font-semibold space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <span>{wizardState.q2_2 === 'sim' ? '✅' : '❌'}</span>
-                      <span>Declaração gerada para CNPJ</span>
+                  <div className="space-y-3.5 text-xs">
+                    <p className="text-xs text-indigo-900 bg-indigo-50/50 p-3 rounded-lg border border-indigo-100 font-bold leading-normal">
+                      O cliente optou pelo recolhimento de taxas. Deste modo, a Declaração de Pobreza está isenta para esta instrução.
+                    </p>
+                    
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-gray-400 font-bold">Guia de custas foi gerada? (varia de acordo com a resposta no item 2.2.1 )</span>
+                      <span className="font-extrabold text-gray-800">
+                        {wizardState.q2_recolher_custas_gerou_guia === 'sim' ? 'Sim ✅' : wizardState.q2_recolher_custas_gerou_guia === 'nao' ? 'Não ❌' : 'Não preenchido ➖'}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span>{wizardState.q2_4 === 'sim' ? '✅' : '❌'}</span>
-                      <span>Balanço patrimonial/declaração assinada pela diretoria</span>
+
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-gray-400 font-bold font-sans">Entregue ao cliente (varia de acordo com a resposta no item 2.2.2 )</span>
+                      <span className="font-extrabold text-gray-800 uppercase font-bold">
+                        {wizardState.q2_recolher_custas_como_entregara 
+                          ? (wizardState.q2_recolher_custas_como_entregara === 'fisica' ? 'Física 📦' : wizardState.q2_recolher_custas_como_entregara.toUpperCase()) 
+                          : 'Não entregue ❌'}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-gray-404 font-bold">Digitalização ou Upload da Guia de custas foi realizado (varia de acordo com a resposta no item 2.2.3 )</span>
+                      <span className="font-extrabold text-gray-800">
+                        {Array.isArray(wizardState.guiaCustasFiles) && wizardState.guiaCustasFiles.length > 0 
+                          ? 'Sim ✅' 
+                          : 'Não realizado ❌'}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-gray-404 font-bold">Meio de recebimento do comprovante de pagamento das custas pelo cliente: (varia de acordo com a resposta no item 2.2.4)</span>
+                      <span className="font-extrabold text-gray-800 font-bold">
+                        {wizardState.q2_recolher_custas_comprovante_enviado_como 
+                          ? (wizardState.q2_recolher_custas_comprovante_enviado_como === 'fisico' ? 'Físico 📦' : wizardState.q2_recolher_custas_comprovante_enviado_como.toUpperCase()) 
+                          : 'Não informado ➖'}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-gray-404 font-bold">Digitalização ou Upload do COMPROVANTE DE PAGAMENTO da Guia de custas foi realizado ? (varia de acordo com a resposta no item 2.2.5)</span>
+                      <span className="font-extrabold text-gray-800">
+                        {Array.isArray(wizardState.comprovanteGuiaCustasFiles) && wizardState.comprovanteGuiaCustasFiles.length > 0 
+                          ? 'Sim ✅' 
+                          : 'Não realizado ❌'}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3.5 text-xs">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-gray-400 font-bold">Declaração de Pobreza foi gerada? (varia de acordo com a resposta no item 2.2 )</span>
+                      <span className="font-extrabold text-gray-800">
+                        {wizardState.q2_2 === 'sim' ? 'Sim ✅' : wizardState.q2_2 === 'nao' ? 'Não ❌' : 'Não preenchido ➖'}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-gray-400 font-bold">Entregue ao cliente (varia de acordo com a resposta no item 2.3 )</span>
+                      <span className="font-extrabold text-gray-800">
+                        {Array.isArray(wizardState?.q2_3) && wizardState.q2_3.length > 0 
+                          ? `Sim (Canais: ${wizardState.q2_3.join(' / ').toUpperCase()}) ✅` 
+                          : 'Não entregue ❌'}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-gray-400 font-bold">Assinado pelo cliente? (varia de acordo com a resposta no item 2.4 )</span>
+                      <span className="font-extrabold text-gray-800">
+                        {wizardState.q2_4 === 'sim' ? 'Sim ✅' : wizardState.q2_4 === 'nao' ? 'Não ❌' : 'Não preenchido ➖'}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-gray-400 font-bold">Meio de recebimento da declaração de pobreza cliente: (varia de acordo com a resposta no item 2.5 )</span>
+                      <span className="font-extrabold text-gray-805 uppercase font-bold">
+                        {wizardState.q2_como_d_recebida 
+                          ? (wizardState.q2_como_d_recebida === 'fisico' ? 'Físico 📦' : wizardState.q2_como_d_recebida.toUpperCase()) 
+                          : 'Não informado ➖'}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-gray-404 font-bold">Digitalização ou Upload foi realizado (varia de acordo com a resposta no item 2.6 )</span>
+                      <span className="font-extrabold text-gray-800 font-bold">
+                        {(wizardState.declaracaoFiles && wizardState.declaracaoFiles.length > 0) 
+                          ? 'Sim ✅' 
+                          : (wizardState.q2_deseja_digitalizar_d === 'sim' ? 'Sim (Pendente upload) ⏳' : 'Não realizado ❌')}
+                      </span>
                     </div>
                   </div>
                 )}
               </div>
 
               {/* Contrato honorários PJ Summary */}
-              <div className="bg-white border border-gray-150 p-4 rounded-2xl space-y-2">
-                <h4 className="text-xs font-black text-indigo-950 uppercase font-mono border-b pb-1 font-semibold">6.3 — Contrato de Honorários PJ</h4>
-                <div className="text-xs font-semibold space-y-1">
-                  <div className="flex items-center gap-1.5">
-                    <span>{wizardState.q3_1 === 'sim' ? '✅' : '❌'}</span>
-                    <span>Contrato corporativo gerado</span>
+              <div className="bg-white border border-gray-150 p-5 rounded-2xl space-y-4 text-left">
+                <h4 className="text-xs font-black text-indigo-950 uppercase font-mono border-b pb-1">6.3 — Contrato de Honorários PJ</h4>
+                <div className="space-y-3.5 text-xs">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-gray-400 font-bold">Contrato de honorários foi gerado? (varia de acordo com a resposta no item 3.1)</span>
+                    <span className="font-extrabold text-gray-800">
+                      {wizardState.q3_1 === 'sim' ? 'Sim ✅' : wizardState.q3_1 === 'nao' ? 'Não ❌' : 'Não preenchido ➖'}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span>{wizardState.q3_4 === 'sim' ? '✅' : '❌'}</span>
-                    <span>Contrato social societário assinado</span>
+
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-gray-400 font-bold font-sans">Entregue ao cliente (Item 3.3)</span>
+                    <span className="font-extrabold text-gray-800">
+                      {Array.isArray(wizardState?.q3_3) && wizardState.q3_3.length > 0 
+                        ? `Sim (Canais: ${wizardState.q3_3.join(' / ').toUpperCase()}) ✅` 
+                        : 'Não entregue ❌'}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span>{wizardState.q3_7 === 'sim' ? '✅' : '⚠️'}</span>
-                    <span>Notificação transmitida à Controladoria Financeira PJ</span>
+
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-gray-400 font-bold font-sans">Assinado pelo cliente? (Item 3.4)</span>
+                    <span className="font-extrabold text-gray-805">
+                      {wizardState.q3_4 === 'sim' ? 'Sim ✅' : wizardState.q3_4 === 'nao' ? 'Não ❌' : 'Não preenchido ➖'}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-gray-400 font-bold">Assinado pelo Advogado? (Item 3.5)</span>
+                    <span className="font-extrabold text-gray-800">
+                      {wizardState.q3_5 === 'sim' ? 'Sim ✅' : wizardState.q3_5 === 'nao' ? 'Não ❌' : 'Não preenchido ➖'}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-gray-400 font-bold font-sans">Meio de recebimento do contrato de honorários: (Item 3.6)</span>
+                    <span className="font-extrabold text-gray-800">
+                      {wizardState.q3_6 === 'sim' ? 'Recebido Digitalizado ✅' : wizardState.q3_6 === 'nao' ? 'Não Recebido / Pendente ❌' : 'Não preenchido ➖'}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-gray-404 font-bold font-sans">Digitalização ou Upload foi realizado do contrato (Item 3.7)</span>
+                    <span className="font-extrabold text-gray-800">
+                      {wizardState.q3_7 === 'sim' ? 'Sim (Custódia Fiel) ✅' : 'Não feito ❌'}
+                    </span>
                   </div>
                 </div>
               </div>

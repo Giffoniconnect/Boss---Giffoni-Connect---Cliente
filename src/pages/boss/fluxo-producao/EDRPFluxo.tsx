@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import FluxoStepLayout from './components/FluxoStepLayout';
 import {
@@ -443,6 +443,7 @@ export default function EDRPFluxo() {
   const [caseObj, setCaseObj] = useState<any>(null);
   const [client, setClient] = useState<any>(null);
   const [edrp, setEdrp] = useState<EDRPData>(DEFAULT_EDRP);
+  const [requests, setRequests] = useState<any[]>([]);
 
   // Defendant registration and DB lookup state managers
   const [dbClients, setDbClients] = useState<any[]>([]);
@@ -539,6 +540,16 @@ export default function EDRPFluxo() {
             setClient(loadedClient);
           }
         }
+
+        // Fetch evidence requests for stage 5 consolidated report
+        const qEv = query(collection(db, 'caseEvidenceRequests'), where('caseId', '==', caseId!));
+        const qSnap = await getDocs(qEv);
+        const reqList: any[] = [];
+        qSnap.forEach((docSnap) => {
+          reqList.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        reqList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setRequests(reqList);
 
         // Merge EDRP data defensively with standard schema types
         const rawEdrp = caseData.edrp || {};
@@ -1028,6 +1039,8 @@ export default function EDRPFluxo() {
   const resolvedClientSlug = client?.slug || 'sem-slug';
 
   const validationAlerts = getValidationWarnings();
+
+  const wizardState = caseObj?.solicitacoesProvasWizardState || {};
 
   return (
     <FluxoStepLayout stepName="EDRP" caseId={caseId} statusText={caseObj?.statusInterno || 'Em estruturação'}>
@@ -1997,6 +2010,206 @@ export default function EDRPFluxo() {
                 placeholder="Documentação anexada, testemunhas chaves, prints, áudios..."
                 className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[60px] outline-none"
               />
+            </div>
+
+            {/* Relatório Completo das Provas Produzidas na Etapa 05 (Exportação Automática) */}
+            <div className="bg-gradient-to-br from-blue-50/40 to-indigo-50/10 border border-blue-150 rounded-[1.25rem] p-5 space-y-4 shadow-3xs hover:border-blue-300 transition-all text-left">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-blue-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded font-black uppercase tracking-wider font-mono">
+                    GDI — Etapa 5
+                  </span>
+                  <span className="text-xs font-black uppercase text-slate-800 tracking-wider font-sans">
+                    Relatório de Custódia e Provas ({client?.type || 'PF'})
+                  </span>
+                </div>
+                {caseObj?.relatorioProvasGoogleDocsUrl && (
+                  <a
+                    href={caseObj.relatorioProvasGoogleDocsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-[10px] bg-white border border-blue-150 text-blue-750 hover:text-blue-900 px-2.5 py-1 rounded-xl font-bold uppercase transition shadow-4xs"
+                  >
+                    <span>GDocs Oficial</span>
+                    <ExternalLink size={10} className="stroke-[2.5]" />
+                  </a>
+                )}
+              </div>
+
+              {/* Status Section */}
+              <div className="flex flex-col gap-3">
+                <div className="p-3 bg-white border border-gray-150 rounded-xl space-y-1">
+                  <span className="text-[9px] uppercase tracking-wider text-gray-400 font-extrabold font-mono block">Status da Etapa 05</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2.5 h-2.5 rounded-full ${wizardState?.step5_consolidado_completed ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+                    <span className="text-xs font-bold text-gray-800">
+                      {wizardState?.step5_consolidado_completed ? 'Custódia de Provas Validada e Fechada' : 'Aguardando validação e consolidação na Etapa 5'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Vertical Document Lists */}
+              <div className="space-y-4">
+                
+                {/* 1. DOCUMENTOS BÁSICOS DO ESCRITÓRIO */}
+                <div className="space-y-2">
+                  <h4 className="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-mono">
+                    1. Auditoria Física dos Documentos Básicos do Escritório
+                  </h4>
+                  <div className="space-y-2">
+                    {/* Procuração */}
+                    <div className="p-3 bg-white border border-gray-150 rounded-xl flex items-center justify-between text-xs">
+                      <div>
+                        <p className="font-bold text-gray-800">Outorga de Procuração Ad Judicia</p>
+                        <p className="text-[10px] text-gray-400 font-semibold leading-relaxed">
+                          Assinada pelo cliente: {wizardState?.q1_3 === 'sim' ? 'Sim ✅' : 'Não ❌'} • Arquivos: {(wizardState?.procuracaoFiles || []).length}
+                        </p>
+                      </div>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${wizardState?.q1_3 === 'sim' && (wizardState?.procuracaoFiles || []).length > 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'}`}>
+                        {wizardState?.q1_3 === 'sim' && (wizardState?.procuracaoFiles || []).length > 0 ? 'Saneado' : 'Pendente'}
+                      </span>
+                    </div>
+
+                    {/* Declaração de Hipossuficiência ou Recolhimento de Custas */}
+                    {client?.type === 'PJ' ? (
+                      <div className="p-3 bg-white border border-gray-150 rounded-xl flex items-center justify-between text-xs">
+                        <div>
+                          <p className="font-bold text-gray-800">Balancete / Declaração PJ</p>
+                          <p className="text-[10px] text-gray-400 font-semibold leading-relaxed">
+                            Apresentação de Balanço/Recolhimento: {wizardState?.q2_1 === 'sim' ? 'Hipossuficiência' : 'Recolhimento de Taxas'} • Arquivos: {(wizardState?.declaracaoFiles || []).length}
+                          </p>
+                        </div>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${((wizardState?.declaracaoFiles || []).length > 0) ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'}`}>
+                          {((wizardState?.declaracaoFiles || []).length > 0) ? 'Saneado' : 'Pendente'}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-white border border-gray-150 rounded-xl flex items-center justify-between text-xs">
+                        <div>
+                          <p className="font-bold text-gray-800">Taxas ou Declaração de Hipossuficiência</p>
+                          <p className="text-[10px] text-gray-400 font-semibold leading-relaxed">
+                            {wizardState?.q2_1 === 'nao' ? (
+                              <>Modalidade: Recolhimento de Taxas • Guia/Comprovante de Custas anexados: {((wizardState?.guiaCustasFiles || []).length > 0 && (wizardState?.comprovanteGuiaCustasFiles || []).length > 0) ? 'Sim ✅' : 'Não ❌'}</>
+                            ) : (
+                              <>Modalidade: Assistência Gratuita • Declaração de Pobreza assinada: {wizardState?.q2_4 === 'sim' ? 'Sim ✅' : 'Não ❌'} • Arquivos: {(wizardState?.declaracaoFiles || []).length}</>
+                            )}
+                          </p>
+                        </div>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${(wizardState?.q2_1 === 'nao' ? ((wizardState?.guiaCustasFiles || []).length > 0 && (wizardState?.comprovanteGuiaCustasFiles || []).length > 0) : (wizardState?.q2_4 === 'sim' && (wizardState?.declaracaoFiles || []).length > 0)) ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'}`}>
+                          {(wizardState?.q2_1 === 'nao' ? ((wizardState?.guiaCustasFiles || []).length > 0 && (wizardState?.comprovanteGuiaCustasFiles || []).length > 0) : (wizardState?.q2_4 === 'sim' && (wizardState?.declaracaoFiles || []).length > 0)) ? 'Saneado' : 'Pendente'}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Contrato de Honorários */}
+                    <div className="p-3 bg-white border border-gray-150 rounded-xl flex items-center justify-between text-xs">
+                      <div>
+                        <p className="font-bold text-gray-800">{client?.type === 'PJ' ? 'Contrato de Honorários Corporativo' : 'Contrato de Honorários Advocatícios'}</p>
+                        <p className="text-[10px] text-gray-400 font-semibold leading-relaxed">
+                          Assinado pelo Cliente: {wizardState?.q3_4 === 'sim' ? 'Sim ✅' : 'Não ❌'} • Assinado pelo Advogado: {wizardState?.q3_5 === 'sim' ? 'Sim ✅' : 'Não ❌'} • Arquivos: {(wizardState?.contratoFiles || []).length}
+                        </p>
+                      </div>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${(wizardState?.q3_7 === 'sim' || (wizardState?.q3_4 === 'sim' && wizardState?.q3_5 === 'sim')) ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'}`}>
+                        {(wizardState?.q3_7 === 'sim' || (wizardState?.q3_4 === 'sim' && wizardState?.q3_5 === 'sim')) ? 'Saneado' : 'Pendente'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. CERTIFICAÇÃO DE PROVAS MÍNIMAS OBRIGATÓRIAS */}
+                <div className="space-y-2">
+                  <h4 className="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-mono">
+                    2. Certificação de Provas Mínimas Obrigatórias
+                  </h4>
+                  <div className="space-y-2">
+                    {client?.type === 'PJ' ? (
+                      <>
+                        {[
+                          { label: 'Cartão CNPJ Oficial', files: wizardState?.cnpjFiles || [] },
+                          { label: 'Contrato Social / Ato Constitutivo', files: wizardState?.contratoSocialFiles || [] },
+                          { label: 'Comprovante Endereço Sede', files: wizardState?.enderecoSedeFiles || [] },
+                          { label: 'RG do Sócio Administrador', files: wizardState?.rgSocioFiles || [] },
+                          { label: 'CPF do Sócio Administrador', files: wizardState?.cpfSocioFiles || [] },
+                          { label: 'Comprovante Endereço Sócio', files: wizardState?.residenciaSocioFiles || [] }
+                        ].map((item, idx) => (
+                          <div key={idx} className="p-3 bg-white border border-gray-150 rounded-xl flex items-center justify-between text-xs">
+                            <div>
+                              <p className="font-bold text-gray-800">{item.label}</p>
+                              <p className="text-[10px] text-gray-400 font-semibold">{item.files.length} arquivo(s) anexados</p>
+                            </div>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${item.files.length > 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
+                              {item.files.length > 0 ? 'Saneado' : 'Ausente'}
+                            </span>
+                          </div>
+                        ))}
+                      </>
+                    ) : (
+                      <>
+                        {[
+                          { label: 'Cédula de Identidade (RG)', files: wizardState?.rgFiles || [] },
+                          { label: 'Cadastro de Pessoa Física (CPF)', files: wizardState?.cpfFiles || [] },
+                          { label: 'Comprovante de Residência Atualizado', files: wizardState?.comprovanteFiles || [] }
+                        ].map((item, idx) => (
+                          <div key={idx} className="p-3 bg-white border border-gray-150 rounded-xl flex items-center justify-between text-xs">
+                            <div>
+                              <p className="font-bold text-gray-800">{item.label}</p>
+                              <p className="text-[10px] text-gray-400 font-semibold">{item.files.length} arquivo(s) anexados</p>
+                            </div>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${item.files.length > 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
+                              {item.files.length > 0 ? 'Saneado' : 'Ausente'}
+                            </span>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. OUTRAS PROVAS E PLEITOS ADICIONAIS */}
+                <div className="space-y-2">
+                  <h4 className="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-mono">
+                    3. Outras Provas Solicitadas (Instrução Processual)
+                  </h4>
+                  {requests.filter(req => {
+                    const t = (req.title || '').toLowerCase();
+                    return !t.includes('procuração') && !t.includes('declaração') && !t.includes('contrato');
+                  }).length > 0 ? (
+                    <div className="space-y-2">
+                      {requests.filter(req => {
+                        const t = (req.title || '').toLowerCase();
+                        return !t.includes('procuração') && !t.includes('declaração') && !t.includes('contrato');
+                      }).map((req, idx) => {
+                        const proofState = wizardState?.q5_provas?.[req.id] || { received: 'nao' };
+                        return (
+                          <div key={idx} className="p-3 bg-white border border-gray-150 rounded-xl flex items-center justify-between text-xs animate-in fade-in duration-200">
+                            <div>
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <span className="text-[8px] bg-blue-50 text-blue-750 px-1.5 py-0.5 rounded font-mono font-bold uppercase border border-blue-200">
+                                  {req.documentNumber || 'Complementar'}
+                                </span>
+                                <span className="font-extrabold text-gray-800 leading-none">{req.title}</span>
+                              </div>
+                              <p className="text-[10px] text-gray-400 font-semibold">Tipo: {req.evidenceType || 'Geral'}</p>
+                              {req.description && (
+                                <p className="text-[11px] text-gray-500 font-medium leading-relaxed max-w-lg mt-1.5 whitespace-pre-line bg-gray-55 p-2 rounded-lg border border-gray-150">{req.description}</p>
+                              )}
+                            </div>
+                            <span className={`text-[9px] px-2 py-0.5 rounded font-black uppercase ${proofState.received === 'sim' ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'}`}>
+                              {proofState.received === 'sim' ? 'Recebido' : 'Pendente'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 italic bg-white p-3.5 rounded-xl border border-dashed border-gray-250 leading-relaxed">
+                      Nenhuma outra prova adicional customizada requerida para esta instrução processual do cliente.
+                    </p>
+                  )}
+                </div>
+
+              </div>
             </div>
 
             {/* Card 9 - Análise de riscos */}

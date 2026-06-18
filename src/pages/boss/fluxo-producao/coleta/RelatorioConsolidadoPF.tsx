@@ -63,37 +63,92 @@ export default function RelatorioConsolidadoPF() {
     const nomeCompleto = client?.personalDados?.pf_nomeCompleto || clientName || "Cliente";
 
     let listText = "";
-    listText += "=== DOCUMENTOS BÁSICOS DO ESCRITÓRIO ===\n\n";
-    basicDocs.forEach((docItem) => {
-      const isCustodiado = docItem.files.length > 0;
-      const statusStr = isCustodiado ? `CUSTODIADO (${docItem.files.length} fl) ✅` : "AUSENTE ✗";
-      const channelStr = docItem.methods.length > 0 ? `(Canais: ${docItem.methods.join(' / ').toUpperCase()})` : "(Não entregue)";
-      listText += `• ${docItem.name.toUpperCase()}:\n  - Status: ${statusStr}\n  - Envio ao Cliente: ${docItem.sent ? "Sim" : "Não"}\n  - Recebimento: ${channelStr}\n\n`;
-    });
+    listText += "=== RELATÓRIO CONSOLIDADO DE SOLICITAÇÃO DE DOCUMENTOS (PF) ===\n\n";
+    listText += "1. DOCUMENTOS BÁSICOS:\n";
+    listText += `• RG (Responsabilidade: Cliente)\n`;
+    listText += `• CPF (Responsabilidade: Cliente)\n`;
+    listText += `• Comprovante de residência (Responsabilidade: Cliente)\n`;
+    listText += `• Certidão de Casamento/Nascimento (Responsabilidade: Cliente)\n`;
+    listText += `• Procuração Ad Judicia (Responsabilidade: Cliente & Escritório):\n`;
+    listText += `  - Procuração foi gerada? ${wizardState?.q1_1 === 'sim' ? 'Sim' : 'Não'}\n`;
+    listText += `  - Entregue ao cliente: ${Array.isArray(wizardState?.q1_2) && wizardState.q1_2.length > 0 ? 'Sim' : 'Não'}\n`;
+    listText += `  - Assinado pelo cliente?: ${wizardState?.q1_3 === 'sim' ? 'Sim' : 'Não'}\n`;
+    listText += `  - Meio de recebimento da procuração: ${wizardState?.q1_como_p_recebida === 'fisico' ? 'Físico' : (wizardState?.q1_como_p_recebida || 'Não informado')}\n`;
+    listText += `  - Digitalização ou Upload realizado: ${(wizardState?.procuracaoFiles && wizardState.procuracaoFiles.length > 0) ? 'Sim' : 'Não'}\n`;
 
-    listText += "=== CERTIFICAÇÃO DE PROVAS MÍNIMAS OBRIGATÓRIAS ===\n\n";
-    const minimDocs = [
-      { label: 'RG', files: wizardState?.rgFiles || [] },
-      { label: 'CPF', files: wizardState?.cpfFiles || [] },
-      { label: 'Comprovante de residência', files: wizardState?.comprovanteFiles || [] }
-    ];
-    minimDocs.forEach((m) => {
-      const statusStr = m.files.length > 0 ? "SANEADO ✅" : "AUSENTE ✗";
-      listText += `• ${m.label.toUpperCase()}: ${statusStr} (${m.files.length} arquivo(s))\n`;
-    });
-    listText += "\n";
+    if (wizardState?.q2_1 === 'sim') {
+      listText += `• Declaração de Pobreza/Hipossuficiência (Responsabilidade: Cliente):\n`;
+      listText += `  - Declaração de Pobreza foi gerada?: ${wizardState?.q2_2 === 'sim' ? 'Sim' : 'Não'}\n`;
+      listText += `  - Entregue ao cliente: ${Array.isArray(wizardState?.q2_3) && wizardState.q2_3.length > 0 ? 'Sim' : 'Não'}\n`;
+      listText += `  - Assinado pelo cliente?: ${wizardState?.q2_4 === 'sim' ? 'Sim' : 'Não'}\n`;
+      listText += `  - Meio de recebimento: ${wizardState?.q2_como_d_recebida || 'Não informado'}\n`;
+      listText += `  - Digitalização realizada: ${(wizardState?.declaracaoFiles && wizardState.declaracaoFiles.length > 0) ? 'Sim' : 'Não'}\n`;
+    } else {
+      listText += `• Guia de Custas e Recolhimento de Taxas (Responsabilidade: Cliente & Escritório):\n`;
+      listText += `  - Guia de custas foi gerada?: ${wizardState?.q2_recolher_custas_gerou_guia === 'sim' ? 'Sim' : 'Não'}\n`;
+      listText += `  - Entregue ao cliente: ${wizardState?.q2_recolher_custas_como_entregara || 'Não informado'}\n`;
+      listText += `  - Digitalização da Guia realizada?: ${(Array.isArray(wizardState?.guiaCustasFiles) && wizardState.guiaCustasFiles.length > 0) ? 'Sim' : 'Não'}\n`;
+      listText += `  - Meio de recebimento do comprovante: ${wizardState?.q2_recolher_custas_comprovante_enviado_como || 'Não informado'}\n`;
+      listText += `  - Digitalização do comprovante realizada?: ${(Array.isArray(wizardState?.comprovanteGuiaCustasFiles) && wizardState.comprovanteGuiaCustasFiles.length > 0) ? 'Sim' : 'Não'}\n`;
+    }
 
-    listText += "=== OUTRAS PROVAS E PLEITOS ADICIONAIS ===\n\n";
+    listText += `• Contrato de Honorários e Prestação de Serviços (Responsabilidade: Cliente & Escritório):\n`;
+    listText += `  - Contrato de honorários foi gerada? ${wizardState?.q3_1 === 'sim' ? 'Sim' : 'Não'}\n`;
+    listText += `  - Entregue ao cliente: ${Array.isArray(wizardState?.q3_3) && wizardState.q3_3.length > 0 ? 'Sim' : 'Não'}\n`;
+    listText += `  - Assinado pelo cliente?: ${wizardState?.q3_4 === 'sim' ? 'Sim' : 'Não'}\n`;
+    listText += `  - Assinado pelo Advogado?: ${wizardState?.q3_5 === 'sim' ? 'Sim' : 'Não'}\n`;
+    listText += `  - Meio de recebimento do contrato: ${wizardState?.q3_6 === 'sim' ? 'Recebido Digitalizado' : 'Não informado'}\n`;
+    listText += `  - Digitalização ou Upload realizado: ${wizardState?.q3_7 === 'sim' ? 'Sim' : 'Não'}\n\n`;
+
+    listText += "2. DOCUMENTOS ESPECÍFICOS:\n";
+    listText += "• CTPS (Responsabilidade: Cliente)\n";
+    listText += "• CNIS (Responsabilidade: Cliente)\n";
+    listText += "• Extrato FGTS (Responsabilidade: Cliente)\n";
+    listText += "• Contratos (Responsabilidade: Cliente / Terceiro)\n";
+    listText += "• Holerites (Responsabilidade: Cliente)\n";
+    listText += "• Laudos médicos (Responsabilidade: Órgão Público / Cliente)\n";
+    listText += "• Fotografias (Responsabilidade: Cliente)\n";
+    listText += "• Mensagens / WhatsApp (Responsabilidade: Cliente)\n";
+    listText += "• E-mails (Responsabilidade: Cliente)\n\n";
+
+    listText += "3. DOCUMENTOS COMPLEMENTARES:\n";
     if (customProvas && customProvas.length > 0) {
       customProvas.forEach((req, idx) => {
-        const proofState = wizardState?.q5_provas?.[req.id] || { received: 'nao' };
-        const statusStr = proofState.received === 'sim' ? "RECEBIDO ✅" : "PENDENTE COOPERAÇÃO ⏳";
-        listText += `${idx + 1}. [${req.documentNumber || 'DOCUMENTO'}] ${req.title}\n`;
-        listText += `   - Tipo: ${req.evidenceType || 'Geral'}\n`;
-        listText += `   - Status de Custódia: ${statusStr}\n\n`;
+        listText += `• [${req.documentNumber || 'COMPLEMENTAR'}] ${req.title} (Responsabilidade: Cliente)\n`;
       });
     } else {
-      listText += "Nenhuma prova adicional customizada requerida para esta instrução processual.\n";
+      listText += "• Nenhuma outra prova específica exigida para o caso de instrução.\n";
+    }
+    listText += "\n";
+
+    listText += "4. DOCUMENTOS PRODUZIDOS PELO ESCRITÓRIO:\n";
+    listText += "• Elaboração de Procuração Ad Judicia (Responsabilidade: Escritório)\n";
+    listText += "• Elaboração de Contrato de Honorários (Responsabilidade: Escritório)\n";
+    listText += "• Emissão de Certidões Públicas (Responsabilidade: Órgão Público / Escritório)\n";
+    listText += "• Pesquisas Externas (Responsabilidade: Escritório)\n\n";
+
+    listText += "5. RESPONSABILIDADE PELA OBTENÇÃO:\n";
+    listText += "• Cliente: Documentos de identificação, residência e instrução probatória pessoal.\n";
+    listText += "• Escritório: Elaboração de peças ordinárias, mandatos, requerimentos e pesquisas de domínio.\n";
+    listText += "• Terceiro: Documentos testemunhais, contratos auxiliares.\n";
+    listText += "• Órgão Público: Certidões judiciais ou cadastros estatais com requisição do escritório.\n\n";
+
+    listText += "6. CHECKLIST CONSOLIDADO:\n";
+    listText += "[ ] RG\n";
+    listText += "[ ] CPF\n";
+    listText += "[ ] Comprovante de residência\n";
+    listText += "[ ] Certidão de Casamento/Nascimento\n";
+    listText += "[ ] Procuração Ad Judicia\n";
+    if (wizardState?.q2_1 === 'sim') {
+      listText += "[ ] Declaração de Pobreza/Hipossuficiência\n";
+    } else {
+      listText += "[ ] Guia de Custas e Comprovante de Pagamento\n";
+    }
+    listText += "[ ] Contrato de Honorários\n";
+    if (customProvas && customProvas.length > 0) {
+      customProvas.forEach((req) => {
+        listText += `[ ] ${req.title}\n`;
+      });
     }
 
     const placeholders: Record<string, string> = {
@@ -338,296 +393,107 @@ export default function RelatorioConsolidadoPF() {
                   1. Auditoria Física dos Documentos Básicos do Escritório
                 </h3>
                 
-                <div className="space-y-4">
-                  {/* PROCURAÇÃO */}
-                  <div id="audi-procuracao-box" className="p-5 bg-white border border-gray-150 rounded-2xl shadow-3xs space-y-4">
-                    <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2.5 h-2.5 bg-blue-600 rounded-full"></div>
-                        <h4 className="text-xs font-black text-gray-950 uppercase tracking-wider font-mono">Procuração</h4>
-                      </div>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-md font-black uppercase ${wizardState.q1_1 === 'sim' ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
-                        {wizardState.q1_1 === 'sim' ? '✓ Ativa' : '✗ Ausente'}
-                      </span>
-                    </div>
-
-                    <div className="space-y-3 pl-2 text-xs">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-gray-400 font-bold">Procuração foi gerada? (varia de acordo com a resposta no item 1.1 )</span>
-                        <span className="font-extrabold text-gray-800">
-                          {wizardState.q1_1 === 'sim' ? 'Sim ✅' : wizardState.q1_1 === 'nao' ? 'Não ❌' : 'Não preenchido ➖'}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-col gap-1">
-                        <span className="text-gray-400 font-bold">Entregue ao cliente (varia de acordo com a resposta no item 1.2 )</span>
-                        <span className="font-extrabold text-gray-800">
-                          {Array.isArray(wizardState.q1_2) && wizardState.q1_2.length > 0 
-                            ? `Sim (Canais: ${wizardState.q1_2.join(' / ').toUpperCase()}) ✅` 
-                            : 'Não entregue ❌'}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-col gap-1">
-                        <span className="text-gray-400 font-bold">Assinado pelo cliente? (varia de acordo com a resposta no item 1.3 )</span>
-                        <span className="font-extrabold text-gray-800">
-                          {wizardState.q1_3 === 'sim' ? 'Sim ✅' : wizardState.q1_3 === 'nao' ? 'Não ❌' : 'Não preenchido ➖'}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-col gap-1">
-                        <span className="text-gray-400 font-bold">Meio de recebimento da procuração do cliente: (varia de acordo com a resposta no item 1.4 )</span>
-                        <span className="font-extrabold text-gray-805 uppercase">
-                          {wizardState.q1_como_p_recebida 
-                            ? (wizardState.q1_como_p_recebida === 'fisico' ? 'Físico 📦' : wizardState.q1_como_p_recebida.toUpperCase()) 
-                            : 'Não informado ➖'}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-col gap-1">
-                        <span className="text-gray-400 font-bold">Digitalização ou Upload foi realizado (varia de acordo com a resposta no item 1.5 )</span>
-                        <span className="font-extrabold text-gray-800">
-                          {(wizardState.procuracaoFiles && wizardState.procuracaoFiles.length > 0) 
-                            ? 'Sim (Arquivo Custodiado) ✅' 
-                            : (wizardState.q1_deseja_digitalizar_p === 'sim' ? 'Sim (Pendente upload) ⏳' : 'Não realizado ❌')}
-                        </span>
-                      </div>
-
-                      {Array.isArray(wizardState?.procuracaoFiles) && wizardState.procuracaoFiles.length > 0 && (
-                        <div className="space-y-1 mt-2">
-                          {wizardState.procuracaoFiles.map((f: any, fIdx: number) => (
-                            <div key={fIdx} className="flex items-center gap-1.5 text-xs text-blue-900 font-semibold bg-blue-50/50 p-1.5 px-2 rounded-lg">
-                              <FileText size={11} className="text-blue-400 shrink-0" />
-                              <span className="truncate">{f.name}</span>
-                              <span className="text-[10px] text-blue-400 font-mono ml-auto">({f.size})</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* DECLARAÇÃO DE POBREZA */}
-                  <div id="audi-declaracao-box" className="p-5 bg-white border border-gray-150 rounded-2xl shadow-3xs space-y-4">
-                    <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2.5 h-2.5 rounded-full ${wizardState.q2_1 === 'sim' ? 'bg-amber-500' : 'bg-gray-300'}`}></div>
-                        <h4 className="text-xs font-black text-gray-950 uppercase tracking-wider font-mono">Declaração de Pobreza</h4>
-                      </div>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-md font-black uppercase ${wizardState.q2_1 === 'sim' ? 'bg-amber-50 text-amber-800' : 'bg-gray-100 text-gray-500'}`}>
-                        {wizardState.q2_1 === 'sim' ? '✓ Requisitado (Gratuidade)' : '➖ Isento / Custas'}
-                      </span>
-                    </div>
-
-                    {wizardState.q2_1 === 'sim' ? (
-                      <div className="space-y-3 pl-2 text-xs">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-gray-400 font-bold">Declaração de Pobreza foi gerada? (varia de acordo com a resposta no item 2.2 )</span>
-                          <span className="font-extrabold text-gray-800">
-                            {wizardState.q2_2 === 'sim' ? 'Sim ✅' : wizardState.q2_2 === 'nao' ? 'Não ❌' : 'Não preenchido ➖'}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col gap-1">
-                          <span className="text-gray-400 font-bold">Entregue ao cliente (varia de acordo com a resposta no item 2.3 )</span>
-                          <span className="font-extrabold text-gray-800">
-                            {Array.isArray(wizardState.q2_3) && wizardState.q2_3.length > 0 
-                              ? `Sim (Canais: ${wizardState.q2_3.join(' / ').toUpperCase()}) ✅` 
-                              : 'Não entregue ❌'}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col gap-1">
-                          <span className="text-gray-400 font-bold">Assinado pelo cliente? (varia de acordo com a resposta no item 2.4 )</span>
-                          <span className="font-extrabold text-gray-800">
-                            {wizardState.q2_4 === 'sim' ? 'Sim ✅' : wizardState.q2_4 === 'nao' ? 'Não ❌' : 'Não preenchido ➖'}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col gap-1">
-                          <span className="text-gray-400 font-bold">Meio de recebimento da declaração de pobreza cliente: (varia de acordo com a resposta no item 2.5 )</span>
-                          <span className="font-extrabold text-gray-805 uppercase">
-                            {wizardState.q2_como_d_recebida 
-                              ? (wizardState.q2_como_d_recebida === 'fisico' ? 'Físico 📦' : wizardState.q2_como_d_recebida.toUpperCase()) 
-                              : 'Não informado ➖'}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col gap-1">
-                          <span className="text-gray-400 font-bold">Digitalização ou Upload foi realizado (varia de acordo com a resposta no item 2.6 )</span>
-                          <span className="font-extrabold text-gray-800">
-                            {(wizardState.declaracaoFiles && wizardState.declaracaoFiles.length > 0) 
-                              ? 'Sim (Arquivo Custodiado) ✅' 
-                              : (wizardState.q2_deseja_digitalizar_d === 'sim' ? 'Sim (Pendente upload) ⏳' : 'Não realizado ❌')}
-                          </span>
-                        </div>
-
-                        {Array.isArray(wizardState?.declaracaoFiles) && wizardState.declaracaoFiles.length > 0 && (
-                          <div className="space-y-1 mt-2">
-                            {wizardState.declaracaoFiles.map((f: any, fIdx: number) => (
-                              <div key={fIdx} className="flex items-center gap-1.5 text-xs text-amber-900 font-semibold bg-amber-50/50 p-1.5 px-2 rounded-lg">
-                                <FileText size={11} className="text-amber-400 shrink-0" />
-                                <span className="truncate">{f.name}</span>
-                                <span className="text-[10px] text-amber-400 font-mono ml-auto">({f.size})</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                <div className="space-y-3">
+                  {/* PROCURAÇÃO STATUS */}
+                  <div className="p-4.5 bg-gray-50/40 border border-gray-150 rounded-2xl text-xs font-bold leading-normal text-left">
+                    {wizardState?.q1_3 === 'sim' && Array.isArray(wizardState?.procuracaoFiles) && wizardState.procuracaoFiles.length > 0 ? (
+                      <span className="text-emerald-700 font-bold">Procuração - assinado e upload no drive ✅</span>
                     ) : (
-                      <p className="text-xs text-gray-400 italic pl-2">
-                        O cliente optou pelo recolhimento de taxas. Deste modo, a Declaração de Pobreza está isenta para esta instrução.
-                      </p>
+                      <span className="text-rose-700 font-bold">Procuração - pendente de geração, assinatura, entrega, digitalização ❌</span>
                     )}
                   </div>
 
-                  {/* GUIA DE CUSTAS */}
-                  <div id="audi-guiacustas-box" className="p-5 bg-white border border-gray-150 rounded-2xl shadow-3xs space-y-4">
-                    <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2.5 h-2.5 rounded-full ${wizardState.q2_1 === 'nao' ? 'bg-emerald-500' : 'bg-gray-300'}`}></div>
-                        <h4 className="text-xs font-black text-gray-955 uppercase tracking-wider font-mono">Guia de Custas</h4>
-                      </div>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-md font-black uppercase ${wizardState.q2_1 === 'nao' ? 'bg-emerald-50 text-emerald-800' : 'bg-gray-100 text-gray-500'}`}>
-                        {wizardState.q2_1 === 'nao' ? '✓ Requisitado (Custas)' : '➖ Isento / Gratuidade'}
-                      </span>
-                    </div>
-
-                    {wizardState.q2_1 === 'nao' ? (
-                      <div className="space-y-3 pl-2 text-xs">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-gray-400 font-bold">Guia de custas foi gerada? (varia de acordo com a resposta no item 2.2.1 )</span>
-                          <span className="font-extrabold text-gray-800">
-                            {wizardState.q2_recolher_custas_gerou_guia === 'sim' ? 'Sim ✅' : wizardState.q2_recolher_custas_gerou_guia === 'nao' ? 'Não ❌' : 'Não preenchido ➖'}
-                          </span>
+                  {/* DECLARAÇÃO OU GUIA DE CUSTAS STATUS */}
+                  <div className="p-4.5 bg-gray-50/40 border border-gray-150 rounded-2xl text-xs font-bold leading-normal text-left space-y-1">
+                    {wizardState?.q2_1 === 'nao' ? (
+                      <>
+                        <p className="text-indigo-900 bg-indigo-50/30 p-2.5 rounded-xl border border-indigo-100 font-extrabold text-[11px] leading-relaxed select-none">
+                          O cliente optou pelo recolhimento de taxas. Deste modo, a Declaração de Pobreza está isenta para esta instrução.
+                        </p>
+                        <div>
+                          {Array.isArray(wizardState?.guiaCustasFiles) && wizardState.guiaCustasFiles.length > 0 && Array.isArray(wizardState?.comprovanteGuiaCustasFiles) && wizardState.comprovanteGuiaCustasFiles.length > 0 ? (
+                            <span className="text-emerald-700 font-bold">Guia de Custas e Comprovante de Pagamento - gerado e upload no drive ✅</span>
+                          ) : (
+                            <span className="text-rose-700 font-bold">Guia de Custas pendente de geração, assinatura, entrega, digitalização ❌</span>
+                          )}
                         </div>
-
-                        <div className="flex flex-col gap-1">
-                          <span className="text-gray-400 font-bold">Entregue ao cliente (varia de acordo com a resposta no item 2.2.2 )</span>
-                          <span className="font-extrabold text-gray-800 uppercase">
-                            {wizardState.q2_recolher_custas_como_entregara 
-                              ? (wizardState.q2_recolher_custas_como_entregara === 'fisica' ? 'Física/Impressa 📦' : wizardState.q2_recolher_custas_como_entregara.toUpperCase()) 
-                              : 'Não entregue ❌'}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col gap-1">
-                          <span className="text-gray-400 font-bold">Digitalização ou Upload da Guia de custas foi realizado (varia de acordo com a resposta no item 2.2.3 )</span>
-                          <span className="font-extrabold text-gray-850">
-                            {Array.isArray(wizardState.guiaCustasFiles) && wizardState.guiaCustasFiles.length > 0 
-                              ? `Sim (${wizardState.guiaCustasFiles.length} arquivo(s) salvo(s) no Drive) ✅` 
-                              : 'Não realizado ❌'}
-                          </span>
-                        </div>
-
-                        {Array.isArray(wizardState?.guiaCustasFiles) && wizardState.guiaCustasFiles.length > 0 && (
-                          <div className="space-y-1 pl-2">
-                            {wizardState.guiaCustasFiles.map((f: any, fIdx: number) => (
-                              <div key={fIdx} className="flex items-center gap-1.5 text-xs text-slate-900 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                                <FileText size={11} className="text-slate-400 shrink-0" />
-                                <span className="truncate">{f.name}</span>
-                                <span className="ml-auto text-[10px] text-gray-400 font-mono">({f.size})</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className="flex flex-col gap-1">
-                          <span className="text-gray-400 font-bold">Meio de recebimento do comprovante de pagamento das custas pelo cliente: (varia de acordo com a resposta no item 2.2.4)</span>
-                          <span className="font-extrabold text-gray-808 uppercase">
-                            {wizardState.q2_recolher_custas_comprovante_enviado_como 
-                              ? (wizardState.q2_recolher_custas_comprovante_enviado_como === 'fisico' ? 'Fisico 📦' : wizardState.q2_recolher_custas_comprovante_enviado_como.toUpperCase()) 
-                              : 'Não informado ➖'}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-col gap-1">
-                          <span className="text-gray-400 font-bold">Digitalização ou Upload do COMPROVANTE DE PAGAMENTO da Guia de custas foi realizado ? (varia de acordo com a resposta no item 2.2.5)</span>
-                          <span className="font-extrabold text-gray-850">
-                            {Array.isArray(wizardState.comprovanteGuiaCustasFiles) && wizardState.comprovanteGuiaCustasFiles.length > 0 
-                              ? `Sim (${wizardState.comprovanteGuiaCustasFiles.length} arquivo(s) salvo(s) no Drive) ✅` 
-                              : 'Não realizado ❌'}
-                          </span>
-                        </div>
-
-                        {Array.isArray(wizardState?.comprovanteGuiaCustasFiles) && wizardState.comprovanteGuiaCustasFiles.length > 0 && (
-                          <div className="space-y-1 pl-2">
-                            {wizardState.comprovanteGuiaCustasFiles.map((f: any, fIdx: number) => (
-                              <div key={fIdx} className="flex items-center gap-1.5 text-xs text-slate-900 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                                <FileText size={11} className="text-slate-400 shrink-0" />
-                                <span className="truncate">{f.name}</span>
-                                <span className="ml-auto text-[10px] text-gray-400 font-mono">({f.size})</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                      </>
                     ) : (
-                      <p className="text-xs text-gray-400 italic pl-2">
-                        O cliente optou pelo Requerimento de Gratuidade de Justiça (Declaração de Pobreza). Isento de Guia de Custas.
-                      </p>
+                      <div>
+                        {wizardState?.q2_4 === 'sim' && Array.isArray(wizardState?.declaracaoFiles) && wizardState.declaracaoFiles.length > 0 ? (
+                          <span className="text-emerald-700 font-bold">Declaração de Pobreza - assinado e upload no drive ✅</span>
+                        ) : (
+                          <span className="text-rose-700 font-bold">Declaração ou Guia de Custas pendente de geração, assinatura, entrega, digitalização ❌</span>
+                        )}
+                      </div>
                     )}
                   </div>
 
-                  {/* CONTRATO DE HONORÁRIOS */}
-                  <div id="audi-contrato-box" className="p-5 bg-white border border-gray-150 rounded-2xl shadow-3xs space-y-4">
-                    <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2.5 h-2.5 bg-red-600 rounded-full"></div>
-                        <h4 className="text-xs font-black text-gray-955 uppercase tracking-wider font-mono">Contrato de honorários</h4>
-                      </div>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-md font-black uppercase ${wizardState.q3_1 === 'sim' ? 'bg-red-50 text-red-700 font-bold border border-red-200' : 'bg-gray-100 text-gray-500'}`}>
-                        {wizardState.q3_1 === 'sim' ? '✓ Ativo' : '✗ Inexistente'}
-                      </span>
-                    </div>
-
-                    <div className="space-y-3 pl-2 text-xs">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-gray-400 font-bold">Contrato de honorários foi gerado? (varia de acordo com a resposta no item 3.1)</span>
-                        <span className="font-extrabold text-gray-800">
-                          {wizardState.q3_1 === 'sim' ? 'Sim ✅' : wizardState.q3_1 === 'nao' ? 'Não ❌' : 'Não preenchido ➖'}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-col gap-1">
-                        <span className="text-gray-400 font-bold">Entregue ao cliente (varia de acordo com a resposta no item 3.3)</span>
-                        <span className="font-extrabold text-gray-800">
-                          {Array.isArray(wizardState.q3_3) && wizardState.q3_3.length > 0 
-                            ? `Sim (Canais: ${wizardState.q3_3.join(' / ').toUpperCase()}) ✅` 
-                            : 'Não entregue ❌'}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-col gap-1">
-                        <span className="text-gray-400 font-bold">Assinado pelo cliente? (varia de acordo com a resposta no item 3.4)</span>
-                        <span className="font-extrabold text-gray-800">
-                          {wizardState.q3_4 === 'sim' ? 'Sim ✅' : wizardState.q3_4 === 'nao' ? 'Não ❌' : 'Não preenchido ➖'}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-col gap-1">
-                        <span className="text-gray-400 font-bold">Assinado pelo Advogado? (varia de acordo com a resposta no item 3.5)</span>
-                        <span className="font-extrabold text-gray-800">
-                          {wizardState.q3_5 === 'sim' ? 'Sim ✅' : wizardState.q3_5 === 'nao' ? 'Não ❌' : 'Não preenchido ➖'}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-col gap-1">
-                        <span className="text-gray-400 font-bold">Meio de recebimento do contrato de honorários do cliente: (varia de acordo com a resposta no item 3.6)</span>
-                        <span className="font-extrabold text-gray-808-sim uppercase">
-                          {wizardState.q3_6 === 'sim' ? 'Recebido Digitalizado ✅' : wizardState.q3_6 === 'nao' ? 'Não Recebido / Pendente ❌' : 'Não preenchido ➖'}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-col gap-1">
-                        <span className="text-gray-405 font-bold">Digitalização ou Upload foi realizado do Contrato de honorários (varia de acordo com a resposta no item 3.7)</span>
-                        <span className="font-extrabold text-gray-800">
-                          {wizardState.q3_7 === 'sim' ? 'Sim (Custódia Concluída) ✅' : wizardState.q3_7 === 'nao' ? 'Não realizado ❌' : 'Não preenchido ➖'}
-                        </span>
-                      </div>
-                    </div>
+                  {/* CONTRATO DE HONORÁRIOS STATUS */}
+                  <div className="p-4.5 bg-gray-50/40 border border-gray-150 rounded-2xl text-xs font-bold leading-normal text-left">
+                    {wizardState?.q3_7 === 'sim' || (wizardState?.q3_4 === 'sim' && wizardState?.q3_5 === 'sim') ? (
+                      <span className="text-emerald-700 font-bold">Contrato - assinado e upload no drive ✅</span>
+                    ) : (
+                      <span className="text-rose-700 font-bold">Contrato pendente de geração, assinatura, entrega, digitalização ❌</span>
+                    )}
                   </div>
                 </div>
+              </div>
+
+              {/* VERTICAL SECTIONS - 2. MINIMUM MANDATORY DOCUMENTS */}
+              <div className="space-y-4">
+                <h3 className="text-xs font-black text-gray-800 uppercase tracking-wider border-b pb-1">
+                  2. Certificação de Provas Mínimas Obrigatórias
+                </h3>
+                <div className="space-y-3">
+                  {[
+                    { label: 'RG', files: wizardState?.rgFiles || [] },
+                    { label: 'CPF', files: wizardState?.cpfFiles || [] },
+                    { label: 'Comprovante de residencia', files: wizardState?.comprovanteFiles || [] }
+                  ].map((minim, mIdx) => (
+                    <div key={mIdx} className="p-3 bg-gray-50/40 border rounded-xl flex items-center justify-between text-xs">
+                      <div>
+                        <p className="font-bold text-gray-850 truncate max-w-[250px]">{minim.label}</p>
+                        <span className="text-[10px] text-gray-400 font-semibold">{minim.files.length} arquivo(s)</span>
+                      </div>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${minim.files.length > 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
+                        {minim.files.length > 0 ? 'Saneado' : 'Ausente'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* VERTICAL SECTIONS - 3. OTHER CUSTOM CLIENT EVIDENCE */}
+              <div className="space-y-4">
+                <h3 className="text-xs font-black text-gray-800 uppercase tracking-wider border-b pb-1">
+                  3. outras Provas solicitadas
+                </h3>
+                {customProvas.length > 0 ? (
+                  <div className="space-y-3">
+                    {customProvas.map((req, rIdx) => {
+                      const proofState = wizardState?.q5_provas?.[req.id] || { received: 'nao' };
+                      return (
+                        <div key={rIdx} className="p-3 bg-gray-50/50 border rounded-xl flex items-center justify-between text-xs">
+                          <div>
+                            <span className="text-[8px] bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded font-mono font-bold block w-max uppercase mb-1">{req.documentNumber || 'ADICIONAL'}</span>
+                            <span className="font-extrabold text-gray-800 block">{req.title}</span>
+                            <span className="text-[11px] text-gray-400 font-semibold">{req.evidenceType}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${proofState.received === 'sim' ? 'bg-emerald-50 text-emerald-850' : 'bg-red-50 text-red-850'}`}>
+                              {proofState.received === 'sim' ? 'Recebido' : 'Pendente'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-405 italic bg-gray-50/55 p-3 rounded-xl border border-dashed border-gray-200">
+                    Nenhuma outra prova específica exigida para o caso de instrução.
+                  </p>
+                )}
               </div>
 
               {/* GDI AUTOMATION - STAGE 5 REPORT GENERATION */}
@@ -758,8 +624,8 @@ export default function RelatorioConsolidadoPF() {
                             <span>Relatório de Provas gerado com sucesso! ✅</span>
                           </div>
                         ) : generatingRelatorio ? (
-                          <div className="p-3 bg-blue-50/50 border border-blue-250 rounded-xl text-blue-900 text-xs font-bold flex items-center gap-2 animate-pulse font-mono">
-                            <RefreshCw className="text-blue-500 shrink-0 animate-spin" size={14} />
+                          <div className="p-3 bg-blue-55 border border-blue-250 rounded-xl text-blue-900 text-xs font-bold flex items-center gap-2 animate-pulse font-mono">
+                            <RefreshCw className="text-blue-505 shrink-0 animate-spin" size={14} />
                             <span>Sincronizando com GDI... Substituindo placeholders secundários</span>
                           </div>
                         ) : (
@@ -846,62 +712,6 @@ export default function RelatorioConsolidadoPF() {
                     </div>
                   )}
                 </div>
-              </div>
-
-              {/* VERTICAL SECTIONS - 2. MINIMUM MANDATORY DOCUMENTS */}
-              <div className="space-y-4">
-                <h3 className="text-xs font-black text-gray-800 uppercase tracking-wider border-b pb-1">
-                  2. Certificação de Provas Mínimas Obrigatórias
-                </h3>
-                <div className="space-y-3">
-                  {[
-                    { label: 'RG', files: wizardState?.rgFiles || [] },
-                    { label: 'CPF', files: wizardState?.cpfFiles || [] },
-                    { label: 'Comprovante de residencia', files: wizardState?.comprovanteFiles || [] }
-                  ].map((minim, mIdx) => (
-                    <div key={mIdx} className="p-3 bg-gray-50/40 border rounded-xl flex items-center justify-between text-xs">
-                      <div>
-                        <p className="font-bold text-gray-850 truncate max-w-[250px]">{minim.label}</p>
-                        <span className="text-[10px] text-gray-400 font-semibold">{minim.files.length} arquivo(s)</span>
-                      </div>
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${minim.files.length > 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
-                        {minim.files.length > 0 ? 'Saneado' : 'Ausente'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* VERTICAL SECTIONS - 3. OTHER CUSTOM CLIENT EVIDENCE */}
-              <div className="space-y-4">
-                <h3 className="text-xs font-black text-gray-800 uppercase tracking-wider border-b pb-1">
-                  3. outras Provas solicitadas
-                </h3>
-                {customProvas.length > 0 ? (
-                  <div className="space-y-3">
-                    {customProvas.map((req, rIdx) => {
-                      const proofState = wizardState?.q5_provas?.[req.id] || { received: 'nao' };
-                      return (
-                        <div key={rIdx} className="p-3 bg-gray-50/50 border rounded-xl flex items-center justify-between text-xs">
-                          <div>
-                            <span className="text-[8px] bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded font-mono font-bold block w-max uppercase mb-1">{req.documentNumber || 'ADICIONAL'}</span>
-                            <span className="font-extrabold text-gray-800 block">{req.title}</span>
-                            <span className="text-[11px] text-gray-400 font-semibold">{req.evidenceType}</span>
-                          </div>
-                          <div className="text-right">
-                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${proofState.received === 'sim' ? 'bg-emerald-50 text-emerald-850' : 'bg-red-50 text-red-850'}`}>
-                              {proofState.received === 'sim' ? 'Recebido' : 'Pendente'}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-405 italic bg-gray-50/55 p-3 rounded-xl border border-dashed border-gray-200">
-                    Nenhuma outra prova específica exigida para o caso de instrução.
-                  </p>
-                )}
               </div>
 
               {/* ACTION PORT BOSS BUTTON */}

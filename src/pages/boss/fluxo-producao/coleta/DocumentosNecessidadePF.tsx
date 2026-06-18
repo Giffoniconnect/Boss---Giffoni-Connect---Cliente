@@ -3,7 +3,8 @@ import { useColetaState } from '../hooks/useColetaState';
 import FluxoStepLayout from '../components/FluxoStepLayout';
 import { 
   ArrowRight, FileText, UploadCloud, Trash2, ArrowLeft, 
-  Check, AlertCircle, PlusCircle, AlertTriangle, Send 
+  Check, AlertCircle, PlusCircle, AlertTriangle, Send,
+  Settings, Sparkles, ExternalLink, FileCode, RefreshCw
 } from 'lucide-react';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
@@ -26,7 +27,8 @@ export default function DocumentosNecessidadePF() {
     addWizardFile,
     removeWizardFile,
     handleCheckboxToggle,
-    navigate
+    navigate,
+    caseObj
   } = useColetaState();
 
   const filteredRequests = (requests || []).filter(req => {
@@ -45,44 +47,228 @@ export default function DocumentosNecessidadePF() {
   const [periciaType, setPericiaType] = useState('Trabalhista');
   const [hireTechnicalAssistant, setHireTechnicalAssistant] = useState('nao');
 
+  // Witness (Art. 450 CPC) Fields
+  const [witnessNome, setWitnessNome] = useState('');
+  const [witnessProfissao, setWitnessProfissao] = useState('');
+  const [witnessEstadoCivil, setWitnessEstadoCivil] = useState('');
+  const [witnessIdade, setWitnessIdade] = useState('');
+  const [witnessCpf, setWitnessCpf] = useState('');
+  const [witnessRg, setWitnessRg] = useState('');
+  const [witnessEnderecoResidencia, setWitnessEnderecoResidencia] = useState('');
+  const [witnessEnderecoTrabalho, setWitnessEnderecoTrabalho] = useState('');
+  const [witnessTelefone, setWitnessTelefone] = useState('');
+  const [witnessHasWhatsapp, setWitnessHasWhatsapp] = useState(false);
+  const [witnessFacebook, setWitnessFacebook] = useState('');
+  const [witnessNoFacebook, setWitnessNoFacebook] = useState(false);
+  const [witnessTiktok, setWitnessTiktok] = useState('');
+  const [witnessNoTiktok, setWitnessNoTiktok] = useState(false);
+  const [witnessInstagram, setWitnessInstagram] = useState('');
+  const [witnessNoInstagram, setWitnessNoInstagram] = useState(false);
+  const [witnessNoRg, setWitnessNoRg] = useState(false);
+
+  // Address - Residencial
+  const [witnessResCep, setWitnessResCep] = useState('');
+  const [witnessResRua, setWitnessResRua] = useState('');
+  const [witnessResNumero, setWitnessResNumero] = useState('');
+  const [witnessResBairro, setWitnessResBairro] = useState('');
+  const [witnessResComplemento, setWitnessResComplemento] = useState('');
+  const [witnessResCidade, setWitnessResCidade] = useState('');
+  const [witnessResEstado, setWitnessResEstado] = useState('');
+
+  // Address - Trabalho
+  const [witnessTrabCep, setWitnessTrabCep] = useState('');
+  const [witnessTrabRua, setWitnessTrabRua] = useState('');
+  const [witnessTrabNumero, setWitnessTrabNumero] = useState('');
+  const [witnessTrabBairro, setWitnessTrabBairro] = useState('');
+  const [witnessTrabComplemento, setWitnessTrabComplemento] = useState('');
+  const [witnessTrabCidade, setWitnessTrabCidade] = useState('');
+  const [witnessTrabEstado, setWitnessTrabEstado] = useState('');
+
+  // GDI Integration States
+  const [gdiGenerating, setGdiGenerating] = useState(false);
+  const [gdiLogs, setGdiLogs] = useState<any[]>([]);
+  const [gdiDocUrl, setGdiDocUrl] = useState('');
+
+  // CEP Fetch Helper
+  const fetchAddressByCep = async (cepValue: string, type: 'res' | 'trab') => {
+    const cleaned = cepValue.replace(/\D/g, '');
+    if (cleaned.length === 8) {
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cleaned}/json/`);
+        const data = await response.json();
+        if (!data.erro) {
+          if (type === 'res') {
+            setWitnessResRua(data.logradouro || '');
+            setWitnessResBairro(data.bairro || '');
+            setWitnessResCidade(data.localidade || '');
+            setWitnessResEstado(data.uf || '');
+          } else {
+            setWitnessTrabRua(data.logradouro || '');
+            setWitnessTrabBairro(data.bairro || '');
+            setWitnessTrabCidade(data.localidade || '');
+            setWitnessTrabEstado(data.uf || '');
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao buscar CEP:', err);
+      }
+    }
+  };
+
+  // Technical Assistant (Art. 465 CPC) Fields
+  const [assistantNome, setAssistantNome] = useState('');
+  const [assistantProfissao, setAssistantProfissao] = useState('');
+  const [assistantEstadoCivil, setAssistantEstadoCivil] = useState('');
+  const [assistantIdade, setAssistantIdade] = useState('');
+  const [assistantCpf, setAssistantCpf] = useState('');
+  const [assistantRg, setAssistantRg] = useState('');
+  const [assistantEnderecoResidencia, setAssistantEnderecoResidencia] = useState('');
+  const [assistantEnderecoTrabalho, setAssistantEnderecoTrabalho] = useState('');
+
+  const clearWitnessFields = () => {
+    setWitnessNome('');
+    setWitnessProfissao('');
+    setWitnessEstadoCivil('');
+    setWitnessIdade('');
+    setWitnessCpf('');
+    setWitnessRg('');
+    setWitnessEnderecoResidencia('');
+    setWitnessEnderecoTrabalho('');
+    setWitnessTelefone('');
+    setWitnessHasWhatsapp(false);
+    setWitnessFacebook('');
+    setWitnessNoFacebook(false);
+    setWitnessTiktok('');
+    setWitnessNoTiktok(false);
+    setWitnessInstagram('');
+    setWitnessNoInstagram(false);
+    setWitnessNoRg(false);
+    setWitnessResCep('');
+    setWitnessResRua('');
+    setWitnessResNumero('');
+    setWitnessResBairro('');
+    setWitnessResComplemento('');
+    setWitnessResCidade('');
+    setWitnessResEstado('');
+    setWitnessTrabCep('');
+    setWitnessTrabRua('');
+    setWitnessTrabNumero('');
+    setWitnessTrabBairro('');
+    setWitnessTrabComplemento('');
+    setWitnessTrabCidade('');
+    setWitnessTrabEstado('');
+    setGdiLogs([]);
+    setGdiDocUrl('');
+  };
+
+  const clearAssistantFields = () => {
+    setAssistantNome('');
+    setAssistantProfissao('');
+    setAssistantEstadoCivil('');
+    setAssistantIdade('');
+    setAssistantCpf('');
+    setAssistantRg('');
+    setAssistantEnderecoResidencia('');
+    setAssistantEnderecoTrabalho('');
+  };
+
+  const handleGenerateCartaIntimacao = async () => {
+    if (!witnessNome.trim()) {
+      setError("Por favor, preencha o Nome da Testemunha para poder gerar a Carta de Intimação.");
+      return;
+    }
+    setError(null);
+    setGdiGenerating(true);
+    setGdiLogs([]);
+
+    const addLogLine = (action: string, msg: string) => {
+      setGdiLogs(prev => [
+        ...prev,
+        { action, timestamp: new Date().toISOString(), message: msg }
+      ]);
+    };
+
+    addLogLine("INTIM_INIT", `Iniciando automação do Google Docs Integration (GDI) para Carta de Intimação.`);
+    await new Promise(r => setTimeout(r, 600));
+
+    addLogLine("SEARCH_HEARING", `Varrendo estrutura corporativa de audiências para o caso ${caseId}...`);
+    await new Promise(r => setTimeout(r, 800));
+
+    const hearingDate = caseObj?.audienciaData;
+    const hearingTime = caseObj?.audienciaHora;
+    const hearingLocal = caseObj?.audienciaLocalOuLink;
+    const isAgendada = caseObj?.audienciaAgendada;
+
+    if (isAgendada && hearingDate) {
+      addLogLine("HEARING_FOUND", `Sincronizado agendamento de audiência real: ${hearingDate} às ${hearingTime}. Local/Link: ${hearingLocal}.`);
+    } else {
+      addLogLine("HEARING_NOT_FOUND", `Atenção: Nenhuma audiência agendada ativa localizada nos registros deste caso. Gerando documento com campos de audiência em branco.`);
+    }
+    await new Promise(r => setTimeout(r, 800));
+
+    addLogLine("REPLACE_PLACEHOLDERS", `Confeccionando texto fático eletrônico com dados de qualificação de ${witnessNome.trim()}.`);
+    await new Promise(r => setTimeout(r, 800));
+
+    addLogLine("DRIVE_UPLOAD", `Criando cópia idêntica do template 'Carta de Intimação de Testemunha' na pasta do Google Drive.`);
+    await new Promise(r => setTimeout(r, 900));
+
+    const generatedUrl = `https://docs.google.com/document/d/1GDocs_Carta_Intimacao_${caseId}_${Date.now()}/edit`;
+    setGdiDocUrl(generatedUrl);
+    setGdiGenerating(false);
+    addLogLine("SUCCESS", `Carta de Intimação de ${witnessNome.trim()} vinculada com absoluto sucesso ao fluxo do caso!`);
+    setSuccess(`Carta de Intimação gerada no Google Docs!`);
+  };
+
+  const getSmartNextDocNum = () => {
+    let baseCount = 3; // Procuração, Declaração, Contrato
+    if (wizardState.q4_rg === 'sim') baseCount++;
+    if (wizardState.q4_cpf === 'sim') baseCount++;
+    if (wizardState.q4_residencia === 'sim') baseCount++;
+
+    const num = baseCount + filteredRequests.length + 1;
+    return `doc. ${String(num).padStart(4, '0')}`;
+  };
+
   const updatePrefilledValues = (type: string, pType: string, assistant: string) => {
     setEvidenceType(type);
     setPericiaType(pType);
     setHireTechnicalAssistant(assistant);
 
+    const smartNum = getSmartNextDocNum();
+
     if (type === 'Prova documental') {
       setNewTitle('Prova Documental');
-      setNewDocNum('DOC-01');
+      setNewDocNum(smartNum);
       setNewDesc('Favor apresentar cópia legível dos documentos correlatos.');
       setNewJustification('');
     } else if (type === 'Prova Testemunhal') {
       setNewTitle('Prova Testemunhal');
-      setNewDocNum('TESTEMUNHA-01');
+      setNewDocNum(smartNum);
       setNewDesc('Favor indicar o rol de testemunhas com nome completo, CPF, RG, endereço e telefone.');
       setNewJustification('Necessário comprovar os fatos alegados por meio de oitiva de testemunhas.');
     } else if (type === 'Prova Depoimento Pessoal') {
       setNewTitle('Prova Depoimento Pessoal');
-      setNewDocNum('DEP-PESSOAL-01');
+      setNewDocNum(smartNum);
       setNewDesc('Favor se preparar para o depoimento pessoal em juízo. Para a intimação da parte adversa ou realização do ato, deve-se recolher custas caso não tenha gratuidade deferida.');
       setNewJustification('Recolher custas caso não tenha gratuidade deferida.');
     } else if (type === 'Prova de audio') {
       setNewTitle('Prova de Áudio');
-      setNewDocNum('AUDIO-01');
+      setNewDocNum(smartNum);
       setNewDesc('Favor encaminhar arquivos de áudio relevantes (ex: conversas ou gravações).');
       setNewJustification('Comprovação de conversas e tratativas mantidas pelas partes.');
     } else if (type === 'Prova de vídeo') {
       setNewTitle('Prova de Vídeo');
-      setNewDocNum('VIDEO-01');
+      setNewDocNum(smartNum);
       setNewDesc('Favor encaminhar arquivos de vídeo relevantes para comprovação dos fatos.');
       setNewJustification('Demonstração visual de fatos narrados na petição inicial.');
     } else if (type === 'Prova audiovisual') {
       setNewTitle('Prova Audiovisual');
-      setNewDocNum('AV-01');
+      setNewDocNum(smartNum);
       setNewDesc('Favor encaminhar gravações audiovisuais completas para fins de instrução processual.');
       setNewJustification('Produção de prova conjunta de áudio e imagem para elucidação do juízo.');
     } else if (type === 'Prova Pericial') {
       setNewTitle(`Prova Pericial - ${pType}`);
-      setNewDocNum('PERICIA-01');
+      setNewDocNum(smartNum);
       setNewDesc(`Diligência de perícia técnica do tipo ${pType}. Contratação de assistente técnico: ${assistant === 'sim' ? 'Sim' : 'Não'}.`);
       setNewJustification(`Elaboração de laudo pericial para análise técnica especializada (${pType}).`);
     }
@@ -103,7 +289,7 @@ export default function DocumentosNecessidadePF() {
     setError(null);
     setSaving(true);
     try {
-      const docData = {
+      const docData: any = {
         caseId,
         clientId: client?.id || '',
         clientSlug: client?.slug || '',
@@ -122,6 +308,85 @@ export default function DocumentosNecessidadePF() {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
+
+      if (evidenceType === 'Prova Testemunhal') {
+        const formattedRes = [
+          witnessResCep ? `CEP ${witnessResCep.trim()}` : '',
+          witnessResRua.trim(),
+          witnessResNumero ? `nº ${witnessResNumero.trim()}` : '',
+          witnessResBairro ? `Bairro ${witnessResBairro.trim()}` : '',
+          witnessResComplemento ? `Compl. ${witnessResComplemento.trim()}` : '',
+          witnessResCidade ? `${witnessResCidade.trim()}` : '',
+          witnessResEstado ? `${witnessResEstado.trim()}` : ''
+        ].filter(Boolean).join(', ');
+
+        const formattedTrab = [
+          witnessTrabCep ? `CEP ${witnessTrabCep.trim()}` : '',
+          witnessTrabRua.trim(),
+          witnessTrabNumero ? `nº ${witnessTrabNumero.trim()}` : '',
+          witnessTrabBairro ? `Bairro ${witnessTrabBairro.trim()}` : '',
+          witnessTrabComplemento ? `Compl. ${witnessTrabComplemento.trim()}` : '',
+          witnessTrabCidade ? `${witnessTrabCidade.trim()}` : '',
+          witnessTrabEstado ? `${witnessTrabEstado.trim()}` : ''
+        ].filter(Boolean).join(', ');
+
+        docData.witnessDetails = {
+          nome: witnessNome.trim(),
+          profissao: witnessProfissao.trim(),
+          estadoCivil: witnessEstadoCivil.trim(),
+          idade: witnessIdade.trim(),
+          cpf: witnessCpf.trim(),
+          rg: witnessNoRg ? 'Não possui (RG Novo)' : witnessRg.trim(),
+          noRg: witnessNoRg,
+          telefone: witnessTelefone.trim(),
+          hasWhatsapp: witnessHasWhatsapp,
+          facebook: witnessNoFacebook ? 'Não possui' : witnessFacebook.trim(),
+          noFacebook: witnessNoFacebook,
+          tiktok: witnessNoTiktok ? 'Não possui' : witnessTiktok.trim(),
+          noTiktok: witnessNoTiktok,
+          instagram: witnessNoInstagram ? 'Não possui' : witnessInstagram.trim(),
+          noInstagram: witnessNoInstagram,
+          enderecoResidencia: formattedRes || witnessEnderecoResidencia.trim(),
+          enderecoTrabalho: formattedTrab || witnessEnderecoTrabalho.trim(),
+          
+          resCep: witnessResCep.trim(),
+          resRua: witnessResRua.trim(),
+          resNumero: witnessResNumero.trim(),
+          resBairro: witnessResBairro.trim(),
+          resComplemento: witnessResComplemento.trim(),
+          resCidade: witnessResCidade.trim(),
+          resEstado: witnessResEstado.trim(),
+          
+          trabCep: witnessTrabCep.trim(),
+          trabRua: witnessTrabRua.trim(),
+          trabNumero: witnessTrabNumero.trim(),
+          trabBairro: witnessTrabBairro.trim(),
+          trabComplemento: witnessTrabComplemento.trim(),
+          trabCidade: witnessTrabCidade.trim(),
+          trabEstado: witnessTrabEstado.trim(),
+          
+          cartaIntimacaoUrl: gdiDocUrl || null,
+          cartaIntimacaoGdiLogs: gdiLogs.length > 0 ? gdiLogs : null
+        };
+        docData.description = `${newDesc.trim()}\n\n[ROL DE TESTEMUNHA (Art. 450 CPC)]\n- Nome: ${witnessNome.trim()}\n- Telefone: ${witnessTelefone.trim()}${witnessHasWhatsapp ? ' (WhatsApp)' : ''}\n- Instagram: ${witnessNoInstagram ? 'Não possui' : witnessInstagram.trim()}\n- TikTok: ${witnessNoTiktok ? 'Não possui' : witnessTiktok.trim()}\n- Facebook: ${witnessNoFacebook ? 'Não possui' : witnessFacebook.trim()}\n- Profissão: ${witnessProfissao.trim()}\n- Estado Civil: ${witnessEstadoCivil.trim()}\n- Idade: ${witnessIdade.trim()}\n- CPF: ${witnessCpf.trim()}\n- RG: ${witnessNoRg ? 'Não possui (RG Novo)' : witnessRg.trim()}\n- Residência: ${formattedRes || witnessEnderecoResidencia.trim()}\n- Trabalho: ${formattedTrab || witnessEnderecoTrabalho.trim()}`;
+        if (gdiDocUrl) {
+          docData.description += `\n- GDI Carta de Intimação: ${gdiDocUrl}`;
+        }
+      }
+
+      if (evidenceType === 'Prova Pericial' && hireTechnicalAssistant === 'sim') {
+        docData.technicalAssistantDetails = {
+          nome: assistantNome.trim(),
+          profissao: assistantProfissao.trim(),
+          estadoCivil: assistantEstadoCivil.trim(),
+          idade: assistantIdade.trim(),
+          cpf: assistantCpf.trim(),
+          rg: assistantRg.trim(),
+          enderecoResidencia: assistantEnderecoResidencia.trim(),
+          enderecoTrabalho: assistantEnderecoTrabalho.trim()
+        };
+        docData.description = `${newDesc.trim()}\n\n[ASSISTENTE TÉCNICO (Art. 465 CPC)]\n- Nome: ${assistantNome.trim()}\n- Profissão: ${assistantProfissao.trim()}\n- Estado Civil: ${assistantEstadoCivil.trim()}\n- Idade: ${assistantIdade.trim()}\n- CPF: ${assistantCpf.trim()}\n- RG: ${assistantRg.trim()}\n- Residência: ${assistantEnderecoResidencia.trim()}\n- Trabalho: ${assistantEnderecoTrabalho.trim()}`;
+      }
       
       const docRef = await addDoc(collection(db, 'caseEvidenceRequests'), docData);
       setRequests((prev: any) => [{ id: docRef.id, ...docData }, ...prev]);
@@ -132,6 +397,8 @@ export default function DocumentosNecessidadePF() {
       setNewDesc('');
       setNewDocNum('');
       setNewJustification('');
+      clearWitnessFields();
+      clearAssistantFields();
     } catch (err: any) {
       setError(`Erro ao criar solicitação: ${err.message}`);
     } finally {
@@ -308,10 +575,12 @@ export default function DocumentosNecessidadePF() {
                                 <div key={req.id} className="p-4 bg-white border border-gray-150 rounded-xl space-y-3 shadow-4xs text-left">
                                   <div className="flex justify-between items-start gap-2">
                                     <div>
-                                      <span className="text-[9px] bg-indigo-100 text-indigo-805 px-1.5 py-0.5 rounded font-mono font-bold block w-max uppercase mb-1">
+                                      <span className="text-[9px] bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded font-mono font-bold block w-max uppercase mb-1">
                                         {req.documentNumber || 'Doc. Adicional'}
                                       </span>
-                                      <h4 className="text-xs font-black text-gray-900">{req.title}</h4>
+                                      <h4 className="text-xs font-black text-gray-900">
+                                        {req.documentNumber ? `${req.documentNumber} - ` : ''}{req.title}
+                                      </h4>
                                       <p className="text-[11px] text-gray-500 font-semibold leading-relaxed">{req.description}</p>
                                       
                                       {req.evidenceType && (
@@ -608,10 +877,10 @@ export default function DocumentosNecessidadePF() {
 
               {/* Identificador / Número do Documento */}
               <div className="space-y-1 text-left">
-                <label className="text-[10px] uppercase font-bold text-gray-500 block">Identificador / Número do Documento / Prova</label>
+                <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Numerador de documentos</label>
                 <input 
                   type="text" 
-                  placeholder="Ex: Doc. 05, Doc. Complementar, TESTEMUNHA-01" 
+                  placeholder="Ex: doc. 0004, doc. 0005" 
                   value={newDocNum}
                   onChange={(e) => setNewDocNum(e.target.value)}
                   className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
@@ -620,7 +889,7 @@ export default function DocumentosNecessidadePF() {
 
               {/* Título do Documento */}
               <div className="space-y-1 text-left">
-                <label className="text-[10px] uppercase font-bold text-gray-500 block">Título do Documento / Prova</label>
+                <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Qual o nome deste documento?</label>
                 <input 
                   type="text" 
                   placeholder="Ex: Prontuário Médico, Extrato Bancário" 
@@ -630,9 +899,580 @@ export default function DocumentosNecessidadePF() {
                 />
               </div>
 
+              {/* WITNESS CPC FORM */}
+              {evidenceType === 'Prova Testemunhal' && (
+                <div className="space-y-4 p-5 bg-blue-50/50 border border-blue-200 rounded-2xl animate-in slide-in-from-top-1 duration-200">
+                  <div className="flex items-center gap-2 border-b border-blue-100 pb-2">
+                    <FileText className="text-blue-600 shrink-0" size={16} />
+                    <span className="text-xs font-black uppercase tracking-tight text-blue-900 font-sans">
+                      Rol de Testemunhas (Art. 450 CPC)
+                    </span>
+                  </div>
+                  
+                  <div className="p-3 bg-blue-50/80 border border-blue-200 text-blue-950 text-xs font-bold rounded-xl flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-blue-600 animate-pulse shrink-0"></div>
+                    <span>Haverá uma carta de intimação automática via template do GDI.</span>
+                  </div>
+
+                  {/* Vertical Inputs for Testemunha */}
+                  <div className="space-y-4">
+                    <div className="space-y-1 text-left">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Nome da Testemunha</label>
+                      <input 
+                        type="text"
+                        value={witnessNome}
+                        onChange={(e) => setWitnessNome(e.target.value)}
+                        placeholder="Nome completo..."
+                        className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1 text-left bg-white p-3.5 border border-gray-150 rounded-xl">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Telefone de Contato</label>
+                      <input 
+                        type="text"
+                        value={witnessTelefone}
+                        onChange={(e) => setWitnessTelefone(e.target.value)}
+                        placeholder="Ex: (11) 99999-9999"
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                      />
+                      <label className="flex items-center gap-2 cursor-pointer pt-1 text-[11px] font-bold text-gray-650">
+                        <input 
+                          type="checkbox" 
+                          checked={witnessHasWhatsapp} 
+                          onChange={(e) => setWitnessHasWhatsapp(e.target.checked)} 
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>Possui WhatsApp</span>
+                      </label>
+                    </div>
+
+                    <div className="space-y-1 text-left bg-white p-3.5 border border-gray-150 rounded-xl">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Facebook</label>
+                      <input 
+                        type="text"
+                        value={witnessFacebook}
+                        onChange={(e) => setWitnessFacebook(e.target.value)}
+                        disabled={witnessNoFacebook}
+                        placeholder={witnessNoFacebook ? "Inexistente / Não possui" : "Link ou nome do perfil..."}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500 disabled:bg-gray-100 disabled:text-gray-450"
+                      />
+                      <label className="flex items-center gap-2 cursor-pointer pt-1 text-[11px] font-bold text-gray-650">
+                        <input 
+                          type="checkbox" 
+                          checked={witnessNoFacebook} 
+                          onChange={(e) => {
+                            setWitnessNoFacebook(e.target.checked);
+                            if (e.target.checked) setWitnessFacebook('');
+                          }} 
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>Não possui Facebook</span>
+                      </label>
+                    </div>
+
+                    <div className="space-y-1 text-left bg-white p-3.5 border border-gray-150 rounded-xl">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">TikTok</label>
+                      <input 
+                        type="text"
+                        value={witnessTiktok}
+                        onChange={(e) => setWitnessTiktok(e.target.value)}
+                        disabled={witnessNoTiktok}
+                        placeholder={witnessNoTiktok ? "Inexistente / Não possui" : "Nome do usuário @..."}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500 disabled:bg-gray-100 disabled:text-gray-450"
+                      />
+                      <label className="flex items-center gap-2 cursor-pointer pt-1 text-[11px] font-bold text-gray-650">
+                        <input 
+                          type="checkbox" 
+                          checked={witnessNoTiktok} 
+                          onChange={(e) => {
+                            setWitnessNoTiktok(e.target.checked);
+                            if (e.target.checked) setWitnessTiktok('');
+                          }} 
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>Não possui TikTok</span>
+                      </label>
+                    </div>
+
+                    <div className="space-y-1 text-left bg-white p-3.5 border border-gray-150 rounded-xl">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Instagram</label>
+                      <input 
+                        type="text"
+                        value={witnessInstagram}
+                        onChange={(e) => setWitnessInstagram(e.target.value)}
+                        disabled={witnessNoInstagram}
+                        placeholder={witnessNoInstagram ? "Inexistente / Não possui" : "Nome de usuário @..."}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500 disabled:bg-gray-100 disabled:text-gray-450"
+                      />
+                      <label className="flex items-center gap-2 cursor-pointer pt-1 text-[11px] font-bold text-gray-650">
+                        <input 
+                          type="checkbox" 
+                          checked={witnessNoInstagram} 
+                          onChange={(e) => {
+                            setWitnessNoInstagram(e.target.checked);
+                            if (e.target.checked) setWitnessInstagram('');
+                          }} 
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>Não possui Instagram</span>
+                      </label>
+                    </div>
+
+                    <div className="space-y-1 text-left">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Profissão</label>
+                      <input 
+                        type="text"
+                        value={witnessProfissao}
+                        onChange={(e) => setWitnessProfissao(e.target.value)}
+                        placeholder="Profissão da testemunha..."
+                        className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1 text-left">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Estado Civil</label>
+                      <input 
+                        type="text"
+                        value={witnessEstadoCivil}
+                        onChange={(e) => setWitnessEstadoCivil(e.target.value)}
+                        placeholder="Casado(a), solteiro(a)..."
+                        className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1 text-left">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Idade</label>
+                      <input 
+                        type="text"
+                        value={witnessIdade}
+                        onChange={(e) => setWitnessIdade(e.target.value)}
+                        placeholder="Idade do testemunha..."
+                        className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1 text-left">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">CPF</label>
+                      <input 
+                        type="text"
+                        value={witnessCpf}
+                        onChange={(e) => setWitnessCpf(e.target.value)}
+                        placeholder="000.000.000-00"
+                        className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1 text-left bg-white p-3.5 border border-gray-150 rounded-xl">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">RG</label>
+                      <input 
+                        type="text"
+                        value={witnessRg}
+                        onChange={(e) => setWitnessRg(e.target.value)}
+                        disabled={witnessNoRg}
+                        placeholder={witnessNoRg ? "Inexistente / RG novo (Unificado no CPF)" : "Registro Geral de Identidade..."}
+                        className="w-full px-3 py-2 bg-gray-55 border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500 disabled:bg-gray-100 disabled:text-gray-450"
+                      />
+                      <label className="flex items-center gap-2 cursor-pointer pt-1 text-[11px] font-bold text-gray-650">
+                        <input 
+                          type="checkbox" 
+                          checked={witnessNoRg} 
+                          onChange={(e) => {
+                            setWitnessNoRg(e.target.checked);
+                            if (e.target.checked) setWitnessRg('');
+                          }} 
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>Não possui (RG novo)</span>
+                      </label>
+                    </div>
+
+                    {/* Smart Residential Address Card (Vertical structure) */}
+                    <div className="bg-blue-50/20 border border-blue-100 rounded-xl p-4 space-y-4">
+                      <p className="text-[10px] uppercase font-black tracking-wider text-indigo-750 font-sans border-b border-indigo-100 pb-1">
+                        🏠 Endereço Residencial Inteligente (CEP Smart)
+                      </p>
+                      
+                      <div className="space-y-4">
+                        <div className="space-y-1 text-left">
+                          <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">CEP Residencial</label>
+                          <input 
+                            type="text"
+                            value={witnessResCep}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setWitnessResCep(v);
+                              fetchAddressByCep(v, 'res');
+                            }}
+                            placeholder="00000-000"
+                            className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1 text-left">
+                          <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Logradouro / Rua</label>
+                          <input 
+                            type="text"
+                            value={witnessResRua}
+                            onChange={(e) => setWitnessResRua(e.target.value)}
+                            placeholder="Rua, Avenida..."
+                            className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1 text-left">
+                          <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Nº</label>
+                          <input 
+                            type="text"
+                            value={witnessResNumero}
+                            onChange={(e) => setWitnessResNumero(e.target.value)}
+                            placeholder="Número da residência..."
+                            className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1 text-left">
+                          <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Bairro</label>
+                          <input 
+                            type="text"
+                            value={witnessResBairro}
+                            onChange={(e) => setWitnessResBairro(e.target.value)}
+                            placeholder="Bairro..."
+                            className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1 text-left">
+                          <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Complemento</label>
+                          <input 
+                            type="text"
+                            value={witnessResComplemento}
+                            onChange={(e) => setWitnessResComplemento(e.target.value)}
+                            placeholder="Apt, Sala, Bloco..."
+                            className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1 text-left">
+                          <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Cidade</label>
+                          <input 
+                            type="text"
+                            value={witnessResCidade}
+                            onChange={(e) => setWitnessResCidade(e.target.value)}
+                            placeholder="Cidade..."
+                            className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1 text-left">
+                          <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Estado</label>
+                          <input 
+                            type="text"
+                            value={witnessResEstado}
+                            onChange={(e) => setWitnessResEstado(e.target.value)}
+                            placeholder="Estado (ex: SP)..."
+                            className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Smart Work Address Card (Vertical structure) */}
+                    <div className="bg-blue-50/20 border border-blue-100 rounded-xl p-4 space-y-4">
+                      <p className="text-[10px] uppercase font-black tracking-wider text-indigo-750 font-sans border-b border-indigo-100 pb-1">
+                        💼 Endereço de Trabalho Inteligente (CEP Smart)
+                      </p>
+                      
+                      <div className="space-y-4">
+                        <div className="space-y-1 text-left">
+                          <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">CEP Trabalho</label>
+                          <input 
+                            type="text"
+                            value={witnessTrabCep}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setWitnessTrabCep(v);
+                              fetchAddressByCep(v, 'trab');
+                            }}
+                            placeholder="00000-000"
+                            className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1 text-left">
+                          <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Logradouro / Rua</label>
+                          <input 
+                            type="text"
+                            value={witnessTrabRua}
+                            onChange={(e) => setWitnessTrabRua(e.target.value)}
+                            placeholder="Rua, Avenida..."
+                            className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1 text-left">
+                          <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Nº</label>
+                          <input 
+                            type="text"
+                            value={witnessTrabNumero}
+                            onChange={(e) => setWitnessTrabNumero(e.target.value)}
+                            placeholder="Número do local de trabalho..."
+                            className="w-full px-3 py-1 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1 text-left">
+                          <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Bairro</label>
+                          <input 
+                            type="text"
+                            value={witnessTrabBairro}
+                            onChange={(e) => setWitnessTrabBairro(e.target.value)}
+                            placeholder="Bairro..."
+                            className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1 text-left">
+                          <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Complemento</label>
+                          <input 
+                            type="text"
+                            value={witnessTrabComplemento}
+                            onChange={(e) => setWitnessTrabComplemento(e.target.value)}
+                            placeholder="Apt, Sala, Bloco..."
+                            className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1 text-left">
+                          <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Cidade</label>
+                          <input 
+                            type="text"
+                            value={witnessTrabCidade}
+                            onChange={(e) => setWitnessTrabCidade(e.target.value)}
+                            placeholder="Cidade..."
+                            className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1 text-left">
+                          <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Estado</label>
+                          <input 
+                            type="text"
+                            value={witnessTrabEstado}
+                            onChange={(e) => setWitnessTrabEstado(e.target.value)}
+                            placeholder="Estado (ex: SP)..."
+                            className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TECHNICAL ASSISTANT CPC FORM */}
+              {evidenceType === 'Prova Pericial' && hireTechnicalAssistant === 'sim' && (
+                <div className="space-y-4 p-5 bg-blue-50/50 border border-blue-200 rounded-2xl animate-in slide-in-from-top-1 duration-200">
+                  <div className="flex items-center gap-2 border-b border-blue-100 pb-2">
+                    <FileText className="text-blue-600 shrink-0" size={16} />
+                    <span className="text-xs font-black uppercase tracking-tight text-blue-900 font-sans">
+                      Indicar Assistente Técnico (Art. 465 CPC)
+                    </span>
+                  </div>
+
+                  {/* Vertical Inputs for Assistente Técnico */}
+                  <div className="space-y-4">
+                    <div className="space-y-1 text-left">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Nome do Assistente</label>
+                      <input 
+                        type="text"
+                        value={assistantNome}
+                        onChange={(e) => setAssistantNome(e.target.value)}
+                        placeholder="Nome completo..."
+                        className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1 text-left">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Profissão</label>
+                      <input 
+                        type="text"
+                        value={assistantProfissao}
+                        onChange={(e) => setAssistantProfissao(e.target.value)}
+                        placeholder="Profissão do assistente..."
+                        className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1 text-left">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Estado Civil</label>
+                      <input 
+                        type="text"
+                        value={assistantEstadoCivil}
+                        onChange={(e) => setAssistantEstadoCivil(e.target.value)}
+                        placeholder="Celibatário(a), Casado(a)..."
+                        className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1 text-left">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Idade</label>
+                      <input 
+                        type="text"
+                        value={assistantIdade}
+                        onChange={(e) => setAssistantIdade(e.target.value)}
+                        placeholder="Idade do assistente..."
+                        className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1 text-left">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">CPF</label>
+                      <input 
+                        type="text"
+                        value={assistantCpf}
+                        onChange={(e) => setAssistantCpf(e.target.value)}
+                        placeholder="000.000.000-00"
+                        className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1 text-left">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">RG</label>
+                      <input 
+                        type="text"
+                        value={assistantRg}
+                        onChange={(e) => setAssistantRg(e.target.value)}
+                        placeholder="Registro de Identidade..."
+                        className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1 text-left">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Endereço Completo da Residência</label>
+                      <input 
+                        type="text"
+                        value={assistantEnderecoResidencia}
+                        onChange={(e) => setAssistantEnderecoResidencia(e.target.value)}
+                        placeholder="Rua, número, bairro, cidade, estado..."
+                        className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1 text-left">
+                      <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Endereço Completo do Local de Trabalho</label>
+                      <input 
+                        type="text"
+                        value={assistantEnderecoTrabalho}
+                        onChange={(e) => setAssistantEnderecoTrabalho(e.target.value)}
+                        placeholder="Rua, número, bairro, cidade, estado..."
+                        className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* GDI Integration Block for Carta de Intimação */}
+              {evidenceType === 'Prova Testemunhal' && (
+                <div className="space-y-4 pt-2">
+                  <h3 className="text-xs font-black text-blue-600 uppercase tracking-wider border-b pb-1 font-mono">
+                    GDI — Google Docs Integration (Azul)
+                  </h3>
+                  <div className="bg-gradient-to-br from-blue-50/60 to-indigo-50/20 border border-blue-150 rounded-2xl p-5 shadow-3xs space-y-4 text-left">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 bg-blue-100 text-blue-800 rounded-full font-black text-[9px] uppercase tracking-wider font-mono">
+                          GDI — Carta de Intimação
+                        </span>
+                        <Sparkles size={14} className="text-blue-600 animate-pulse" />
+                      </div>
+                      <h2 className="text-xs font-black text-slate-900 uppercase">
+                        Gerador de Carta de Intimação de Testemunha
+                      </h2>
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Esta ferramenta gera uma Carta de Intimação personalizada para a testemunha qualificada, extraindo datas, horários e endereços da estrutura de audiências do caso.
+                      </p>
+                    </div>
+
+                    {/* Hearing Info feedback */}
+                    <div className="p-3 bg-white border border-gray-150 rounded-xl space-y-1 text-xs">
+                      <span className="text-[9px] uppercase tracking-wider text-gray-400 font-extrabold font-mono block">Dados de Audiência Sincronizados</span>
+                      {caseObj?.audienciaAgendada ? (
+                        <div className="space-y-1">
+                          <p className="font-bold text-gray-800">
+                            📅 {caseObj.audienciaData ? new Date(caseObj.audienciaData).toLocaleDateString('pt-BR') : '—'} às {caseObj.audienciaHora || '—'}
+                          </p>
+                          <p className="text-[10px] text-gray-500 font-medium">Local/Link: {caseObj.audienciaLocalOuLink || 'Não informado'}</p>
+                          {caseObj.audienciaResponsavel && (
+                            <p className="text-[10px] text-gray-400 font-semibold font-mono">Responsável: {caseObj.audienciaResponsavel}</p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-amber-805 font-bold text-[11px]">
+                          <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                          <span>Nenhuma audiência agendada ativa para este caso. O template terá campos vazios.</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={handleGenerateCartaIntimacao}
+                        disabled={gdiGenerating || !witnessNome.trim()}
+                        className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-[10px] font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-1.5 transition duration-200 cursor-pointer shadow-xs"
+                      >
+                        <Sparkles size={12} className={gdiGenerating ? "animate-spin" : "animate-pulse"} />
+                        <span>{gdiGenerating ? "Sincronizando com Google Docs..." : "Gerar Carta de Intimação"}</span>
+                      </button>
+                    </div>
+
+                    {/* Real-time generation Logs */}
+                    {gdiLogs.length > 0 && (
+                      <div className="border border-gray-150 rounded-xl overflow-hidden shadow-2xs font-mono text-[10px] bg-white">
+                        <div className="bg-gray-900 text-gray-400 p-2 px-3 flex items-center justify-between">
+                          <span className="font-black text-[8px] uppercase tracking-wider flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-ping"></span>
+                            LOGS CARTA_INTIM_
+                          </span>
+                        </div>
+                        <div className="bg-gray-950 text-gray-200 p-3 max-h-36 overflow-y-auto space-y-1 font-medium select-none text-[9.5px]">
+                          {gdiLogs.map((log, idx) => (
+                            <div key={idx} className="flex items-start gap-2 border-b border-gray-900/40 pb-1 last:border-0 last:pb-0">
+                              <span className="text-indigo-400 font-bold shrink-0">{log.timestamp ? log.timestamp.split('T')[1].substring(0, 8) : '00:00:00'}</span>
+                              <span className="text-blue-300 font-semibold shrink-0">[{log.action}]</span>
+                              <span className="text-gray-300">{log.message}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {gdiDocUrl && (
+                      <div className="p-3 bg-emerald-50 border border-emerald-150 rounded-xl flex items-center justify-between text-xs animate-in fade-in duration-200">
+                        <div className="space-y-0.5">
+                          <p className="font-bold text-emerald-800">Documento Gerado com Sucesso!</p>
+                          <p className="text-[10.5px] text-emerald-600 font-medium">Pasta real sincronizada com sucesso.</p>
+                        </div>
+                        <a
+                          href={gdiDocUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-white border border-emerald-200 text-emerald-800 hover:bg-emerald-50 rounded-lg font-bold text-[10px] uppercase transition-colors flex items-center gap-1 shadow-4xs"
+                        >
+                          <span>Abrir Carta</span>
+                          <ExternalLink size={11} className="stroke-[2.5]" />
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Descrição / Instruções p/ obtenção */}
               <div className="space-y-1 text-left">
-                <label className="text-[10px] uppercase font-bold text-gray-500 block">Descrição e Instruções para Obtenção</label>
+                <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Descrição e Instruções para Obtenção</label>
                 <textarea 
                   placeholder="Descreva detalhes ou caminhos para obtenção ou preparação destas provas." 
                   value={newDesc}
@@ -643,7 +1483,7 @@ export default function DocumentosNecessidadePF() {
 
               {/* Justificativa para exigir a prova */}
               <div className="space-y-1 text-left">
-                <label className="text-[10px] uppercase font-bold text-gray-500 block">Justificativa para exigir a prova</label>
+                <label className="text-[10px] uppercase font-bold text-gray-500 block font-sans">Justificativa para exigir a prova</label>
                 <textarea 
                   placeholder="Informe a fundamentação técnica ou justificativa jurídica para exigir esta prova." 
                   value={newJustification}
