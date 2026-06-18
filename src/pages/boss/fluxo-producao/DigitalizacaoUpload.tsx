@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useColetaState } from './hooks/useColetaState';
 import { flowRoutes } from './utils/flowRoutes';
 import FluxoStepLayout from './components/FluxoStepLayout';
@@ -22,7 +23,8 @@ import {
   QrCode,
   FolderOpen,
   ShieldCheck,
-  ExternalLink
+  ExternalLink,
+  Plus
 } from 'lucide-react';
 
 interface DocItem {
@@ -47,14 +49,191 @@ export default function DigitalizacaoUpload() {
     removeWizardFile,
     fetching,
     saving,
-    navigate
+    navigate,
+    requests
   } = useColetaState();
 
   const [uploadingField, setUploadingField] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [localComments, setLocalComments] = useState<string>('');
-  const [activeSubetapa, setActiveSubetapa] = useState<'digitalizacao' | 'auditoria'>('digitalizacao');
+  
+  const location = useLocation();
+  const path = location.pathname;
+
+  // Derive active subetapa based on URL route
+  let currentSubetapa: 1 | 2 | 3 = 1;
+  if (path.includes('/setor.de.digitalizacao.e.upload')) {
+    currentSubetapa = 2;
+  } else if (path.includes('/auditoria.do.setor.de.digitalizacao.e.upload')) {
+    currentSubetapa = 3;
+  }
+
+  const handleSwitchRoute = (sub: 1 | 2 | 3) => {
+    if (!caseId) return;
+    if (sub === 1) {
+      navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/digitalizacao-upload/responsavel.pela.digitalizacao.e.upload`);
+    } else if (sub === 2) {
+      navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/digitalizacao-upload/setor.de.digitalizacao.e.upload`);
+    } else if (sub === 3) {
+      navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/digitalizacao-upload/auditoria.do.setor.de.digitalizacao.e.upload`);
+    }
+  };
+
+  // Perform redirect from base digitalizacao-upload to subetapa 1
+  useEffect(() => {
+    if (caseId && (path.endsWith('/digitalizacao-upload') || path.endsWith('/digitalizacao-upload/'))) {
+      navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/digitalizacao-upload/responsavel.pela.digitalizacao.e.upload`);
+    }
+  }, [caseId, path, navigate]);
+
+  // Responsabilização pela Digitalização / Upload State Mapping
+  const respCategoria = wizardState?.resp_digitalizacao_categoria || 'secretaria';
+  const respPerfil = wizardState?.resp_digitalizacao_perfil || 'Secretariado';
+  const respNome = wizardState?.resp_digitalizacao_nome || 'Amanda Giffoni';
+  const respSelectedSubetapa = wizardState?.resp_digitalizacao_current_subetapa || 1;
+  const respTodoistSubtaskId = wizardState?.resp_todoist_subtask_id || '';
+  const respTodoistSubtaskUrl = wizardState?.resp_todoist_subtask_url || '';
+  const respTodoistStatus = wizardState?.resp_todoist_status || 'idle';
+  const respTodoistLogFalha = wizardState?.resp_todoist_log_falha || '';
+  const respSubetapa02Checked = wizardState?.resp_subetapa_02_checked || false;
+  const respSubetapa03Checked = wizardState?.resp_subetapa_03_checked || false;
+  const [respTodoistLoading, setRespTodoistLoading] = useState(false);
+  
+  const [showAddNewRespInput, setShowAddNewRespInput] = useState(false);
+  const [newRespNameInput, setNewRespNameInput] = useState('');
+
+  const getNamesForPerfil = (perf: string) => {
+    const defaults: Record<string, string[]> = {
+      'Secretariado': ['Amanda Giffoni', 'Bruna Silva', 'Camila Souza'],
+      'CEO': ['Dr. Marcos Giffoni'],
+      'Advogado Associado': ['Dra. Viviane Corrêa', 'Dr. Felipe Santos', 'Dra. Carolina Castro'],
+      'Estagiário': ['Roberto Estagiário', 'Lucas Lima', 'Mariana Costa']
+    };
+
+    const baseNames = defaults[perf] || [];
+    const customNames = wizardState?.resp_custom_names_by_perfil?.[perf] || [];
+    const allNames = Array.from(new Set([...baseNames, ...customNames]));
+    if (allNames.length === 0) {
+      allNames.push(respNome);
+    }
+    return allNames;
+  };
+
+  const handleAddCustomResponsible = async () => {
+    if (!newRespNameInput.trim()) return;
+    const nameToAdd = newRespNameInput.trim();
+    const currentCustom = wizardState?.resp_custom_names_by_perfil || {};
+    const existingForPerf = currentCustom[respPerfil] || [];
+    
+    const updatedForPerf = Array.from(new Set([...existingForPerf, nameToAdd]));
+    const updatedCustom = {
+      ...currentCustom,
+      [respPerfil]: updatedForPerf
+    };
+
+    await handleUpdateRespFields({
+      resp_custom_names_by_perfil: updatedCustom,
+      resp_digitalizacao_nome: nameToAdd
+    });
+
+    setNewRespNameInput('');
+    setShowAddNewRespInput(false);
+  };
+
+  const handleUpdateRespFields = async (updates: any) => {
+    try {
+      await saveWizardStateUpdate(updates);
+    } catch (err) {
+      console.error("[Resp State Update Failed]", err);
+    }
+  };
+
+  const handleChangeRespCategoria = async (cat: string) => {
+    let perf = 'Secretariado';
+    let nome = 'Amanda Giffoni';
+    if (cat === 'adv') {
+      perf = 'Advogado Associado';
+      nome = 'Dra. Viviane Corrêa';
+    } else if (cat === 'estagiario') {
+      perf = 'Estagiário';
+      nome = 'Roberto Estagiário';
+    }
+    await handleUpdateRespFields({
+      resp_digitalizacao_categoria: cat,
+      resp_digitalizacao_perfil: perf,
+      resp_digitalizacao_nome: nome
+    });
+  };
+
+  const handleChangeRespPerfil = async (perf: string) => {
+    const names = getNamesForPerfil(perf);
+    const firstName = names[0] || 'Amanda Giffoni';
+    
+    let cat = 'secretaria';
+    if (perf === 'CEO' || perf === 'Advogado Associado') {
+      cat = 'adv';
+    } else if (perf === 'Estagiário') {
+      cat = 'estagiario';
+    }
+
+    await handleUpdateRespFields({
+      resp_digitalizacao_categoria: cat,
+      resp_digitalizacao_perfil: perf,
+      resp_digitalizacao_nome: firstName
+    });
+  };
+
+  const handleCreateTodoistSubtask = async () => {
+    setRespTodoistLoading(true);
+    await handleUpdateRespFields({
+      resp_todoist_status: 'loading',
+      resp_todoist_log_falha: ''
+    });
+
+    const parentTaskId = caseObj?.todoistTaskId || '';
+    const bodyPayload = {
+      caseId: caseId,
+      projectId: caseObj?.todoistProjectId || '__TODOIST_INBOX__',
+      projectName: caseObj?.todoistProjectName || 'Caixa de Entrada (Inbox)',
+      content: `Subtarefa: Digitalização ou Upload - Responsável: ${respNome} (${respPerfil})`,
+      parentId: parentTaskId,
+      dueDate: '',
+      priority: 3,
+      labels: ['digitalizacao'],
+      assignee: '',
+      isDuplicateCreationAttempt: true
+    };
+
+    try {
+      const response = await fetch('/api/todoist/create-case-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyPayload)
+      });
+      const data = await response.json();
+      
+      if (data.success === true && data.todoistTaskId) {
+        await handleUpdateRespFields({
+          resp_todoist_status: 'success',
+          resp_todoist_subtask_id: data.todoistTaskId,
+          resp_todoist_subtask_url: data.todoistTaskUrl
+        });
+      } else {
+        await handleUpdateRespFields({
+          resp_todoist_status: 'error',
+          resp_todoist_log_falha: data.errorMessage || 'Erro inesperado na criação da subtarefa no Todoist.'
+        });
+      }
+    } catch (err: any) {
+      await handleUpdateRespFields({
+        resp_todoist_status: 'error',
+        resp_todoist_log_falha: err.message || String(err)
+      });
+    } finally {
+      setRespTodoistLoading(false);
+    }
+  };
 
   const isPJ = client?.type === 'PJ';
   const suffix = isPJ ? 'PJ' : 'PF';
@@ -295,6 +474,174 @@ export default function DigitalizacaoUpload() {
     }
   };
 
+  // Divide documents based on Office vs. Minimum categories
+  const officeDocIds = ['procuracao', 'declaracao', 'contrato', 'procuracaoPJ', 'declaracaoPJ', 'contratoPJ'];
+  const officeDocs = docs.filter(doc => officeDocIds.includes(doc.id));
+  const minimumDocs = docs.filter(doc => !officeDocIds.includes(doc.id));
+
+  // Render a document row reusable helper
+  const renderDocRow = (docItem: DocItem, status: any, isUploadingThis: boolean) => {
+    return (
+      <div key={docItem.id} id={`doc-item-${docItem.id}`} className="p-6 bg-white hover:bg-gray-50/40 transition-colors flex flex-col space-y-4">
+        
+        {/* 1. Tipo de Documento */}
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <h4 className="text-sm lg:text-base font-black text-gray-900 tracking-tight">{docItem.label}</h4>
+            {docItem.required && (
+              <span className="text-[9px] font-black uppercase tracking-wider font-mono px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-150">
+                Obrigatório
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 font-sans">
+            <span className="text-xs font-semibold text-gray-400">Padrão de nomeação final no Drive:</span>
+            <span className="text-xs px-2 py-0.5 bg-gray-100 rounded font-mono text-gray-700 font-semibold break-all">
+              {docItem.prefix} - {clientName || 'Cliente'}
+            </span>
+          </div>
+        </div>
+
+        {/* Separator line */}
+        <div className="border-t border-gray-150 my-1"></div>
+
+        {/* Vertical elements stacked exactly one under another */}
+        <div className="space-y-3.5">
+          
+          {/* 2. Origem do Recebimento */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 font-sans">
+            <span className="text-xs font-black uppercase text-gray-400 tracking-wider w-48 shrink-0">Origem do Recebimento:</span>
+            <div>
+              {status.received ? (
+                <span className={`inline-flex items-center gap-1 text-xs font-extrabold capitalize ${status.channel === 'fisico' ? 'text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg' : 'text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg'}`}>
+                  ● {status.channel === 'fisico' ? '📄 Físico (papel)' : `📱 Digital (${status.channel})`}
+                </span>
+              ) : (
+                <span className="text-xs font-extrabold text-gray-450 bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-lg">Aguardando Coleta</span>
+              )}
+            </div>
+          </div>
+
+          {/* 3. Situação de Digitalização */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 font-sans">
+            <span className="text-xs font-black uppercase text-gray-400 tracking-wider w-48 shrink-0">Situação de Digitalização:</span>
+            <div>
+              {status.digitalizacao === 'digitalizado' ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full font-black text-xs tracking-tight border border-emerald-150">
+                  Digitalizado
+                </span>
+              ) : status.digitalizacao === 'pendente' ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-full font-black text-xs tracking-tight border border-amber-150">
+                  Pendente Física (Setor)
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 text-gray-400 rounded-full font-black text-xs tracking-tight border border-gray-150">
+                  Não aplicável
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* 4. Upload no Google Drive */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 font-sans">
+            <span className="text-xs font-black uppercase text-gray-400 tracking-wider w-48 shrink-0">Upload no Google Drive:</span>
+            <div>
+              {status.upload === 'concluido' ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-sky-50 text-sky-700 rounded-full font-black text-xs tracking-tight border border-sky-150">
+                  Concluído no Drive
+                </span>
+              ) : status.upload === 'pendente' ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-50 text-red-700 rounded-full font-black text-xs tracking-tight border border-red-150">
+                  Pendente de Upload
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 text-gray-400 rounded-full font-black text-xs tracking-tight border border-gray-200">
+                  Aguardando
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* 5. Fazer Upload e Renomear */}
+          <div className="flex flex-col sm:flex-row sm:items-start gap-1.5 sm:gap-4 pt-1 font-sans">
+            <span className="text-xs font-black uppercase text-gray-400 tracking-wider w-48 shrink-0 mt-1">Ações / Arquivo:</span>
+            <div className="flex-1 w-full space-y-3">
+              {status.received && status.upload !== 'concluido' && (
+                <div className="flex flex-wrap items-center gap-3">
+                  {status.digitalizacao === 'pendente' && (
+                    <button
+                      type="button"
+                      onClick={() => handleMarkAsDigitalized(docItem)}
+                      className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-black tracking-tight cursor-pointer transition-colors"
+                    >
+                      Forçar como Digitalizado
+                    </button>
+                  )}
+                  
+                  <label className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-black tracking-tight cursor-pointer transition-colors">
+                    {isUploadingThis ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        <span>Sincronizando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={14} />
+                        <span>Upload e Renomeação Automatica</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      className="hidden"
+                      disabled={isUploadingThis}
+                      onChange={(e) => handleFileUpload(e, docItem)}
+                    />
+                  </label>
+                </div>
+              )}
+
+              {/* Already uploaded file list. Built carefully with deep widths and word-breaks to prevent any spill & keep robust padding */}
+              {status.fileList.length > 0 ? (
+                <div className="space-y-1.5 w-full max-w-xxl">
+                  {status.fileList.map((file: any, fIdx: number) => (
+                    <div key={fIdx} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-indigo-50/50 border border-indigo-150 rounded-xl gap-3 w-full">
+                      <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                        <FileText size={16} className="text-indigo-600 shrink-0 mt-0.5" />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-mono font-bold text-gray-900 text-xs break-all whitespace-normal leading-relaxed">
+                            {file.name}
+                          </p>
+                          <span className="text-[10px] text-indigo-500 font-extrabold block mt-0.5">Tamanho: {file.size} - Sincronizado</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeWizardFile(docItem.field, fIdx)}
+                        className="p-2 text-xs font-black text-red-500 hover:bg-red-50 border border-transparent hover:border-red-150 rounded-lg cursor-pointer transition-colors shrink-0 outline-none text-right"
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : status.upload === 'concluido' ? (
+                <p className="text-xs font-bold text-gray-400 mt-1 flex items-center gap-1.5 font-sans">
+                  <span className="text-emerald-500">✓</span> Atribuído / Sincronizado por canal direto no fluxo
+                </p>
+              ) : (
+                <div className="p-4 border border-dashed border-gray-200 rounded-2xl text-left bg-gray-50/30 max-w-md">
+                  <p className="text-xs text-gray-400 font-semibold leading-relaxed font-sans">Nenhum arquivo de upload definitivo anexado a esta seção.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    );
+  };
+
   if (fetching) {
     return (
       <FluxoStepLayout stepName="Digitalização & Central de Uploads" caseId={caseId}>
@@ -309,6 +656,81 @@ export default function DigitalizacaoUpload() {
   return (
     <FluxoStepLayout stepName="Digitalização e Central de Uploads" caseId={caseId}>
       <div className="space-y-6">
+
+        {/* Gorgeous 3-Subetapas Tab Navigation */}
+        <div className="bg-white border border-gray-150 rounded-[2rem] p-5 shadow-xs">
+          <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block mb-4 ml-1">3 subetapas operacionais da digitalização</span>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {/* Tab 1: Responsabilidade */}
+            <button
+              onClick={() => handleSwitchRoute(1)}
+              className={`p-4.5 rounded-2xl text-left border flex items-start gap-4 transition-all duration-200 cursor-pointer ${
+                currentSubetapa === 1
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                  : 'bg-gray-50 border-gray-100 text-gray-600 hover:bg-gray-100 hover:border-gray-200'
+              }`}
+            >
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+                currentSubetapa === 1 ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-600'
+              }`}>
+                01
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-xs font-black block tracking-tight">Subetapa 01</span>
+                <span className="text-[11px] font-bold block mt-0.5 leading-tight">Responsabilização do Setor</span>
+                <span className={`text-[10px] block mt-1 ${currentSubetapa === 1 ? 'text-emerald-100' : 'text-gray-400'}`}>
+                  Responsável & Integração Todoist
+                </span>
+              </div>
+            </button>
+
+            {/* Tab 2: Setor de Digitalização e Upload */}
+            <button
+              onClick={() => handleSwitchRoute(2)}
+              className={`p-4.5 rounded-2xl text-left border flex items-start gap-4 transition-all duration-200 cursor-pointer ${
+                currentSubetapa === 2
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                  : 'bg-gray-50 border-gray-100 text-gray-600 hover:bg-gray-100 hover:border-gray-200'
+              }`}
+            >
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+                currentSubetapa === 2 ? 'bg-white/20 text-white' : 'bg-indigo-50 text-indigo-600'
+              }`}>
+                02
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-xs font-black block tracking-tight">Subetapa 02</span>
+                <span className="text-[11px] font-bold block mt-0.5 leading-tight">Setor de Digitalização e Uploads</span>
+                <span className={`text-[10px] block mt-1 ${currentSubetapa === 2 ? 'text-indigo-100' : 'text-gray-400'}`}>
+                  {numUploaded} de {totalDocsCount} Enviados
+                </span>
+              </div>
+            </button>
+
+            {/* Tab 3: Auditoria do Setor */}
+            <button
+              onClick={() => handleSwitchRoute(3)}
+              className={`p-4.5 rounded-2xl text-left border flex items-start gap-4 transition-all duration-200 cursor-pointer ${
+                currentSubetapa === 3
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                  : 'bg-gray-50 border-gray-100 text-gray-600 hover:bg-gray-100 hover:border-gray-200'
+              }`}
+            >
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+                currentSubetapa === 3 ? 'bg-white/20 text-white' : 'bg-indigo-50 text-indigo-600'
+              }`}>
+                03
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-xs font-black block tracking-tight">Subetapa 03</span>
+                <span className="text-[11px] font-bold block mt-0.5 leading-tight">Auditoria do Setor</span>
+                <span className={`text-[10px] block mt-1 ${currentSubetapa === 3 ? 'text-indigo-100' : 'text-gray-400'}`}>
+                  {numAudited} de {totalDocsCount} Auditados ({pctAudited}%)
+                </span>
+              </div>
+            </button>
+          </div>
+        </div>
         
         {/* Banner with general instructions */}
         <div className="bg-white border border-gray-150 rounded-[2rem] p-6 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-6 transition-all hover:border-gray-250">
@@ -362,99 +784,327 @@ export default function DigitalizacaoUpload() {
           </div>
         )}
 
-        {/* 2 Subetapas Selector */}
-        <div className="bg-white border border-gray-150 rounded-[2rem] p-6 shadow-xs space-y-4">
-          <div className="text-left font-sans">
-            <h3 className="text-sm font-black text-gray-900 tracking-tight flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse"></span>
-              Subetapas do Setor de Digitalização e Uploads
-            </h3>
-            <p className="text-[12px] text-gray-400 font-semibold mt-0.5">
-              Gerencie de forma independente cada fase do processamento digital de ativos e auditoria da Giffoni Advogados.
-            </p>
+        {/* Card: Responsabilização pela digitalização ou upload */}
+        {currentSubetapa === 1 && (
+          <div id="card-responsabilizacao" className="bg-white border border-emerald-100 hover:border-emerald-200 rounded-[2rem] p-6 shadow-xs text-left space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-extrabold text-sm font-sans">
+                R
+              </div>
+              <div className="text-left">
+                <h3 className="text-base font-black text-gray-900 tracking-tight font-sans">Responsabilização pela digitalização ou upload</h3>
+                <p className="text-[11px] text-gray-400 font-semibold mt-0.5 font-sans">Definição do responsável encarregado e acompanhamento integrado via Todoist.</p>
+              </div>
+            </div>
+
+            {/* Steps Indicator */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {[1, 2, 3].map((stepNum) => (
+                <button
+                  type="button"
+                  key={stepNum}
+                  onClick={() => handleUpdateRespFields({ resp_digitalizacao_current_subetapa: stepNum })}
+                  className={`w-8 h-8 rounded-lg text-xs font-bold font-mono transition-all flex items-center justify-center cursor-pointer border ${
+                    respSelectedSubetapa === stepNum
+                      ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs scale-105'
+                      : 'bg-gray-50 hover:bg-gray-100 text-gray-500 border-gray-200'
+                  }`}
+                >
+                  0{stepNum}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Subetapa 1 Button */}
-            <button
-              type="button"
-              onClick={() => setActiveSubetapa('digitalizacao')}
-              className={`flex items-center justify-between p-4.5 border rounded-2xl text-left cursor-pointer outline-none relative overflow-hidden group transition-all ${
-                activeSubetapa === 'digitalizacao'
-                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs scale-[1.01]'
-                  : numUploaded > 0
-                  ? 'bg-emerald-50/55 border-emerald-150 text-emerald-800 hover:bg-emerald-50 hover:border-emerald-250 hover:shadow-xs'
-                  : 'bg-gray-50/50 border-gray-150 text-gray-655 hover:bg-gray-100 hover:border-gray-250 hover:text-gray-950'
-              }`}
-            >
-              <div className="flex items-center gap-3.5 min-w-0 font-sans">
-                <div className={`p-2.5 rounded-xl shrink-0 ${
-                  activeSubetapa === 'digitalizacao' ? 'bg-indigo-500 text-white' : numUploaded > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-150 text-gray-400'
-                }`}>
-                  <Upload size={18} />
-                </div>
-                <div className="min-w-0">
-                  <span className={`text-[10px] uppercase font-black tracking-widest block font-mono ${activeSubetapa === 'digitalizacao' ? 'text-indigo-200' : 'text-gray-450'}`}>
-                    Subetapa 01 / 02
-                  </span>
-                  <span className="text-[13px] font-extrabold tracking-tight block leading-tight mt-0.5">
-                    Setor de Digitalização e Uploads
-                  </span>
-                  <span className={`text-[11px] block mt-0.5 opacity-85 ${activeSubetapa === 'digitalizacao' ? 'text-indigo-150' : 'text-gray-500'}`}>
-                    {numUploaded} de {totalDocsCount} sincronizados
-                  </span>
-                </div>
-              </div>
-              
-              {numUploaded === totalDocsCount && (
-                <div className="w-5 h-5 bg-emerald-500 text-white rounded-full flex items-center justify-center text-[10px] shrink-0 font-black shadow-xs">
-                  ✓
-                </div>
-              )}
-            </button>
-
-            {/* Subetapa 2 Button */}
-            <button
-              type="button"
-              onClick={() => setActiveSubetapa('auditoria')}
-              className={`flex items-center justify-between p-4.5 border rounded-2xl text-left cursor-pointer outline-none relative overflow-hidden group transition-all ${
-                activeSubetapa === 'auditoria'
-                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-xs scale-[1.01]'
-                  : wizardState?.digitalizacao_upload_completed === true
-                  ? 'bg-emerald-50/55 border-emerald-150 text-emerald-800 hover:bg-emerald-50 hover:border-emerald-250 hover:shadow-xs'
-                  : 'bg-gray-50/50 border-gray-150 text-gray-655 hover:bg-gray-100 hover:border-gray-250 hover:text-gray-950'
-              }`}
-            >
-              <div className="flex items-center gap-3.5 min-w-0 font-sans">
-                <div className={`p-2.5 rounded-xl shrink-0 ${
-                  activeSubetapa === 'auditoria' ? 'bg-indigo-500 text-white' : wizardState?.digitalizacao_upload_completed === true ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-150 text-gray-400'
-                }`}>
-                  <ShieldCheck size={18} />
-                </div>
-                <div className="min-w-0">
-                  <span className={`text-[10px] uppercase font-black tracking-widest block font-mono ${activeSubetapa === 'auditoria' ? 'text-indigo-200' : 'text-gray-450'}`}>
-                    Subetapa 02 / 02
-                  </span>
-                  <span className="text-[13px] font-extrabold tracking-tight block leading-tight mt-0.5">
-                    Auditoria do Setor de Digitalização
-                  </span>
-                  <span className={`text-[11px] block mt-0.5 opacity-85 ${activeSubetapa === 'auditoria' ? 'text-indigo-150' : 'text-gray-500'}`}>
-                    {numAudited} de {totalDocsCount} auditados
-                  </span>
-                </div>
+          {/* Render Subetapa Content */}
+          {respSelectedSubetapa === 1 && (
+            <div className="space-y-4 animate-fade-in text-left">
+              <div className="bg-emerald-50/55 p-4 border border-emerald-150 rounded-2xl text-left">
+                <span className="text-[10px] font-mono font-black text-emerald-800 uppercase block tracking-wider">Subetapa 01</span>
+                <h4 className="text-sm font-black text-emerald-950 mt-1 leading-snug">Quem será responsável pela digitalização?</h4>
+                <p className="text-xs text-emerald-700/80 leading-relaxed mt-0.5 font-sans">Selecione em cascata a categoria e perfil, e envie a subtarefa vinculada ao Todoist.</p>
               </div>
 
-              {numAudited === totalDocsCount && (
-                <div className="w-5 h-5 bg-emerald-500 text-white rounded-full flex items-center justify-center text-[10px] shrink-0 font-black shadow-xs">
-                  ✓
+              <div className="space-y-4 max-w-xl">
+                {/* Passo 1 - perfil cargo */}
+                <div>
+                  <label className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-wider block mb-1">Passo 1 - perfil cargo</label>
+                  <select
+                    value={respPerfil}
+                    onChange={(e) => handleChangeRespPerfil(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-emerald-500 transition-colors shadow-2xs font-sans"
+                  >
+                    <option value="Secretariado">Secretariado</option>
+                    <option value="CEO">CEO</option>
+                    <option value="Advogado Associado">Advogado Associado</option>
+                    <option value="Estagiário">Estagiário</option>
+                  </select>
                 </div>
-              )}
-            </button>
-          </div>
+
+                {/* Passo 2 - Nome do Responsável */}
+                <div>
+                  <label className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-wider block mb-1">Passo 2 - Nome do Responsável</label>
+                  <div className="flex gap-2">
+                    <select
+                      value={respNome}
+                      onChange={(e) => handleUpdateRespFields({ resp_digitalizacao_nome: e.target.value })}
+                      className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-emerald-500 transition-colors shadow-2xs font-sans"
+                    >
+                      {getNamesForPerfil(respPerfil).map((name) => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </select>
+                    
+                    <button
+                      type="button"
+                      onClick={() => setShowAddNewRespInput(true)}
+                      className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-150 text-emerald-700 hover:text-emerald-800 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer transition-all shrink-0"
+                    >
+                      <Plus size={14} /> Add responsável
+                    </button>
+                  </div>
+                </div>
+
+                {/* Add New Responsible Inline Form */}
+                {showAddNewRespInput && (
+                  <div className="p-4 bg-gray-50 border border-gray-200 rounded-2xl space-y-3 animate-fade-in text-left">
+                    <div>
+                      <label className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-wider block mb-1">Nome do Novo Responsável ({respPerfil})</label>
+                      <input
+                        type="text"
+                        value={newRespNameInput}
+                        onChange={(e) => setNewRespNameInput(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-emerald-500 transition-colors shadow-2xs font-sans"
+                        placeholder="Ex: Dra. Juliana Moura"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddCustomResponsible();
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddNewRespInput(false);
+                          setNewRespNameInput('');
+                        }}
+                        className="px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-100 text-gray-500 rounded-lg text-[11px] font-bold font-sans cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAddCustomResponsible}
+                        disabled={!newRespNameInput.trim()}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold font-sans cursor-pointer disabled:opacity-50"
+                      >
+                        Salvar e Selecionar
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Todoist Subtask Integration Box */}
+              <div className="pt-4 border-t border-gray-100 space-y-3 block text-left">
+                <div className="flex items-center justify-between text-xs font-black text-gray-400 uppercase tracking-wider">
+                  <span>Integração Automática Todoist</span>
+                  {caseObj?.todoistTaskId ? (
+                    <span className="text-emerald-600 lowercase font-mono">vínculo com tarefa principal ativo</span>
+                  ) : (
+                    <span className="text-amber-600 lowercase font-mono">tarefa principal não encontrada</span>
+                  )}
+                </div>
+
+                {respTodoistStatus === 'success' ? (
+                  <div className="p-4 bg-emerald-50 border border-emerald-250 rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs font-bold text-emerald-800">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 size={16} className="text-emerald-600 shrink-0 animate-pulse" />
+                      <span>Subtarefa de Digitalização criada com sucesso e vinculada no Todoist!</span>
+                    </div>
+                    {respTodoistSubtaskUrl && (
+                      <a
+                        href={respTodoistSubtaskUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-100 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors shrink-0 flex items-center gap-1.5 font-sans"
+                      >
+                        <ExternalLink size={11} /> Ver Subtarefa
+                      </a>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2 text-left">
+                    <button
+                      type="button"
+                      onClick={handleCreateTodoistSubtask}
+                      disabled={respTodoistLoading || !respNome.trim()}
+                      className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-2xs cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {respTodoistLoading ? (
+                        <>
+                          <Loader2 size={12} className="animate-spin" />
+                          <span>Instanciando subtarefa vinculada...</span>
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw size={12} />
+                          <span>Vincular e Registrar Subtarefa no Todoist</span>
+                        </>
+                      )}
+                    </button>
+                    {respTodoistStatus === 'error' && (
+                      <p className="text-[10px] font-bold text-red-650 bg-red-50 p-2.5 rounded-lg border border-red-200 font-sans">
+                        Aviso: {respTodoistLogFalha}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Navigation button inside tabs */}
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleUpdateRespFields({ resp_digitalizacao_current_subetapa: 2 })}
+                  className="px-4 py-2 bg-gray-950 hover:bg-black text-white text-[11px] font-bold rounded-xl flex items-center gap-1.5 cursor-pointer uppercase transition-all font-sans"
+                >
+                  <span>Avançar para Subetapa 02</span>
+                  <ArrowRight size={12} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {respSelectedSubetapa === 2 && (
+            <div className="space-y-4 animate-fade-in text-left">
+              <div className="bg-amber-50/50 p-4 border border-amber-150 rounded-2xl text-left">
+                <span className="text-[10px] font-mono font-black text-amber-800 uppercase block tracking-wider">Subetapa 02</span>
+                <h4 className="text-sm font-black text-amber-950 mt-1 leading-snug">Triagem e Organização Preventiva</h4>
+                <p className="text-xs text-amber-700/80 leading-relaxed mt-0.5 font-sans">Certificação de integridade física antes de enviar os documentos organizados para a nuvem.</p>
+              </div>
+
+              <div className="p-4 bg-gray-50 border border-gray-150 rounded-2xl block text-left text-xs font-semibold space-y-2 text-gray-750 leading-relaxed font-sans">
+                <p className="font-bold text-gray-800">Diretrizes da Giffoni Advogados Associados:</p>
+                <ul className="list-disc pl-4 space-y-1 text-gray-500 font-medium">
+                  <li>Validar se as assinaturas físicas correspondem à procuração, contrato e declaração.</li>
+                  <li>Limpar marcas de impressora ou imperfeições de scanner.</li>
+                  <li>Consolidar todos os documentos mínimos num único lote padrão.</li>
+                </ul>
+              </div>
+
+              {/* Complete Step 2 toggle */}
+              <label className="flex items-center justify-between p-3.5 bg-white border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
+                <div className="flex items-center gap-2.5 font-sans text-left">
+                  <input
+                    type="checkbox"
+                    checked={respSubetapa02Checked}
+                    onChange={(e) => handleUpdateRespFields({ resp_subetapa_02_checked: e.target.checked })}
+                    className="w-4 h-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-xs font-extrabold text-gray-950 block font-sans">Subetapa 02 de Triagem Concluída</span>
+                    <span className="text-[10px] text-gray-400 block font-sans">Confirmo que a triagem e desambiguação física de ativos foi finalizada.</span>
+                  </div>
+                </div>
+                <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border leading-none font-mono ${respSubetapa02Checked ? 'bg-emerald-50 text-emerald-700 border-emerald-250' : 'bg-gray-100 text-gray-400 border-gray-200'}`}>
+                  {respSubetapa02Checked ? 'COMPLETO' : 'PENDENTE'}
+                </span>
+              </label>
+
+              {/* Nav Buttons */}
+              <div className="flex justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleUpdateRespFields({ resp_digitalizacao_current_subetapa: 1 })}
+                  className="px-3.5 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 text-[11px] font-medium rounded-xl flex items-center gap-1.5 cursor-pointer uppercase transition-all font-sans"
+                >
+                  <ArrowLeft size={12} />
+                  <span>Voltar</span>
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => handleUpdateRespFields({ resp_digitalizacao_current_subetapa: 3 })}
+                  className="px-4 py-2 bg-gray-950 hover:bg-black text-white text-[11px] font-bold rounded-xl flex items-center gap-1.5 cursor-pointer uppercase transition-all font-sans"
+                >
+                  <span>Avançar para Subetapa 03</span>
+                  <ArrowRight size={12} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {respSelectedSubetapa === 3 && (
+            <div className="space-y-4 animate-fade-in text-left font-sans">
+              <div className="bg-sky-50/50 p-4 border border-sky-150 rounded-2xl text-left">
+                <span className="text-[10px] font-mono font-black text-sky-850 uppercase block tracking-wider">Subetapa 03</span>
+                <h4 className="text-sm font-black text-sky-950 mt-1 leading-snug">Validação Geral dos Arquivos Digitais</h4>
+                <p className="text-xs text-sky-700/80 leading-relaxed mt-0.5 font-sans">Certificação eletrônica de que todos os uploads do caso foram indexados permanentemente.</p>
+              </div>
+
+              <div className="p-4 bg-emerald-50/30 border border-emerald-100 rounded-2xl text-xs font-semibold text-emerald-900 leading-relaxed text-left block font-sans">
+                <span className="font-extrabold text-emerald-950 block mb-1">✓ Termo de Responsabilidade Operacional</span>
+                Certifico que as guias, termos de hipossuportabilidade, RG, CPF e demais anexos necessários foram inseridos, nomeados de acordo com o padrão e sincronizados com a pasta oficial.
+              </div>
+
+              {/* Complete Step 3 toggle */}
+              <label className="flex items-center justify-between p-3.5 bg-white border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
+                <div className="flex items-center gap-2.5 font-sans text-left">
+                  <input
+                    type="checkbox"
+                    checked={respSubetapa03Checked}
+                    onChange={(e) => handleUpdateRespFields({ resp_subetapa_03_checked: e.target.checked })}
+                    className="w-4 h-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-xs font-extrabold text-gray-950 block font-sans">Validação Geral Concluída</span>
+                    <span className="text-[10px] text-gray-400 block font-sans">Assinatura digital final e encerramento da responsabilização.</span>
+                  </div>
+                </div>
+                <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border leading-none font-mono ${respSubetapa03Checked ? 'bg-emerald-50 text-emerald-700 border-emerald-250' : 'bg-gray-100 text-gray-400 border-gray-200'}`}>
+                  {respSubetapa03Checked ? 'COMPLETO' : 'PENDENTE'}
+                </span>
+              </label>
+
+              {/* Nav Buttons */}
+              <div className="flex justify-between pt-2 font-sans">
+                <button
+                  type="button"
+                  onClick={() => handleUpdateRespFields({ resp_digitalizacao_current_subetapa: 2 })}
+                  className="px-3.5 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 text-[11px] font-medium rounded-xl flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <ArrowLeft size={12} />
+                  <span>Voltar</span>
+                </button>
+
+                <div className="flex items-center gap-4">
+                  <p className="text-[10px] font-bold text-gray-400 flex items-center gap-1 font-sans">
+                    <CheckCircle2 size={12} className="text-emerald-500" />
+                    <span>Responsabilidade configurada</span>
+                  </p>
+                  
+                  <button
+                    type="button"
+                    onClick={() => handleSwitchRoute(2)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-xl flex items-center gap-1.5 cursor-pointer uppercase transition-all font-sans shrink-0"
+                  >
+                    <span>Iniciar Setor de Digitalizações (Subetapa 02)</span>
+                    <ArrowRight size={12} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
+        )}
 
-        {/* SUBETAPA 01 - Setor de Digitalização e Uploads */}
-        {activeSubetapa === 'digitalizacao' && (
+        {/* SUBETAPA 02 - Setor de Digitalização e Uploads */}
+        {currentSubetapa === 2 && (
           <div className="space-y-6 animate-fade-in text-left">
             {/* Bento Grid layout containing global statistics & workflow metadata */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -524,182 +1174,284 @@ export default function DigitalizacaoUpload() {
           </div>
         </div>
 
-        {/* Document Tracking List */}
-        <div className="bg-white border border-gray-150 rounded-[2rem] shadow-xs overflow-hidden">
-          <div className="p-6 border-b border-gray-150 bg-gray-50/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h2 className="text-base font-black text-gray-900 tracking-tight">Ledger de Controle de Digitalização</h2>
-              <p className="text-xs text-gray-400 font-semibold mt-0.5">Veja a listagem definitiva de itens. Conclua os uploads pendentes aplicando a padronização oficial de arquivos.</p>
+        {/* Document Tracking List split into 3 Card containers */}
+        <div className="space-y-6">
+          
+          {/* CARD 1 - Documentos obrigatórios do Escritório */}
+          <div className="bg-white border border-gray-150 rounded-[2rem] shadow-xs overflow-hidden">
+            <div className="p-6 border-b border-gray-150 bg-gray-50/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-black uppercase tracking-wider font-mono">
+                  Card 1
+                </span>
+                <h2 className="text-base font-black text-gray-900 tracking-tight mt-1">
+                  Documentos obrigatórios do Escritório
+                </h2>
+                <p className="text-xs text-gray-400 font-semibold mt-0.5">
+                  Procuração, Declaração e Contrato de Honorários fundamentais para prosseguimento do feito.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 font-semibold">
+                <span className="text-xs text-gray-405">Padronização de arquivos ativa:</span>
+                <kbd className="px-2 py-1 bg-gray-100 rounded text-[10px] font-mono font-black text-indigo-700 tracking-tight border border-gray-250">
+                  Doc. XX - [Item]
+                </kbd>
+              </div>
             </div>
-            
-            <div className="flex items-center gap-2 font-semibold">
-              <span className="text-xs text-gray-500">Formato de Nomenclatura Ativo:</span>
-              <kbd className="px-2 py-1 bg-gray-100 rounded text-[10px] font-mono font-black text-indigo-700 tracking-tight border border-gray-250">
-                Doc. XX - [Tipo de Documento] - {clientName || 'Nome do Cliente'}
-              </kbd>
-            </div>
-          </div>
-
-          <div className="divide-y divide-gray-150">
-            {docs.map((docItem, index) => {
-              const status = getDocStatuses(docItem);
-              const isUploadingThis = uploadingField === docItem.field;
-
-              return (
-                <div key={docItem.id} className="p-6 bg-white hover:bg-gray-50/40 transition-colors flex flex-col space-y-4">
-                  
-                  {/* 1. Tipo de Documento */}
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-md">0{index + 1}</span>
-                      <h4 className="text-sm lg:text-base font-black text-gray-900 tracking-tight">{docItem.label}</h4>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-xs font-semibold text-gray-400">Padrão de nomeação final no Drive:</span>
-                      <span className="text-xs px-2 py-0.5 bg-gray-100 rounded font-mono text-gray-700 font-semibold break-all">
-                        {docItem.prefix} - {clientName || 'Cliente'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Separator line */}
-                  <div className="border-t border-gray-100 my-1"></div>
-
-                  {/* Vertical elements stacked exactly one under another */}
-                  <div className="space-y-3.5">
-                    
-                    {/* 2. Origem do Recebimento */}
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
-                      <span className="text-xs font-black uppercase text-gray-400 tracking-wider w-48 shrink-0">Origem do Recebimento:</span>
-                      <div>
-                        {status.received ? (
-                          <span className={`inline-flex items-center gap-1 text-xs font-extrabold capitalize ${status.channel === 'fisico' ? 'text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg' : 'text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg'}`}>
-                            ● {status.channel === 'fisico' ? '📄 Físico (papel)' : `📱 Digital (${status.channel})`}
-                          </span>
-                        ) : (
-                          <span className="text-xs font-extrabold text-gray-450 bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-lg">Aguardando Coleta</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 3. Situação de Digitalização */}
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
-                      <span className="text-xs font-black uppercase text-gray-400 tracking-wider w-48 shrink-0">Situação de Digitalização:</span>
-                      <div>
-                        {status.digitalizacao === 'digitalizado' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full font-black text-xs tracking-tight border border-emerald-150">
-                            Digitalizado
-                          </span>
-                        ) : status.digitalizacao === 'pendente' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-full font-black text-xs tracking-tight border border-amber-150">
-                            Pendente Física (Setor)
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 text-gray-400 rounded-full font-black text-xs tracking-tight border border-gray-150">
-                            Não aplicável
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 4. Upload no Google Drive */}
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
-                      <span className="text-xs font-black uppercase text-gray-400 tracking-wider w-48 shrink-0">Upload no Google Drive:</span>
-                      <div>
-                        {status.upload === 'concluido' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-sky-50 text-sky-700 rounded-full font-black text-xs tracking-tight border border-sky-150">
-                            Concluído no Drive
-                          </span>
-                        ) : status.upload === 'pendente' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-50 text-red-700 rounded-full font-black text-xs tracking-tight border border-red-150">
-                            Pendente de Upload
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 text-gray-400 rounded-full font-black text-xs tracking-tight border border-gray-200">
-                            Aguardando
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 5. Fazer Upload e Renomear (renomeado para Upload e Renomeação Automatica) */}
-                    <div className="flex flex-col sm:flex-row sm:items-start gap-1.5 sm:gap-4 pt-1">
-                      <span className="text-xs font-black uppercase text-gray-400 tracking-wider w-48 shrink-0 mt-1">Ações / Arquivo:</span>
-                      <div className="flex-1 w-full space-y-3">
-                        {status.received && status.upload !== 'concluido' && (
-                          <div className="flex flex-wrap items-center gap-3">
-                            {status.digitalizacao === 'pendente' && (
-                              <button
-                                onClick={() => handleMarkAsDigitalized(docItem)}
-                                className="px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-black tracking-tight cursor-pointer transition-colors"
-                              >
-                                Forçar como Digitalizado
-                              </button>
-                            )}
-                            
-                            <label className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-black tracking-tight cursor-pointer transition-colors">
-                              {isUploadingThis ? (
-                                <>
-                                  <Loader2 size={14} className="animate-spin" />
-                                  <span>Sincronizando...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Upload size={14} />
-                                  <span>Upload e Renomeação Automatica</span>
-                                </>
-                              )}
-                              <input
-                                type="file"
-                                className="hidden"
-                                disabled={isUploadingThis}
-                                onChange={(e) => handleFileUpload(e, docItem)}
-                              />
-                            </label>
-                          </div>
-                        )}
-
-                        {/* Already uploaded file list. Built carefully with deep widths and word-breaks to prevent any spill & keep robust padding */}
-                        {status.fileList.length > 0 ? (
-                          <div className="space-y-1.5 w-full max-w-xxl">
-                            {status.fileList.map((file: any, fIdx: number) => (
-                              <div key={fIdx} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-indigo-50/50 border border-indigo-150 rounded-xl gap-3 w-full">
-                                <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                                  <FileText size={16} className="text-indigo-600 shrink-0 mt-0.5" />
-                                  <div className="min-w-0 flex-1">
-                                    <p className="font-mono font-bold text-gray-900 text-xs break-all whitespace-normal leading-relaxed">
-                                      {file.name}
-                                    </p>
-                                    <span className="text-[10px] text-indigo-500 font-extrabold block mt-0.5">Tamanho: {file.size} - Sincronizado</span>
-                                  </div>
-                                </div>
-                                <button
-                                  onClick={() => removeWizardFile(docItem.field, fIdx)}
-                                  className="p-2 text-xs font-black text-red-500 hover:bg-red-50 border border-transparent hover:border-red-150 rounded-lg cursor-pointer transition-colors shrink-0 outline-none text-right"
-                                >
-                                  Excluir
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        ) : status.upload === 'concluido' ? (
-                          <p className="text-xs font-bold text-gray-400 mt-1 flex items-center gap-1.5">
-                            <span className="text-emerald-500">✓</span> Atribuído / Sincronizado por canal direto no fluxo
-                          </p>
-                        ) : (
-                          <div className="p-4 border border-dashed border-gray-200 rounded-2xl text-left bg-gray-50/30 max-w-md">
-                            <p className="text-xs text-gray-400 font-semibold leading-relaxed">Nenhum arquivo de upload definitivo anexado a esta seção.</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                  </div>
-
+            <div className="divide-y divide-gray-150">
+              {officeDocs.map((docItem) => {
+                const status = getDocStatuses(docItem);
+                const isUploadingThis = uploadingField === docItem.field;
+                return renderDocRow(docItem, status, isUploadingThis);
+              })}
+              {officeDocs.length === 0 && (
+                <div className="p-8 text-center text-xs text-gray-400 font-semibold">
+                  Nenhum documento de escritório aplicável para o tipo de cliente ativo.
                 </div>
-              );
-            })}
+              )}
+            </div>
           </div>
+
+          {/* CARD 2 - Documentos mínimos obrigatórios */}
+          <div className="bg-white border border-gray-150 rounded-[2rem] shadow-xs overflow-hidden">
+            <div className="p-6 border-b border-gray-150 bg-gray-50/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <span className="text-[10px] bg-sky-50 text-sky-700 px-2 py-0.5 rounded-md font-black uppercase tracking-wider font-mono">
+                  Card 2
+                </span>
+                <h2 className="text-base font-black text-gray-900 tracking-tight mt-1">
+                  Documentos mínimos obrigatórios
+                </h2>
+                <p className="text-xs text-gray-400 font-semibold mt-0.5">
+                  Documentos de identificação e qualificação necessários da parte (RG, CPF e comprovantes relevantes).
+                </p>
+              </div>
+            </div>
+            <div className="divide-y divide-gray-150">
+              {minimumDocs.map((docItem) => {
+                const status = getDocStatuses(docItem);
+                const isUploadingThis = uploadingField === docItem.field;
+                return renderDocRow(docItem, status, isUploadingThis);
+              })}
+              {minimumDocs.length === 0 && (
+                <div className="p-8 text-center text-xs text-gray-400 font-semibold">
+                  Nenhum documento mínimo obrigatório cadastrado.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* CARD 3 - Outras Provas do cliente */}
+          <div className="bg-white border border-gray-150 rounded-[2rem] shadow-xs overflow-hidden">
+            <div className="p-6 border-b border-gray-150 bg-gray-50/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md font-black uppercase tracking-wider font-mono">
+                  Card 3
+                </span>
+                <h2 className="text-base font-black text-gray-900 tracking-tight mt-1">
+                  Outras Provas do cliente
+                </h2>
+                <p className="text-xs text-gray-400 font-semibold mt-0.5">
+                  Provas dinâmicas e sob demanda cadastradas e solicitadas na subetapa de Provas de Necessidade.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/solicitacao-documentos-necessidade-${isPJ ? 'PJ' : 'PF'}`)}
+                className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-xl text-xs font-black uppercase tracking-wider transition-colors shrink-0 flex items-center gap-1.5 font-sans"
+              >
+                Gerenciar Solicitações <ExternalLink size={12} />
+              </button>
+            </div>
+            <div className="divide-y divide-gray-150">
+              {requests.map((req, reqIdx) => {
+                // Determine mock docItem for each evidence request
+                const docItem: DocItem = {
+                  id: req.id,
+                  label: req.title,
+                  key: req.id,
+                  field: `custom_${req.id}`,
+                  prefix: req.documentNumber || `Doc. Adicional 0${reqIdx + 1}`,
+                  required: false
+                };
+
+                const fileList = wizardState[docItem.field] || [];
+                const isUploaded = fileList.length > 0;
+
+                // Load valState of request
+                const valState = wizardState.q5_provas?.[req.id] || { received: 'nao' };
+                const received = valState.received === 'sim';
+                const channel = valState.channels?.join(', ') || 'Não especificado';
+
+                // Determine dynamic status tags
+                const tagDigitalizacao = isUploaded ? 'digitalizado' : (received ? 'pendente' : 'n_a');
+                const tagUpload = isUploaded ? 'concluido' : (received ? 'pendente' : 'aguardando');
+
+                const status = {
+                  received,
+                  channel,
+                  digitalizacao: tagDigitalizacao,
+                  upload: tagUpload,
+                  fileList
+                };
+
+                const isUploadingThis = uploadingField === docItem.field;
+
+                return (
+                  <div key={req.id} className="p-6 bg-white hover:bg-gray-50/40 transition-colors flex flex-col space-y-4">
+                    {/* Header: Title */}
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">
+                          {docItem.prefix}
+                        </span>
+                        <h4 className="text-sm lg:text-base font-black text-gray-900 tracking-tight">{req.title}</h4>
+                      </div>
+                      {req.description && (
+                        <p className="text-xs text-gray-500 font-medium leading-relaxed max-w-2xl">{req.description}</p>
+                      )}
+                    </div>
+
+                    {/* Separator */}
+                    <div className="border-t border-gray-150 my-1"></div>
+
+                    {/* Meta information */}
+                    <div className="space-y-3.5">
+                      {/* Received Origin */}
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 font-sans">
+                        <span className="text-xs font-black uppercase text-gray-400 tracking-wider w-48 shrink-0">Origem:</span>
+                        <div>
+                          {status.received ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-extrabold capitalize text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg">
+                              ● Recebido via {status.channel}
+                            </span>
+                          ) : (
+                            <span className="text-xs font-extrabold text-gray-400 bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-lg">
+                              Aguardando Coleta do Cliente
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Digitalization Status */}
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 font-sans">
+                        <span className="text-xs font-black uppercase text-gray-400 tracking-wider w-48 shrink-0">Central Digital:</span>
+                        <div>
+                          {status.digitalizacao === 'digitalizado' ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full font-black text-xs tracking-tight border border-emerald-150">
+                              Digitalizado
+                            </span>
+                          ) : status.digitalizacao === 'pendente' ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 rounded-full font-black text-xs tracking-tight border border-amber-150">
+                              Pendente Física
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 text-gray-400 rounded-full font-black text-xs tracking-tight border border-gray-150">
+                              Não coletado / Pendente
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Google Drive Status */}
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 font-sans">
+                        <span className="text-xs font-black uppercase text-gray-400 tracking-wider w-48 shrink-0">Nuvem (Drive):</span>
+                        <div>
+                          {status.upload === 'concluido' ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-sky-50 text-sky-700 rounded-full font-black text-xs tracking-tight border border-sky-150">
+                              Concluído no Drive
+                            </span>
+                          ) : status.upload === 'pendente' ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-50 text-red-700 rounded-full font-black text-xs tracking-tight border border-red-150">
+                              Pendente de Upload
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 text-gray-400 rounded-full font-black text-xs tracking-tight border border-gray-200">
+                              Aguardando
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* File Upload Box */}
+                      <div className="flex flex-col sm:flex-row sm:items-start gap-1.5 sm:gap-4 pt-1 font-sans">
+                        <span className="text-xs font-black uppercase text-gray-400 tracking-wider w-48 shrink-0 mt-1">Ações / Arquivo:</span>
+                        <div className="flex-1 w-full space-y-3">
+                          {status.upload !== 'concluido' && (
+                            <div className="flex flex-wrap items-center gap-3">
+                              <label className="flex items-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-black tracking-tight cursor-pointer transition-colors">
+                                {isUploadingThis ? (
+                                  <>
+                                    <Loader2 size={14} className="animate-spin" />
+                                    <span>Sincronizando...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Upload size={14} />
+                                    <span>Upload e Renomeação Automática</span>
+                                  </>
+                                )}
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  disabled={isUploadingThis}
+                                  onChange={(e) => handleFileUpload(e, docItem)}
+                                />
+                              </label>
+                            </div>
+                          )}
+
+                          {/* File list */}
+                          {status.fileList.length > 0 ? (
+                            <div className="space-y-1.5 w-full max-w-xxl">
+                              {status.fileList.map((file: any, fIdx: number) => (
+                                <div key={fIdx} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-indigo-50/50 border border-indigo-150 rounded-xl gap-3 w-full">
+                                  <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                                    <FileText size={16} className="text-indigo-600 shrink-0 mt-0.5" />
+                                    <div className="min-w-0 flex-1">
+                                      <p className="font-mono font-bold text-gray-900 text-xs break-all whitespace-normal leading-relaxed">
+                                        {file.name}
+                                      </p>
+                                      <span className="text-[10px] text-indigo-500 font-extrabold block mt-0.5">Tamanho: {file.size} - Sincronizado</span>
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => removeWizardFile(docItem.field, fIdx)}
+                                    className="p-2 text-xs font-black text-red-500 hover:bg-red-50 border border-transparent hover:border-red-150 rounded-lg cursor-pointer transition-colors shrink-0 outline-none"
+                                  >
+                                    Excluir
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="p-4 border border-dashed border-gray-200 rounded-2xl text-left bg-gray-50/30 max-w-md">
+                              <p className="text-xs text-gray-400 font-semibold leading-relaxed">
+                                Nenhum arquivo de upload definitivo anexado a esta seção. Use o botão acima para subir as provas.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+                );
+              })}
+              {requests.length === 0 && (
+                <div className="p-10 text-center font-sans space-y-3 bg-gray-50/20">
+                  <FolderOpen className="mx-auto text-gray-300" size={32} />
+                  <div>
+                    <p className="text-xs font-black text-gray-700">Nenhuma Prova Complementar adicionada</p>
+                    <p className="text-[11px] text-gray-400 font-semibold mt-0.5">
+                      Você pode adicionar solicitações de prova sob demanda na subetapa correspondente.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
         </div>
 
         {/* Operational logs & notes regarding digitalizations */}
@@ -748,8 +1500,8 @@ export default function DigitalizacaoUpload() {
           </div>
         )}
 
-        {/* SUBETAPA 02: AUDITORIA DO SETOR DE DIGITALIZAÇÃO E UPLOADS */}
-        {activeSubetapa === 'auditoria' && (
+        {/* SUBETAPA 03: AUDITORIA DO SETOR DE DIGITALIZAÇÃO E UPLOADS */}
+        {currentSubetapa === 3 && (
           <div className="space-y-6 animate-fade-in text-left">
             
             {/* Integrated Drive and Folder Information box */}
@@ -968,12 +1720,20 @@ export default function DigitalizacaoUpload() {
               )}
             </button>
 
-            {activeSubetapa === 'digitalizacao' ? (
+            {currentSubetapa === 1 ? (
               <button
-                onClick={() => setActiveSubetapa('auditoria')}
+                onClick={() => handleSwitchRoute(2)}
                 className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black tracking-tight shadow-xs flex items-center gap-2 cursor-pointer transition-colors"
               >
-                <span>Avançar para Auditoria (Subetapa 02)</span>
+                <span>Avançar para Setor de Digitalizações (Subetapa 02)</span>
+                <ArrowRight size={15} />
+              </button>
+            ) : currentSubetapa === 2 ? (
+              <button
+                onClick={() => handleSwitchRoute(3)}
+                className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black tracking-tight shadow-xs flex items-center gap-2 cursor-pointer transition-colors"
+              >
+                <span>Avançar para Auditoria do Setor (Subetapa 03)</span>
                 <ArrowRight size={15} />
               </button>
             ) : (

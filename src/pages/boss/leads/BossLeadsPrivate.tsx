@@ -16,6 +16,7 @@ import {
   UserPlus, 
   Building2, 
   ArrowRight, 
+  ArrowLeft,
   TrendingUp, 
   Users, 
   Clock, 
@@ -668,6 +669,14 @@ export default function BossLeadsPrivate() {
               </p>
             </div>
             <div className="flex gap-2.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => navigate('/boss-giffoni-clientes/setores')}
+                className="text-xs font-bold text-indigo-700 bg-white border border-indigo-200 hover:bg-slate-50 px-4 py-2.5 rounded-xl shadow-4xs transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <ArrowLeft size={14} />
+                <span>Voltar para Setores do Escritório</span>
+              </button>
               <button
                 type="button"
                 onClick={() => navigate('/boss/leads/private/dashboard/managing.private.leads')}

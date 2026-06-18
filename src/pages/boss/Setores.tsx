@@ -192,6 +192,10 @@ export default function Setores() {
                       <span className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-md">
                         <CheckCircle2 size={12} /> Sistema Interno Integrado
                       </span>
+                    ) : sector.id === 'rh' ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-rose-600 bg-rose-50 px-2.5 py-0.5 rounded-md">
+                        <CheckCircle2 size={12} /> Sistema Interno Integrado
+                      </span>
                     ) : hasLink ? (
                       <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
                         <CheckCircle2 size={12} /> Link Configurado
@@ -205,7 +209,7 @@ export default function Setores() {
                 </div>
 
                 <div className="border-t border-gray-50 pt-4 flex flex-col gap-2">
-                  {sector.id !== 'marketing' && sector.id !== 'crm' && !hasLink && (
+                  {sector.id !== 'marketing' && sector.id !== 'crm' && sector.id !== 'rh' && !hasLink && (
                     <div className="flex items-center gap-1.5 text-xs text-amber-600 font-medium">
                       <AlertCircle size={14} className="shrink-0" />
                       <span>Link ainda não configurado</span>
@@ -226,6 +230,14 @@ export default function Setores() {
                       className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-lg rounded-2xl font-bold text-sm text-center transition-all inline-flex items-center justify-center gap-2 group cursor-pointer"
                     >
                       <span>Ver Dashboard do CRM</span>
+                      <ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
+                    </button>
+                  ) : sector.id === 'rh' ? (
+                    <button
+                      onClick={() => navigate('/boss-giffoni-clientes/setores/dashboard.RH.Giffoni.Adv.Associados')}
+                      className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 text-white hover:shadow-lg rounded-2xl font-bold text-sm text-center transition-all inline-flex items-center justify-center gap-2 group cursor-pointer"
+                    >
+                      <span>Ver Dashboard do Setor de RH</span>
                       <ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
                     </button>
                   ) : hasLink ? (

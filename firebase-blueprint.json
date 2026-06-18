@@ -469,6 +469,24 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["clientId", "updatedAt"]
+    },
+    "RHCollaborator": {
+      "title": "RH Collaborator",
+      "description": "Collaborator profile and goals tracked by Human Resources.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "department": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "status": { "type": "string", "enum": ["Ativo", "Inativo"] },
+        "goals": {
+          "type": "array"
+        }
+      },
+      "required": ["id", "name", "role", "department", "status"]
     }
   },
   "firestore": {
@@ -551,6 +569,10 @@
     "prestacaoContasDrafts": {
       "schema": "PrestacaoContasDraft",
       "description": "Draft storage for accountability statements."
+    },
+    "rhCollaborators": {
+      "schema": "RHCollaborator",
+      "description": "Collaborators and their goals managed by the RH sector."
     }
   }
 }

@@ -3,7 +3,7 @@ import { useColetaState } from '../hooks/useColetaState';
 import FluxoStepLayout from '../components/FluxoStepLayout';
 import { 
   ArrowRight, FileText, UploadCloud, Trash2, ArrowLeft, 
-  Check, AlertCircle, PlusCircle 
+  Check, AlertCircle, PlusCircle, AlertTriangle
 } from 'lucide-react';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
@@ -29,10 +29,64 @@ export default function DocumentosNecessidadePJ() {
     navigate
   } = useColetaState();
 
+  const filteredRequests = (requests || []).filter(req => {
+    const t = (req.title || '').toLowerCase();
+    return !t.includes('procuração') && !t.includes('declaração') && !t.includes('contrato');
+  });
+
   // New Evidence Request fields
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newDocNum, setNewDocNum] = useState('');
+  const [newJustification, setNewJustification] = useState('');
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [evidenceType, setEvidenceType] = useState('Prova documental');
+  const [periciaType, setPericiaType] = useState('Trabalhista');
+  const [hireTechnicalAssistant, setHireTechnicalAssistant] = useState('nao');
+
+  const updatePrefilledValues = (type: string, pType: string, assistant: string) => {
+    setEvidenceType(type);
+    setPericiaType(pType);
+    setHireTechnicalAssistant(assistant);
+
+    if (type === 'Prova documental') {
+      setNewTitle('Prova Documental Corporativa');
+      setNewDocNum('DOC-PJ-01');
+      setNewDesc('Favor apresentar cópia legível dos documentos corporativos correlatos.');
+      setNewJustification('');
+    } else if (type === 'Prova Testemunhal') {
+      setNewTitle('Prova Testemunhal Corporativa');
+      setNewDocNum('TESTEMUNHA-PJ-01');
+      setNewDesc('Favor indicar o rol de testemunhas corporativas com nome completo, CPF, RG, endereço e telefone.');
+      setNewJustification('Necessário comprovar relações de trabalho/prestação de serviços por meio de testemunhas.');
+    } else if (type === 'Prova Depoimento Pessoal') {
+      setNewTitle('Prova Depoimento Pessoal Representante Legal');
+      setNewDocNum('DEP-PESSOAL-PJ-01');
+      setNewDesc('Favor se preparar para o depoimento pessoal do representante legal em juízo. Deve-se recolher custas caso não tenha gratuidade deferida.');
+      setNewJustification('Recolher custas caso não tenha gratuidade deferida.');
+    } else if (type === 'Prova de audio') {
+      setNewTitle('Prova de Áudio Corporativo');
+      setNewDocNum('AUDIO-PJ-01');
+      setNewDesc('Favor encaminhar arquivos de áudio corporativo relevantes (ex: mensagens de voz, gravações comerciais).');
+      setNewJustification('Comprovação das trocas de mensagens gravadas por áudio.');
+    } else if (type === 'Prova de vídeo') {
+      setNewTitle('Prova de Vídeo Corporativo');
+      setNewDocNum('VIDEO-PJ-01');
+      setNewDesc('Favor encaminhar arquivos de vídeo relevantes para demonstração dos fatos ocorridos na empresa.');
+      setNewJustification('Elucidação de fatos demonstrados visualmente.');
+    } else if (type === 'Prova audiovisual') {
+      setNewTitle('Prova Audiovisual Empresarial');
+      setNewDocNum('AV-PJ-01');
+      setNewDesc('Favor encaminhar mídias audiovisuais completas para fins de instrução processual.');
+      setNewJustification('Apresentação de registro audiovisual integrado.');
+    } else if (type === 'Prova Pericial') {
+      setNewTitle(`Prova Pericial - ${pType}`);
+      setNewDocNum('PERICIA-PJ-01');
+      setNewDesc(`Diligência de perícia técnica corporativa do tipo ${pType}. Contratação de assistente técnico: ${assistant === 'sim' ? 'Sim' : 'Não'}.`);
+      setNewJustification(`Elaboração de laudo pericial técnico especializado para a lide (${pType}).`);
+    }
+  };
 
   const handleNextPhase = () => {
     saveWizardStateUpdate({ step5_completed: true }).then(() => {
@@ -56,6 +110,10 @@ export default function DocumentosNecessidadePJ() {
         title: newTitle.trim(),
         description: newDesc.trim(),
         documentNumber: newDocNum.trim(),
+        justification: newJustification.trim(),
+        evidenceType: evidenceType,
+        periciaType: evidenceType === 'Prova Pericial' ? periciaType : null,
+        hireTechnicalAssistant: evidenceType === 'Prova Pericial' ? hireTechnicalAssistant : null,
         status: 'pendente',
         visibleToClient: true,
         allowUpload: true,
@@ -73,6 +131,7 @@ export default function DocumentosNecessidadePJ() {
       setNewTitle('');
       setNewDesc('');
       setNewDocNum('');
+      setNewJustification('');
     } catch (err: any) {
       setError(`Erro ao criar solicitação: ${err.message}`);
     } finally {
@@ -171,6 +230,317 @@ export default function DocumentosNecessidadePJ() {
               </div>
             )}
 
+            {/* Checklist de Provas Custodiadas - Documentos Básicos do Escritório PJ */}
+            <div className="space-y-6">
+              
+              {/* Card - Documentos Básicos do Escritório */}
+              <div className="bg-white border border-gray-150 rounded-2xl p-5 shadow-3xs space-y-4">
+                <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-red-650"></div>
+                  <h4 className="text-xs font-black text-gray-900 uppercase tracking-tight">
+                    Card - Documentos Básicos do Escritório PJ
+                  </h4>
+                </div>
+                
+                <div className="space-y-4">
+                  {/* procuração */}
+                  <div className="p-4 bg-gray-50/50 hover:bg-gray-55 border border-gray-150 rounded-xl flex flex-col gap-3 transition-colors">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="text-left">
+                        <span className="text-[10px] font-black text-red-650 uppercase font-mono tracking-wide block">Básico PJ 01</span>
+                        <h5 className="text-[12px] font-black text-gray-800">Procuração PJ</h5>
+                        <p className="text-[11px] font-semibold text-gray-400">Representação outorgada pelo cliente empresarial ao escritório.</p>
+                      </div>
+                      <div className="shrink-0 flex items-center gap-2">
+                        {(wizardState.procuracaoFiles || []).length > 0 ? (
+                          <div className="text-[10px] bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg font-black uppercase tracking-wider border border-emerald-150 flex items-center gap-1">
+                            <span>✓ Custodiado</span>
+                            <span className="font-mono">({(wizardState.procuracaoFiles || []).length} fl)</span>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] bg-red-50 text-red-700 px-2.5 py-1 rounded-lg font-black uppercase tracking-wider border border-red-150">
+                            ✗ Ausente
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="border-t border-gray-100/70 pt-3.5 space-y-3">
+                      <div className="space-y-1 text-left">
+                        <p className="text-[11px] font-black text-gray-700 uppercase tracking-tight">O documento foi enviado/entregue ao cliente?</p>
+                        <div className="flex gap-4">
+                          {['sim', 'nao'].map(o => (
+                            <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-bold text-gray-750">
+                              <input 
+                                type="radio" 
+                                checked={wizardState.q1_1 === o} 
+                                onChange={() => saveWizardStateUpdate({ q1_1: o })} 
+                                className="text-red-600 focus:ring-0"
+                              />
+                              <span>{o === 'sim' ? 'Sim (Entregue)' : 'Não'}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 text-left">
+                        <p className="text-[11px] font-black text-gray-700 uppercase tracking-tight">Qual a forma/canal de entrega fática?</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            { key: 'fisica', label: 'Física/Impressa' },
+                            { key: 'whatsapp', label: 'WhatsApp' },
+                            { key: 'email', label: 'E-mail' },
+                            { key: 'outro', label: 'Outro' }
+                          ].map(m => {
+                            const isSelected = (wizardState.q1_2 || []).includes(m.key);
+                            return (
+                              <button
+                                key={m.key}
+                                type="button"
+                                onClick={() => {
+                                  const current = wizardState.q1_2 || [];
+                                  const next = current.includes(m.key)
+                                    ? current.filter((x: string) => x !== m.key)
+                                    : [...current, m.key];
+                                  saveWizardStateUpdate({ q1_2: next });
+                                }}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all ${
+                                  isSelected
+                                    ? 'bg-red-650 border-red-650 text-white'
+                                    : 'bg-white border-gray-150 text-gray-650 hover:border-gray-350'
+                                }`}
+                              >
+                                {m.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {(wizardState.q1_2 || []).includes('outro') && (
+                          <input 
+                            type="text"
+                            placeholder="Especifique a forma alternativa de entrega..."
+                            value={wizardState.q1_2_outro || ''}
+                            onChange={(e) => saveWizardStateUpdate({ q1_2_outro: e.target.value })}
+                            className="w-full mt-1.5 px-3 py-1.5 bg-white border border-gray-200 focus:border-red-500 rounded-xl text-xs font-semibold focus:outline-hidden transition-all shadow-3xs"
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    {(wizardState.procuracaoFiles || []).length > 0 && (
+                      <div className="pl-4 space-y-1">
+                        {(wizardState.procuracaoFiles || []).map((f: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between p-1.5 px-2 bg-red-50/60 border border-red-150 rounded-xl text-xs">
+                            <span className="truncate font-semibold text-red-900 flex items-center gap-1 min-w-0 max-w-xs">
+                              <FileText size={12} className="shrink-0" /> <span className="truncate">{f.name}</span>
+                            </span>
+                            <span className="text-[10px] text-red-400 font-mono shrink-0">({f.size})</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Declaração */}
+                  <div className="p-4 bg-gray-50/50 hover:bg-gray-55 border border-gray-150 rounded-xl flex flex-col gap-3 transition-colors">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="text-left">
+                        <span className="text-[10px] font-black text-red-655 uppercase font-mono tracking-wide block">Básico PJ 02</span>
+                        <h5 className="text-[12px] font-black text-gray-800">Balancete / Declaração PJ</h5>
+                        <p className="text-[11px] font-semibold text-gray-400 font-sans">Documentação contábil ou comprovação de hipossuficiência jurídica corporativa.</p>
+                      </div>
+                      <div className="shrink-0 flex items-center gap-2">
+                        {(wizardState.declaracaoFiles || []).length > 0 ? (
+                          <div className="text-[10px] bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg font-black uppercase tracking-wider border border-emerald-150 flex items-center gap-1">
+                            <span>✓ Custodiado</span>
+                            <span className="font-mono">({(wizardState.declaracaoFiles || []).length} fl)</span>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] bg-red-50 text-red-700 px-2.5 py-1 rounded-lg font-black uppercase tracking-wider border border-red-150">
+                            ✗ Ausente
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="border-t border-gray-100/70 pt-3.5 space-y-3">
+                      <div className="space-y-1 text-left">
+                        <p className="text-[11px] font-black text-gray-700 uppercase tracking-tight">O documento foi enviado/entregue ao cliente?</p>
+                        <div className="flex gap-4">
+                          {['sim', 'nao'].map(o => (
+                            <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-bold text-gray-750">
+                              <input 
+                                type="radio" 
+                                checked={wizardState.q2_2 === o} 
+                                onChange={() => saveWizardStateUpdate({ q2_2: o })} 
+                                className="text-red-600 focus:ring-0"
+                              />
+                              <span>{o === 'sim' ? 'Sim (Entregue)' : 'Não'}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 text-left">
+                        <p className="text-[11px] font-black text-gray-700 uppercase tracking-tight">Qual a forma/canal de entrega fática?</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            { key: 'fisica', label: 'Física/Impressa' },
+                            { key: 'whatsapp', label: 'WhatsApp' },
+                            { key: 'email', label: 'E-mail' },
+                            { key: 'outro', label: 'Outro' }
+                          ].map(m => {
+                            const isSelected = (wizardState.q2_3 || []).includes(m.key);
+                            return (
+                              <button
+                                key={m.key}
+                                type="button"
+                                onClick={() => {
+                                  const current = wizardState.q2_3 || [];
+                                  const next = current.includes(m.key)
+                                    ? current.filter((x: string) => x !== m.key)
+                                    : [...current, m.key];
+                                  saveWizardStateUpdate({ q2_3: next });
+                                }}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all ${
+                                  isSelected
+                                    ? 'bg-red-650 border-red-650 text-white'
+                                    : 'bg-white border-gray-150 text-gray-650 hover:border-gray-350'
+                                }`}
+                              >
+                                {m.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {(wizardState.q2_3 || []).includes('outro') && (
+                          <input 
+                            type="text"
+                            placeholder="Especifique a forma alternativa de entrega..."
+                            value={wizardState.q2_3_outro || ''}
+                            onChange={(e) => saveWizardStateUpdate({ q2_3_outro: e.target.value })}
+                            className="w-full mt-1.5 px-3 py-1.5 bg-white border border-gray-200 focus:border-red-500 rounded-xl text-xs font-semibold focus:outline-hidden transition-all shadow-3xs"
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    {(wizardState.declaracaoFiles || []).length > 0 && (
+                      <div className="pl-4 space-y-1">
+                        {(wizardState.declaracaoFiles || []).map((f: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between p-1.5 px-2 bg-red-50/60 border border-red-150 rounded-xl text-xs">
+                            <span className="truncate font-semibold text-red-900 flex items-center gap-1 min-w-0 max-w-xs">
+                              <FileText size={12} className="shrink-0" /> <span className="truncate">{f.name}</span>
+                            </span>
+                            <span className="text-[10px] text-red-400 font-mono shrink-0">({f.size})</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Contrato */}
+                  <div className="p-4 bg-gray-50/50 hover:bg-gray-55 border border-gray-150 rounded-xl flex flex-col gap-3 transition-colors">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="text-left">
+                        <span className="text-[10px] font-black text-red-655 uppercase font-mono tracking-wide block">Básico PJ 03</span>
+                        <h5 className="text-[12px] font-black text-gray-800">Contrato de Honorários Corporativo</h5>
+                        <p className="text-[11px] font-semibold text-gray-400">Contrato de honorários e prestação de serviços advocatícios corporativos.</p>
+                      </div>
+                      <div className="shrink-0 flex items-center gap-2">
+                        {(wizardState.contratoFiles || []).length > 0 ? (
+                          <div className="text-[10px] bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg font-black uppercase tracking-wider border border-emerald-150 flex items-center gap-1">
+                            <span>✓ Custodiado</span>
+                            <span className="font-mono">({(wizardState.contratoFiles || []).length} fl)</span>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] bg-red-50 text-red-700 px-2.5 py-1 rounded-lg font-black uppercase tracking-wider border border-red-150">
+                            ✗ Ausente
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="border-t border-gray-100/70 pt-3.5 space-y-3">
+                      <div className="space-y-1 text-left">
+                        <p className="text-[11px] font-black text-gray-700 uppercase tracking-tight">O documento foi enviado/entregue ao cliente?</p>
+                        <div className="flex gap-4">
+                          {['sim', 'nao'].map(o => (
+                            <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-bold text-gray-750">
+                              <input 
+                                type="radio" 
+                                checked={wizardState.q3_1 === o} 
+                                onChange={() => saveWizardStateUpdate({ q3_1: o })} 
+                                className="text-red-600 focus:ring-0"
+                              />
+                              <span>{o === 'sim' ? 'Sim (Entregue)' : 'Não'}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 text-left">
+                        <p className="text-[11px] font-black text-gray-750 uppercase tracking-tight">Qual a forma/canal de entrega fática?</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            { key: 'fisica', label: 'Física/Impressa' },
+                            { key: 'whatsapp', label: 'WhatsApp' },
+                            { key: 'email', label: 'E-mail' },
+                            { key: 'outro', label: 'Outro' }
+                          ].map(m => {
+                            const isSelected = (wizardState.q3_3 || []).includes(m.key);
+                            return (
+                              <button
+                                key={m.key}
+                                type="button"
+                                onClick={() => {
+                                  const current = wizardState.q3_3 || [];
+                                  const next = current.includes(m.key)
+                                    ? current.filter((x: string) => x !== m.key)
+                                    : [...current, m.key];
+                                  saveWizardStateUpdate({ q3_3: next });
+                                }}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border transition-all ${
+                                  isSelected
+                                    ? 'bg-red-650 border-red-650 text-white'
+                                    : 'bg-white border-gray-150 text-gray-650 hover:border-gray-350'
+                                }`}
+                              >
+                                {m.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {(wizardState.q3_3 || []).includes('outro') && (
+                          <input 
+                            type="text"
+                            placeholder="Especifique a forma alternativa de entrega..."
+                            value={wizardState.q3_3_outro || ''}
+                            onChange={(e) => saveWizardStateUpdate({ q3_3_outro: e.target.value })}
+                            className="w-full mt-1.5 px-3 py-1.5 bg-white border border-gray-200 focus:border-red-500 rounded-xl text-xs font-semibold focus:outline-hidden transition-all shadow-3xs"
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    {(wizardState.contratoFiles || []).length > 0 && (
+                      <div className="pl-4 space-y-1">
+                        {(wizardState.contratoFiles || []).map((f: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between p-1.5 px-2 bg-red-50/60 border border-red-150 rounded-xl text-xs">
+                            <span className="truncate font-semibold text-red-900 flex items-center gap-1 min-w-0 max-w-xs">
+                              <FileText size={12} className="shrink-0" /> <span className="truncate">{f.name}</span>
+                            </span>
+                            <span className="text-[10px] text-red-400 font-mono shrink-0">({f.size})</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
             {/* FLOW QUESTIONNAIRE CARD */}
             <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-2xs space-y-5">
               
@@ -195,59 +565,29 @@ export default function DocumentosNecessidadePJ() {
               {wizardState.q5_1 === 'sim' && (
                 <div className="space-y-6 border-l-2 border-indigo-200 pl-4 animate-in fade-in duration-200">
                   
-                  {/* FORM TO ADD NEW CUSTOM REQUEST */}
-                  <form onSubmit={handleAddEvidence} className="bg-gray-50 border rounded-2xl p-4 space-y-3">
-                    <span className="text-[9px] font-bold uppercase tracking-wider font-mono text-indigo-700 block">Cadastrar Solicitação Empresarial</span>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className="text-[10px] uppercase font-bold text-gray-500">Título do Documento</label>
-                        <input 
-                          type="text" 
-                          placeholder="Ex: Balanço DRE, Extrato FGTS" 
-                          value={newTitle}
-                          onChange={(e) => setNewTitle(e.target.value)}
-                          className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[10px] uppercase font-bold text-gray-500">Identificador / Número do Documento</label>
-                        <input 
-                          type="text" 
-                          placeholder="Ex: Doc. PJ-05, Doc. Recorrente" 
-                          value={newDocNum}
-                          onChange={(e) => setNewDocNum(e.target.value)}
-                          className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
-                        />
-                      </div>
+                    {/* FORM TO ADD NEW CUSTOM REQUEST IN MODAL */}
+                    <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 flex flex-col items-center justify-center text-center space-y-2">
+                      <p className="text-xs font-bold text-indigo-950">Selecione o tipo de prova e os detalhes correspondentes</p>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setIsModalOpen(true);
+                          updatePrefilledValues('Prova documental', 'Trabalhista', 'nao');
+                        }}
+                        disabled={saving}
+                        className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+                      >
+                        <PlusCircle size={14} />
+                        <span>Adicionar Solicitação de Prova</span>
+                      </button>
                     </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[10px] uppercase font-bold text-gray-500">Descrição / Instruções p/ obtenção corporativa</label>
-                      <textarea 
-                        placeholder="Descreva detalhes específicos de obtenção junto ao dpto contábil ou fiscal." 
-                        value={newDesc}
-                        onChange={(e) => setNewDesc(e.target.value)}
-                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500 min-h-[60px]"
-                      />
-                    </div>
-
-                    <button 
-                      type="submit"
-                      disabled={saving}
-                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
-                    >
-                      <PlusCircle size={14} />
-                      <span>Adicionar Solicitação</span>
-                    </button>
-                  </form>
 
                   {/* RENDER CUSTOM REQUESTS CHECKBOXES */}
-                  {requests.length > 0 && (
+                  {filteredRequests.length > 0 && (
                     <div className="space-y-4">
                       <span className="text-[10px] font-black uppercase text-indigo-950 font-mono tracking-widest block border-b pb-1 font-semibold">Checklist de Provas Custodiadas</span>
                       <div className="space-y-4">
-                        {requests.map((req) => {
+                        {filteredRequests.map((req) => {
                           const valState = wizardState.q5_provas?.[req.id] || { received: 'nao' };
                           const setVal = (updatesSub: any) => {
                             const nextProvas = {
@@ -264,6 +604,37 @@ export default function DocumentosNecessidadePJ() {
                                   <span className="text-[9px] bg-indigo-105 text-indigo-800 px-1.5 py-0.5 rounded font-mono font-bold block w-max uppercase mb-1">{req.documentNumber || 'Doc. Adicional'}</span>
                                   <h4 className="text-xs font-black text-gray-900">{req.title}</h4>
                                   <p className="text-[11px] text-gray-500 font-semibold leading-relaxed">{req.description}</p>
+                                  
+                                  {req.evidenceType && (
+                                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                      <span className="text-[9px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                                        {req.evidenceType}
+                                      </span>
+                                      {req.evidenceType === 'Prova Pericial' && req.periciaType && (
+                                        <span className="text-[9px] bg-amber-50 text-amber-800 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                                          Perícia: {req.periciaType}
+                                        </span>
+                                      )}
+                                      {req.evidenceType === 'Prova Pericial' && req.hireTechnicalAssistant && (
+                                        <span className="text-[9px] bg-teal-50 text-teal-800 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                                          Assistente Técnico: {req.hireTechnicalAssistant === 'sim' ? 'Sim' : 'Não'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {req.evidenceType === 'Prova Depoimento Pessoal' && (
+                                    <div className="mt-1.5 p-2 bg-amber-50 border border-amber-100 rounded-lg text-amber-900 text-[10px] font-semibold flex gap-1 items-center">
+                                      <AlertTriangle size={12} className="text-amber-600" />
+                                      <span>Recolher custas caso não tenha gratuidade deferida</span>
+                                    </div>
+                                  )}
+
+                                  {req.justification && (
+                                    <p className="text-[11px] text-gray-400 font-semibold italic mt-1.5 leading-relaxed bg-gray-50/55 p-2 rounded-lg border border-gray-100/55">
+                                      <strong>Justificativa para exigir a prova:</strong> {req.justification}
+                                    </p>
+                                  )}
                                 </div>
                               </div>
 
@@ -354,7 +725,7 @@ export default function DocumentosNecessidadePJ() {
                           {wizardState.q1_3 === 'nao' && <li>Falta assinatura Procuração PJ (Doc. 01)</li>}
                           {(wizardState.q2_1 === 'sim' && wizardState.q2_4 === 'nao') && <li>Falta assinatura Balancete/Declaração PJ (Doc. 02)</li>}
                           {wizardState.q3_4 === 'nao' && <li>Falta assinatura Contrato de Honorários Corporativo</li>}
-                          {requests.filter(req => wizardState.q5_provas?.[req.id]?.received === 'nao').map(req => (
+                          {filteredRequests.filter(req => wizardState.q5_provas?.[req.id]?.received === 'nao').map(req => (
                             <li key={req.id}>Pendente receber: {req.title}</li>
                           ))}
                         </ul>
@@ -425,6 +796,175 @@ export default function DocumentosNecessidadePJ() {
         )}
 
       </div>
+
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl border border-gray-150 shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="bg-indigo-900 text-white p-5 flex items-center justify-between">
+              <div className="space-y-0.5">
+                <span className="text-[10px] font-mono uppercase tracking-widest text-indigo-200 block font-bold">Portal BOSS</span>
+                <h2 className="text-sm font-black uppercase tracking-tight">Adicionar Solicitação de Prova (PJ)</h2>
+              </div>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="text-indigo-200 hover:text-white bg-indigo-800 p-1.5 rounded-lg transition-colors cursor-pointer"
+                type="button"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            {/* Modal Body - SCROLLABLE */}
+            <div className="p-6 overflow-y-auto space-y-4">
+              
+              {/* Type selection - OBRIGATÓRIA VERTICAL */}
+              <div className="space-y-1 text-left">
+                <label className="text-[10px] uppercase font-bold text-gray-500 block">Tipo de Prova</label>
+                <select
+                  value={evidenceType}
+                  onChange={(e) => {
+                    const selectedType = e.target.value;
+                    updatePrefilledValues(selectedType, periciaType, hireTechnicalAssistant);
+                  }}
+                  className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  <option value="Prova documental">Prova documental</option>
+                  <option value="Prova Testemunhal">Prova Testemunhal</option>
+                  <option value="Prova Depoimento Pessoal">Prova Depoimento Pessoal</option>
+                  <option value="Prova de audio">Prova de áudio</option>
+                  <option value="Prova de vídeo">Prova de vídeo</option>
+                  <option value="Prova audiovisual">Prova audiovisual</option>
+                  <option value="Prova Pericial">Prova Pericial</option>
+                </select>
+              </div>
+
+              {/* Warning note for Prova Depoimento Pessoal */}
+              {evidenceType === 'Prova Depoimento Pessoal' && (
+                <div className="p-3 bg-amber-50 border border-amber-250 rounded-xl text-amber-900 text-[11px] font-semibold flex gap-2 items-start text-left">
+                  <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                  <span>Atenção: É necessário recolher as custas da intimação/ato de depoimento pessoal caso a gratuidade não tenha sido deferida no processo.</span>
+                </div>
+              )}
+
+              {/* Prova Pericial fields - MUST be vertical following guidelines */}
+              {evidenceType === 'Prova Pericial' && (
+                <div className="space-y-3 p-4 bg-gray-50 border border-gray-150 rounded-2xl animate-in slide-in-from-top-1 duration-200">
+                  <div className="space-y-1 text-left">
+                    <label className="text-[10px] uppercase font-bold text-gray-500 block">Tipo de Perícia</label>
+                    <select
+                      value={periciaType}
+                      onChange={(e) => {
+                        const pt = e.target.value;
+                        setPericiaType(pt);
+                        updatePrefilledValues('Prova Pericial', pt, hireTechnicalAssistant);
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500 cursor-pointer"
+                    >
+                      <option value="Trabalhista">Trabalhista</option>
+                      <option value="Bancária">Bancária</option>
+                      <option value="Consumerista">Consumerista</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1 text-left">
+                    <label className="text-[10px] uppercase font-bold text-gray-500 block">Se irá contratar assistente técnico</label>
+                    <div className="flex gap-4 mt-1">
+                      {['sim', 'nao'].map((val) => (
+                        <label key={val} className="flex items-center gap-1.5 cursor-pointer text-xs font-black uppercase text-gray-700">
+                          <input
+                            type="radio"
+                            name="hireTechnicalAssistantPJ"
+                            value={val}
+                            checked={hireTechnicalAssistant === val}
+                            onChange={() => {
+                              setHireTechnicalAssistant(val);
+                              updatePrefilledValues('Prova Pericial', periciaType, val);
+                            }}
+                            className="text-indigo-600 focus:ring-0"
+                          />
+                          <span>{val === 'sim' ? 'Sim' : 'Não'}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Identificador / Número do Documento */}
+              <div className="space-y-1 text-left">
+                <label className="text-[10px] uppercase font-bold text-gray-500 block">Identificador / Número do Documento / Prova</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Doc. PJ-05, Doc. Recorrente" 
+                  value={newDocNum}
+                  onChange={(e) => setNewDocNum(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Título do Documento */}
+              <div className="space-y-1 text-left">
+                <label className="text-[10px] uppercase font-bold text-gray-500 block">Título do Documento / Prova</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Balanço DRE, Extrato FGTS" 
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Descrição / Instruções p/ obtenção */}
+              <div className="space-y-1 text-left">
+                <label className="text-[10px] uppercase font-bold text-gray-500 block">Descrição e Instruções corporativas de Obtenção</label>
+                <textarea 
+                  placeholder="Descreva detalhes ou caminhos para obtenção ou preparação destas provas." 
+                  value={newDesc}
+                  onChange={(e) => setNewDesc(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500 min-h-[70px]"
+                />
+              </div>
+
+              {/* Justificativa para exigir a prova */}
+              <div className="space-y-1 text-left">
+                <label className="text-[10px] uppercase font-bold text-gray-500 block">Justificativa para exigir a prova</label>
+                <textarea 
+                  placeholder="Informe a fundamentação técnica ou justificativa jurídica para exigir esta prova." 
+                  value={newJustification}
+                  onChange={(e) => setNewJustification(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-250 rounded-xl text-xs font-semibold outline-none focus:border-indigo-500 min-h-[70px]"
+                />
+              </div>
+
+            </div>
+
+            {/* Modal Actions */}
+            <div className="p-4 bg-gray-50 border-t border-gray-150 flex gap-3 justify-end">
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="px-4 py-2 bg-white border border-gray-250 hover:bg-gray-100 rounded-xl text-xs font-bold text-gray-750 transition-colors cursor-pointer"
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={async (e) => {
+                  await handleAddEvidence(e);
+                  setIsModalOpen(false);
+                }}
+                type="button"
+                disabled={saving}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <PlusCircle size={14} />
+                <span>Confirmar e Adicionar</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
     </FluxoStepLayout>
   );
 }

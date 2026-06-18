@@ -333,5 +333,24 @@ service cloud.firestore {
     match /prestacaoContasDrafts/{draftId} {
       allow read, write: if isAdmin();
     }
+
+    // -------------------------------------------------------------------------
+    // RH COLLABORATORS COLLECTION (Recursos Humanos)
+    // -------------------------------------------------------------------------
+    match /rhCollaborators/{collabId} {
+      function isValidRHCollaborator(data) {
+        return data.keys().hasAll(['id', 'name', 'role', 'department', 'status']) &&
+               data.id is string &&
+               data.name is string && data.name.size() <= 200 &&
+               data.role is string && data.role.size() <= 200 &&
+               data.department is string && data.department.size() <= 100 &&
+               data.status is string && (data.status == 'Ativo' || data.status == 'Inativo') &&
+               (!data.keys().hasAny(['goals']) || data.goals is list);
+      }
+
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && isValidRHCollaborator(request.resource.data);
+      allow delete: if isAdmin();
+    }
   }
 }

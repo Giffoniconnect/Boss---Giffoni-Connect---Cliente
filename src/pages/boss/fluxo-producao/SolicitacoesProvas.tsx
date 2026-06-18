@@ -29,6 +29,9 @@ interface EvidenceRequest {
   justification?: string;
   documentType?: string;
   generatedFileName?: string;
+  evidenceType?: string;
+  periciaType?: string;
+  hireTechnicalAssistant?: string;
   createdAt: string;
   updatedAt: string;
 }

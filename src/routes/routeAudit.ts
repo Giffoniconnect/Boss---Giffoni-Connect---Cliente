@@ -9,6 +9,7 @@ export const expectedRoutes = [
   '/boss-giffoni-clientes/dashboard',
   '/boss-giffoni-clientes/central-controle',
   '/boss-giffoni-clientes/setores',
+  '/boss-giffoni-clientes/setores/dashboard.RH.Giffoni.Adv.Associados',
   '/boss-giffoni-clientes/configuracoes',
   '/boss-giffoni-clientes/giffoni-connect-atalhos',
 

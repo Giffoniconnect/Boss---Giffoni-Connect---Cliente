@@ -8,7 +8,7 @@ interface ColetaProvasSubetapasCardProps {
   caseId?: string;
   tipoPessoa?: 'PF' | 'PJ';
   wizardState?: any;
-  currentStep: 'procuracao' | 'declaracao' | 'documentos-minimos' | 'documentos-necessidade' | 'documentos-auditoria' | 'inicio';
+  currentStep: 'procuracao' | 'declaracao' | 'documentos-minimos' | 'documentos-necessidade' | 'documentos-consolidado' | 'documentos-auditoria' | 'inicio';
 }
 
 export default function ColetaProvasSubetapasCard({
@@ -73,43 +73,43 @@ export default function ColetaProvasSubetapasCard({
 
   const steps = [
     {
-      key: 'inicio',
-      label: 'Abertura de Protocolo Documental',
-      path: `${basePath}/card-iniciar-coleta-obrigatoria`,
-      icon: ClipboardCheck,
-      completed: true,
-    },
-    {
       key: 'procuracao',
-      label: 'Criar Procuração',
+      label: 'Criar Procuração - etapa 01',
       path: `${basePath}/solicitacao-procuracao-${suffix}`,
       icon: FileText,
       completed: wizardState?.step1_completed || false,
     },
     {
       key: 'declaracao',
-      label: 'Custas ou Pobreza',
+      label: 'Custas ou pobreza - etapa 02',
       path: `${basePath}/solicitacao-declaracao-${suffix}`,
       icon: Coins,
       completed: wizardState?.step2_completed || false,
     },
     {
       key: 'documentos-minimos',
-      label: 'Provas Mínimas Obrigatórias',
+      label: 'Provas mínimas obrigatórias - etapa 03',
       path: `${basePath}/solicitacao-documentos-minimos-${suffix}`,
       icon: CheckSquare,
       completed: wizardState?.step4_completed || false,
     },
     {
       key: 'documentos-necessidade',
-      label: 'Outras Provas do Cliente',
+      label: 'Outras provas do cliente - etapa 04',
       path: `${basePath}/solicitacao-documentos-necessidade-${suffix}`,
       icon: FolderOpen,
       completed: wizardState?.step5_completed || false,
     },
     {
+      key: 'documentos-consolidado',
+      label: 'Relatório de Provas Consolidado - etapa 05',
+      path: `${basePath}/solicitacao-documentos-consolidado-${suffix}`,
+      icon: ClipboardCheck,
+      completed: wizardState?.step5_consolidado_completed || false,
+    },
+    {
       key: 'documentos-auditoria',
-      label: 'Auditoria da Coleta de Provas',
+      label: 'Auditoria da coleta de Provas - etapa 06',
       path: `${basePath}/solicitacao-documentos-auditoria-${suffix}`,
       icon: ShieldCheck,
       completed: wizardState?.step6_completed || false,

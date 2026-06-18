@@ -464,6 +464,164 @@ export default function FluxoHome() {
                   );
                 }
 
+                // If this is Step 06 — Digitalização/Upload, and we have a loaded case, we must construct a highly stylized, detailed card!
+                if (step.id === 'digitalizacao-upload' && caseIdParam) {
+                  const isPJ = activeClientObj?.type === 'PJ';
+                  const wizardState = activeCaseObj?.solicitacoesProvasWizardState || {};
+                  
+                  const pfDocs = [
+                    { id: 'procuracao', field: 'procuracaoFiles' },
+                    { id: 'declaracao', field: 'declaracaoFiles' },
+                    { id: 'contrato', field: 'contratoFiles' },
+                    { id: 'rg', field: 'rgFiles' },
+                    { id: 'cpf', field: 'cpfFiles' },
+                    { id: 'residencia', field: 'residenciaFiles' }
+                  ];
+
+                  const pjDocs = [
+                    { id: 'cnpj', field: 'cnpjFiles' },
+                    { id: 'contratoSocial', field: 'contratoSocialFiles' },
+                    { id: 'enderecoSede', field: 'enderecoSedeFiles' },
+                    { id: 'procuracaoPJ', field: 'procuracaoFiles' },
+                    { id: 'declaracaoPJ', field: 'declaracaoFiles' },
+                    { id: 'contratoPJ', field: 'contratoFiles' },
+                    { id: 'rgSocio', field: 'rgSocioFiles' },
+                    { id: 'cpfSocio', field: 'cpfSocioFiles' },
+                    { id: 'residenciaSocio', field: 'residenciaSocioFiles' }
+                  ];
+
+                  const docsStep = isPJ ? pjDocs : pfDocs;
+                  const calculatedStatuses = docsStep.map(item => {
+                    const fileList = wizardState[item.field] || [];
+                    const isUploaded = fileList.length > 0;
+
+                    let received = 'nao';
+                    let receivedChannel = '';
+                    let autoDigitalize = '';
+
+                    if (item.id === 'procuracao' || item.id === 'procuracaoPJ') {
+                      received = wizardState.q1_3 || 'nao';
+                      receivedChannel = wizardState.q1_como_p_recebida || '';
+                      autoDigitalize = wizardState.q1_deseja_digitalizar_p || '';
+                    } else if (item.id === 'declaracao' || item.id === 'declaracaoPJ') {
+                      received = wizardState.q2_4 || 'nao';
+                      receivedChannel = wizardState.q2_como_d_recebida || '';
+                      autoDigitalize = wizardState.q2_deseja_digitalizar_d || '';
+                    } else if (item.id === 'contrato' || item.id === 'contratoPJ') {
+                      received = wizardState.q3_4 || 'nao';
+                      receivedChannel = wizardState.q3_como_c_recebida || '';
+                      autoDigitalize = wizardState.q3_deseja_digitalizar_c || '';
+                    } else if (item.id === 'rg' || item.id === 'rgSocio') {
+                      received = wizardState.q4_rg === 'sim' || (wizardState.rgFiles?.length > 0) ? 'sim' : 'nao';
+                      receivedChannel = wizardState.rgFiles?.length > 0 ? 'whatsapp' : 'fisico';
+                      autoDigitalize = wizardState.q4_rg_digitalizar_agora || '';
+                    } else if (item.id === 'cpf' || item.id === 'cpfSocio') {
+                      received = wizardState.q4_cpf === 'sim' || (wizardState.cpfFiles?.length > 0) ? 'sim' : 'nao';
+                      receivedChannel = wizardState.cpfFiles?.length > 0 ? 'whatsapp' : 'fisico';
+                      autoDigitalize = wizardState.q4_cpf_digitalizar_agora || '';
+                    } else if (item.id === 'residencia' || item.id === 'residenciaSocio') {
+                      received = wizardState.q4_residencia === 'sim' || (wizardState.residenciaFiles?.length > 0) ? 'sim' : 'nao';
+                      receivedChannel = wizardState.residenciaFiles?.length > 0 ? 'whatsapp' : 'fisico';
+                      autoDigitalize = wizardState.q4_residencia_digitalizar_agora || '';
+                    } else {
+                      received = fileList.length > 0 ? 'sim' : 'nao';
+                      receivedChannel = 'whatsapp';
+                      autoDigitalize = 'sim';
+                    }
+
+                    let tagDigitalizacao: 'digitalizado' | 'pendente' | 'n_a' = 'n_a';
+                    if (isUploaded) {
+                      tagDigitalizacao = 'digitalizado';
+                    } else if (received === 'sim') {
+                      if (receivedChannel === 'fisico' && autoDigitalize === 'nao') {
+                        tagDigitalizacao = 'pendente';
+                      } else {
+                        tagDigitalizacao = 'digitalizado';
+                      }
+                    }
+
+                    let tagUpload: 'concluido' | 'pendente' | 'aguardando' = 'aguardando';
+                    if (isUploaded) {
+                      tagUpload = 'concluido';
+                    } else if (received === 'sim') {
+                      tagUpload = 'pendente';
+                    }
+
+                    return { digitalizacao: tagDigitalizacao, upload: tagUpload };
+                  });
+
+                  const totalCount = docsStep.length;
+                  const countDig = calculatedStatuses.filter(s => s.digitalizacao === 'digitalizado').length;
+                  const countUp = calculatedStatuses.filter(s => s.upload === 'concluido').length;
+                  const countPendingUp = calculatedStatuses.filter(s => s.upload === 'pendente').length;
+                  const numFaltaDig = totalCount - countDig;
+
+                  const colorClass = getStepColorBg(step.id);
+
+                  return (
+                    <div
+                      key={step.id}
+                      onClick={() => handleNavigateToStep(step.id)}
+                      className="bg-white border-2 border-sky-400 rounded-[2rem] p-5 shadow-sm relative overflow-hidden group flex flex-col justify-between hover:shadow-md transition-all min-h-[225px] cursor-pointer"
+                    >
+                      <div className="space-y-3.5 text-left">
+                        <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${colorClass}`}>
+                              <Icon size={16} />
+                            </div>
+                            <div>
+                              <span className="text-[8.5px] font-mono font-black text-gray-400 block h-3 uppercase">
+                                ETAPA {String(step.order).padStart(2, '0')}
+                              </span>
+                              <h5 className="font-extrabold text-gray-900 text-xs mt-0.5 tracking-tight">
+                                {step.label}
+                              </h5>
+                            </div>
+                          </div>
+                          
+                          <span className="text-[10px] font-black font-mono text-sky-700 bg-sky-50 px-2 py-0.5 rounded-lg shrink-0">
+                            {Math.round((countUp / totalCount) * 100)}%
+                          </span>
+                        </div>
+
+                        <div className="text-[11px] text-gray-500 leading-relaxed font-semibold space-y-1 font-sans">
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-400">Total de Documentos:</span>
+                            <span className="font-bold text-gray-800 font-mono">{totalCount}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-emerald-600">✓ Já Digitalizados:</span>
+                            <span className="font-bold text-emerald-700 font-mono">{countDig}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-amber-600">⚡ Falta Digitalizar:</span>
+                            <span className="font-bold text-amber-700 font-mono">{numFaltaDig}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-indigo-650">⬆ Upload Concluído:</span>
+                            <span className="font-bold text-indigo-700 font-mono">{countUp}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-rose-600">⚠ Pendentes de Upload:</span>
+                            <span className="font-semibold text-rose-700 font-mono">{countPendingUp}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-2">
+                        <button
+                          type="button"
+                          className="w-full py-2 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-xl text-center text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <span>Gerenciar Digitalizações</span>
+                          <ArrowRight size={10} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
                 // Normal / other steps
                 const colorClass = getStepColorBg(step.id);
                 return (

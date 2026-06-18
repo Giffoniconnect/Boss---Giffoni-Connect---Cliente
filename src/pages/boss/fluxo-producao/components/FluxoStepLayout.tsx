@@ -9,7 +9,7 @@ interface FluxoStepLayoutProps {
   stepName: string;
   caseId?: string;
   statusText?: string;
-  coletaSubetapasStep?: 'procuracao' | 'declaracao' | 'documentos-minimos' | 'documentos-necessidade' | 'documentos-auditoria' | 'inicio';
+  coletaSubetapasStep?: 'procuracao' | 'declaracao' | 'documentos-minimos' | 'documentos-necessidade' | 'documentos-consolidado' | 'documentos-auditoria' | 'inicio';
   wizardState?: any;
   tipoPessoa?: 'PF' | 'PJ';
   tipoProducaoSubetapasStep?: 'natureza' | 'judicial' | 'extrajudicial' | 'form';

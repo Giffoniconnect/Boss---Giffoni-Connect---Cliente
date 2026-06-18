@@ -56,6 +56,7 @@ import {
   Share2,
   FolderOpen,
   FileCheck,
+  Mail,
   X
 } from 'lucide-react';
 
@@ -78,6 +79,15 @@ export default function EditarPortalCliente() {
   } else if (location.pathname.includes('/prestar.contas.recibo.e.envio')) {
     prestacaoStep = 3;
   }
+
+  // Selected client & loading states
+  const [selectedClient, setSelectedClient] = useState<any | null>(null);
+  const [clientCases, setClientCases] = useState<any[]>([]);
+  const [selectedCase, setSelectedCase] = useState<any | null>(null);
+  const [loadingClient, setLoadingClient] = useState(true);
+  const [loadingCaseDetails, setLoadingCaseDetails] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   // Prestar Contas State Management
   const [targetCaseId, setTargetCaseId] = useState('');
@@ -431,15 +441,6 @@ export default function EditarPortalCliente() {
       }
     }
   }, [valorRecebidoTotal, feesSystem, valorContrato, honorarioExitoPercentual]);
-
-  // Selected client & loading states
-  const [selectedClient, setSelectedClient] = useState<any | null>(null);
-  const [clientCases, setClientCases] = useState<any[]>([]);
-  const [selectedCase, setSelectedCase] = useState<any | null>(null);
-  const [loadingClient, setLoadingClient] = useState(true);
-  const [loadingCaseDetails, setLoadingCaseDetails] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   // States for Ficha de Identificação Cadastral Navigation & Visibility
   const [fichaActiveTab, setFichaActiveTab] = useState<'contratante' | 'endereco' | 'socios' | 'bancarios' | 'acesso'>('contratante');

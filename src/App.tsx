@@ -98,6 +98,7 @@ const BossLogin = React.lazy(() => import('./pages/boss/Login'));
 const Dashboard = React.lazy(() => import('./pages/boss/Dashboard'));
 const CentralControle = React.lazy(() => import('./pages/boss/CentralControle'));
 const Setores = React.lazy(() => import('./pages/boss/Setores'));
+const RhDashboard = React.lazy(() => import('./pages/boss/RhDashboard'));
 const Configuracoes = React.lazy(() => import('./pages/boss/Configuracoes'));
 const ClientesList = React.lazy(() => import('./pages/boss/ClientesList'));
 const ClienteDetail = React.lazy(() => import('./pages/boss/ClienteDetail'));
@@ -166,6 +167,8 @@ const DocumentosNecessidadePF = React.lazy(() => import('./pages/boss/fluxo-prod
 const DocumentosNecessidadePJ = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/DocumentosNecessidadePJ'));
 const DocumentosAuditoriaPF = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/DocumentosAuditoriaPF'));
 const DocumentosAuditoriaPJ = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/DocumentosAuditoriaPJ'));
+const RelatorioConsolidadoPF = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/RelatorioConsolidadoPF'));
+const RelatorioConsolidadoPJ = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/RelatorioConsolidadoPJ'));
 
 // Leads / Marketing step views
 const BossLeadsPrivate = React.lazy(() => import('./pages/boss/leads/BossLeadsPrivate'));
@@ -210,6 +213,7 @@ const bossRouter = createBrowserRouter(
       <Route path="/boss-giffoni-clientes/dashboard" element={<SafeRoute children={<Dashboard />} />} />
       <Route path="/boss-giffoni-clientes/central-controle" element={<SafeRoute children={<CentralControle />} />} />
       <Route path="/boss-giffoni-clientes/setores" element={<SafeRoute children={<Setores />} />} />
+      <Route path="/boss-giffoni-clientes/setores/dashboard.RH.Giffoni.Adv.Associados" element={<SafeRoute children={<RhDashboard />} />} />
       <Route path="/boss-giffoni-clientes/configuracoes" element={<SafeRoute children={<Configuracoes />} />} />
       <Route path="/boss-giffoni-clientes/giffoni-connect-atalhos" element={<SafeRoute children={<CentralAtalhos />} />} />
 
@@ -292,6 +296,9 @@ const bossRouter = createBrowserRouter(
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacoes-informacoes" element={<SafeRoute children={<SolicitacoesInformacoes />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacoes-provas" element={<SafeRoute children={<SolicitacoesProvas />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/digitalizacao-upload" element={<SafeRoute children={<DigitalizacaoUpload />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/digitalizacao-upload/responsavel.pela.digitalizacao.e.upload" element={<SafeRoute children={<DigitalizacaoUpload />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/digitalizacao-upload/setor.de.digitalizacao.e.upload" element={<SafeRoute children={<DigitalizacaoUpload />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/digitalizacao-upload/auditoria.do.setor.de.digitalizacao.e.upload" element={<SafeRoute children={<DigitalizacaoUpload />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/card-iniciar-coleta-obrigatoria" element={<SafeRoute children={<CardIniciarColeta />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/financeiro" element={<SafeRoute children={<FinanceiroFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/edrp" element={<SafeRoute children={<EDRPFluxo />} />} />
@@ -320,6 +327,8 @@ const bossRouter = createBrowserRouter(
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-necessidade-PJ" element={<SafeRoute children={<DocumentosNecessidadePJ />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-auditoria-PF" element={<SafeRoute children={<DocumentosAuditoriaPF />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-auditoria-PJ" element={<SafeRoute children={<DocumentosAuditoriaPJ />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-consolidado-PF" element={<SafeRoute children={<RelatorioConsolidadoPF />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-consolidado-PJ" element={<SafeRoute children={<RelatorioConsolidadoPJ />} />} />
 
       {/* ========================================================
           GRUPO 7 — LEADS / MARKETING:

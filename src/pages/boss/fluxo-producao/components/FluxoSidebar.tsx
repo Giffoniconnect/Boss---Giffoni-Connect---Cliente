@@ -79,7 +79,9 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
           else if (s.id === 'dados-caso') shortLabel = 'Entrevista (5W2H)';
           else if (s.id === 'tipo-producao') shortLabel = 'Tipo de Serviço';
           else if (s.id === 'solicitacoes-provas') shortLabel = 'Coleta de Provas';
-          else if (s.id === 'solicitacoes-informacoes') shortLabel = 'Info. Complementares';
+          else if (s.id === 'digitalizacao-upload') shortLabel = 'Digitalização & Upload';
+          else if (s.id === 'solicitacoes-informacoes') shortLabel = 'Solicitar ➕ informações';
+          else if (s.id === 'solicitacoes-provas-adicionais') shortLabel = 'Solicitar ➕ Provas';
           else if (s.id === 'financeiro') shortLabel = 'Financeiro';
           else if (s.id === 'edrp') shortLabel = 'Estruturação (EDRP)';
           else if (s.id === 'pre-peticionamento-ia') shortLabel = 'Pré-Peticionamento';
@@ -221,6 +223,11 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
         return 'complete';
       }
       return (caseObj.infoStatus === 'concluido' || caseObj.infoCompleted) ? 'complete' : 'uninitiated';
+    }
+
+    if (stepId === 'solicitacoes-provas-adicionais') {
+      if (!caseObj) return 'uninitiated';
+      return (caseObj.solicitacoesProvasAdicionaisCompleted || caseObj.evidenceStatus === 'concluido') ? 'complete' : 'uninitiated';
     }
 
     if (stepId === 'financeiro') {

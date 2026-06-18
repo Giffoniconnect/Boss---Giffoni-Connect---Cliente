@@ -5299,7 +5299,9 @@ app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
       assignee,
       previousTodoistTaskId,
       previousTodoistTaskUrl,
-      isDuplicateCreationAttempt
+      isDuplicateCreationAttempt,
+      parentId,
+      parent_id
     } = req.body || {};
 
     if (isDuplicateCreationAttempt) {
@@ -5377,6 +5379,11 @@ app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
 
     if (!isInbox) {
       todoistPayload.project_id = projectId;
+    }
+
+    const finalParentId = parentId || parent_id;
+    if (finalParentId && String(finalParentId).trim()) {
+      todoistPayload.parent_id = String(finalParentId).trim();
     }
 
     addLog("info", "TODOIST_CREATE_STARTED", "Enviando tarefa para a API real do Todoist v1.", {

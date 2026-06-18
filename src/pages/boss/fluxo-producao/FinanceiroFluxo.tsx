@@ -2934,12 +2934,13 @@ export default function FinanceiroFluxo() {
                       questionNumber="3.3"
                     />
 
-                    {["q3_4", "q3_5", "q3_6", "q3_7"].map((f, i) => {
+                    {["q3_4", "q3_5", "q3_6", "q3_7", "q3_8"].map((f, i) => {
                       const labels = [
-                        "3.4 O cliente assinou o contrato?",
-                        "3.5 Você solicitou a digitalização do contrato?",
+                        "3.4 O cliente assinou o contrato 🖋️?",
+                        "3.5 O advogado assinou o contrato 🖋️?",
                         "3.6 Você recebeu o contrato digitalizado?",
-                        "3.7 O financeiro foi informado?",
+                        "3.7 Você recebeu o contrato digitalizado 🖨️ ?",
+                        "3.8 O financeiro foi informado?",
                       ];
                       return (
                         <div key={f} className="space-y-1">
@@ -3262,7 +3263,7 @@ export default function FinanceiroFluxo() {
 
                             <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
                               <span className="text-gray-500 font-bold">
-                                3.4 Assinado pelo Cliente?
+                                3.4 Assinado pelo Cliente 🖋️?
                               </span>
                               <span
                                 className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
@@ -3277,7 +3278,7 @@ export default function FinanceiroFluxo() {
 
                             <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
                               <span className="text-gray-500 font-bold">
-                                3.5 Solicitou Digitalização?
+                                3.5 Assinado pelo Advogado 🖋️?
                               </span>
                               <span
                                 className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
@@ -3307,7 +3308,7 @@ export default function FinanceiroFluxo() {
 
                             <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
                               <span className="text-gray-500 font-bold">
-                                3.7 Financeiro Informado?
+                                3.7 Recebeu o Contrato Digitalizado 🖨️?
                               </span>
                               <span
                                 className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
@@ -3317,6 +3318,21 @@ export default function FinanceiroFluxo() {
                                 }`}
                               >
                                 {wizardState.q3_7 || "não preenchido"}
+                              </span>
+                            </div>
+
+                            <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                              <span className="text-gray-500 font-bold">
+                                3.8 Financeiro Informado?
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                                  wizardState.q3_8 === "sim"
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    : "bg-rose-50 text-rose-700 border border-rose-200"
+                                }`}
+                              >
+                                {wizardState.q3_8 || "não preenchido"}
                               </span>
                             </div>
                           </>

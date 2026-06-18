@@ -484,6 +484,96 @@ export default function DeclaracaoPF() {
 
   const [uploading, setUploading] = React.useState(false);
 
+  const CustomFileUploadBox = ({ field, prefix, buttonLabel }: { field: string; prefix: string; buttonLabel: string }) => {
+    const files = wizardState[field] || [];
+    const [localUploading, setLocalUploading] = React.useState(false);
+
+    return (
+      <div className="space-y-2 mt-1">
+        <label className="group flex flex-col items-center justify-center border border-dashed border-gray-300 hover:border-emerald-500 rounded-xl p-3 bg-gray-50/50 hover:bg-gray-50 transition-all cursor-pointer">
+          {localUploading ? (
+            <div className="w-5 h-5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin mb-1"></div>
+          ) : (
+            <UploadCloud className="text-gray-400 group-hover:text-emerald-600 mb-1" size={20} />
+          )}
+          <span className="text-[11px] font-bold text-gray-750">
+            {localUploading ? "Enviando para o Google Drive..." : buttonLabel}
+          </span>
+          <input 
+            type="file" 
+            className="hidden" 
+            disabled={localUploading}
+            onChange={async (e) => {
+              if (e.target.files && e.target.files.length > 0) {
+                const file = e.target.files[0];
+                const originalName = file.name;
+                const sizeStr = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+                const lastDotIndex = originalName.lastIndexOf('.');
+                const extension = lastDotIndex !== -1 ? originalName.substring(lastDotIndex) : '';
+                const finalName = `${prefix} - ${clientName || 'Cliente'}${extension}`;
+
+                setLocalUploading(true);
+                setError(null);
+                try {
+                  const base64Promise = new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = err => reject(err);
+                  });
+                  const base64 = await base64Promise;
+
+                  const targetFolder = (driveFolderId || '1YUl0Z3hbptBaXfdp0vSnvGTQv0ChsPMs').trim();
+
+                  const response = await fetch('/api/google-docs/upload-file', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      folderId: targetFolder,
+                      fileName: finalName,
+                      fileBase64: base64,
+                      mimeType: file.type,
+                      googleAccessToken: googleAccessToken || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken')
+                    })
+                  });
+
+                  const data = await response.json();
+                  if (!response.ok || !data.success) {
+                    throw new Error(data.errorMessage || 'Falha ao enviar arquivo para o Google Drive');
+                  }
+
+                  await addWizardFile(field, finalName, sizeStr);
+                  setSuccess("Arquivo enviado e salvo no Google Drive: " + finalName);
+                  setTimeout(() => setSuccess(null), 5000);
+                } catch (err: any) {
+                  setError(err.message || 'Erro ao realizar upload do arquivo');
+                } finally {
+                  setLocalUploading(false);
+                }
+              }
+            }}
+          />
+        </label>
+        {files.length > 0 && (
+          <div className="space-y-1">
+            {files.map((f: any, idx: number) => (
+              <div key={idx} className="flex items-center justify-between p-2 bg-emerald-50 border border-emerald-150 rounded-xl text-xs">
+                <span className="truncate font-semibold text-emerald-950 flex items-center gap-1">
+                  <FileText size={12} /> {f.name} <span className="text-[10px] text-emerald-400 font-normal">({f.size})</span>
+                </span>
+                <button type="button" onClick={() => removeWizardFile(field, idx)} className="text-rose-600 hover:bg-rose-100 p-1 rounded-lg">
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const FileUploadBox = ({ field }: { field: string }) => {
     const files = wizardState[field] || [];
     return (
@@ -653,26 +743,168 @@ export default function DeclaracaoPF() {
             <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-2xs space-y-5">
               
               <div className="space-y-1 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
-                <p className="text-xs font-extrabold text-gray-800">2.1 O cliente precisará de gratuidade da justiça (Corte Isenção)?</p>
-                <div className="flex gap-4 mt-2">
-                  {['sim', 'nao'].map(o => (
-                    <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs font-black uppercase text-gray-700">
-                      <input 
-                        type="radio" 
-                        name="q2_1" 
-                        checked={wizardState.q2_1 === o} 
-                        onChange={() => saveWizardStateUpdate({ q2_1: o })} 
-                        className="text-indigo-600"
-                      />
-                      <span>{o === 'sim' ? 'Sim (Exige Declaração) ✅' : 'Não (Custas Pagas) ❌'}</span>
-                    </label>
-                  ))}
+                <p className="text-xs font-extrabold text-gray-800">2.1 - O Cliente tem direito a Gratuidade ou 💲 Recolherá custas 💲</p>
+                <div className="flex flex-col gap-2.5 mt-2">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-xs font-black uppercase text-gray-700">
+                    <input 
+                      type="radio" 
+                      name="q2_1" 
+                      checked={wizardState.q2_1 === 'sim'} 
+                      onChange={() => saveWizardStateUpdate({ q2_1: 'sim' })} 
+                      className="text-indigo-600"
+                    />
+                    <span>Direito a Gratuidade (Declaração de Pobreza) ✅</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer text-xs font-black uppercase text-gray-700">
+                    <input 
+                      type="radio" 
+                      name="q2_1" 
+                      checked={wizardState.q2_1 === 'nao'} 
+                      onChange={() => saveWizardStateUpdate({ q2_1: 'nao' })} 
+                      className="text-indigo-600"
+                    />
+                    <span>Recolher Custas 💰</span>
+                  </label>
                 </div>
               </div>
 
               {wizardState.q2_1 === 'nao' && (
-                <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl text-emerald-900 text-xs font-semibold animate-in fade-in">
-                  O cliente optará pelo pagamento de taxas ordinárias. Deste modo, o caso fiscal/judicial está isento de declaração regulamentar de pobreza. Podemos seguir à próxima fase.
+                <div className="space-y-5 border-l-2 border-emerald-200 pl-4 animate-in fade-in duration-200">
+                  
+                  {/* 2.2.1 - Você gerou a GUIA DE CUSTAS do cliente? */}
+                  <div className="space-y-1 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
+                    <p className="text-xs font-extrabold text-gray-800 font-sans">2.2.1 - Você gerou a GUIA DE CUSTAS do cliente?</p>
+                    <div className="flex flex-col gap-2 mt-1.5">
+                      {['sim', 'nao'].map(o => (
+                        <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
+                          <input 
+                            type="radio" 
+                            name="q2_recolher_custas_gerou_guia" 
+                            checked={wizardState.q2_recolher_custas_gerou_guia === o} 
+                            onChange={() => saveWizardStateUpdate({ q2_recolher_custas_gerou_guia: o })} 
+                          />
+                          <span>{o === 'sim' ? 'sim ✅' : 'não ❌'}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 2.2.2 - Como você entregará o documento ao cliente? */}
+                  {wizardState.q2_recolher_custas_gerou_guia === 'sim' && (
+                    <div className="space-y-2 animate-in fade-in duration-300 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
+                      <p className="text-xs font-extrabold text-gray-800 font-sans">2.2.2 - Como você entregará o documento ao cliente?</p>
+                      <div className="flex flex-col gap-2 mt-1.5">
+                        {[
+                          { key: 'fisica', label: 'Física/Impressa' },
+                          { key: 'whatsapp', label: 'WhatsApp' },
+                          { key: 'email', label: 'E-mail' },
+                          { key: 'outro', label: 'Outro' }
+                        ].map((item) => {
+                          const isActive = wizardState.q2_recolher_custas_como_entregara === item.key;
+                          return (
+                            <label key={item.key} className="flex items-center gap-1.5 cursor-pointer text-xs font-black uppercase text-gray-700">
+                              <input
+                                type="radio"
+                                name="q2_recolher_custas_como_entregara"
+                                checked={isActive}
+                                onChange={() => saveWizardStateUpdate({ q2_recolher_custas_como_entregara: item.key })}
+                                className="text-indigo-600"
+                              />
+                              <span>{item.label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+
+                      {wizardState.q2_recolher_custas_como_entregara === 'outro' && (
+                        <div className="mt-2 text-xs">
+                          <input
+                            type="text"
+                            placeholder="Especifique o outro meio de entrega..."
+                            value={wizardState.q2_recolher_custas_como_entregara_outro || ''}
+                            onChange={(e) => saveWizardStateUpdate({ q2_recolher_custas_como_entregara_outro: e.target.value })}
+                            className="w-full max-w-md px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:outline-hidden transition-all shadow-3xs"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 2.2.3 - Guardar a Guia de custas na Pasta de destino */}
+                  {wizardState.q2_recolher_custas_gerou_guia === 'sim' && wizardState.q2_recolher_custas_como_entregara && (
+                    <div className="space-y-2 animate-in fade-in duration-300 bg-emerald-500/5 p-4 rounded-2xl border border-emerald-100">
+                      <p className="text-xs font-black text-emerald-950 uppercase tracking-wider block">
+                        2.2.3 - Guardar a Guia de custas na Pasta de destino
+                      </p>
+                      <p className="text-[11px] text-gray-400 font-sans leading-none pb-1">
+                        Upload automático na pasta de destino com renomeação automática para: <strong className="font-mono text-emerald-850">doc. 02.1 - Guia de Custas</strong>
+                      </p>
+                      <CustomFileUploadBox 
+                        field="guiaCustasFiles" 
+                        prefix="doc. 02.1 - Guia de Custas"
+                        buttonLabel="Anexar Guia de Custas (PDF/Imagem)"
+                      />
+                    </div>
+                  )}
+
+                  {/* 2.2.4 - Como o cliente te enviou o comprovante de pagamento das custas? */}
+                  {wizardState.q2_recolher_custas_gerou_guia === 'sim' && wizardState.q2_recolher_custas_como_entregara && (
+                    <div className="space-y-2 animate-in fade-in duration-300 bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
+                      <p className="text-xs font-extrabold text-gray-800 font-sans">2.2.4 - Como o cliente te enviou o comprovante de pagamento das custas?</p>
+                      <div className="flex flex-col gap-2 mt-1.5">
+                        {[
+                          { key: 'fisico', label: 'Físico' },
+                          { key: 'whatsapp', label: 'What’s App' },
+                          { key: 'email', label: 'Email' },
+                          { key: 'outro', label: 'Outro' }
+                        ].map((item) => {
+                          const isActive = wizardState.q2_recolher_custas_comprovante_enviado_como === item.key;
+                          return (
+                            <label key={item.key} className="flex items-center gap-1.5 cursor-pointer text-xs font-black uppercase text-gray-700">
+                              <input
+                                type="radio"
+                                name="q2_recolher_custas_comprovante_enviado_como"
+                                checked={isActive}
+                                onChange={() => saveWizardStateUpdate({ q2_recolher_custas_comprovante_enviado_como: item.key })}
+                                className="text-indigo-600"
+                              />
+                              <span>{item.label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+
+                      {wizardState.q2_recolher_custas_comprovante_enviado_como === 'outro' && (
+                        <div className="mt-2 text-xs">
+                          <input
+                            type="text"
+                            placeholder="Especifique o outro meio de recebimento..."
+                            value={wizardState.q2_recolher_custas_comprovante_enviado_como_outro || ''}
+                            onChange={(e) => saveWizardStateUpdate({ q2_recolher_custas_comprovante_enviado_como_outro: e.target.value })}
+                            className="w-full max-w-md px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold focus:outline-hidden transition-all shadow-3xs"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 2.2.5 - Guardar o COMPROVANTE DE PAGAMENTO da Guia de custas na Pasta de destino */}
+                  {wizardState.q2_recolher_custas_gerou_guia === 'sim' && wizardState.q2_recolher_custas_como_entregara && wizardState.q2_recolher_custas_comprovante_enviado_como && (
+                    <div className="space-y-2 animate-in fade-in duration-300 bg-emerald-500/5 p-4 rounded-2xl border border-emerald-100">
+                      <p className="text-xs font-black text-emerald-950 uppercase tracking-wider block">
+                        2.2.5 - Guardar o COMPROVANTE DE PAGAMENTO da Guia de custas na Pasta de destino
+                      </p>
+                      <p className="text-[11px] text-gray-400 font-sans leading-none pb-1">
+                        Upload automático na pasta de destino com renomeação automática para: <strong className="font-mono text-emerald-850">doc. 02.2 - comprovante de pagamento Guia de Custas</strong>
+                      </p>
+                      <CustomFileUploadBox 
+                        field="comprovanteGuiaCustasFiles" 
+                        prefix="doc. 02.2 - comprovante de pagamento Guia de Custas"
+                        buttonLabel="Anexar Comprovante de Pagamento (PDF/Imagem)"
+                      />
+                    </div>
+                  )}
+
                 </div>
               )}
 
@@ -829,7 +1061,7 @@ export default function DeclaracaoPF() {
 
                       {wizardState.q2_3 && wizardState.q2_3.length > 0 && (
                         <div className="space-y-1 animate-in fade-in duration-300">
-                          <p className="text-xs font-extrabold text-gray-800">2.4 Você recebeu a declaração do cliente?</p>
+                          <p className="text-xs font-extrabold text-gray-800">2.4 Você recebeu a declaração do cliente ASSINADA 🖊️?</p>
                           <div className="flex gap-4 mt-1.5">
                             {['sim', 'nao'].map(o => (
                               <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-705">
@@ -928,7 +1160,13 @@ export default function DeclaracaoPF() {
               <div className="pt-4 border-t border-gray-100 flex items-center justify-end">
                 <button
                   type="button"
-                  disabled={!wizardState.q2_1 || (wizardState.q2_1 === 'sim' && !wizardState.q2_2) || saving}
+                  disabled={
+                    !wizardState.q2_1 || 
+                    (wizardState.q2_1 === 'sim' && !wizardState.q2_2) || 
+                    (wizardState.q2_1 === 'nao' && !wizardState.q2_recolher_custas_gerou_guia) || 
+                    (wizardState.q2_1 === 'nao' && wizardState.q2_recolher_custas_gerou_guia === 'sim' && (!wizardState.q2_recolher_custas_como_entregara || !wizardState.q2_recolher_custas_comprovante_enviado_como)) ||
+                    saving
+                  }
                   onClick={handleNextPhase}
                   className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer disabled:opacity-50"
                 >

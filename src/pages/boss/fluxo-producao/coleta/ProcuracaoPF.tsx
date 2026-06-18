@@ -1457,7 +1457,7 @@ export default function ProcuracaoPF() {
 
                   {wizardState.q1_2 && wizardState.q1_2.length > 0 && (
                     <div className="space-y-1 animate-in fade-in duration-300">
-                      <p className="text-xs font-extrabold text-gray-800">1.3 Você recebeu a procuração do cliente?</p>
+                      <p className="text-xs font-extrabold text-gray-800">1.3 Você recebeu a procuração do cliente ASSINADA🖊️?</p>
                       <div className="flex gap-4 mt-1.5">
                         {['sim', 'nao'].map(o => (
                           <label key={o} className="flex items-center gap-1.5 cursor-pointer text-xs uppercase font-extrabold text-gray-750">
