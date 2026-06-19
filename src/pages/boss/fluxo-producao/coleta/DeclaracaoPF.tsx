@@ -673,16 +673,13 @@ export default function DeclaracaoPF() {
         
         {/* HEADER PANEL */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-5">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
-                Etapa 2 — Pessoa Física (PF)
-              </span>
-              <span className="text-xs text-gray-400">Cliente: <strong>{clientName}</strong></span>
-            </div>
-            <h1 className="text-lg font-black text-gray-900 tracking-tight leading-none pt-1">
-              Declaração de Hipossuficiência
+          <div className="space-y-1.5">
+            <h1 className="text-lg font-black text-gray-900 tracking-tight leading-none">
+              Subetapa 2 - Custas ou Declaração de Hipossuficiência
             </h1>
+            <div className="text-xs text-gray-400">
+              Cliente: <strong>{clientName}</strong>
+            </div>
           </div>
           <button
             type="button"

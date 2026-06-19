@@ -1838,16 +1838,33 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
     addLog("PLACEHOLDER_REPLACEMENT_STARTED", { googleDocsId });
     const docs = google.docs({ version: "v1", auth: jwtClient });
     
-    // Prepare replace requests
-    const replaceRequests = Object.entries(placeholdersToUse).map(([key, val]) => ({
-      replaceAllText: {
-        containsText: {
-          text: key,
-          matchCase: true
-        },
-        replaceText: String(val)
+    // Prepare replace requests with variants (e.g. key, <<key>>, {{key}})
+    const replaceRequests: any[] = [];
+    for (const [key, val] of Object.entries(placeholdersToUse)) {
+      const valueStr = String(val);
+      // Main key
+      replaceRequests.push({
+        replaceAllText: {
+          containsText: { text: key, matchCase: true },
+          replaceText: valueStr
+        }
+      });
+      // Variants if key doesn't have delimiters
+      if (!key.startsWith("<<") && !key.startsWith("{{")) {
+        replaceRequests.push({
+          replaceAllText: {
+            containsText: { text: `<<${key}>>`, matchCase: true },
+            replaceText: valueStr
+          }
+        });
+        replaceRequests.push({
+          replaceAllText: {
+            containsText: { text: `{{${key}}}`, matchCase: true },
+            replaceText: valueStr
+          }
+        });
       }
-    }));
+    }
 
     if (replaceRequests.length > 0) {
       await docs.documents.batchUpdate({

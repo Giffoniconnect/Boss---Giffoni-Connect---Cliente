@@ -62,113 +62,97 @@ export default function RelatorioConsolidadoPF() {
     const targetClientId = client?.id || caseObj?.clientId || "";
     const nomeCompleto = client?.personalDados?.pf_nomeCompleto || clientName || "Cliente";
 
-    let listText = "";
-    listText += "=== RELATÓRIO CONSOLIDADO DE SOLICITAÇÃO DE DOCUMENTOS (PF) ===\n\n";
-    listText += "1. DOCUMENTOS BÁSICOS:\n";
-    listText += `• RG (Responsabilidade: Cliente)\n`;
-    listText += `• CPF (Responsabilidade: Cliente)\n`;
-    listText += `• Comprovante de residência (Responsabilidade: Cliente)\n`;
-    listText += `• Certidão de Casamento/Nascimento (Responsabilidade: Cliente)\n`;
-    listText += `• Procuração Ad Judicia (Responsabilidade: Cliente & Escritório):\n`;
-    listText += `  - Procuração foi gerada? ${wizardState?.q1_1 === 'sim' ? 'Sim' : 'Não'}\n`;
-    listText += `  - Entregue ao cliente: ${Array.isArray(wizardState?.q1_2) && wizardState.q1_2.length > 0 ? 'Sim' : 'Não'}\n`;
-    listText += `  - Assinado pelo cliente?: ${wizardState?.q1_3 === 'sim' ? 'Sim' : 'Não'}\n`;
-    listText += `  - Meio de recebimento da procuração: ${wizardState?.q1_como_p_recebida === 'fisico' ? 'Físico' : (wizardState?.q1_como_p_recebida || 'Não informado')}\n`;
-    listText += `  - Digitalização ou Upload realizado: ${(wizardState?.procuracaoFiles && wizardState.procuracaoFiles.length > 0) ? 'Sim' : 'Não'}\n`;
-
-    if (wizardState?.q2_1 === 'sim') {
-      listText += `• Declaração de Pobreza/Hipossuficiência (Responsabilidade: Cliente):\n`;
-      listText += `  - Declaração de Pobreza foi gerada?: ${wizardState?.q2_2 === 'sim' ? 'Sim' : 'Não'}\n`;
-      listText += `  - Entregue ao cliente: ${Array.isArray(wizardState?.q2_3) && wizardState.q2_3.length > 0 ? 'Sim' : 'Não'}\n`;
-      listText += `  - Assinado pelo cliente?: ${wizardState?.q2_4 === 'sim' ? 'Sim' : 'Não'}\n`;
-      listText += `  - Meio de recebimento: ${wizardState?.q2_como_d_recebida || 'Não informado'}\n`;
-      listText += `  - Digitalização realizada: ${(wizardState?.declaracaoFiles && wizardState.declaracaoFiles.length > 0) ? 'Sim' : 'Não'}\n`;
-    } else {
-      listText += `• Guia de Custas e Recolhimento de Taxas (Responsabilidade: Cliente & Escritório):\n`;
-      listText += `  - Guia de custas foi gerada?: ${wizardState?.q2_recolher_custas_gerou_guia === 'sim' ? 'Sim' : 'Não'}\n`;
-      listText += `  - Entregue ao cliente: ${wizardState?.q2_recolher_custas_como_entregara || 'Não informado'}\n`;
-      listText += `  - Digitalização da Guia realizada?: ${(Array.isArray(wizardState?.guiaCustasFiles) && wizardState.guiaCustasFiles.length > 0) ? 'Sim' : 'Não'}\n`;
-      listText += `  - Meio de recebimento do comprovante: ${wizardState?.q2_recolher_custas_comprovante_enviado_como || 'Não informado'}\n`;
-      listText += `  - Digitalização do comprovante realizada?: ${(Array.isArray(wizardState?.comprovanteGuiaCustasFiles) && wizardState.comprovanteGuiaCustasFiles.length > 0) ? 'Sim' : 'Não'}\n`;
+    // 1. Procuração
+    let procuracaoStatus = "doc. 0001 - Procuração - pendente de geração, assinatura, entrega e digitalização ❌";
+    const hasProcFiles = Array.isArray(wizardState?.procuracaoFiles) && wizardState.procuracaoFiles.length > 0;
+    const isProcSigned = wizardState?.q1_3 === 'sim';
+    if (isProcSigned && hasProcFiles) {
+      procuracaoStatus = "doc. 0001 - Procuração - assinado e com upload no Drive ✅";
+    } else if (hasProcFiles || wizardState?.q1_1 === 'sim' || isProcSigned || (Array.isArray(wizardState?.q1_2) && wizardState.q1_2.length > 0)) {
+      procuracaoStatus = "doc. 0001 - Procuração - parcialmente recebida ou com pendências ⚠️";
     }
 
-    listText += `• Contrato de Honorários e Prestação de Serviços (Responsabilidade: Cliente & Escritório):\n`;
-    listText += `  - Contrato de honorários foi gerada? ${wizardState?.q3_1 === 'sim' ? 'Sim' : 'Não'}\n`;
-    listText += `  - Entregue ao cliente: ${Array.isArray(wizardState?.q3_3) && wizardState.q3_3.length > 0 ? 'Sim' : 'Não'}\n`;
-    listText += `  - Assinado pelo cliente?: ${wizardState?.q3_4 === 'sim' ? 'Sim' : 'Não'}\n`;
-    listText += `  - Assinado pelo Advogado?: ${wizardState?.q3_5 === 'sim' ? 'Sim' : 'Não'}\n`;
-    listText += `  - Meio de recebimento do contrato: ${wizardState?.q3_6 === 'sim' ? 'Recebido Digitalizado' : 'Não informado'}\n`;
-    listText += `  - Digitalização ou Upload realizado: ${wizardState?.q3_7 === 'sim' ? 'Sim' : 'Não'}\n\n`;
+    // 2. Declaração ou Guia de Custas
+    let declaracaoStatus = "doc. 0002 - Declaração de Pobreza ou Guia de Custas - pendente de geração, assinatura, entrega e digitalização ❌";
+    if (wizardState?.q2_1 === 'nao') {
+      const hasGuiaFiles = Array.isArray(wizardState?.guiaCustasFiles) && wizardState.guiaCustasFiles.length > 0;
+      const hasComprovanteFiles = Array.isArray(wizardState?.comprovanteGuiaCustasFiles) && wizardState.comprovanteGuiaCustasFiles.length > 0;
+      if (hasGuiaFiles && hasComprovanteFiles) {
+        declaracaoStatus = "doc. 0002 - Declaração de Pobreza ou Guia de Custas - assinado e com upload no Drive ✅";
+      } else if (hasGuiaFiles || hasComprovanteFiles) {
+        declaracaoStatus = "doc. 0002 - Declaração de Pobreza ou Guia de Custas - parcialmente recebida ou com pendências ⚠️";
+      }
+    } else {
+      const hasDeclFiles = Array.isArray(wizardState?.declaracaoFiles) && wizardState.declaracaoFiles.length > 0;
+      const isDeclSigned = wizardState?.q2_4 === 'sim';
+      if (isDeclSigned && hasDeclFiles) {
+        declaracaoStatus = "doc. 0002 - Declaração de Pobreza ou Guia de Custas - assinado e com upload no Drive ✅";
+      } else if (hasDeclFiles || wizardState?.q2_2 === 'sim' || isDeclSigned || (Array.isArray(wizardState?.q2_3) && wizardState.q2_3.length > 0)) {
+        declaracaoStatus = "doc. 0002 - Declaração de Pobreza ou Guia de Custas - parcialmente recebida ou com pendências ⚠️";
+      }
+    }
 
-    listText += "2. DOCUMENTOS ESPECÍFICOS:\n";
-    listText += "• CTPS (Responsabilidade: Cliente)\n";
-    listText += "• CNIS (Responsabilidade: Cliente)\n";
-    listText += "• Extrato FGTS (Responsabilidade: Cliente)\n";
-    listText += "• Contratos (Responsabilidade: Cliente / Terceiro)\n";
-    listText += "• Holerites (Responsabilidade: Cliente)\n";
-    listText += "• Laudos médicos (Responsabilidade: Órgão Público / Cliente)\n";
-    listText += "• Fotografias (Responsabilidade: Cliente)\n";
-    listText += "• Mensagens / WhatsApp (Responsabilidade: Cliente)\n";
-    listText += "• E-mails (Responsabilidade: Cliente)\n\n";
+    // 3. Contrato
+    let contratoStatus = "doc. $$$$ - Contrato de Honorários - pendente de geração, assinatura, entrega e digitalização ❌";
+    const hasContratoFiles = Array.isArray(wizardState?.contratoFiles) && wizardState.contratoFiles.length > 0;
+    const isContratoSigned = wizardState?.q3_4 === 'sim' && wizardState?.q3_5 === 'sim';
+    const isContratoDone = wizardState?.q3_7 === 'sim' || isContratoSigned;
+    if (isContratoDone && hasContratoFiles) {
+      contratoStatus = "doc. $$$$ - Contrato de Honorários - assinado e com upload no Drive ✅";
+    } else if (hasContratoFiles || wizardState?.q3_1 === 'sim' || wizardState?.q3_4 === 'sim' || wizardState?.q3_5 === 'sim' || (Array.isArray(wizardState?.q3_3) && wizardState.q3_3.length > 0)) {
+      contratoStatus = "doc. $$$$ - Contrato de Honorários - parcialmente recebido ou com pendências ⚠️";
+    }
 
-    listText += "3. DOCUMENTOS COMPLEMENTARES:\n";
-    if (customProvas && customProvas.length > 0) {
-      customProvas.forEach((req, idx) => {
-        listText += `• [${req.documentNumber || 'COMPLEMENTAR'}] ${req.title} (Responsabilidade: Cliente)\n`;
+    // Certificação de Provas Mínimas Obrigatórias
+    const rgFiles = wizardState?.rgFiles || [];
+    const rgCount = rgFiles.length;
+    const rgPresence = rgCount > 0 ? "Presente ✅" : "Ausente ❌";
+
+    const cpfFiles = wizardState?.cpfFiles || [];
+    const cpfCount = cpfFiles.length;
+    const cpfPresence = cpfCount > 0 ? "Presente ✅" : "Ausente ❌";
+
+    const addressFiles = wizardState?.comprovanteFiles || wizardState?.residenciaFiles || [];
+    const addressCount = addressFiles.length;
+    const addressPresence = addressCount > 0 ? "Presente ✅" : "Ausente ❌";
+
+    // Outras Provas Solicitadas
+    let outrasProvasText = "";
+    if (customProvas.length > 0) {
+      const customLines = customProvas.map((req, rIdx) => {
+        const proofState = wizardState?.q5_provas?.[req.id] || { received: 'nao' };
+        const docNumber = req.documentNumber || `doc. 000${rIdx + 6}`;
+        const evidenceType = req.evidenceType || "Prova documental";
+        
+        const customFiles = wizardState[`custom_${req.id}`] || [];
+        const filesCount = customFiles.length;
+        const isPresent = filesCount > 0 || proofState.received === 'sim';
+        const statusText = isPresent ? "Presente ✅" : "Ausente ❌";
+        
+        return `${docNumber}\n${req.title}\n${evidenceType}\n${filesCount} arquivo(s)\n${statusText}`;
       });
+      outrasProvasText = customLines.join("\n\n");
     } else {
-      listText += "• Nenhuma outra prova específica exigida para o caso de instrução.\n";
+      outrasProvasText = "Não há outras provas complementares solicitadas.";
     }
-    listText += "\n";
 
-    listText += "4. DOCUMENTOS PRODUZIDOS PELO ESCRITÓRIO:\n";
-    listText += "• Elaboração de Procuração Ad Judicia (Responsabilidade: Escritório)\n";
-    listText += "• Elaboração de Contrato de Honorários (Responsabilidade: Escritório)\n";
-    listText += "• Emissão de Certidões Públicas (Responsabilidade: Órgão Público / Escritório)\n";
-    listText += "• Pesquisas Externas (Responsabilidade: Escritório)\n\n";
+    // Assemble unified final text
+    let reportText = "";
+    reportText += "Relação de Documentos Básicos do Escritório\n\n";
+    reportText += `${procuracaoStatus}\n\n`;
+    reportText += `${declaracaoStatus}\n\n`;
+    reportText += `${contratoStatus}\n\n\n`;
 
-    listText += "5. RESPONSABILIDADE PELA OBTENÇÃO:\n";
-    listText += "• Cliente: Documentos de identificação, residência e instrução probatória pessoal.\n";
-    listText += "• Escritório: Elaboração de peças ordinárias, mandatos, requerimentos e pesquisas de domínio.\n";
-    listText += "• Terceiro: Documentos testemunhais, contratos auxiliares.\n";
-    listText += "• Órgão Público: Certidões judiciais ou cadastros estatais com requisição do escritório.\n\n";
+    reportText += "Relação de Provas Mínimas obrigatórias\n\n";
+    reportText += `doc. 0003 - RG\n${rgCount} arquivo(s)\n${rgPresence}\n\n`;
+    reportText += `doc. 0004 - CPF\n${cpfCount} arquivo(s)\n${cpfPresence}\n\n`;
+    reportText += `doc. 0005 - Comprovante de residencia\n${addressCount} arquivo(s)\n${addressPresence}\n\n\n`;
 
-    listText += "6. CHECKLIST CONSOLIDADO:\n";
-    listText += "[ ] RG\n";
-    listText += "[ ] CPF\n";
-    listText += "[ ] Comprovante de residência\n";
-    listText += "[ ] Certidão de Casamento/Nascimento\n";
-    listText += "[ ] Procuração Ad Judicia\n";
-    if (wizardState?.q2_1 === 'sim') {
-      listText += "[ ] Declaração de Pobreza/Hipossuficiência\n";
-    } else {
-      listText += "[ ] Guia de Custas e Comprovante de Pagamento\n";
-    }
-    listText += "[ ] Contrato de Honorários\n";
-    if (customProvas && customProvas.length > 0) {
-      customProvas.forEach((req) => {
-        listText += `[ ] ${req.title}\n`;
-      });
-    }
+    reportText += "Relação de outras Provas solicitadas\n\n";
+    reportText += outrasProvasText;
 
     const placeholders: Record<string, string> = {
-      "{{CLIENTE_NOME}}": nomeCompleto,
-      "{{NOME_COMPLETO}}": nomeCompleto,
-      "{{CLIENT_NOME}}": nomeCompleto,
-      "{{CLIENTE}}": nomeCompleto,
-      "{{CPF_CNPJ}}": client?.personalDados?.pf_cpf || client?.pfDadosPessoais?.pf_cpf || "",
-      "{{CPF}}": client?.personalDados?.pf_cpf || client?.pfDadosPessoais?.pf_cpf || "",
-      "{{RG}}": client?.personalDados?.pf_rg || client?.pfDadosPessoais?.pf_rg || "",
-      "{{TELEFONE}}": client?.personalDados?.pf_telefone || client?.pfDadosPessoais?.pf_telefone || "",
-      "{{ENDERECO}}": client?.personalDados?.pf_endereco || client?.pfDadosPessoais?.pf_endereco || "",
-      "{{CASE_ID}}": caseId || "",
-      "{{DATA_GERACAO}}": new Date().toLocaleDateString('pt-BR'),
-      "{{STATUS_RELATORIO}}": missingDocs.length === 0 ? "TOTALMENTE SANEADO" : "PENDÊNCIAS EM ABERTO",
-      "{{PROVAS_LISTADO}}": listText,
-      "{{RELATORIO_PROVAS}}": listText,
-      "{{PROVAS_DETALHES}}": listText,
-      "{{DATA_ASSINATURA}}": new Date().toLocaleDateString('pt-BR'),
-      "<<data da assinatura>>": new Date().toLocaleDateString('pt-BR')
+      "Relatório_geral_de_Provas_pessoa_fisica": reportText
     };
 
     const officialTemplateId = "1BPIOSWMjvLsSWzo_NcMjixrYUhmq7sKW2pRjdp1bS0s";
@@ -319,16 +303,13 @@ export default function RelatorioConsolidadoPF() {
         
         {/* HEADER PANEL */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-5">
-          <div className="space-y-1 text-left">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
-                Etapa 5 — Relatório de Custódia (PF)
-              </span>
-              <span className="text-xs text-gray-400">Cliente: <strong>{client?.personalDados?.pf_nomeCompleto || 'PF'}</strong></span>
-            </div>
-            <h1 className="text-lg font-black text-gray-900 tracking-tight leading-none pt-1">
-              Relatório de Provas Consolidado
+          <div className="space-y-1.5 text-left">
+            <h1 className="text-lg font-black text-gray-900 tracking-tight leading-none">
+              Subetapa 5 - Relatório de Provas Consolidado
             </h1>
+            <div className="text-xs text-gray-400">
+              Cliente: <strong>{client?.personalDados?.pf_nomeCompleto || 'PF'}</strong>
+            </div>
           </div>
           <button
             type="button"
@@ -390,16 +371,16 @@ export default function RelatorioConsolidadoPF() {
               {/* VERTICAL SECTIONS - 1. BASIC DOCUMENTS STATUS */}
               <div id="secao-auditoria-basicos" className="space-y-4">
                 <h3 className="text-xs font-black text-gray-800 uppercase tracking-wider border-b pb-1">
-                  1. Auditoria Física dos Documentos Básicos do Escritório
+                  Relação de Documentos Básicos do Escritório
                 </h3>
                 
                 <div className="space-y-3">
                   {/* PROCURAÇÃO STATUS */}
                   <div className="p-4.5 bg-gray-50/40 border border-gray-150 rounded-2xl text-xs font-bold leading-normal text-left">
                     {wizardState?.q1_3 === 'sim' && Array.isArray(wizardState?.procuracaoFiles) && wizardState.procuracaoFiles.length > 0 ? (
-                      <span className="text-emerald-700 font-bold">Procuração - assinado e upload no drive ✅</span>
+                      <span className="text-emerald-700 font-bold">doc. 0001 - Procuração - assinado e upload no drive ✅</span>
                     ) : (
-                      <span className="text-rose-700 font-bold">Procuração - pendente de geração, assinatura, entrega, digitalização ❌</span>
+                      <span className="text-rose-700 font-bold">doc. 0001 - Procuração - pendente de geração, assinatura, entrega, digitalização ❌</span>
                     )}
                   </div>
 
@@ -412,18 +393,18 @@ export default function RelatorioConsolidadoPF() {
                         </p>
                         <div>
                           {Array.isArray(wizardState?.guiaCustasFiles) && wizardState.guiaCustasFiles.length > 0 && Array.isArray(wizardState?.comprovanteGuiaCustasFiles) && wizardState.comprovanteGuiaCustasFiles.length > 0 ? (
-                            <span className="text-emerald-700 font-bold">Guia de Custas e Comprovante de Pagamento - gerado e upload no drive ✅</span>
+                            <span className="text-emerald-700 font-bold">doc. 0002 - Declaração de Pobreza ou Guia de Custas - gerado e upload no drive ✅</span>
                           ) : (
-                            <span className="text-rose-700 font-bold">Guia de Custas pendente de geração, assinatura, entrega, digitalização ❌</span>
+                            <span className="text-rose-700 font-bold">doc. 0002 - Declaração de Pobreza ou Guia de Custas pendente de geração, assinatura, entrega, digitalização ❌</span>
                           )}
                         </div>
                       </>
                     ) : (
                       <div>
                         {wizardState?.q2_4 === 'sim' && Array.isArray(wizardState?.declaracaoFiles) && wizardState.declaracaoFiles.length > 0 ? (
-                          <span className="text-emerald-700 font-bold">Declaração de Pobreza - assinado e upload no drive ✅</span>
+                          <span className="text-emerald-700 font-bold">doc. 0002 - Declaração de Pobreza ou Guia de Custas - assinado e upload no drive ✅</span>
                         ) : (
-                          <span className="text-rose-700 font-bold">Declaração ou Guia de Custas pendente de geração, assinatura, entrega, digitalização ❌</span>
+                          <span className="text-rose-700 font-bold">doc. 0002 - Declaração de Pobreza ou Guia de Custas pendente de geração, assinatura, entrega, digitalização ❌</span>
                         )}
                       </div>
                     )}
@@ -432,9 +413,9 @@ export default function RelatorioConsolidadoPF() {
                   {/* CONTRATO DE HONORÁRIOS STATUS */}
                   <div className="p-4.5 bg-gray-50/40 border border-gray-150 rounded-2xl text-xs font-bold leading-normal text-left">
                     {wizardState?.q3_7 === 'sim' || (wizardState?.q3_4 === 'sim' && wizardState?.q3_5 === 'sim') ? (
-                      <span className="text-emerald-700 font-bold">Contrato - assinado e upload no drive ✅</span>
+                      <span className="text-emerald-700 font-bold">doc. $$$$ - Contrato de Honorários - assinado e upload no drive ✅</span>
                     ) : (
-                      <span className="text-rose-700 font-bold">Contrato pendente de geração, assinatura, entrega, digitalização ❌</span>
+                      <span className="text-rose-700 font-bold">doc. $$$$ - Contrato de Honorários pendente de geração, assinatura, entrega, digitalização ❌</span>
                     )}
                   </div>
                 </div>
@@ -443,13 +424,13 @@ export default function RelatorioConsolidadoPF() {
               {/* VERTICAL SECTIONS - 2. MINIMUM MANDATORY DOCUMENTS */}
               <div className="space-y-4">
                 <h3 className="text-xs font-black text-gray-800 uppercase tracking-wider border-b pb-1">
-                  2. Certificação de Provas Mínimas Obrigatórias
+                  Relação de Provas Mínimas obrigatórias
                 </h3>
                 <div className="space-y-3">
                   {[
-                    { label: 'RG', files: wizardState?.rgFiles || [] },
-                    { label: 'CPF', files: wizardState?.cpfFiles || [] },
-                    { label: 'Comprovante de residencia', files: wizardState?.comprovanteFiles || [] }
+                    { label: 'doc. 0003 - RG', files: wizardState?.rgFiles || [] },
+                    { label: 'doc. 0004 - CPF', files: wizardState?.cpfFiles || [] },
+                    { label: 'doc. 0005 - Comprovante de residencia', files: wizardState?.comprovanteFiles || [] }
                   ].map((minim, mIdx) => (
                     <div key={mIdx} className="p-3 bg-gray-50/40 border rounded-xl flex items-center justify-between text-xs">
                       <div>
@@ -467,7 +448,7 @@ export default function RelatorioConsolidadoPF() {
               {/* VERTICAL SECTIONS - 3. OTHER CUSTOM CLIENT EVIDENCE */}
               <div className="space-y-4">
                 <h3 className="text-xs font-black text-gray-800 uppercase tracking-wider border-b pb-1">
-                  3. outras Provas solicitadas
+                  Relação de outras Provas solicitadas
                 </h3>
                 {customProvas.length > 0 ? (
                   <div className="space-y-3">
@@ -476,7 +457,7 @@ export default function RelatorioConsolidadoPF() {
                       return (
                         <div key={rIdx} className="p-3 bg-gray-50/50 border rounded-xl flex items-center justify-between text-xs">
                           <div>
-                            <span className="text-[8px] bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded font-mono font-bold block w-max uppercase mb-1">{req.documentNumber || 'ADICIONAL'}</span>
+                            <span className="text-[8px] bg-indigo-50 text-indigo-700 px-1 py-0.5 rounded font-mono font-bold block w-max uppercase mb-1">{req.documentNumber || `doc. 000${rIdx + 6}`}</span>
                             <span className="font-extrabold text-gray-800 block">{req.title}</span>
                             <span className="text-[11px] text-gray-400 font-semibold">{req.evidenceType}</span>
                           </div>

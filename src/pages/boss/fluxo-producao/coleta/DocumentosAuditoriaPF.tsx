@@ -26,6 +26,25 @@ export default function DocumentosAuditoriaPF() {
     navigate
   } = useColetaState();
 
+  const filteredRequests = (requests || []).filter(req => {
+    const titleLower = (req.title || '').toLowerCase();
+    const docTypeLower = (req.documentType || '').toLowerCase();
+    const idLower = (req.id || '').toLowerCase();
+    
+    // Exclude Procuracao, Declaracao, Contrato
+    if (titleLower.includes('procuração') || titleLower.includes('procuracao')) return false;
+    if (titleLower.includes('declaração') || titleLower.includes('declaracao') || titleLower.includes('pobreza') || titleLower.includes('guia de custas')) return false;
+    if (titleLower.includes('contrato') || titleLower.includes('honorário') || titleLower.includes('honorario')) return false;
+    
+    if (docTypeLower.includes('procuracao') || docTypeLower.includes('procuração')) return false;
+    if (docTypeLower.includes('declaracao') || docTypeLower.includes('declaração') || docTypeLower.includes('pobreza') || docTypeLower.includes('guia_custas')) return false;
+    if (docTypeLower.includes('contrato') || docTypeLower.includes('honorarios') || docTypeLower.includes('honorário')) return false;
+
+    if (idLower.includes('procuracao') || idLower.includes('declaracao') || idLower.includes('contrato')) return false;
+
+    return true;
+  });
+
   // Metrics calculation
   let totalExpected = 5; // procuracao-generated, procuracao-signed, contrato-generated, contrato-signed, rg/cpf/residencia (counts as 1)
   let received = 0;
@@ -49,9 +68,9 @@ export default function DocumentosAuditoriaPF() {
   received += (minDocsChecked / 3); // normalized contribution
 
   // Custom requests
-  if (wizardState.q5_1 === 'sim' && requests.length > 0) {
-    totalExpected += requests.length;
-    requests.forEach(r => {
+  if (wizardState.q5_1 === 'sim' && filteredRequests.length > 0) {
+    totalExpected += filteredRequests.length;
+    filteredRequests.forEach(r => {
       const isOk = wizardState.q5_provas?.[r.id]?.received === 'sim';
       if (isOk) received++;
     });
@@ -385,9 +404,9 @@ export default function DocumentosAuditoriaPF() {
                   </span>
                 </div>
                 
-                {requests && requests.length > 0 ? (
+                {filteredRequests && filteredRequests.length > 0 ? (
                   <div className="space-y-3">
-                    {requests.map((req) => {
+                    {filteredRequests.map((req) => {
                       const proofState = wizardState.q5_provas?.[req.id] || { received: 'nao' };
                       const isReceived = proofState.received === 'sim';
                       
@@ -456,7 +475,7 @@ export default function DocumentosAuditoriaPF() {
                     (wizardState.q1_3 !== 'sim' ? "* Procuração Ad Judicia assinada\n" : "") +
                     (wizardState.q2_1 === 'sim' && wizardState.q2_4 !== 'sim' ? "* Declaração de Hipossuficiência assinada\n" : "") +
                     (wizardState.q3_4 !== 'sim' ? "* Contrato de Honorários assinado\n" : "") +
-                    requests.filter(req => wizardState.q5_provas?.[req.id]?.received !== 'sim').map(r => `* ${r.title}\n`).join('')
+                    filteredRequests.filter(req => wizardState.q5_provas?.[req.id]?.received !== 'sim').map(r => `* ${r.title}\n`).join('')
                   }
                 </div>
 

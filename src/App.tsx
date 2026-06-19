@@ -322,6 +322,14 @@ const bossRouter = createBrowserRouter(
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-contrato-PF" element={<SafeRoute children={<ContratoHonorariosPF />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-contrato-PJ" element={<SafeRoute children={<ContratoHonorariosPJ />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-minimos-PF" element={<SafeRoute children={<DocumentosMinimosPF />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-minimos-PF/Rg.antigo" element={<SafeRoute children={<DocumentosMinimosPF />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-minimos-PF/coletar.CPF" element={<SafeRoute children={<DocumentosMinimosPF />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-minimos-PF/coletar.comprovante.de.residencia" element={<SafeRoute children={<DocumentosMinimosPF />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-minimos-PF/Rg.novo" element={<SafeRoute children={<DocumentosMinimosPF />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-minimos-PF/CNH" element={<SafeRoute children={<DocumentosMinimosPF />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-minimos-PF/CTPS" element={<SafeRoute children={<DocumentosMinimosPF />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-minimos-PF/Passaporte" element={<SafeRoute children={<DocumentosMinimosPF />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-minimos-PF/outro.doc.de.identficacao" element={<SafeRoute children={<DocumentosMinimosPF />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-minimos-PJ" element={<SafeRoute children={<DocumentosMinimosPJ />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-necessidade-PF" element={<SafeRoute children={<DocumentosNecessidadePF />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacao-documentos-necessidade-PJ" element={<SafeRoute children={<DocumentosNecessidadePJ />} />} />
