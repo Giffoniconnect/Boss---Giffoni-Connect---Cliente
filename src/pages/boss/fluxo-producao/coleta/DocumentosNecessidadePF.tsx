@@ -281,7 +281,7 @@ export default function DocumentosNecessidadePF() {
 
   const handleNextPhase = () => {
     saveWizardStateUpdate({ step5_completed: true }).then(() => {
-      navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/solicitacao-documentos-auditoria-PF`);
+      navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/solicitacao-documentos-consolidado-PF`);
     });
   };
 

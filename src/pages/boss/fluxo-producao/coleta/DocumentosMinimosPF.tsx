@@ -7,8 +7,8 @@ import { db } from '../../../../lib/firebase';
 import { collection, addDoc } from 'firebase/firestore';
 import { 
   ArrowRight, FileText, UploadCloud, Trash2, ArrowLeft, 
-  Check, AlertCircle, Sparkles, FolderIcon, CardIcon, 
-  BookOpen, PlusCircle, Printer, Download, ExternalLink, HelpCircle,
+  Check, AlertCircle, Sparkles, FolderIcon, 
+  BookOpen, Printer, Download, ExternalLink, HelpCircle,
   Info, Send, CheckCircle2
 } from 'lucide-react';
 
@@ -149,11 +149,7 @@ export default function DocumentosMinimosPF() {
     }
   };
 
-  // Inline dynamic proof state
-  const [showAddProofForm, setShowAddProofForm] = React.useState(false);
-  const [newProofTitle, setNewProofTitle] = React.useState('');
-  const [newProofDesc, setNewProofDesc] = React.useState('');
-  const [isSubmittingProof, setIsSubmittingProof] = React.useState(false);
+
 
   React.useEffect(() => {
     const dateStr = wizardState.q4_residencia_data;
@@ -196,36 +192,7 @@ export default function DocumentosMinimosPF() {
     });
   };
 
-  const handleAddCustomProof = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newProofTitle.trim()) return;
-    setIsSubmittingProof(true);
-    setGdiError(null);
-    try {
-      const docData = {
-        caseId,
-        clientId: caseObj?.clientId || client?.id || '',
-        title: newProofTitle.trim(),
-        description: newProofDesc.trim(),
-        status: 'pendente',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      const docRef = await addDoc(collection(db, 'caseEvidenceRequests'), docData);
-      if (setRequests) {
-        setRequests((prev: any) => [{ id: docRef.id, ...docData }, ...prev]);
-      }
-      setSuccess('Solicitação de prova complementar incluída com sucesso!');
-      setTimeout(() => setSuccess(null), 3000);
-      setNewProofTitle('');
-      setNewProofDesc('');
-      setShowAddProofForm(false);
-    } catch (err: any) {
-      setGdiError(`Erro ao adicionar solicitação de prova: ${err.message}`);
-    } finally {
-      setIsSubmittingProof(false);
-    }
-  };
+
 
   // Real, fully integrated Google Docs Generator for Residence Declaration
   const handleGenerateResidenceDeclaration = async () => {
@@ -1530,234 +1497,7 @@ export default function DocumentosMinimosPF() {
               </>
             )}
 
-            {!isResidenciaRoute && (
-              <>
-                {/* 4. DYNAMIC SECTION FOR CUSTOM SOLICITAÇÃO DE PROVA */}
-                <div className="pt-6 border-t border-gray-150 space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-indigo-50/45 p-4 rounded-2xl border border-indigo-100">
-                    <div className="space-y-0.5">
-                      <h3 className="text-xs font-black text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
-                        <PlusCircle size={14} className="text-indigo-600 animate-pulse" />
-                        <span>Adicionar Solicitação de Prova Coletora</span>
-                      </h3>
-                      <p className="text-[11px] text-gray-500 font-semibold leading-tight">
-                        Crie e vincule dinamicamente coletores específicos a esta admissão. Cada novo item gera automaticamente o bloco de auditoria.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddProofForm(!showAddProofForm)}
-                      className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all shadow-2xs cursor-pointer shrink-0"
-                    >
-                      {showAddProofForm ? 'Cancelar' : '+ Add novo Coletor'}
-                    </button>
-                  </div>
 
-                  {/* INLINE DOCUMENT CREATION FORM */}
-                  {showAddProofForm && (
-                    <form onSubmit={handleAddCustomProof} className="p-4 bg-white border border-gray-200 rounded-2xl space-y-4 shadow-3xs animate-in slide-in-from-top-2 duration-200">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase font-bold text-gray-650 block">Nome do Documento / Coletor Especial:</label>
-                        <input
-                          type="text"
-                          required
-                          value={newProofTitle}
-                          onChange={(e) => setNewProofTitle(e.target.value)}
-                          placeholder="Ex: CNIS, Histórico Escolar, Holerites, Dec. Imposto de Renda"
-                          className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase font-bold text-gray-650 block">Descrição / Objetivo do documento:</label>
-                        <textarea
-                          value={newProofDesc}
-                          onChange={(e) => setNewProofDesc(e.target.value)}
-                          placeholder="Qual a finalidade deste coletor e prazos desejados..."
-                          rows={2}
-                          className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none resize-none"
-                        />
-                      </div>
-
-                      <div className="pt-1">
-                        <button
-                          type="submit"
-                          disabled={isSubmittingProof}
-                          className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                        >
-                          {isSubmittingProof ? 'Cadastrando...' : '✅ Confirmar & Criar Coletor'}
-                        </button>
-                      </div>
-                    </form>
-                  )}
-
-                  {/* CUSTOM REQUEST QUESTIONS REPRODUCER PANEL */}
-                  {requests && requests.length > 0 && (
-                    <div className="space-y-6 pt-2">
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest font-mono">Coletores Gerados ({requests.length})</h4>
-                        <div className="flex-1 h-px bg-gray-150"></div>
-                      </div>
-
-                      <div className="space-y-5">
-                        {requests.map((req, index) => {
-                          const reqId = req.id;
-                          const reqName = req.title || 'Documento de Prova';
-                          const reqDesc = req.description ? req.description.split('\n\n')[0] : '';
-                          const docNum = String(index + 5).padStart(2, '0');
-
-                          // Answers State Binding
-                          const q_recebido = wizardState[`q5_prova_recebido_${reqId}`] || '';
-                          const q_como_recebido = wizardState[`q5_prova_como_recebido_${reqId}`] || '';
-                          const q_digitalizar = wizardState[`q5_prova_digitalizar_${reqId}`] || '';
-                          const q_has_files = (wizardState[`q5_prova_arquivos_${reqId}`] || []).length > 0;
-
-                          return (
-                            <div key={reqId} className="p-5 bg-indigo-50/20 border border-indigo-100 rounded-2xl space-y-4 animate-in fade-in">
-                              
-                              {/* Header Card */}
-                              <div className="flex items-start justify-between gap-4 border-b border-indigo-50/70 pb-2.5">
-                                <div className="space-y-0.5">
-                                  <span className="text-[9px] uppercase font-bold text-indigo-700 tracking-wider">Documento de Prova Complementar</span>
-                                  <h4 className="text-xs font-extrabold text-indigo-950">
-                                    doc. {docNum} - {reqName}
-                                  </h4>
-                                  {reqDesc && (
-                                    <p className="text-[10px] text-gray-500 font-semibold normal-case mt-0.5">
-                                      {reqDesc}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Questions Column Single-Layout */}
-                              <div className="space-y-4">
-                                
-                                {/* Dynamic Q1: Recebido? */}
-                                <div className="flex flex-col gap-2">
-                                  <p className="text-xs font-extrabold text-indigo-900 uppercase">
-                                    {reqName} recebido?
-                                  </p>
-                                  <div className="flex flex-col gap-2">
-                                    {['sim', 'nao'].map(o => (
-                                      <label key={o} className="flex items-center gap-2 cursor-pointer text-xs font-bold uppercase text-gray-700">
-                                        <input 
-                                          type="radio" 
-                                          name={`q5_prova_recebido_${reqId}`} 
-                                          checked={q_recebido === o} 
-                                          onChange={() => saveWizardStateUpdate({ [`q5_prova_recebido_${reqId}`]: o })} 
-                                          className="text-indigo-600 focus:ring-indigo-500"
-                                        />
-                                        <span>{o === 'sim' ? 'Sim' : 'Não'}</span>
-                                      </label>
-                                    ))}
-                                  </div>
-                                </div>
-
-                                {/* Dynamic Q2: Como foi recebido? */}
-                                {q_recebido === 'sim' && (
-                                  <div className="flex flex-col gap-2 pt-3 border-t border-indigo-50 animate-in fade-in duration-150">
-                                    <p className="text-xs font-extrabold text-indigo-900 uppercase">
-                                      Como o {reqName} foi recebido?
-                                    </p>
-                                    <div className="flex flex-col gap-2">
-                                      {[
-                                        { key: 'fisico', label: 'Físico 📄' },
-                                        { key: 'whatsapp', label: 'WhatsApp 📱' },
-                                        { key: 'email', label: 'E-mail ✉️' },
-                                        { key: 'outro', label: 'Outro 📁' }
-                                      ].map(opt => (
-                                        <label key={opt.key} className="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-700">
-                                          <input 
-                                            type="radio" 
-                                            name={`q5_prova_como_recebido_${reqId}`} 
-                                            checked={q_como_recebido === opt.key} 
-                                            onChange={() => saveWizardStateUpdate({ [`q5_prova_como_recebido_${reqId}`]: opt.key })} 
-                                            className="text-indigo-600 focus:ring-indigo-500"
-                                          />
-                                          <span>{opt.label}</span>
-                                        </label>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Dynamic Q3: Deseja digitalizar agora? */}
-                                {q_recebido === 'sim' && q_como_recebido && (
-                                  <div className="flex flex-col gap-2 pt-3 border-t border-indigo-50 animate-in fade-in duration-150">
-                                    <p className="text-xs font-extrabold text-indigo-900 uppercase">
-                                      Deseja digitalizar o {reqName} agora?
-                                    </p>
-                                    <div className="flex flex-col gap-2">
-                                      {['sim', 'nao'].map(o => (
-                                        <label key={o} className="flex items-center gap-2 cursor-pointer text-xs font-bold uppercase text-gray-700">
-                                          <input 
-                                            type="radio" 
-                                            name={`q5_prova_digitalizar_${reqId}`} 
-                                            checked={q_digitalizar === o} 
-                                            onChange={() => saveWizardStateUpdate({ [`q5_prova_digitalizar_${reqId}`]: o })} 
-                                            className="text-indigo-600 focus:ring-indigo-500"
-                                          />
-                                          <span>{o === 'sim' ? 'Sim' : 'Não'}</span>
-                                        </label>
-                                      ))}
-                                    </div>
-
-                                    {/* Upload box if SIM */}
-                                    {q_digitalizar === 'sim' && (
-                                      <div className="p-4 bg-white rounded-xl border border-indigo-100/70 space-y-1.5 mt-2 animate-in slide-in-from-top-1">
-                                        <span className="text-[10px] uppercase font-bold text-indigo-600 font-mono">Durable Storage Drive</span>
-                                        <FileUploadBox 
-                                          field={`q5_prova_arquivos_${reqId}`} 
-                                          labelText={`Enviar arquivo (${reqName})`}
-                                          customName={`doc. ${docNum} - ${reqName} - ${clientName ? clientName.trim() : 'Cliente'}`}
-                                        />
-                                      </div>
-                                    )}
-
-                                    {/* Notice if NAO */}
-                                    {q_digitalizar === 'nao' && (
-                                      <div className="p-3.5 bg-amber-50 border border-amber-150 text-amber-900 rounded-xl text-xs font-bold mt-2 flex gap-2 animate-in slide-in-from-top-1">
-                                        <AlertCircle size={14} className="text-amber-600 shrink-0 mt-0.5" />
-                                        <div>
-                                          <span className="font-extrabold uppercase text-[10px] text-amber-800 block">Pendência de Digitalização Registrada</span>
-                                          <span className="font-semibold text-amber-700 normal-case mt-0.5 block">
-                                            Este documento permanece pendente de digitalização/upload e constará na seção correspondente do Relatório de Auditoria.
-                                          </span>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                  </div>
-                                )}
-
-                                {/* Audit Pending automatic Warning when received is NAO */}
-                                {q_recebido === 'nao' && (
-                                  <div className="p-3.5 bg-rose-50 border border-rose-150 text-rose-900 rounded-xl text-xs font-bold mt-2 flex gap-2 animate-in slide-in-from-top-1">
-                                    <AlertCircle size={14} className="text-rose-600 shrink-0 mt-0.5" />
-                                    <div>
-                                      <span className="font-extrabold uppercase text-[10px] text-rose-800 block">Pendência Documental Grave</span>
-                                      <span className="font-semibold text-rose-700 normal-case mt-0.5 block">
-                                        O documento "{reqName}" não foi recebido. Esta pendência documental foi registrada de forma automática na seção "Pendências de Digitalização" do Relatório de Auditoria.
-                                      </span>
-                                    </div>
-                                  </div>
-                                )}
-
-                              </div>
-
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                    </div>
-                  )}
-
-                </div>
-
-              </>
-            )}
 
             </div>
 

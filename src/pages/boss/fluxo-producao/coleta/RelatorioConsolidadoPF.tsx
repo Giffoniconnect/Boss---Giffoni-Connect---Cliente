@@ -31,37 +31,75 @@ export default function RelatorioConsolidadoPF() {
     clientName,
   } = useColetaState();
 
+  const basicDocs = [
+    {
+      name: 'Procuração Ad Judicia',
+      files: wizardState?.procuracaoFiles || [],
+      sent: wizardState?.q1_1 === 'sim',
+      methods: wizardState?.q1_2 || [],
+      required: true
+    },
+    {
+      name: 'Declaração de Hipossuficiência',
+      files: wizardState?.declaracaoFiles || [],
+      sent: wizardState?.q2_2 === 'sim',
+      methods: wizardState?.q2_3 || [],
+      required: wizardState?.q2_1 === 'sim'
+    },
+    {
+      name: 'Contrato de Prestação de Serviços',
+      files: wizardState?.contratoFiles || [],
+      sent: wizardState?.q3_1 === 'sim',
+      methods: wizardState?.q3_3 || [],
+      required: true
+    }
+  ];
+
+  const totalMinimosFiles = (wizardState?.rgFiles || []).length + 
+                           (wizardState?.cpfFiles || []).length + 
+                           (wizardState?.comprovanteFiles || []).length;
+
+  const customProvas = (requests || []).filter(req => {
+    const t = (req.title || '').toLowerCase();
+    return !t.includes('procuração') && !t.includes('declaração') && !t.includes('contrato');
+  });
+
+  const missingDocs = basicDocs.filter(d => d.required && d.files.length === 0);
+
+  const basicCount = 
+    ((wizardState?.procuracaoFiles || []).length > 0 ? 1 : 0) +
+    ((wizardState?.q2_1 === 'nao' 
+      ? ((wizardState?.guiaCustasFiles || []).length > 0 || (wizardState?.comprovanteGuiaCustasFiles || []).length > 0)
+      : (wizardState?.declaracaoFiles || []).length > 0) ? 1 : 0) +
+    ((wizardState?.contratoFiles || []).length > 0 ? 1 : 0);
+
+  const completedObrigatorios = 
+    ((wizardState?.rgFiles || []).length > 0 ? 1 : 0) +
+    ((wizardState?.cpfFiles || []).length > 0 ? 1 : 0) +
+    (((wizardState?.comprovanteFiles || []).length > 0 || (wizardState?.residenciaFiles || []).length > 0) ? 1 : 0);
+
+  const completedOutrasProvas = customProvas.filter(req => {
+    const proofState = wizardState?.q5_provas?.[req.id] || { received: 'nao' };
+    return proofState.received === 'sim' || (wizardState[`custom_${req.id}`] || []).length > 0;
+  }).length;
+
+  const totalOutrasProvas = customProvas.length;
+  const totalAllRequested = 3 + 3 + totalOutrasProvas;
+  const totalAllReceived = basicCount + completedObrigatorios + completedOutrasProvas;
+  const requestedPercentage = 100;
+  const receivedPercentage = Math.round((totalAllReceived / (totalAllRequested || 1)) * 100);
+
   const [generatingRelatorio, setGeneratingRelatorio] = useState(false);
   const [copiedRelatorio, setCopiedRelatorio] = useState(false);
   const [isGdiSettingsOpen, setIsGdiSettingsOpen] = useState(false);
   const [relatorioLogs, setRelatorioLogs] = useState<any[]>([]);
 
-  const handleGenerateRelatorioDocs = async () => {
-    setGeneratingRelatorio(true);
-    setError(null);
-    setSuccess(null);
-    const trackingLogs: any[] = [];
-    const addTrackLog = (step: string, details?: any) => {
-      trackingLogs.push({ step, timestamp: new Date().toISOString(), details });
-      setRelatorioLogs([...trackingLogs]);
-    };
+  // Preview and validation GDI states
+  const [reportPreview, setReportPreview] = useState<string | null>(null);
+  const [isValidatedReport, setIsValidatedReport] = useState(false);
+  const [isPreviewValidated, setIsPreviewValidated] = useState(false);
 
-    addTrackLog("BUTTON_CLICKED", { documentType: "relatorio_provas", clientType: "PF" });
-
-    if (!driveFolderId) {
-      addTrackLog("DRIVE_FOLDER_ERROR", { error: "Sem ID de pasta do Drive" });
-      setError("Não há pasta real do Google Drive vinculada ao cliente.");
-      setGeneratingRelatorio(false);
-      return;
-    }
-
-    addTrackLog("DRIVE_FOLDER_VALIDATED", { destinationFolderId: driveFolderId });
-
-    const jobId = `job-relatorio-pf-${Date.now()}`;
-    const targetCaseId = caseId;
-    const targetClientId = client?.id || caseObj?.clientId || "";
-    const nomeCompleto = client?.personalDados?.pf_nomeCompleto || clientName || "Cliente";
-
+  const compileReportText = () => {
     // 1. Procuração
     let procuracaoStatus = "doc. 0001 - Procuração - pendente de geração, assinatura, entrega e digitalização ❌";
     const hasProcFiles = Array.isArray(wizardState?.procuracaoFiles) && wizardState.procuracaoFiles.length > 0;
@@ -150,6 +188,50 @@ export default function RelatorioConsolidadoPF() {
 
     reportText += "Relação de outras Provas solicitadas\n\n";
     reportText += outrasProvasText;
+
+    return reportText;
+  };
+
+  const handleValidateReport = () => {
+    setError(null);
+    setSuccess(null);
+    try {
+      const text = compileReportText();
+      setReportPreview(text);
+      setIsValidatedReport(true);
+      setSuccess("Relatório de Provas PF compilado com absoluto sucesso para o Preview GDI!");
+    } catch (err: any) {
+      setError(`Falha ao compilar relatório para validação: ${err.message}`);
+    }
+  };
+
+  const handleGenerateRelatorioDocs = async () => {
+    setGeneratingRelatorio(true);
+    setError(null);
+    setSuccess(null);
+    const trackingLogs: any[] = [];
+    const addTrackLog = (step: string, details?: any) => {
+      trackingLogs.push({ step, timestamp: new Date().toISOString(), details });
+      setRelatorioLogs([...trackingLogs]);
+    };
+
+    addTrackLog("BUTTON_CLICKED", { documentType: "relatorio_provas", clientType: "PF" });
+
+    if (!driveFolderId) {
+      addTrackLog("DRIVE_FOLDER_ERROR", { error: "Sem ID de pasta do Drive" });
+      setError("Não há pasta real do Google Drive vinculada ao cliente.");
+      setGeneratingRelatorio(false);
+      return;
+    }
+
+    addTrackLog("DRIVE_FOLDER_VALIDATED", { destinationFolderId: driveFolderId });
+
+    const jobId = `job-relatorio-pf-${Date.now()}`;
+    const targetCaseId = caseId;
+    const targetClientId = client?.id || caseObj?.clientId || "";
+    const nomeCompleto = client?.personalDados?.pf_nomeCompleto || clientName || "Cliente";
+
+    const reportText = compileReportText();
 
     const placeholders: Record<string, string> = {
       "Relatório_geral_de_Provas_pessoa_fisica": reportText
@@ -256,41 +338,6 @@ export default function RelatorioConsolidadoPF() {
     }
   };
 
-  const basicDocs = [
-    {
-      name: 'Procuração Ad Judicia',
-      files: wizardState?.procuracaoFiles || [],
-      sent: wizardState?.q1_1 === 'sim',
-      methods: wizardState?.q1_2 || [],
-      required: true
-    },
-    {
-      name: 'Declaração de Hipossuficiência',
-      files: wizardState?.declaracaoFiles || [],
-      sent: wizardState?.q2_2 === 'sim',
-      methods: wizardState?.q2_3 || [],
-      required: wizardState?.q2_1 === 'sim'
-    },
-    {
-      name: 'Contrato de Prestação de Serviços',
-      files: wizardState?.contratoFiles || [],
-      sent: wizardState?.q3_1 === 'sim',
-      methods: wizardState?.q3_3 || [],
-      required: true
-    }
-  ];
-
-  const totalMinimosFiles = (wizardState?.rgFiles || []).length + 
-                           (wizardState?.cpfFiles || []).length + 
-                           (wizardState?.comprovanteFiles || []).length;
-
-  const customProvas = (requests || []).filter(req => {
-    const t = (req.title || '').toLowerCase();
-    return !t.includes('procuração') && !t.includes('declaração') && !t.includes('contrato');
-  });
-
-  const missingDocs = basicDocs.filter(d => d.required && d.files.length === 0);
-
   return (
     <FluxoStepLayout 
       stepName="Relatório de Provas Consolidado" 
@@ -346,25 +393,50 @@ export default function RelatorioConsolidadoPF() {
             <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-2xs space-y-6 text-left">
               
               {/* STAGE METRIC */}
-              <div className="bg-gradient-to-r from-indigo-50 to-indigo-120/40 p-5 rounded-2xl border border-indigo-100 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="bg-gradient-to-r from-indigo-50 to-indigo-120/40 p-6 rounded-2xl border border-indigo-100 flex flex-col gap-5">
                 <div className="space-y-1">
-                  <span className="text-[9px] bg-indigo-200/50 text-indigo-700 px-2 py-0.5 rounded font-black uppercase tracking-wider font-mono">Status da Custódia</span>
+                  <span className="text-[9px] bg-indigo-200/50 text-indigo-700 px-2 py-0.5 rounded font-black uppercase tracking-wider font-mono">Status do Relatório de Coleta de provas</span>
                   <h3 className="text-sm font-black text-indigo-950">
-                    {missingDocs.length === 0 ? 'Documentos Básicos Saneados' : 'Documentos Pendentes Identificados'}
+                    {missingDocs.length === 0 ? 'Documentos Básicos Saneados' : 'Relação Total de Provas a Coletar'}
                   </h3>
                   <p className="text-xs font-semibold text-gray-500 leading-normal">
                     Este relatório compila e consolida a integridade da entrega material de todas as provas do processo do cliente para a instrução.
                   </p>
                 </div>
-                <div className="shrink-0 flex items-center gap-2">
-                  <div className="px-3.5 py-2 bg-white rounded-xl border border-indigo-100 text-center">
-                    <span className="block text-xs font-black text-indigo-900">{basicDocs.filter(d => d.files.length > 0).length} / 3</span>
-                    <span className="text-[9px] text-gray-400 font-black uppercase tracking-wider block">Básicos</span>
+                
+                {/* Vertical metric cards */}
+                <div className="grid grid-cols-1 gap-3 w-full">
+                  
+                  {/* Card 1: básicos */}
+                  <div className="px-5 py-4 bg-white rounded-2xl border border-indigo-100 flex items-center justify-between shadow-3xs hover:border-indigo-250 transition-all">
+                    <span className="text-xs text-gray-550 font-black uppercase tracking-wider block">básicos</span>
+                    <span className="text-sm font-black text-indigo-900 font-mono">{basicCount} / 3</span>
                   </div>
-                  <div className="px-3.5 py-2 bg-white rounded-xl border border-indigo-100 text-center">
-                    <span className="block text-xs font-black text-indigo-900">{totalMinimosFiles}</span>
-                    <span className="text-[9px] text-gray-400 font-black uppercase tracking-wider block">Anexos</span>
+
+                  {/* Card 2: obrigatórios */}
+                  <div className="px-5 py-4 bg-white rounded-2xl border border-indigo-100 flex items-center justify-between shadow-3xs hover:border-indigo-250 transition-all">
+                    <span className="text-xs text-gray-550 font-black uppercase tracking-wider block">obrigatórios</span>
+                    <span className="text-sm font-black text-indigo-900 font-mono">{completedObrigatorios} / 3</span>
                   </div>
+
+                  {/* Card 3: outras provas */}
+                  <div className="px-5 py-4 bg-white rounded-2xl border border-indigo-100 flex items-center justify-between shadow-3xs hover:border-indigo-250 transition-all">
+                    <span className="text-xs text-gray-550 font-black uppercase tracking-wider block">outras provas</span>
+                    <span className="text-sm font-black text-indigo-900 font-mono">{completedOutrasProvas} / {totalOutrasProvas}</span>
+                  </div>
+
+                  {/* Card 4: total de provas solicitadas % */}
+                  <div className="px-5 py-4 bg-white rounded-2xl border border-indigo-100 flex items-center justify-between shadow-3xs hover:border-indigo-250 transition-all">
+                    <span className="text-xs text-gray-550 font-black uppercase tracking-wider block">total de provas solicitadas %</span>
+                    <span className="text-sm font-black text-indigo-900 font-mono">{totalAllRequested} / {totalAllRequested} ({requestedPercentage}%)</span>
+                  </div>
+
+                  {/* Card 5: total de provas entregues % */}
+                  <div className="px-5 py-4 bg-white rounded-2xl border border-indigo-100 flex items-center justify-between shadow-3xs hover:border-indigo-250 transition-all">
+                    <span className="text-indigo-650 text-xs font-black uppercase tracking-wider block">total de provas entregues %</span>
+                    <span className="text-sm font-black text-indigo-900 font-mono">{totalAllReceived} / {totalAllRequested} ({receivedPercentage}%)</span>
+                  </div>
+
                 </div>
               </div>
 
@@ -474,6 +546,71 @@ export default function RelatorioConsolidadoPF() {
                   <p className="text-xs text-gray-405 italic bg-gray-50/55 p-3 rounded-xl border border-dashed border-gray-200">
                     Nenhuma outra prova específica exigida para o caso de instrução.
                   </p>
+                )}
+              </div>
+
+              {/* BUTTON VALIDAR RELATÓRIO E PREVIEW GDI */}
+              <div className="space-y-4 pt-4 border-t border-gray-100">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black text-gray-800 uppercase tracking-wider">
+                    Validação e Preview de Relatório (GDI)
+                  </h3>
+                  <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-black uppercase tracking-wider font-mono">Etapa Preparatória</span>
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={handleValidateReport}
+                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-3xs"
+                >
+                  <CheckCircle2 size={14} />
+                  <span>Validar Relatório</span>
+                </button>
+
+                {reportPreview !== null && (
+                  <div className="border border-blue-200 rounded-2xl p-5 bg-blue-50/20 space-y-4 animate-in fade-in duration-200 text-left">
+                    <div className="flex items-center gap-2 border-b border-blue-100 pb-2">
+                      <div className="w-2 h-2 rounded-full bg-blue-600 animate-ping"></div>
+                      <h4 className="text-xs font-black text-blue-950 uppercase tracking-wider font-mono">
+                        Preview do Google Docs integration
+                      </h4>
+                    </div>
+
+                    <p className="text-[11px] text-blue-900 font-medium leading-normal">
+                      Os dados de Relação de Documentos Básicos do Escritório, Relação de Provas Mínimas obrigatórias e Relação de outras Provas solicitadas foram mapeados com sucesso.
+                    </p>
+
+                    <div className="bg-white border border-blue-100 rounded-xl p-3.5 font-mono text-[10px] text-blue-800 leading-normal max-h-56 overflow-y-auto whitespace-pre-wrap select-all">
+                      <span className="font-extrabold uppercase block text-[8px] text-blue-500 tracking-wider mb-2">
+                        PLACEHOLDER DE DESTINO: {"<<"}Relatório_geral_de_Provas_pessoa_fisica{">>"}
+                      </span>
+                      {reportPreview}
+                    </div>
+
+                    <div className="pt-1">
+                      {isPreviewValidated ? (
+                        <div className="p-3.5 bg-emerald-50 border border-emerald-150 text-emerald-950 rounded-xl text-[10px] font-bold leading-normal flex items-start gap-2 animate-in fade-in duration-200">
+                          <CheckCircle2 className="text-emerald-600 shrink-0 mt-0.5" size={15} />
+                          <div className="space-y-0.5">
+                            <span className="block text-emerald-900 uppercase text-[9px] tracking-wider font-mono font-black">Preview do GDI Homologado</span>
+                            <span className="text-emerald-800">O payload da {"<<"}Relatório_geral_de_Provas_pessoa_fisica{">>"} de Provas da Pessoa Física está 100% pronto para ser enviado! 🔵</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsPreviewValidated(true);
+                            setSuccess("Preview do Google Docs validado com sucesso! Payload do placeholder está pronto para ser enviado.");
+                            setTimeout(() => setSuccess(null), 3500);
+                          }}
+                          className="w-full py-2.5 bg-blue-700 hover:bg-blue-850 text-white rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-3xs"
+                        >
+                          <span>Validar Preview</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
 

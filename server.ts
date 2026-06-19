@@ -5039,7 +5039,7 @@ async function createTodoistTask(payload: TodoistTaskPayload) {
   if (payload.dueString) body.due_string = payload.dueString;
   if (payload.priority) body.priority = payload.priority;
 
-  const url = "https://api.todoist.com/api/v1/tasks";
+  const url = "https://api.todoist.com/rest/v2/tasks";
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -5048,10 +5048,6 @@ async function createTodoistTask(payload: TodoistTaskPayload) {
     },
     body: JSON.stringify(body)
   });
-
-  if (response.status === 410) {
-    throw new Error("TODOIST_ENDPOINT_DEPRECATED");
-  }
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -5117,7 +5113,7 @@ app.post("/api/todoist/create-task", async (req, res) => {
       return res.status(410).json({
         success: false,
         error: "TODOIST_ENDPOINT_DEPRECATED",
-        message: "Endpoint antigo do Todoist detectado. Use somente https://api.todoist.com/api/v1."
+        message: "Endpoint antigo do Todoist detectado. Use somente https://api.todoist.com/rest/v2."
       });
     }
     return res.status(500).json({
@@ -5142,22 +5138,12 @@ app.get("/api/todoist/projects", async (req: any, res: any) => {
       });
     }
 
-    const response = await fetch("https://api.todoist.com/api/v1/projects", {
+    const response = await fetch("https://api.todoist.com/rest/v2/projects", {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${token}`
       }
     });
-
-    if (response.status === 410) {
-      return res.status(410).json({
-        success: false,
-        errorCode: "TODOIST_ENDPOINT_DEPRECATED",
-        errorMessage: "Endpoint antigo do Todoist detectado. Use somente https://api.todoist.com/api/v1.",
-        httpStatus: 410,
-        rawResponse: ""
-      });
-    }
 
     if (!response.ok) {
       const text = await response.text();
@@ -5172,6 +5158,17 @@ app.get("/api/todoist/projects", async (req: any, res: any) => {
     }
 
     const projects = await response.json();
+    if (!Array.isArray(projects)) {
+      console.warn("[Todoist API Warning]: Retorno de projetos não é um array:", projects);
+      return res.status(502).json({
+        success: false,
+        errorCode: "TODOIST_RESPONSE_MALFORMED",
+        errorMessage: "A resposta do Todoist não retornou um array válido de projetos.",
+        httpStatus: 502,
+        rawResponse: JSON.stringify(projects)
+      });
+    }
+
     return res.status(200).json({
       success: true,
       projects: projects.map((p: any) => ({
@@ -5274,35 +5271,18 @@ app.get("/api/todoist/diagnostics", async (req: any, res: any) => {
   }
 
   let canReachTodoistApi = false;
-  let isDeprecated = false;
   if (tokenConfigured) {
     try {
-      const pingRes = await fetch("https://api.todoist.com/api/v1/projects", {
+      const pingRes = await fetch("https://api.todoist.com/rest/v2/projects", {
         method: "GET",
         headers: {
           "Authorization": `Bearer ${token}`
         }
       });
-      if (pingRes.status === 410) {
-        isDeprecated = true;
-      } else {
-        canReachTodoistApi = pingRes.ok;
-      }
+      canReachTodoistApi = pingRes.ok;
     } catch (err) {
       console.error("Error pinging Todoist API:", err);
     }
-  }
-
-  if (isDeprecated) {
-    return res.status(410).json({
-      success: false,
-      tokenConfigured,
-      tokenMasked,
-      service: "todoist",
-      canReachTodoistApi: false,
-      errorCode: "TODOIST_ENDPOINT_DEPRECATED",
-      errorMessage: "Endpoint antigo do Todoist detectado. Use somente https://api.todoist.com/api/v1."
-    });
   }
 
   return res.json({
@@ -5314,7 +5294,7 @@ app.get("/api/todoist/diagnostics", async (req: any, res: any) => {
   });
 });
 
-const TODOIST_API_BASE_URL = "https://api.todoist.com/api/v1";
+const TODOIST_API_BASE_URL = "https://api.todoist.com/rest/v2";
 
 // POST /api/todoist/create-case-task
 app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
@@ -5490,14 +5470,6 @@ app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
       body: JSON.stringify(todoistPayload)
     });
 
-    if (createRes.status === 410) {
-      return fail(
-        410,
-        "TODOIST_ENDPOINT_DEPRECATED",
-        "Endpoint antigo do Todoist detectado. Use somente https://api.todoist.com/api/v1."
-      );
-    }
-
     const createRaw = await createRes.text();
     const createContentType = createRes.headers.get("content-type") || "";
 
@@ -5555,14 +5527,6 @@ app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
         Accept: "application/json"
       }
     });
-
-    if (verifyRes.status === 410) {
-      return fail(
-        410,
-        "TODOIST_ENDPOINT_DEPRECATED",
-        "Endpoint antigo do Todoist detectado. Use somente https://api.todoist.com/api/v1."
-      );
-    }
 
     const verifyRaw = await verifyRes.text();
     const verifyContentType = verifyRes.headers.get("content-type") || "";

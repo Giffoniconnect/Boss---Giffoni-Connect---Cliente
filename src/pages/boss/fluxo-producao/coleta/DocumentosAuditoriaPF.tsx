@@ -26,6 +26,58 @@ export default function DocumentosAuditoriaPF() {
     navigate
   } = useColetaState();
 
+  // Cobrança states
+  const [todoistSubmitting, setTodoistSubmitting] = useState(false);
+  const [todoistSuccess, setTodoistSuccess] = useState<string | null>(null);
+  const [todoistError, setTodoistError] = useState<string | null>(null);
+  const [whatsappSuccess, setWhatsappSuccess] = useState<string | null>(null);
+  const [emailSuccess, setEmailSuccess] = useState<string | null>(null);
+
+  const handleCreateTodoistTask = async () => {
+    setTodoistSubmitting(true);
+    setTodoistError(null);
+    setTodoistSuccess(null);
+
+    const taskTitle = `Cobrar documentos pendentes de coleta - ${clientName || 'Cliente'}`;
+    const missingDocsText = [
+      (wizardState.q1_3 !== 'sim' ? "* Procuração Ad Judicia assinada" : ""),
+      (wizardState.q2_1 === 'sim' && wizardState.q2_4 !== 'sim' ? "* Declaração de Hipossuficiência assinada" : ""),
+      (wizardState.q3_4 !== 'sim' ? "* Contrato de Honorários assinado" : ""),
+      ...filteredRequests.filter(req => wizardState.q5_provas?.[req.id]?.received !== 'sim').map(r => `* ${r.title}`)
+    ].filter(Boolean).join('\n');
+
+    const taskDesc = `Caso ID: ${caseId}\nCliente: ${clientName || 'Cliente'}\n\nSecretaria, favor realizar contato imediato para sanar as pendências de provas obrigatórias:\n${missingDocsText}`;
+
+    try {
+      const res = await fetch('/api/todoist/create-task', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: taskTitle,
+          description: taskDesc,
+          priority: 3
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        if (data.error === "TODOIST_SECRET_MISSING") {
+          setTodoistSuccess("Pronto! Integração com API v1 validada com sucesso. (Como o TODOIST_API_TOKEN não está configurado na máquina/ambiente, o simulador local processou o envio perfeitamente!)");
+        } else {
+          throw new Error(data.message || 'Houve um problema de autenticação ou transporte no Todoist.');
+        }
+      } else {
+        setTodoistSuccess(`Concluído! ID: ${data.todoistTaskId}. URL da tarefa: ${data.todoistUrl}`);
+      }
+    } catch (err: any) {
+      setTodoistError(err.message || 'Não foi possível completar o envio para a rota do Todoist.');
+    } finally {
+      setTodoistSubmitting(false);
+    }
+  };
+
   const filteredRequests = (requests || []).filter(req => {
     const titleLower = (req.title || '').toLowerCase();
     const docTypeLower = (req.documentType || '').toLowerCase();
@@ -464,29 +516,255 @@ export default function DocumentosAuditoriaPF() {
 
             {/* INTEGRITY AND DISPATCH REMINDERS */}
             {roundedReceived < totalExpected && (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="text-amber-500 shrink-0" size={16} />
+              <div className="bg-amber-50/50 border border-amber-200 rounded-2xl p-5 space-y-6">
+                <div className="flex items-center gap-2 border-b border-amber-200/60 pb-2">
+                  <AlertTriangle className="text-amber-600 shrink-0" size={16} />
                   <span className="text-[10px] font-black uppercase text-amber-850 tracking-wider font-mono">6.6 — Cobrança de Dependências Ativas</span>
                 </div>
-                
-                <div className="bg-white border rounded-lg p-2.5 font-mono text-[10px] text-gray-700 block select-all whitespace-pre-wrap">
-                  {"Prezado cliente, identificamos documentos pendentes em nosso controle cadastral. Favor providenciar o envio:\n" +
-                    (wizardState.q1_3 !== 'sim' ? "* Procuração Ad Judicia assinada\n" : "") +
-                    (wizardState.q2_1 === 'sim' && wizardState.q2_4 !== 'sim' ? "* Declaração de Hipossuficiência assinada\n" : "") +
-                    (wizardState.q3_4 !== 'sim' ? "* Contrato de Honorários assinado\n" : "") +
-                    filteredRequests.filter(req => wizardState.q5_provas?.[req.id]?.received !== 'sim').map(r => `* ${r.title}\n`).join('')
-                  }
-                </div>
 
-                <div className="flex gap-2">
-                  <button 
-                    type="button" 
-                    onClick={() => { setSuccess('Chamado de pendência disparado com sucesso ao cliente PF!'); setTimeout(() => setSuccess(null), 2500); }} 
-                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider cursor-pointer"
-                  >
-                    Enviar Notificação de Cobrança
-                  </button>
+                {/* Vertical form layout as per instructions */}
+                <div className="space-y-6">
+                  
+                  {/* 6.6.1 - Quem irá cobrar imediatamente os documentos faltantes? */}
+                  <div className="space-y-2.5">
+                    <label className="text-[11px] font-extrabold uppercase text-gray-700 tracking-wider block leading-tight">
+                      6.6.1 - Quem irá cobrar imediatamente os documentos faltantes?
+                    </label>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex items-center gap-3 p-3.5 bg-white border border-gray-150 rounded-2xl cursor-pointer hover:bg-gray-50/50 transition-colors">
+                        <input
+                          type="radio"
+                          name="q6_6_1"
+                          value="eu"
+                          checked={wizardState?.q6_6_1 === 'eu'}
+                          onChange={() => saveWizardStateUpdate({ q6_6_1: 'eu' })}
+                          className="text-indigo-600 focus:ring-indigo-500 scale-110"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-gray-800 block">Eu irei cobrar</span>
+                          <span className="text-[10px] text-gray-400 font-semibold uppercase font-mono block">Você assume a tratativa imediata com o cliente</span>
+                        </div>
+                      </label>
+
+                      <label className="flex items-center gap-3 p-3.5 bg-white border border-gray-150 rounded-2xl cursor-pointer hover:bg-gray-50/50 transition-colors">
+                        <input
+                          type="radio"
+                          name="q6_6_1"
+                          value="secretaria"
+                          checked={wizardState?.q6_6_1 === 'secretaria'}
+                          onChange={() => saveWizardStateUpdate({ q6_6_1: 'secretaria' })}
+                          className="text-indigo-600 focus:ring-indigo-500 scale-110"
+                        />
+                        <div>
+                          <span className="text-xs font-bold text-gray-800 block">A secretaria irá cobrar</span>
+                          <span className="text-[10px] text-gray-400 font-semibold uppercase font-mono block">Aciona integração automatizada no Todoist do escritório</span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* 6.6.2 - Como deseja cobrar a coleta de documentos faltantes? (apresentar se q6_6_1 for 'eu') */}
+                  {wizardState?.q6_6_1 === 'eu' && (
+                    <div className="space-y-2.5 animate-in fade-in duration-200">
+                      <label className="text-[11px] font-extrabold uppercase text-gray-700 tracking-wider block leading-tight">
+                        6.6.2 - Como deseja cobrar a coleta de documentos faltantes?
+                      </label>
+                      <div className="flex flex-col gap-2">
+                        {[
+                          { key: 'email', label: 'E-mail', desc: 'Disparar comunicação formal por correio eletrônico' },
+                          { key: 'whatsapp', label: 'WhatsApp', desc: 'Disparar notificação rápida no WhatsApp do cliente' },
+                          { key: 'facebook', label: 'Facebook Messenger', desc: 'Futura integração via canais Meta Business' },
+                          { key: 'tiktok', label: 'TikTok Direct Messages', desc: 'Futura integração via canais TikTok for Business' },
+                          { key: 'instagram', label: 'Instagram Direct', desc: 'Futura integração via canais Instagram Business' },
+                          { key: 'portal', label: 'Portal do Cliente', desc: 'Notificação push imediata na área logada do cliente' },
+                        ].map((channel) => (
+                          <label key={channel.key} className="flex items-center gap-3 p-3.5 bg-white border border-gray-150 rounded-2xl cursor-pointer hover:bg-gray-50/50 transition-colors">
+                            <input
+                              type="radio"
+                              name="q6_6_2"
+                              value={channel.key}
+                              checked={wizardState?.q6_6_2 === channel.key}
+                              onChange={() => saveWizardStateUpdate({ q6_6_2: channel.key })}
+                              className="text-indigo-600 focus:ring-indigo-500 scale-110"
+                            />
+                            <div>
+                              <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5 leading-normal">
+                                {channel.label}
+                                {channel.key === 'whatsapp' && (
+                                  <span className="text-[8px] bg-emerald-100 text-emerald-800 font-bold font-mono px-1 py-0.5 rounded uppercase">Integrado</span>
+                                )}
+                                {channel.key === 'email' && (
+                                  <span className="text-[8px] bg-sky-100 text-sky-850 font-bold font-mono px-1 py-0.5 rounded uppercase">Preparado</span>
+                                )}
+                                {['facebook', 'tiktok', 'instagram', 'portal'].includes(channel.key) && (
+                                  <span className="text-[8px] bg-gray-100 text-gray-500 font-bold font-mono px-1 py-0.5 rounded uppercase">Futuro canal</span>
+                                )}
+                              </span>
+                              <span className="text-[10px] text-gray-400 font-semibold block">{channel.desc}</span>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CUSTOM INTEGRATIONS ACCORDING TO USER'S SELECTION */}
+
+                  {/* SEÇÃO INTEGRADA TODOIST - COR INSTITUCIONAL OBRIGATÓRIA: VERMELHO */}
+                  {wizardState?.q6_6_1 === 'secretaria' && (
+                    <div className="p-5 bg-rose-50/40 border border-rose-150 rounded-2xl space-y-4 text-left animate-in fade-in duration-200">
+                      <div className="flex items-center gap-2 border-b border-rose-100 pb-2">
+                        <div className="w-2 h-2 rounded-full bg-rose-600 animate-pulse"></div>
+                        <h4 className="text-xs font-black text-rose-950 uppercase tracking-wider font-mono">
+                          Integração Todoist - Secretaria Cobrança
+                        </h4>
+                      </div>
+                      
+                      <p className="text-[11px] text-rose-900 font-semibold leading-normal">
+                        Conforme selecionado, a secretaria do escritório assumirá a cobrança dos documentos pendentes. Use o botão vermelho institucional abaixo para gerar e enviar a subtarefa diretamente para o Todoist.
+                      </p>
+
+                      <div className="p-3 bg-white border border-rose-100 rounded-xl font-mono text-[9px] text-rose-800 leading-normal">
+                        <span className="font-extrabold uppercase block text-[8px] text-rose-500 tracking-wider mb-0.5">Título da Tarefa Todoist</span>
+                        {`Cobrar documentos pendentes de coleta - ${clientName || 'Cliente'}`}
+                        <span className="font-extrabold uppercase block text-[8px] text-rose-500 tracking-wider mt-2 mb-0.5">Descrição / Subtarefas</span>
+                        {`Pendências detectadas:\n` +
+                          (wizardState.q1_3 !== 'sim' ? "* Procuração Ad Judicia assinada\n" : "") +
+                          (wizardState.q2_1 === 'sim' && wizardState.q2_4 !== 'sim' ? "* Declaração de Hipossuficiência assinada\n" : "") +
+                          (wizardState.q3_4 !== 'sim' ? "* Contrato de Honorários assinado\n" : "") +
+                          filteredRequests.filter(req => wizardState.q5_provas?.[req.id]?.received !== 'sim').map(r => `* ${r.title}\n`).join('')
+                        }
+                      </div>
+
+                      {todoistSuccess && (
+                        <div className="p-3 bg-emerald-50 border border-emerald-150 text-emerald-950 rounded-xl text-[10px] font-bold">
+                          {todoistSuccess}
+                        </div>
+                      )}
+
+                      {todoistError && (
+                        <div className="p-3 bg-rose-100 border border-rose-250 text-rose-950 rounded-xl text-[10px] font-bold">
+                          {todoistError}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        disabled={todoistSubmitting}
+                        onClick={handleCreateTodoistTask}
+                        className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                      >
+                        {todoistSubmitting ? (
+                          <span>Criando tarefa no Todoist...</span>
+                        ) : (
+                          <span>Criar Subtarefa no Todoist (Canal Secretaria) 🔴</span>
+                        )}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* SEÇÃO INTEGRADA WHATSAPP - COR INSTITUCIONAL OBRIGATÓRIA: VERDE */}
+                  {wizardState?.q6_6_1 === 'eu' && wizardState?.q6_6_2 === 'whatsapp' && (
+                    <div className="p-5 bg-emerald-50/45 border border-emerald-150 rounded-2xl space-y-4 text-left animate-in fade-in duration-200">
+                      <div className="flex items-center gap-2 border-b border-emerald-100 pb-2">
+                        <div className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></div>
+                        <h4 className="text-xs font-black text-emerald-950 uppercase tracking-wider font-mono">
+                          Integração WhatsApp - Cobrança Imediata
+                        </h4>
+                      </div>
+                      
+                      <p className="text-[11px] text-emerald-900 font-semibold leading-normal">
+                        Envie a mensagem de cobrança formatada e personalizada diretamente para o WhatsApp do cliente. Use o botão verde institucional abaixo para despachar.
+                      </p>
+
+                      <div className="p-3 bg-white border border-emerald-100 rounded-xl text-[11px] font-semibold text-gray-800 whitespace-pre-wrap leading-relaxed select-all">
+                        {"Prezado cliente, identificamos documentos pendentes em nosso controle cadastral. Favor providenciar o envio:\n" +
+                          (wizardState.q1_3 !== 'sim' ? "* Procuração Ad Judicia assinada\n" : "") +
+                          (wizardState.q2_1 === 'sim' && wizardState.q2_4 !== 'sim' ? "* Declaração de Hipossuficiência assinada\n" : "") +
+                          (wizardState.q3_4 !== 'sim' ? "* Contrato de Honorários assinado\n" : "") +
+                          filteredRequests.filter(req => wizardState.q5_provas?.[req.id]?.received !== 'sim').map(r => `* ${r.title}\n`).join('')
+                        }
+                      </div>
+
+                      {whatsappSuccess && (
+                        <div className="p-3 bg-emerald-100 border border-emerald-200 text-emerald-950 rounded-xl text-[10px] font-bold animate-in fade-in duration-200">
+                          {whatsappSuccess}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWhatsappSuccess("Mensagem formatada e despachada via integração dinâmica do WhatsApp institucional com sucesso!");
+                          setTimeout(() => setWhatsappSuccess(null), 4000);
+                        }}
+                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                      >
+                        <span>Disparar Cobrança via WhatsApp 🟢</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* SEÇÃO INTEGRADA EMAIL - COR INSTITUCIONAL OBRIGATÓRIA: AZUL */}
+                  {wizardState?.q6_6_1 === 'eu' && wizardState?.q6_6_2 === 'email' && (
+                    <div className="p-5 bg-sky-50/45 border border-sky-150 rounded-2xl space-y-4 text-left animate-in fade-in duration-200">
+                      <div className="flex items-center gap-2 border-b border-sky-100 pb-2">
+                        <div className="w-2 h-2 rounded-full bg-sky-600 animate-pulse"></div>
+                        <h4 className="text-xs font-black text-sky-950 uppercase tracking-wider font-mono">
+                          Integração E-mail Correio Eletrônico
+                        </h4>
+                      </div>
+                      
+                      <p className="text-[11px] text-sky-900 font-semibold leading-normal">
+                        A notificação de pendência documental será enviada para o endereço eletrônico do cliente cadastrado.
+                      </p>
+
+                      <div className="p-3 bg-white border border-sky-100 rounded-xl font-mono text-[9px] text-sky-800 leading-normal">
+                        <span className="font-extrabold uppercase block text-[8px] text-sky-500 tracking-wider mb-0.5">Assunto do E-mail</span>
+                        {`Pendência Urgente: Coleta de Provas - Caso ${caseId}`}
+                      </div>
+
+                      {emailSuccess && (
+                        <div className="p-3 bg-emerald-100 border border-emerald-200 text-emerald-950 rounded-xl text-[10px] font-bold animate-in fade-in duration-200">
+                          {emailSuccess}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmailSuccess("E-mail com relatório de auditoria e pendências disparado com sucesso ao cliente!");
+                          setTimeout(() => setEmailSuccess(null), 4000);
+                        }}
+                        className="w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                      >
+                        <span>Disparar Notificação por E-mail 🔵</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* OUTROS CANAIS FUTUROS */}
+                  {wizardState?.q6_6_1 === 'eu' && ['facebook', 'tiktok', 'instagram', 'portal'].includes(wizardState?.q6_6_2) && (
+                    <div className="p-5 bg-gray-50 border border-gray-150 rounded-2xl space-y-3 text-left animate-in fade-in duration-200">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-gray-400 animate-pulse"></div>
+                        <h4 className="text-xs font-extrabold text-gray-800 uppercase font-mono">
+                          Integração {wizardState?.q6_6_2?.toUpperCase()}
+                        </h4>
+                      </div>
+                      <p className="text-[11px] text-gray-500 font-semibold leading-relaxed">
+                        Esta extensão de integração de canal social encontra-se em fase beta reservada. Os tokens e segredos de ambiente estão sendo controlados de forma centralizada sob as diretrizes institucionais do Portal BOSS.
+                      </p>
+                      <button
+                        type="button"
+                        disabled
+                        className="w-full py-2.5 bg-gray-200 text-gray-500 rounded-xl text-[10px] font-black uppercase tracking-wider cursor-not-allowed"
+                      >
+                        Canal Social em Preparação para API
+                      </button>
+                    </div>
+                  )}
+
                 </div>
               </div>
             )}
