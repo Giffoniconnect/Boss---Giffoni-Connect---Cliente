@@ -30,7 +30,9 @@ import {
   Flag,
   ChevronDown,
   Eye,
-  EyeOff
+  EyeOff,
+  Layers,
+  CheckSquare
 } from 'lucide-react';
 
 function formatCNJ(value: string): string {
@@ -137,6 +139,16 @@ export default function TipoServico() {
   const [processNumber, setProcessNumber] = useState('');
   const [serviceSubtype, setServiceSubtype] = useState('');
 
+  // New States for Petição Inicial Structure
+  const [areaDireito, setAreaDireito] = useState('');
+  const [customAreas, setCustomAreas] = useState<string[]>([]);
+  const [temSubArea, setTemSubArea] = useState<'sim' | 'nao'>('nao');
+  const [subArea, setSubArea] = useState('');
+  const [showAddAreaInput, setShowAddAreaInput] = useState(false);
+  const [newAreaInput, setNewAreaInput] = useState('');
+  const [customAllowedFeesInput, setCustomAllowedFeesInput] = useState<string[]>(["fixo", "exito_simples", "misto"]);
+  const [customAreaFeesMap, setCustomAreaFeesMap] = useState<Record<string, string[]>>({});
+
   // Future Todoist status fields
   const [todoistTaskId, setTodoistTaskId] = useState('');
   const [todoistTaskUrl, setTodoistTaskUrl] = useState('');
@@ -209,7 +221,7 @@ export default function TipoServico() {
 
   useEffect(() => {
     if (subTypeRoute === 'peticao-inicial') {
-      setVara('A definir');
+      setVara(prev => prev || 'A definir');
     }
   }, [subTypeRoute]);
 
@@ -235,10 +247,15 @@ export default function TipoServico() {
             setOppositeParty(data.oppositeParty || '');
             setHasOppositeParty(!!data.hasOppositeParty);
             setAssunto(data.assunto || data.title || '');
-            setVara(subTypeRoute === 'peticao-inicial' ? 'A definir' : (data.vara || ''));
+            setVara(subTypeRoute === 'peticao-inicial' ? (data.vara || 'A definir') : (data.vara || ''));
             setComarca(data.comarca || '');
             setProcessNumber(data.processNumber || '');
             setServiceSubtype(data.serviceSubtype || '');
+            setAreaDireito(data.areaDireito || '');
+            setCustomAreas(data.customAreas || []);
+            setCustomAreaFeesMap(data.customAreaFeesMap || {});
+            setTemSubArea(data.temSubArea || 'nao');
+            setSubArea(data.subArea || '');
 
             // Todoist metadata with automatic simulator protection
             let loadedTaskId = data.todoistTaskId || '';
@@ -557,7 +574,9 @@ export default function TipoServico() {
 
     try {
       const isPeticaoInicial = subTypeRoute === 'peticao-inicial';
-      const nextStage = advanceAfter ? "solicitacoes-provas" : "tipo-producao";
+      const nextStage = advanceAfter 
+        ? (isPeticaoInicial ? "financeiro" : "solicitacoes-provas") 
+        : "tipo-producao";
 
       const payload: any = {
         serviceMacroType: macro,
@@ -577,14 +596,19 @@ export default function TipoServico() {
         todoistAutomationStatus: todoistAutomationStatus || 'aguardando',
         todoistTaskLogFalha: todoistTaskLogFalha || '',
         updatedAt: now,
-        productionStage: nextStage
+        productionStage: nextStage,
+        customAreaFeesMap: customAreaFeesMap || {}
       };
 
       if (isPeticaoInicial) {
         payload.tipoServicoCompleto = true;
         payload.tipoServicoPendente = false;
-        payload.vara = "A definir";
+        payload.vara = vara || 'A definir';
         payload.comarca = comarca || '';
+        payload.areaDireito = areaDireito || '';
+        payload.customAreas = customAreas || [];
+        payload.temSubArea = temSubArea || 'nao';
+        payload.subArea = temSubArea === 'sim' ? (subArea || '') : '';
       } else if (macro === 'judicial') {
         payload.vara = vara || '';
         payload.comarca = comarca || '';
@@ -625,7 +649,11 @@ export default function TipoServico() {
 
       if (advanceAfter) {
         setTimeout(() => {
-          navigate(`/boss-giffoni-clientes/fluxo-producao/${safeCaseId}/solicitacoes-provas`);
+          if (isPeticaoInicial) {
+            navigate(`/boss-giffoni-clientes/fluxo-producao/${safeCaseId}/financeiro`);
+          } else {
+            navigate(`/boss-giffoni-clientes/fluxo-producao/${safeCaseId}/solicitacoes-provas`);
+          }
         }, 800);
       }
 
@@ -928,6 +956,93 @@ export default function TipoServico() {
               </div>
             ) : null}
           </div>
+        </div>
+
+        {/* CLICKABLE AND FUNCTIONAL SUBSTAGE CARDS */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pb-6 border-b border-gray-100">
+          {/* Card 1 - Segmento */}
+          <button
+            type="button"
+            onClick={() => {
+              navigate(getRouteTo('natureza'));
+            }}
+            className={`p-4 rounded-2xl border text-left flex items-center gap-3 transition-all cursor-pointer ${
+              currentStep === 'natureza'
+                ? 'border-indigo-600 bg-indigo-50/10 ring-2 ring-indigo-600/20 shadow-sm scale-[1.01]'
+                : 'bg-white border-gray-150 hover:border-indigo-400 hover:shadow-xs'
+            }`}
+          >
+            <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 shadow-xs ${
+              currentStep === 'natureza' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-emerald-50 text-emerald-600 border-emerald-150'
+            }`}>
+              {currentStep !== 'natureza' ? <Check size={14} className="stroke-[3]" /> : <Layers size={14} />}
+            </div>
+            <div>
+              <p className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider leading-none">Subetapa 01</p>
+              <h5 className="font-bold text-xs text-gray-900 mt-1">Segmento da Demanda</h5>
+            </div>
+          </button>
+
+          {/* Card 2 - Tipo do Serviço */}
+          <button
+            type="button"
+            onClick={() => {
+              const macro = macroTypeSelection || 'judicial';
+              navigate(getRouteTo(macro));
+            }}
+            className={`p-4 rounded-2xl border text-left flex items-center gap-3 transition-all cursor-pointer ${
+              currentStep === 'judicial' || currentStep === 'extrajudicial'
+                ? 'border-indigo-600 bg-indigo-50/10 ring-2 ring-indigo-600/20 shadow-sm scale-[1.01]'
+                : currentStep === 'form'
+                ? 'bg-emerald-50/20 border-emerald-150 text-emerald-800'
+                : 'bg-white border-gray-150 hover:border-indigo-400 hover:shadow-xs opacity-75'
+            }`}
+          >
+            <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 shadow-xs ${
+              currentStep === 'judicial' || currentStep === 'extrajudicial'
+                ? 'bg-indigo-600 text-white border-indigo-600'
+                : currentStep === 'form'
+                ? 'bg-emerald-50 text-emerald-600 border-emerald-150'
+                : 'bg-gray-50 text-gray-400 border-gray-100'
+            }`}>
+              {currentStep === 'form' ? <Check size={14} className="stroke-[3]" /> : <Scale size={14} />}
+            </div>
+            <div>
+              <p className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider leading-none">Subetapa 02</p>
+              <h5 className="font-bold text-xs text-gray-900 mt-1">
+                {macroTypeSelection === 'extrajudicial' ? 'Serviço Extrajudicial' : 'Serviço Judicial'}
+              </h5>
+            </div>
+          </button>
+
+          {/* Card 3 - Cadastro */}
+          <button
+            type="button"
+            onClick={() => {
+              const subtype = subTypeRoute || 'peticao-inicial';
+              const query = clientId ? `?clientId=${clientId}` : '';
+              navigate(`/boss-giffoni-clientes/fluxo-producao/${safeCaseId}/tipo-producao/${subtype}${query}`);
+            }}
+            className={`p-4 rounded-2xl border text-left flex items-center gap-3 transition-all cursor-pointer ${
+              currentStep === 'form'
+                ? 'border-indigo-600 bg-indigo-50/10 ring-2 ring-indigo-600/20 shadow-sm scale-[1.01]'
+                : 'bg-white border-gray-150 hover:border-indigo-400 hover:shadow-xs opacity-60'
+            }`}
+          >
+            <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 shadow-xs ${
+              currentStep === 'form'
+                ? 'bg-indigo-600 text-white border-indigo-600'
+                : todoistAutomationStatus === 'criado' || !!todoistTaskId
+                ? 'bg-emerald-50 text-emerald-600 border-emerald-150'
+                : 'bg-gray-50 text-gray-400 border-gray-100'
+            }`}>
+              {todoistAutomationStatus === 'criado' || !!todoistTaskId ? <Check size={14} className="stroke-[3]" /> : <CheckSquare size={14} />}
+            </div>
+            <div>
+              <p className="text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider leading-none">Subetapa 03</p>
+              <h5 className="font-bold text-xs text-gray-900 mt-1">Cadastro no Todoist</h5>
+            </div>
+          </button>
         </div>
 
         {isEntrevistaIncomplete && (
@@ -1252,7 +1367,7 @@ export default function TipoServico() {
                         {/* Nome completo do cliente */}
                         <div className="space-y-1.5">
                           <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
-                            Nome completo do cliente
+                            Nome completo do Cliente
                           </label>
                           <input 
                             type="text" 
@@ -1260,6 +1375,160 @@ export default function TipoServico() {
                             disabled 
                             className="w-full px-4 py-3 bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-500 cursor-not-allowed outline-none"
                           />
+                        </div>
+
+                        {/* Nome completo da parte Adversa */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
+                            Nome completo da parte Adversa
+                          </label>
+                          <input 
+                            type="text" 
+                            value={oppositeParty} 
+                            onChange={(e) => setOppositeParty(e.target.value)}
+                            placeholder="Ex: Nome do Réu / Requerido" 
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                          />
+                        </div>
+
+                        {/* Área do Direito */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
+                            Área do Direito
+                          </label>
+                          <select
+                            value={areaDireito}
+                            onChange={(e) => setAreaDireito(e.target.value)}
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                          >
+                            <option value="">Selecione a área do direito</option>
+                            {[
+                              "Direito Civil",
+                              "Direito do Trabalho - Reclamante",
+                              "Direito do Trabalho - Reclamada",
+                              "Direito Previdenciário -  INSS - RGPS",
+                              "Direito Previdenciário - RPPS - Outros Regimes",
+                              "Direito Administrativo",
+                              "Direito Tributário",
+                              "Direito Ambiental",
+                              "Direito Bancário",
+                              "Direito do Consumidor"
+                            ].map((area) => (
+                              <option key={area} value={area}>{area}</option>
+                            ))}
+                            {customAreas.map((area) => (
+                              <option key={area} value={area}>{area}</option>
+                            ))}
+                          </select>
+
+                          {!showAddAreaInput ? (
+                            <button
+                              type="button"
+                              onClick={() => setShowAddAreaInput(true)}
+                              className="mt-1 text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 transition-all outline-none"
+                            >
+                              + ADD nova área
+                            </button>
+                          ) : (
+                            <div className="mt-2 flex flex-col gap-3 p-4 bg-gray-50 border border-gray-200 rounded-2xl animate-fadeIn text-xs shadow-sm">
+                              <p className="font-bold text-gray-800">Cadastrar Nova Área do Direito</p>
+                              <input
+                                type="text"
+                                placeholder="Nome da nova área"
+                                value={newAreaInput}
+                                onChange={(e) => setNewAreaInput(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 bg-white outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 transition-all"
+                              />
+
+                              {/* Balloon checkboxes for fee selection */}
+                              <div className="bg-white border border-gray-150 p-3 rounded-xl space-y-2">
+                                <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block font-mono">
+                                  Tipos de Honorários Possíveis de Cobrar
+                                </span>
+                                <div className="space-y-2">
+                                  <label className="flex items-center gap-2 font-semibold text-gray-700 cursor-pointer text-xs">
+                                    <input
+                                      type="checkbox"
+                                      checked={customAllowedFeesInput.includes("fixo")}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setCustomAllowedFeesInput(prev => [...prev, "fixo"]);
+                                        } else {
+                                          setCustomAllowedFeesInput(prev => prev.filter(f => f !== "fixo"));
+                                        }
+                                      }}
+                                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    Honorários Fixos
+                                  </label>
+                                  <label className="flex items-center gap-2 font-semibold text-gray-700 cursor-pointer text-xs">
+                                    <input
+                                      type="checkbox"
+                                      checked={customAllowedFeesInput.includes("exito_simples")}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setCustomAllowedFeesInput(prev => [...prev, "exito_simples"]);
+                                        } else {
+                                          setCustomAllowedFeesInput(prev => prev.filter(f => f !== "exito_simples"));
+                                        }
+                                      }}
+                                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    Honorários de Êxito Simples
+                                  </label>
+                                  <label className="flex items-center gap-2 font-semibold text-gray-700 cursor-pointer text-xs">
+                                    <input
+                                      type="checkbox"
+                                      checked={customAllowedFeesInput.includes("misto")}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setCustomAllowedFeesInput(prev => [...prev, "misto"]);
+                                        } else {
+                                          setCustomAllowedFeesInput(prev => prev.filter(f => f !== "misto"));
+                                        }
+                                      }}
+                                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    Honorários Mistos (Fixo + Êxito)
+                                  </label>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (newAreaInput.trim()) {
+                                      const added = newAreaInput.trim();
+                                      setCustomAreas(prev => [...prev, added]);
+                                      setAreaDireito(added);
+                                      setCustomAreaFeesMap(prev => ({
+                                        ...prev,
+                                        [added]: customAllowedFeesInput.length > 0 ? customAllowedFeesInput : ["fixo", "exito_simples", "misto"]
+                                      }));
+                                      setNewAreaInput('');
+                                      setCustomAllowedFeesInput(["fixo", "exito_simples", "misto"]);
+                                      setShowAddAreaInput(false);
+                                    }
+                                  }}
+                                  className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all"
+                                >
+                                  Adicionar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setNewAreaInput('');
+                                    setCustomAllowedFeesInput(["fixo", "exito_simples", "misto"]);
+                                    setShowAddAreaInput(false);
+                                  }}
+                                  className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-semibold hover:bg-gray-200 transition-all"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         {/* Assunto */}
@@ -1276,32 +1545,55 @@ export default function TipoServico() {
                           />
                         </div>
 
-                        {/* Tipo de serviço */}
-                        <div className="space-y-1.5">
+                        {/* Deseja adicionar sub-área? */}
+                        <div className="space-y-2">
                           <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
-                            Tipo de serviço
+                            Deseja adicionar sub-área?
                           </label>
-                          <input 
-                            type="text" 
-                            value="Petição inicial a ajuizar" 
-                            disabled 
-                            className="w-full px-4 py-3 bg-gray-100 border border-gray-150 rounded-xl text-xs font-black text-gray-500 cursor-not-allowed outline-none"
-                          />
+                          <div className="flex gap-4">
+                            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-gray-700">
+                              <input 
+                                type="radio" 
+                                name="temSubArea" 
+                                value="sim" 
+                                checked={temSubArea === 'sim'}
+                                onChange={() => setTemSubArea('sim')}
+                                className="accent-indigo-600"
+                              />
+                              Sim
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-gray-700">
+                              <input 
+                                type="radio" 
+                                name="temSubArea" 
+                                value="nao" 
+                                checked={temSubArea === 'nao'}
+                                onChange={() => {
+                                  setTemSubArea('nao');
+                                  setSubArea('');
+                                }}
+                                className="accent-indigo-600"
+                              />
+                              Não
+                            </label>
+                          </div>
                         </div>
 
-                        {/* Nome da Parte Adversa */}
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
-                            Nome da Parte Adversa
-                          </label>
-                          <input 
-                            type="text" 
-                            value={oppositeParty} 
-                            onChange={(e) => setOppositeParty(e.target.value)}
-                            placeholder="Ex: Banco X S/A ou Seguradora Y" 
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
-                          />
-                        </div>
+                        {/* Se sim, Qual será a Sub-área? */}
+                        {temSubArea === 'sim' && (
+                          <div className="space-y-1.5 animate-fadeIn">
+                            <label className="text-xs font-bold uppercase text-gray-500 tracking-wide block">
+                              Qual será a Sub-área?
+                            </label>
+                            <input 
+                              type="text" 
+                              value={subArea} 
+                              onChange={(e) => setSubArea(e.target.value)}
+                              placeholder="Ex: Contratos, Consumidor, Danos Morais" 
+                              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
+                            />
+                          </div>
+                        )}
 
                         {/* Vara */}
                         <div className="space-y-1.5">
@@ -1310,9 +1602,10 @@ export default function TipoServico() {
                           </label>
                           <input 
                             type="text" 
-                            value="A definir" 
-                            disabled 
-                            className="w-full px-4 py-3 bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-500 cursor-not-allowed outline-none"
+                            value={vara} 
+                            onChange={(e) => setVara(e.target.value)}
+                            placeholder="Ex: 1ª Vara Cível, Juizado Especial Cível" 
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-gray-950 focus:bg-white focus:ring-1 focus:ring-gray-900 rounded-xl text-xs font-semibold text-gray-800 transition-all outline-none"
                           />
                         </div>
 
@@ -1952,11 +2245,11 @@ export default function TipoServico() {
                   {loading ? (
                     <>
                       <Loader2 size={14} className="animate-spin" />
-                      <span>Salvando...</span>
+                      <span>{subTypeRoute === 'peticao-inicial' ? 'Avançando para o Financeiro...' : 'Salvando...'}</span>
                     </>
                   ) : (
                     <>
-                      <span>Próxima subetapa (Salvar e Avançar)</span>
+                      <span>{subTypeRoute === 'peticao-inicial' ? 'Avançar para o Financeiro 💲' : 'Próxima subetapa (Salvar e Avançar)'}</span>
                       <ArrowRight size={14} />
                     </>
                   )}
