@@ -2667,6 +2667,7 @@ export const FinancialManager: React.FC<FinancialManagerProps> = ({
                   <option value="Boleto">Boleto</option>
                   <option value="Cartão de Crédito">Cartão de Crédito</option>
                   <option value="Depósito">Depósito</option>
+                  <option value="Alvará judicial">Alvará judicial</option>
                   <option value="A combinar">A combinar</option>
                 </select>
               </div>

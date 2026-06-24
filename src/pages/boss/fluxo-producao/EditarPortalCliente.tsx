@@ -1058,13 +1058,25 @@ export default function EditarPortalCliente() {
             </div>
             <p className="text-[15px] text-gray-400 font-semibold mt-1">Configuração individual das seções e fichas integradas fáticas para o portal do cliente.</p>
           </div>
-          <button
-            onClick={fetchClientData}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 hover:text-gray-955 rounded-2xl text-[15px] font-extrabold transition uppercase tracking-wider font-mono self-start cursor-pointer"
-          >
-            <RefreshCw size={14} className={loadingClient ? 'animate-spin' : ''} />
-            Recarregar Cliente
-          </button>
+          <div className="flex flex-wrap items-center gap-3 self-start">
+            {slug === 'viviane-correa-medina-giffoni-rodrigues-pf-77759b' && (
+              <button
+                id="btn-ver-cadastro-contrato"
+                onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao/f60jptoSi8Z9xat45yIb/financeiro/Criar%20Contrato%20de%20Honor%C3%A1rios')}
+                className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 hover:text-indigo-900 rounded-2xl text-[15px] font-extrabold transition uppercase tracking-wider font-mono cursor-pointer shadow-sm"
+              >
+                <FileText size={14} />
+                Ver Cadastro do Contrato de honorários
+              </button>
+            )}
+            <button
+              onClick={fetchClientData}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 hover:text-gray-955 rounded-2xl text-[15px] font-extrabold transition uppercase tracking-wider font-mono cursor-pointer"
+            >
+              <RefreshCw size={14} className={loadingClient ? 'animate-spin' : ''} />
+              Recarregar Cliente
+            </button>
+          </div>
         </div>
 
         {/* FEEDBACK LABELS */}

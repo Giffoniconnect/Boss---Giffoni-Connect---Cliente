@@ -51,6 +51,9 @@ import {
   EyeOff,
   ChevronRight,
   UploadCloud,
+  QrCode,
+  Barcode,
+  Banknote,
 } from "lucide-react";
 import { flowRoutes } from "./utils/flowRoutes";
 
@@ -711,6 +714,12 @@ export default function FinanceiroFluxo() {
   const [customPrevidenciarioInput, setCustomPrevidenciarioInput] = useState<string>("");
   const [showCustomPrevidenciarioModal, setShowCustomPrevidenciarioModal] = useState<boolean>(false);
 
+  // Meio de Pagamento new sub-states
+  const [gerarReciboAutomaticoForm, setGerarReciboAutomaticoForm] = useState<boolean>(false);
+  const [cartaoPorOndeForm, setCartaoPorOndeForm] = useState<string>("Infinitepay - Tap to pay");
+  const [boletoPorOndeForm, setBoletoPorOndeForm] = useState<string>("ASAAS");
+  const [comprovantesMeioPagamentoForm, setComprovantesMeioPagamentoForm] = useState<any[]>([]);
+
   const [financeiroDetalhamentoState, setFinanceiroDetalhamento] = useState<any>({});
   const [financeiroApuracaoTrabalhistaState, setFinanceiroApuracaoTrabalhista] = useState<any>({
     idHomologacaoCalculos: "",
@@ -891,6 +900,12 @@ export default function FinanceiroFluxo() {
           client?.bancario_chavePix ||
           "",
       );
+
+      // Load new payment options
+      setGerarReciboAutomaticoForm(caseObj.gerarReciboAutomatico === true);
+      setCartaoPorOndeForm(caseObj.cartaoPorOnde || "Infinitepay - Tap to pay");
+      setBoletoPorOndeForm(caseObj.boletoPorOnde || "ASAAS");
+      setComprovantesMeioPagamentoForm(caseObj.comprovantesMeioPagamento || []);
     }
   }, [caseObj, client]);
 
@@ -969,6 +984,12 @@ export default function FinanceiroFluxo() {
     if ((caseObj.reclamanteMultaFGTSIndep || false) !== reclamanteMultaFGTSIndep) return true;
     if ((caseObj.reclamanteSeguroDesemprego || false) !== reclamanteSeguroDesemprego) return true;
     if ((caseObj.valorCausaReclamada || "") !== valorCausaReclamada) return true;
+
+    // Check payment sub-states
+    if ((caseObj.gerarReciboAutomatico === true) !== gerarReciboAutomaticoForm) return true;
+    if ((caseObj.cartaoPorOnde || "Infinitepay - Tap to pay") !== cartaoPorOndeForm) return true;
+    if ((caseObj.boletoPorOnde || "ASAAS") !== boletoPorOndeForm) return true;
+    if (JSON.stringify(caseObj.comprovantesMeioPagamento || []) !== JSON.stringify(comprovantesMeioPagamentoForm)) return true;
 
     return false;
   };
@@ -2029,6 +2050,11 @@ export default function FinanceiroFluxo() {
         cobrancaAutomaticaInteg: cobrancaAutomaticaIntegForm,
         
         // Brand new financial fields
+        gerarReciboAutomatico: gerarReciboAutomaticoForm,
+        cartaoPorOnde: cartaoPorOndeForm,
+        boletoPorOnde: boletoPorOndeForm,
+        comprovantesMeioPagamento: comprovantesMeioPagamentoForm,
+
         modeloHonorarios: modeloHonorariosForm,
         categoriaExito: categoriaExitoForm,
         classeExito: classeExitoForm,
@@ -2555,6 +2581,145 @@ export default function FinanceiroFluxo() {
     setFormNotes("");
   };
 
+  // Helper component for automatic receipt and payment proof upload
+  const ComprovanteUploadBox = () => {
+    const getValorParaRenomeacao = () => {
+      const entradaLimpa = (valorEntradaForm || "0,00").replace("R$", "").trim();
+      if (entradaLimpa !== "0,00" && entradaLimpa !== "") {
+        return `R$ ${entradaLimpa}`;
+      }
+      const fixoLimpo = (honorarioFixoValorForm || "0,00").replace("R$", "").trim();
+      if (fixoLimpo !== "0,00" && fixoLimpo !== "") {
+        return `R$ ${fixoLimpo}`;
+      }
+      return "A Combinar";
+    };
+
+    const getTodayFormatted = () => {
+      const d = new Date();
+      const day = String(d.getDate()).padStart(2, "0");
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    };
+
+    const expectedName = `Comprovante de pagamento de Honorários Advocatícios - Valor: ${getValorParaRenomeacao()} - Data: ${getTodayFormatted()}`;
+
+    return (
+      <div className="space-y-2 mt-2 bg-slate-50 border border-slate-200 p-3.5 rounded-xl animate-fadeIn">
+        <div className="flex items-center justify-between">
+          <label className="text-[10px] font-extrabold uppercase text-gray-500 tracking-wider font-mono">
+            Anexo de Comprovante (Renomeação Automática)
+          </label>
+        </div>
+        <div className="text-[11px] text-gray-500 font-semibold leading-relaxed">
+          O arquivo enviado será automaticamente renomeado para: <br/>
+          <span className="font-mono text-indigo-700 font-bold break-all bg-indigo-50/50 px-1.5 py-0.5 rounded border border-indigo-100 block mt-1">
+            {expectedName}.[ext]
+          </span>
+        </div>
+        <label className="group flex flex-col items-center justify-center border border-dashed border-gray-300 hover:border-indigo-500 rounded-xl p-3 bg-white hover:bg-gray-50/50 transition-all cursor-pointer">
+          <UploadCloud
+            className="text-gray-400 group-hover:text-indigo-600 mb-1"
+            size={20}
+          />
+          <span className="text-[11px] font-bold text-gray-700 font-sans">
+            Clique para selecionar ou arraste o comprovante
+          </span>
+          <input
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files && e.target.files.length > 0) {
+                const file = e.target.files[0];
+                const originalName = file.name;
+                const size = (file.size / 1024 / 1024).toFixed(2) + " MB";
+                const lastDotIndex = originalName.lastIndexOf('.');
+                const extension = lastDotIndex !== -1 ? originalName.substring(lastDotIndex) : '';
+                const finalName = `${expectedName}${extension}`;
+                
+                setComprovantesMeioPagamentoForm((prev) => [
+                  ...prev,
+                  { name: finalName, size, uploadedAt: new Date().toISOString() },
+                ]);
+              }
+            }}
+          />
+        </label>
+        {comprovantesMeioPagamentoForm.length > 0 && (
+          <div className="space-y-1 mt-2">
+            {comprovantesMeioPagamentoForm.map((f: any, idx: number) => (
+              <div
+                key={idx}
+                className="flex items-center justify-between p-2 bg-indigo-50 border border-indigo-150 rounded-xl text-[11px]"
+              >
+                <span className="truncate font-semibold text-indigo-900 flex items-center gap-1.5 font-mono">
+                  <FileText size={12} className="text-indigo-500" /> {f.name}{" "}
+                  <span className="text-[9px] text-indigo-400 font-normal">
+                    ({f.size})
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setComprovantesMeioPagamentoForm((prev) => prev.filter((_, i) => i !== idx));
+                  }}
+                  className="text-rose-600 hover:bg-rose-100 p-1 rounded-lg transition"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const ApiLinkBox = ({ link }: { link: string }) => {
+    const [copied, setCopied] = useState(false);
+    const handleCopy = () => {
+      navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+      <div className="space-y-1.5 bg-indigo-50/50 border border-indigo-100 p-3 rounded-xl animate-fadeIn mt-2">
+        <label className="text-[10px] font-extrabold uppercase text-indigo-700 tracking-wider font-mono flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+          Link de Pagamento Gerado Automaticamente (API)
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            readOnly
+            value={link}
+            className="flex-1 px-3 py-1.5 bg-white border border-gray-250 rounded-lg text-[11px] font-mono font-medium text-gray-700 select-all outline-none"
+          />
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-extrabold rounded-lg transition whitespace-nowrap"
+          >
+            {copied ? "Copiado!" : "Copiar"}
+          </button>
+          <a
+            href={link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[10px] font-extrabold rounded-lg transition flex items-center gap-1 border border-gray-300"
+          >
+            Testar <ExternalLink size={11} />
+          </a>
+        </div>
+        <p className="text-[9px] font-bold text-indigo-500/80 font-sans italic">
+          *Este link foi provisionado via integração direta do portal BOSS com a plataforma de faturamento.
+        </p>
+      </div>
+    );
+  };
+
   const handleSaveAndAdvance = async () => {
     setSaving(true);
     setError(null);
@@ -3035,9 +3200,21 @@ export default function FinanceiroFluxo() {
                                 <input
                                   type="date"
                                   disabled={dataPrimeiroVencimentoADefinir}
+                                  min={new Date().toISOString().split("T")[0]}
                                   value={dataPrimeiroVencimentoForm}
                                   onChange={(e) => {
                                     const val = e.target.value;
+                                    const todayStr = new Date().toISOString().split("T")[0];
+                                    if (val && val < todayStr) {
+                                      setError("A data do primeiro vencimento não pode ser inferior à data de hoje.");
+                                      setDataPrimeiroVencimentoForm(todayStr);
+                                      const dateObj = new Date(todayStr + "T12:00:00");
+                                      if (!isNaN(dateObj.getTime())) {
+                                        setDiaVencimentoForm(String(dateObj.getDate()));
+                                      }
+                                      return;
+                                    }
+                                    setError(null);
                                     setDataPrimeiroVencimentoForm(val);
                                     if (val) {
                                       const dateObj = new Date(val + "T12:00:00");
@@ -3560,68 +3737,267 @@ export default function FinanceiroFluxo() {
 
                         {/* TIPO DE RECEBIMENTO & PIX FIELDS (HIDDEN exclusively for pure exito models) */}
                         {!["exito_simples", "exito_trabalhista_reclamante", "exito_trabalhista_reclamada", "exito_previdenciario_beneficio_temporario"].includes(modeloHonorariosForm) && (
-                          <div className="bg-slate-50/50 border border-slate-150 p-4 rounded-xl space-y-4 animate-fadeIn">
-                            <h4 className="text-xs font-black uppercase text-slate-900 tracking-wider flex items-center gap-1.5 font-mono">
-                              Parâmetros de Recebimento de honorários fixos
-                            </h4>
+                          <div className="bg-slate-50/50 border border-slate-150 p-5 rounded-2xl space-y-5 animate-fadeIn">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                              <h4 className="text-xs font-black uppercase text-slate-900 tracking-wider flex items-center gap-1.5 font-mono">
+                                Parâmetros de Recebimento de honorários fixos
+                              </h4>
+                              {/* Visual badge representing the active payment method */}
+                              {(() => {
+                                if (tipoRecebimentoForm === "PIX") {
+                                  return (
+                                    <span className="flex items-center gap-1 bg-teal-50 text-teal-700 text-[10px] font-black border border-teal-200 px-2 py-0.5 rounded-md uppercase font-mono">
+                                      <QrCode size={11} /> PIX Oficial
+                                    </span>
+                                  );
+                                }
+                                if (tipoRecebimentoForm === "Boleto") {
+                                  return (
+                                    <span className="flex items-center gap-1 bg-amber-50 text-amber-700 text-[10px] font-black border border-amber-200 px-2 py-0.5 rounded-md uppercase font-mono">
+                                      <Barcode size={11} /> Boleto
+                                    </span>
+                                  );
+                                }
+                                if (tipoRecebimentoForm === "Cartão de Crédito") {
+                                  return (
+                                    <span className="flex items-center gap-1 bg-indigo-50 text-indigo-700 text-[10px] font-black border border-indigo-200 px-2 py-0.5 rounded-md uppercase font-mono">
+                                      <CreditCard size={11} /> Cartão
+                                    </span>
+                                  );
+                                }
+                                if (tipoRecebimentoForm === "Dinheiro") {
+                                  return (
+                                    <span className="flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[10px] font-black border border-emerald-200 px-2 py-0.5 rounded-md uppercase font-mono">
+                                      <Banknote size={11} /> Dinheiro
+                                    </span>
+                                  );
+                                }
+                                if (tipoRecebimentoForm === "Transferência Bancária") {
+                                  return (
+                                    <span className="flex items-center gap-1 bg-blue-50 text-blue-700 text-[10px] font-black border border-blue-200 px-2 py-0.5 rounded-md uppercase font-mono">
+                                      <Landmark size={11} /> Transferência
+                                    </span>
+                                  );
+                                }
+                                return null;
+                              })()}
+                            </div>
+
                             <div className="grid grid-cols-1 gap-4">
                               <div className="space-y-1">
                                 <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
-                                  Tipo de Recebimento
+                                  Meio de Pagamento
                                 </label>
                                 <select
                                   value={tipoRecebimentoForm}
                                   onChange={(e) => setTipoRecebimentoForm(e.target.value)}
-                                  className="w-full px-3 py-2 bg-white border border-gray-250 rounded-lg text-xs font-semibold text-gray-800 outline-none transition"
+                                  className="w-full px-3 py-2 bg-white border border-gray-250 rounded-lg text-xs font-semibold text-gray-800 outline-none transition focus:border-indigo-500"
                                 >
-                                  <option value="PIX">PIX (Chave Automática)</option>
+                                  <option value="PIX">PIX</option>
+                                  <option value="Boleto">Boleto</option>
+                                  <option value="Cartão de Crédito">Cartão de Crédito</option>
                                   <option value="Dinheiro">Dinheiro</option>
                                   <option value="Transferência Bancária">Transferência Bancária</option>
-                                  <option value="Stripe">Stripe Gateway</option>
-                                  <option value="ASAAS">ASAAS Gateway</option>
-                                  <option value="InfinitePay">InfinitePay</option>
-                                  <option value="Cartão de Crédito - Maquininha PagSeguro">Cartão de Crédito - Maquininha PagSeguro</option>
                                 </select>
                               </div>
 
+                              {/* CONDITIONAL LAYOUTS */}
+
                               {tipoRecebimentoForm === "PIX" && (
-                                <>
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">
-                                      Banco do PIX
-                                    </label>
-                                    <input
-                                      type="text"
-                                      value={pixBancoForm}
-                                      onChange={(e) => setPixBancoForm(e.target.value)}
-                                      className="w-full px-3 py-2 bg-white border border-gray-250 rounded-lg text-xs font-semibold text-gray-800 focus:border-indigo-500 outline-none transition"
-                                      placeholder="Ex: Banco Itaú"
-                                    />
+                                <div className="space-y-4 bg-teal-50/20 border border-teal-100 p-4 rounded-xl animate-fadeIn">
+                                  <div className="flex items-center gap-1.5 text-xs font-bold text-teal-800">
+                                    <span className="w-2 h-2 rounded-full bg-teal-500"></span>
+                                    Configuração de Recebimento via PIX
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                      <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">
+                                        Banco do PIX
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={pixBancoForm}
+                                        onChange={(e) => setPixBancoForm(e.target.value)}
+                                        className="w-full px-3 py-2 bg-white border border-gray-250 rounded-lg text-xs font-semibold text-gray-800 focus:border-indigo-500 outline-none transition"
+                                        placeholder="Ex: Banco Itaú"
+                                      />
+                                    </div>
+
+                                    <div className="space-y-1">
+                                      <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">
+                                        Chave PIX
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={pixChaveForm}
+                                        onChange={(e) => setPixChaveForm(e.target.value)}
+                                        className="w-full px-3 py-2 bg-white border border-gray-250 rounded-lg text-xs font-semibold text-gray-800 focus:border-indigo-500 outline-none transition"
+                                        placeholder="E-mail, CNPJ, CPF..."
+                                      />
+                                    </div>
                                   </div>
 
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">
-                                      Chave PIX
-                                    </label>
-                                    <input
-                                      type="text"
-                                      value={pixChaveForm}
-                                      onChange={(e) => setPixChaveForm(e.target.value)}
-                                      className="w-full px-3 py-2 bg-white border border-gray-250 rounded-lg text-xs font-semibold text-gray-800 focus:border-indigo-500 outline-none transition"
-                                      placeholder="E-mail, CNPJ, CPF..."
-                                    />
-                                  </div>
-                                </>
+                                  <ComprovanteUploadBox />
+                                </div>
                               )}
 
-                              <div className="space-y-1">
+                              {tipoRecebimentoForm === "Boleto" && (
+                                <div className="space-y-4 bg-amber-50/20 border border-amber-100 p-4 rounded-xl animate-fadeIn">
+                                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800">
+                                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                    Configuração de Recebimento via Boleto Bancário
+                                  </div>
+                                  
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">
+                                      Por onde você receberá o Boleto?
+                                    </label>
+                                    <select
+                                      value={boletoPorOndeForm}
+                                      onChange={(e) => setBoletoPorOndeForm(e.target.value)}
+                                      className="w-full px-3 py-2 bg-white border border-gray-250 rounded-lg text-xs font-semibold text-gray-800 outline-none transition focus:border-indigo-500"
+                                    >
+                                      <option value="ASAAS">ASAAS</option>
+                                      <option value="STRIPE">STRIPE</option>
+                                    </select>
+                                  </div>
+
+                                  {(() => {
+                                    const shortId = caseId ? caseId.substring(0, 6) : "GDI";
+                                    const generatedBoletoLink = boletoPorOndeForm === "ASAAS"
+                                      ? `https://cobranca.asaas.com/i/boleto_giffoni_${shortId}_${Date.now().toString().substring(8)}`
+                                      : `https://checkout.stripe.com/pay/boleto_giffoni_${shortId}_${Date.now().toString().substring(8)}`;
+                                    return <ApiLinkBox link={generatedBoletoLink} />;
+                                  })()}
+                                </div>
+                              )}
+
+                              {tipoRecebimentoForm === "Cartão de Crédito" && (
+                                <div className="space-y-4 bg-indigo-50/20 border border-indigo-100 p-4 rounded-xl animate-fadeIn">
+                                  <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-800">
+                                    <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                                    Configuração de Recebimento via Cartão de Crédito
+                                  </div>
+
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">
+                                      Por onde você receberá o Cartão de Crédito?
+                                    </label>
+                                    <select
+                                      value={cartaoPorOndeForm}
+                                      onChange={(e) => setCartaoPorOndeForm(e.target.value)}
+                                      className="w-full px-3 py-2 bg-white border border-gray-250 rounded-lg text-xs font-semibold text-gray-800 outline-none transition focus:border-indigo-500"
+                                    >
+                                      <option value="Infinitepay - Tap to pay">Infinitepay - Tap to pay</option>
+                                      <option value="Infinitepay - Link de pagamento">Infinitepay - Link de pagamento</option>
+                                      <option value="ASAAS - Link de pagamento">ASAAS - Link de pagamento</option>
+                                      <option value="Stripe - Link de pagamento">Stripe - Link de pagamento</option>
+                                      <option value="PagSeguro - Tap to pay">PagSeguro - Tap to pay</option>
+                                      <option value="PagSeguro - Link de Pagamento">PagSeguro - Link de Pagamento</option>
+                                      <option value="Pagseguro - Maquininha da Pagseguro">Pagseguro - Maquininha da Pagseguro</option>
+                                    </select>
+                                  </div>
+
+                                  {["Infinitepay - Tap to pay", "PagSeguro - Tap to pay", "Pagseguro - Maquininha da Pagseguro"].includes(cartaoPorOndeForm) && (
+                                    <ComprovanteUploadBox />
+                                  )}
+
+                                  {["Infinitepay - Link de pagamento", "ASAAS - Link de pagamento", "Stripe - Link de pagamento", "PagSeguro - Link de Pagamento"].includes(cartaoPorOndeForm) && (
+                                    (() => {
+                                      const shortId = caseId ? caseId.substring(0, 6) : "GDI";
+                                      let generatedCartaoLink = "";
+                                      if (cartaoPorOndeForm === "Infinitepay - Link de pagamento") {
+                                        generatedCartaoLink = `https://link.infinitepay.com/giffoniadv/cartao_${shortId}_${Date.now().toString().substring(8)}`;
+                                      } else if (cartaoPorOndeForm === "ASAAS - Link de pagamento") {
+                                        generatedCartaoLink = `https://cobranca.asaas.com/i/cartao_giffoni_${shortId}_${Date.now().toString().substring(8)}`;
+                                      } else if (cartaoPorOndeForm === "Stripe - Link de pagamento") {
+                                        generatedCartaoLink = `https://checkout.stripe.com/pay/cartao_giffoni_${shortId}_${Date.now().toString().substring(8)}`;
+                                      } else if (cartaoPorOndeForm === "PagSeguro - Link de Pagamento") {
+                                        generatedCartaoLink = `https://pag.ae/giffoni_cartao_${shortId}_${Date.now().toString().substring(8)}`;
+                                      }
+                                      return <ApiLinkBox link={generatedCartaoLink} />;
+                                    })()
+                                  )}
+
+                                  <div className="bg-white border border-gray-200 p-3.5 rounded-xl space-y-2 mt-2">
+                                    <label className="text-xs font-bold text-gray-700 flex items-center justify-between cursor-pointer">
+                                      <span className="font-sans">Você deseja gerar o recibo automaticamente?</span>
+                                      <div className="relative inline-flex items-center">
+                                        <input
+                                          type="checkbox"
+                                          checked={gerarReciboAutomaticoForm}
+                                          onChange={(e) => setGerarReciboAutomaticoForm(e.target.checked)}
+                                          className="sr-only peer"
+                                          id="checkbox-recibo-automatico-cartao"
+                                        />
+                                        <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                                      </div>
+                                    </label>
+                                    {gerarReciboAutomaticoForm && (
+                                      <div className="text-[11px] font-bold text-indigo-700 bg-indigo-50/60 p-2.5 border border-indigo-120 rounded-lg animate-fadeIn flex gap-1.5">
+                                        <span className="text-sm">🤖</span>
+                                        <span>
+                                          Caso esta opção seja selecionada será criada uma automação GDI para a criação do Recibo Automático da Giffoni Advogados Associados
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {tipoRecebimentoForm === "Dinheiro" && (
+                                <div className="space-y-4 bg-emerald-50/20 border border-emerald-100 p-4 rounded-xl animate-fadeIn">
+                                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                    Configuração de Recebimento em Dinheiro
+                                  </div>
+
+                                  <div className="bg-white border border-gray-200 p-3.5 rounded-xl space-y-2">
+                                    <label className="text-xs font-bold text-gray-700 flex items-center justify-between cursor-pointer">
+                                      <span className="font-sans">Você deseja gerar o recibo automaticamente?</span>
+                                      <div className="relative inline-flex items-center">
+                                        <input
+                                          type="checkbox"
+                                          checked={gerarReciboAutomaticoForm}
+                                          onChange={(e) => setGerarReciboAutomaticoForm(e.target.checked)}
+                                          className="sr-only peer"
+                                          id="checkbox-recibo-automatico-dinheiro"
+                                        />
+                                        <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                                      </div>
+                                    </label>
+                                    {gerarReciboAutomaticoForm && (
+                                      <div className="text-[11px] font-bold text-indigo-700 bg-indigo-50/60 p-2.5 border border-indigo-120 rounded-lg animate-fadeIn flex gap-1.5">
+                                        <span className="text-sm">🤖</span>
+                                        <span>
+                                          Caso esta opção seja selecionada será criada uma automação GDI para a criação do Recibo Automático da Giffoni Advogados Associados
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {tipoRecebimentoForm === "Transferência Bancária" && (
+                                <div className="space-y-4 bg-blue-50/20 border border-blue-100 p-4 rounded-xl animate-fadeIn">
+                                  <div className="flex items-center gap-1.5 text-xs font-bold text-blue-800">
+                                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                                    Configuração de Recebimento via Transferência Bancária 🏦 ➡️ 🏦
+                                  </div>
+
+                                  <ComprovanteUploadBox />
+                                </div>
+                              )}
+
+                              {/* GERAÇÃO EM LOTE */}
+                              <div className="space-y-1 pt-2 border-t border-slate-100">
                                 <label className="text-[10px] font-bold uppercase text-gray-445 tracking-wide font-mono">
                                   Geração em Lote
                                 </label>
                                 <select
                                   value={cobrancaAutomaticaIntegForm}
                                   onChange={(e) => setCobrancaAutomaticaIntegForm(e.target.value)}
-                                  className="w-full px-3 py-1.5 bg-white border border-gray-250 rounded-lg text-xs font-semibold text-gray-800 outline-none transition"
+                                  className="w-full px-3 py-1.5 bg-white border border-gray-250 rounded-lg text-xs font-semibold text-gray-800 outline-none transition focus:border-indigo-500"
                                 >
                                   <option value="Não">Não (Faturado Manualmente)</option>
                                   <option value="Sim">Sim (Sincronização Ativa Integrada)</option>
@@ -5715,7 +6091,7 @@ export default function FinanceiroFluxo() {
             type="button"
             onClick={() => {
               if (activeSubStep === 1) {
-                navigate(flowRoutes.solicitacoesInformacoes(caseId));
+                navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/tipo-producao`);
               } else if (activeSubStep === 2) {
                 navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/financeiro/Criar Contrato de Honorários`);
               } else if (activeSubStep === 3) {
@@ -5726,7 +6102,7 @@ export default function FinanceiroFluxo() {
           >
             <ArrowLeft size={14} />
             {activeSubStep === 1
-              ? "Voltar para Solicitação de Informações Complementares"
+              ? "Voltar para Subetapa 03 - Cadastrando Tarefa no Todoist"
               : activeSubStep === 2
               ? "Voltar para Subetapa 01 do Financeiro"
               : "Voltar para Subetapa 02 do Financeiro"}
