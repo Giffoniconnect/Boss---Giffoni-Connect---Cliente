@@ -391,6 +391,40 @@ export default function FinanceiroFluxo() {
     }
   };
 
+  const handleUpdateDetalhamento = (key: string, value: any) => {
+    setFinanceiroDetalhamento((prev: any) => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  const handleSaveSubStep2ToDb = async () => {
+    try {
+      setError(null);
+      setSuccess(null);
+      setSaving(true);
+      const caseDocRef = doc(db, "cases", caseId!);
+      await updateDoc(caseDocRef, {
+        formaPagamento: formaPagamentoForm,
+        tipoRecebimento: tipoRecebimentoForm,
+        quantidadeParcelas: Number(quantidadeParcelasForm) || 1,
+        valorParcela: valorParcelaForm,
+        valorEntrada: valorEntradaForm,
+        dataPrimeiroVencimento: dataPrimeiroVencimentoADefinir ? "a definir" : dataPrimeiroVencimentoForm,
+        dataPrimeiroVencimentoADefinir: dataPrimeiroVencimentoADefinir,
+        financeiroDetalhamento: financeiroDetalhamentoState || {},
+        updatedAt: new Date().toISOString()
+      });
+      setSuccess("Alterações do contrato salvas com sucesso!");
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      console.error(err);
+      setError("Erro ao salvar alterações da SubEtapa 02: " + (err.message || err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleAddParcelaManual = async () => {
     const nextId = String(Date.now());
     const novaParcela = {
@@ -638,6 +672,7 @@ export default function FinanceiroFluxo() {
   const [valorEntradaForm, setValorEntradaForm] = useState("0,00");
   const [dataPrimeiroVencimentoForm, setDataPrimeiroVencimentoForm] =
     useState("");
+  const [dataPrimeiroVencimentoADefinir, setDataPrimeiroVencimentoADefinir] = useState<boolean>(false);
   const [cobrancaAutomaticaIntegForm, setCobrancaAutomaticaIntegForm] =
     useState("Não");
 
@@ -741,7 +776,9 @@ export default function FinanceiroFluxo() {
       setValorParcelaForm(caseObj.valorParcela || "0,00");
       setDiaVencimentoForm(caseObj.diaVencimento || "10");
       setValorEntradaForm(caseObj.valorEntrada || "0,00");
-      setDataPrimeiroVencimentoForm(caseObj.dataPrimeiroVencimento || "");
+      const rawDPV = caseObj.dataPrimeiroVencimento || "";
+      setDataPrimeiroVencimentoForm(rawDPV === "a definir" ? "" : rawDPV);
+      setDataPrimeiroVencimentoADefinir(caseObj.dataPrimeiroVencimentoADefinir === true || rawDPV === "a definir");
       setCobrancaAutomaticaIntegForm(caseObj.cobrancaAutomaticaInteg || "Não");
 
       // Load new fields
@@ -890,6 +927,52 @@ export default function FinanceiroFluxo() {
     formaPagamentoForm,
   ]);
 
+  const [showUnsavedBalloon, setShowUnsavedBalloon] = useState(false);
+
+  const checkIfSubStep1IsDirty = () => {
+    if (!caseObj) return false;
+    
+    // Check main operational fields
+    const defaultTipoServico = caseObj.assunto || "Serviço de Assessoria Jurídica";
+    if ((caseObj.tipoServicoContratado || defaultTipoServico) !== tipoServicoContratadoForm) return true;
+    if ((caseObj.tipoHonorario || "Honorários Fixos") !== tipoHonorarioForm) return true;
+    if ((caseObj.honorarioFixoValor || "0,00") !== honorarioFixoValorForm) return true;
+    if ((caseObj.formaPagamento || "À vista") !== formaPagamentoForm) return true;
+    if ((caseObj.tipoRecebimento || "PIX") !== tipoRecebimentoForm) return true;
+    
+    const defaultPixBanco = client?.bancario_bancoPix || "Nubank";
+    if ((caseObj.pixBanco || defaultPixBanco) !== pixBancoForm) return true;
+    if ((caseObj.pixChave || client?.bancario_chavePix || "") !== pixChaveForm) return true;
+    
+    if ((Number(caseObj.quantidadeParcelas) || 1) !== Number(quantidadeParcelasForm)) return true;
+    if ((caseObj.valorParcela || "0,00") !== valorParcelaForm) return true;
+    if ((caseObj.diaVencimento || "10") !== diaVencimentoForm) return true;
+    if ((caseObj.valorEntrada || "0,00") !== valorEntradaForm) return true;
+    const currentEffectiveDPV = dataPrimeiroVencimentoADefinir ? "a definir" : dataPrimeiroVencimentoForm;
+    if ((caseObj.dataPrimeiroVencimento || "") !== currentEffectiveDPV) return true;
+    if ((caseObj.cobrancaAutomaticaInteg || "Não") !== cobrancaAutomaticaIntegForm) return true;
+    
+    if ((caseObj.modeloHonorarios || "fixo") !== modeloHonorariosForm) return true;
+    
+    const defaultPercentualExito = caseObj.honorarioExitoPercentual || "30%";
+    if ((caseObj.percentualExito || defaultPercentualExito) !== percentualExitoForm) return true;
+    if ((caseObj.percentualExitoSobreRetroativo || "30%") !== percentualExitoSobreRetroativoForm) return true;
+    if ((Number(caseObj.quantidadeParcelasExitoPrevidenciario) || 0) !== Number(quantidadeParcelasExitoPrevidenciarioForm)) return true;
+    if ((caseObj.baseCalculoExito || "Proveito Econômico") !== baseCalculoExitoForm) return true;
+    
+    if ((caseObj.dataVencimentoEntrada || "") !== dataVencimentoEntradaForm) return true;
+    if ((caseObj.pagoNaAssinatura || false) !== pagoNaAssinaturaForm) return true;
+    if ((caseObj.reclamanteVerbasRescisorias || false) !== reclamanteVerbasRescisorias) return true;
+    if ((caseObj.reclamanteFGTS || false) !== reclamanteFGTS) return true;
+    if ((caseObj.reclamanteFGTSIndep || false) !== reclamanteFGTSIndep) return true;
+    if ((caseObj.reclamanteMultaFGTS || false) !== reclamanteMultaFGTS) return true;
+    if ((caseObj.reclamanteMultaFGTSIndep || false) !== reclamanteMultaFGTSIndep) return true;
+    if ((caseObj.reclamanteSeguroDesemprego || false) !== reclamanteSeguroDesemprego) return true;
+    if ((caseObj.valorCausaReclamada || "") !== valorCausaReclamada) return true;
+
+    return false;
+  };
+
   const renderStatusBadge = () => {
     const status = caseObj?.contratoHonorariosStatus;
     if (status === "gerando") {
@@ -933,6 +1016,15 @@ export default function FinanceiroFluxo() {
   };
 
   const handleGenerateContratoHonorarios = async () => {
+    if (checkIfSubStep1IsDirty()) {
+      setError("Condições não foram gravadas. Isso pode afetar o gDI e a subetapa 02, grave a operação antes de prosseguir.");
+      setShowUnsavedBalloon(true);
+      setTimeout(() => {
+        setShowUnsavedBalloon(false);
+      }, 6000);
+      return;
+    }
+
     const isPf = client?.type === "PF";
     const jobId =
       "job_contr_gdocs_" +
@@ -1061,6 +1153,125 @@ export default function FinanceiroFluxo() {
       compatTipoHonorario = "Misto (Fixo + Êxito)";
     }
 
+    // Generate automatic analytical table for subetapa 02 synchronization
+    const list: any[] = [];
+    let currentId = 1;
+
+    const isFixoModel = ["fixo", "fixo_mais_exito_simples", "fixo_mais_exito_completo_trabalhista", "fixo_mais_exito_completo_previdenciario"].includes(modeloHonorariosForm);
+    if (isFixoModel || !modeloHonorariosForm) {
+      const entradaLimpa = (valorEntradaForm || "0,00").replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
+      const entryVal = parseFloat(entradaLimpa);
+      if (!isNaN(entryVal) && entryVal > 0) {
+        list.push({
+          id: String(currentId++),
+          numero: "Entrada Fixo",
+          valor: `R$ ${valorEntradaForm.replace("R$", "").trim()}`,
+          dataVencimento: dataPrimeiroVencimentoForm || new Date().toISOString().split("T")[0],
+          pago: false,
+          status: "pendente",
+          formaRecebimento: tipoRecebimentoForm || "PIX"
+        });
+      }
+
+      const nParcelas = Math.max(1, Number(quantidadeParcelasForm) || 1);
+      const baseDate = dataPrimeiroVencimentoForm 
+        ? new Date(dataPrimeiroVencimentoForm + "T12:00:00") 
+        : new Date();
+
+      for (let i = 0; i < nParcelas; i++) {
+        const dueDate = new Date(baseDate);
+        dueDate.setMonth(baseDate.getMonth() + i);
+        const isDateValid = !isNaN(dueDate.getTime());
+        const dateStr = isDateValid ? dueDate.toISOString().split("T")[0] : "";
+
+        list.push({
+          id: String(currentId++),
+          numero: `Parcela Fixo ${i + 1}/${nParcelas}`,
+          valor: `R$ ${valorParcelaForm.replace("R$", "").trim()}`,
+          dataVencimento: dateStr,
+          pago: false,
+          status: "pendente",
+          formaRecebimento: tipoRecebimentoForm || "PIX"
+        });
+      }
+    }
+
+    if (modeloHonorariosForm === "exito_simples" || modeloHonorariosForm === "fixo_mais_exito_simples") {
+      list.push({
+        id: String(currentId++),
+        numero: "Honorários Êxito Simples Estimado",
+        valor: `R$ 1.500,00`,
+        dataVencimento: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString().split("T")[0],
+        pago: false,
+        status: "pendente",
+        formaRecebimento: "Alvará / Pix"
+      });
+    } else if (modeloHonorariosForm === "exito_completo_trabalhista" || modeloHonorariosForm === "fixo_mais_exito_completo_trabalhista") {
+      const hContratuais = financeiroRateioState?.totalHonorariosContratuais || "0,00";
+      const hSucumbenciais = financeiroRateioState?.totalHonorariosSucumbenciais || "0,00";
+      const lCliente = financeiroRateioState?.totalCliente || "0,00";
+
+      list.push({
+        id: String(currentId++),
+        numero: "Honorários Contratuais Trabalhistas",
+        valor: hContratuais !== "0,00" && hContratuais !== "NaN" ? `R$ ${hContratuais}` : `R$ 4.500,00 (Estimativo)`,
+        dataVencimento: new Date(Date.now() + 120 * 24 * 3600 * 1000).toISOString().split("T")[0],
+        pago: false,
+        status: "pendente",
+        formaRecebimento: "Retenção em Guia/Alvará"
+      });
+
+      list.push({
+        id: String(currentId++),
+        numero: "Honorários Sucumbenciais",
+        valor: hSucumbenciais !== "0,00" && hSucumbenciais !== "NaN" ? `R$ ${hSucumbenciais}` : "R$ 0,00",
+        dataVencimento: new Date(Date.now() + 120 * 24 * 3600 * 1000).toISOString().split("T")[0],
+        pago: false,
+        status: "pendente",
+        formaRecebimento: "Alvará Judicial"
+      });
+
+      list.push({
+        id: String(currentId++),
+        numero: "Repasse Líquido ao Cliente",
+        valor: lCliente !== "0,00" && lCliente !== "NaN" ? `R$ ${lCliente}` : `R$ 10.500,00 (Estimativo)`,
+        dataVencimento: new Date(Date.now() + 120 * 24 * 3600 * 1000).toISOString().split("T")[0],
+        pago: false,
+        status: "pendente",
+        formaRecebimento: "Repasse por Pix"
+      });
+    } else if (modeloHonorariosForm === "exito_completo_previdenciario" || modeloHonorariosForm === "fixo_mais_exito_completo_previdenciario") {
+      const hRetroativo = financeiroApuracaoPrevidenciariaState?.valorHonorariosRetroativo || "0,00";
+      
+      list.push({
+        id: String(currentId++),
+        numero: "Honorários sobre Retroativo",
+        valor: hRetroativo !== "0,00" && hRetroativo !== "NaN" ? `R$ ${hRetroativo}` : "R$ 3.000,00 (Estimativo)",
+        dataVencimento: new Date(Date.now() + 150 * 24 * 3600 * 1000).toISOString().split("T")[0],
+        pago: false,
+        status: "pendente",
+        formaRecebimento: "Precatório / RPV"
+      });
+
+      const limitPrevidenciarioFuturo = Math.max(0, Number(quantidadeParcelasExitoPrevidenciarioForm) || 0);
+      const prcPrevVal = financeiroApuracaoPrevidenciariaState?.valorBeneficioMensal || "0,00";
+      
+      for (let j = 0; j < limitPrevidenciarioFuturo; j++) {
+        list.push({
+          id: String(currentId++),
+          numero: `Honorários Parc. Benefício ${j + 1}/${limitPrevidenciarioFuturo}`,
+          valor: prcPrevVal !== "0,00" && prcPrevVal !== "NaN" ? `R$ ${prcPrevVal}` : "R$ 1.412,00 (Estimativo)",
+          dataVencimento: new Date(Date.now() + (180 + j * 30) * 24 * 3600 * 1000).toISOString().split("T")[0],
+          pago: false,
+          status: "pendente",
+          formaRecebimento: "Boleto / Pix"
+        });
+      }
+    }
+
+    setTabelaAnalitica(list);
+    setShowUnsavedBalloon(false);
+
     const updatedFinanceData: Record<string, any> = {
       tipoServicoContratado: tipoServicoContratadoForm,
       tipoHonorario: compatTipoHonorario,
@@ -1076,7 +1287,8 @@ export default function FinanceiroFluxo() {
       valorParcela: valorParcelaForm,
       diaVencimento: diaVencimentoForm,
       valorEntrada: valorEntradaForm,
-      dataPrimeiroVencimento: dataPrimeiroVencimentoForm,
+      dataPrimeiroVencimento: dataPrimeiroVencimentoADefinir ? "a definir" : dataPrimeiroVencimentoForm,
+      dataPrimeiroVencimentoADefinir: dataPrimeiroVencimentoADefinir,
       cobrancaAutomaticaInteg: cobrancaAutomaticaIntegForm,
       
       // Brand new financial fields
@@ -1109,6 +1321,10 @@ export default function FinanceiroFluxo() {
       servicosTemporariosSelected: servicosTemporariosSelected,
       aposentadoriasList: aposentadoriasList,
       aposentadoriasSelected: aposentadoriasSelected,
+
+      // Synchronized subetapa 02 details
+      tabelaAnalitica: list,
+      financeiroUltimaSincronizacaoSubetapa01: modeloHonorariosForm || "fixo",
 
       // For backwards compatibility mapping when templates expect these
       honorariosPercentual: ["exito_completo_previdenciario", "fixo_mais_exito_completo_previdenciario"].includes(modeloHonorariosForm)
@@ -1677,6 +1893,122 @@ export default function FinanceiroFluxo() {
         compatTipoHonorario = "Misto (Fixo + Êxito)";
       }
 
+      // 1. Generate automatic analytical table for subetapa 02 synchronization
+      const list: any[] = [];
+      let currentId = 1;
+
+      const isFixoModel = ["fixo", "fixo_mais_exito_simples", "fixo_mais_exito_completo_trabalhista", "fixo_mais_exito_completo_previdenciario"].includes(modeloHonorariosForm);
+      if (isFixoModel || !modeloHonorariosForm) {
+        const entradaLimpa = (valorEntradaForm || "0,00").replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
+        const entryVal = parseFloat(entradaLimpa);
+        if (!isNaN(entryVal) && entryVal > 0) {
+          list.push({
+            id: String(currentId++),
+            numero: "Entrada Fixo",
+            valor: `R$ ${valorEntradaForm.replace("R$", "").trim()}`,
+            dataVencimento: dataPrimeiroVencimentoForm || new Date().toISOString().split("T")[0],
+            pago: false,
+            status: "pendente",
+            formaRecebimento: tipoRecebimentoForm || "PIX"
+          });
+        }
+
+        const nParcelas = Math.max(1, Number(quantidadeParcelasForm) || 1);
+        const baseDate = dataPrimeiroVencimentoForm 
+          ? new Date(dataPrimeiroVencimentoForm + "T12:00:00") 
+          : new Date();
+
+        for (let i = 0; i < nParcelas; i++) {
+          const dueDate = new Date(baseDate);
+          dueDate.setMonth(baseDate.getMonth() + i);
+          const isDateValid = !isNaN(dueDate.getTime());
+          const dateStr = isDateValid ? dueDate.toISOString().split("T")[0] : "";
+
+          list.push({
+            id: String(currentId++),
+            numero: `Parcela Fixo ${i + 1}/${nParcelas}`,
+            valor: `R$ ${valorParcelaForm.replace("R$", "").trim()}`,
+            dataVencimento: dateStr,
+            pago: false,
+            status: "pendente",
+            formaRecebimento: tipoRecebimentoForm || "PIX"
+          });
+        }
+      }
+
+      if (modeloHonorariosForm === "exito_simples" || modeloHonorariosForm === "fixo_mais_exito_simples") {
+        list.push({
+          id: String(currentId++),
+          numero: "Honorários Êxito Simples Estimado",
+          valor: `R$ 1.500,00`,
+          dataVencimento: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString().split("T")[0],
+          pago: false,
+          status: "pendente",
+          formaRecebimento: "Alvará / Pix"
+        });
+      } else if (modeloHonorariosForm === "exito_completo_trabalhista" || modeloHonorariosForm === "fixo_mais_exito_completo_trabalhista") {
+        const hContratuais = financeiroRateioState?.totalHonorariosContratuais || "0,00";
+        const hSucumbenciais = financeiroRateioState?.totalHonorariosSucumbenciais || "0,00";
+        const lCliente = financeiroRateioState?.totalCliente || "0,00";
+
+        list.push({
+          id: String(currentId++),
+          numero: "Honorários Contratuais Trabalhistas",
+          valor: hContratuais !== "0,00" && hContratuais !== "NaN" ? `R$ ${hContratuais}` : `R$ 4.500,00 (Estimativo)`,
+          dataVencimento: new Date(Date.now() + 120 * 24 * 3600 * 1000).toISOString().split("T")[0],
+          pago: false,
+          status: "pendente",
+          formaRecebimento: "Retenção em Guia/Alvará"
+        });
+
+        list.push({
+          id: String(currentId++),
+          numero: "Honorários Sucumbenciais",
+          valor: hSucumbenciais !== "0,00" && hSucumbenciais !== "NaN" ? `R$ ${hSucumbenciais}` : "R$ 0,00",
+          dataVencimento: new Date(Date.now() + 120 * 24 * 3600 * 1000).toISOString().split("T")[0],
+          pago: false,
+          status: "pendente",
+          formaRecebimento: "Alvará Judicial"
+        });
+
+        list.push({
+          id: String(currentId++),
+          numero: "Repasse Líquido ao Cliente",
+          valor: lCliente !== "0,00" && lCliente !== "NaN" ? `R$ ${lCliente}` : `R$ 10.500,00 (Estimativo)`,
+          dataVencimento: new Date(Date.now() + 120 * 24 * 3600 * 1000).toISOString().split("T")[0],
+          pago: false,
+          status: "pendente",
+          formaRecebimento: "Repasse por Pix"
+        });
+      } else if (modeloHonorariosForm === "exito_completo_previdenciario" || modeloHonorariosForm === "fixo_mais_exito_completo_previdenciario") {
+        const hRetroativo = financeiroApuracaoPrevidenciariaState?.valorHonorariosRetroativo || "0,00";
+        
+        list.push({
+          id: String(currentId++),
+          numero: "Honorários sobre Retroativo",
+          valor: hRetroativo !== "0,00" && hRetroativo !== "NaN" ? `R$ ${hRetroativo}` : "R$ 3.000,00 (Estimativo)",
+          dataVencimento: new Date(Date.now() + 150 * 24 * 3600 * 1000).toISOString().split("T")[0],
+          pago: false,
+          status: "pendente",
+          formaRecebimento: "Precatório / RPV"
+        });
+
+        const limitPrevidenciarioFuturo = Math.max(0, Number(quantidadeParcelasExitoPrevidenciarioForm) || 0);
+        const prcPrevVal = financeiroApuracaoPrevidenciariaState?.valorBeneficioMensal || "0,00";
+        
+        for (let j = 0; j < limitPrevidenciarioFuturo; j++) {
+          list.push({
+            id: String(currentId++),
+            numero: `Honorários Parc. Benefício ${j + 1}/${limitPrevidenciarioFuturo}`,
+            valor: prcPrevVal !== "0,00" && prcPrevVal !== "NaN" ? `R$ ${prcPrevVal}` : "R$ 1.412,00 (Estimativo)",
+            dataVencimento: new Date(Date.now() + (180 + j * 30) * 24 * 3600 * 1000).toISOString().split("T")[0],
+            pago: false,
+            status: "pendente",
+            formaRecebimento: "Boleto / Pix"
+          });
+        }
+      }
+
       const updatedFinanceData: Record<string, any> = {
         tipoServicoContratado: tipoServicoContratadoForm,
         tipoHonorario: compatTipoHonorario,
@@ -1692,7 +2024,8 @@ export default function FinanceiroFluxo() {
         valorParcela: valorParcelaForm,
         diaVencimento: diaVencimentoForm,
         valorEntrada: valorEntradaForm,
-        dataPrimeiroVencimento: dataPrimeiroVencimentoForm,
+        dataPrimeiroVencimento: dataPrimeiroVencimentoADefinir ? "a definir" : dataPrimeiroVencimentoForm,
+        dataPrimeiroVencimentoADefinir: dataPrimeiroVencimentoADefinir,
         cobrancaAutomaticaInteg: cobrancaAutomaticaIntegForm,
         
         // Brand new financial fields
@@ -1725,6 +2058,10 @@ export default function FinanceiroFluxo() {
         servicosTemporariosSelected: servicosTemporariosSelected,
         aposentadoriasList: aposentadoriasList,
         aposentadoriasSelected: aposentadoriasSelected,
+
+        // Synchronized subetapa 02 details
+        tabelaAnalitica: list,
+        financeiroUltimaSincronizacaoSubetapa01: modeloHonorariosForm || "fixo",
 
         // For backwards compatibility mapping when templates expect these
         honorariosPercentual: ["exito_completo_previdenciario", "fixo_mais_exito_completo_previdenciario"].includes(modeloHonorariosForm)
@@ -1761,7 +2098,16 @@ export default function FinanceiroFluxo() {
       }
 
       await updateDoc(caseDocRef, updatedFinanceData);
-      setSuccess("Condições financeiras gravadas com sucesso no caso e integradas ao modelo novo!");
+      
+      // Update local states immediately for instant UI feedback
+      setCaseObj((prev: any) => ({
+        ...prev,
+        ...updatedFinanceData
+      }));
+      setTabelaAnalitica(list);
+      setShowUnsavedBalloon(false);
+
+      setSuccess("Condições financeiras gravadas e subetapa 02 sincronizada com sucesso!");
       setRefreshToggle((prev) => prev + 1);
       setTimeout(() => setSuccess(null), 3050);
     } catch (err: any) {
@@ -2215,7 +2561,13 @@ export default function FinanceiroFluxo() {
     const nowISO = new Date().toISOString();
 
     if (activeSubStep === 1) {
-      setActiveSubStep(2);
+      navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/financeiro/ver.detalhes.do.contrato.de.honorarios`);
+      setSaving(false);
+      return;
+    }
+
+    if (activeSubStep === 2) {
+      navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/financeiro/auditoria.do.contrato.de.honorarios`);
       setSaving(false);
       return;
     }
@@ -2552,7 +2904,7 @@ export default function FinanceiroFluxo() {
                           <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
                           {title}
                         </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4">
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
                               Valor Fixo Total
@@ -2662,31 +3014,53 @@ export default function FinanceiroFluxo() {
                                 </div>
                               </div>
 
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
-                                  Dia de Vencimento
-                                </label>
-                                <select
-                                  value={diaVencimentoForm}
-                                  onChange={(e) => setDiaVencimentoForm(e.target.value)}
-                                  className="w-full px-3 py-2 bg-white border border-gray-250 focus:border-indigo-500 rounded-lg text-xs font-semibold text-gray-800 outline-none transition font-mono"
-                                >
-                                  {["5", "10", "15", "20", "25", "30"].map((d) => (
-                                    <option key={d} value={d}>Dia {d}</option>
-                                  ))}
-                                </select>
-                              </div>
-
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
-                                  Data do Primeiro Vencimento
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono flex items-center justify-between">
+                                  <span>Data do 1 vencimento</span>
+                                  <label className="flex items-center gap-1 cursor-pointer normal-case text-gray-400 font-semibold select-none hover:text-gray-600 transition">
+                                    <input
+                                      type="checkbox"
+                                      checked={dataPrimeiroVencimentoADefinir}
+                                      onChange={(e) => {
+                                        setDataPrimeiroVencimentoADefinir(e.target.checked);
+                                        if (e.target.checked) {
+                                          setDataPrimeiroVencimentoForm("");
+                                        }
+                                      }}
+                                      className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-3 w-3 cursor-pointer"
+                                    />
+                                    <span className="text-[8px]">A definir</span>
+                                  </label>
                                 </label>
                                 <input
                                   type="date"
+                                  disabled={dataPrimeiroVencimentoADefinir}
                                   value={dataPrimeiroVencimentoForm}
-                                  onChange={(e) => setDataPrimeiroVencimentoForm(e.target.value)}
-                                  className="w-full px-3 py-2 bg-white border border-gray-250 focus:border-indigo-500 rounded-lg text-xs font-semibold text-gray-800 outline-none transition font-sans"
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setDataPrimeiroVencimentoForm(val);
+                                    if (val) {
+                                      const dateObj = new Date(val + "T12:00:00");
+                                      if (!isNaN(dateObj.getTime())) {
+                                        setDiaVencimentoForm(String(dateObj.getDate()));
+                                      }
+                                    }
+                                  }}
+                                  className={`w-full px-3 py-2 border rounded-lg text-xs font-semibold outline-none transition font-sans ${
+                                    dataPrimeiroVencimentoADefinir
+                                      ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed"
+                                      : "bg-white border-gray-250 focus:border-indigo-500 text-gray-800"
+                                  }`}
                                 />
+                                <p className="text-[9px] text-gray-400 font-medium font-sans leading-tight mt-0.5">
+                                  * este dia será automaticamente selecionado para os meses seguintes
+                                </p>
+                              </div>
+
+                              <div className="p-3 bg-amber-50 border border-amber-200/60 rounded-xl">
+                                <p className="text-[10px] text-amber-800 font-semibold leading-relaxed">
+                                  📌 As parcelas serão fixas, mensais, iguais e sucessivas, com o mesmo dia de vencimento em cada mes
+                                </p>
                               </div>
                             </>
                           )}
@@ -2701,7 +3075,7 @@ export default function FinanceiroFluxo() {
                           <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
                           {title}
                         </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 gap-4">
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
                               Percentual de Êxito
@@ -2812,7 +3186,7 @@ export default function FinanceiroFluxo() {
                                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
                                   Parâmetros de Êxito Contratual — Trabalhista Reclamante
                                 </h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 gap-4">
                                   <div className="space-y-1">
                                     <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
                                       Percentual de Êxito
@@ -2949,7 +3323,7 @@ export default function FinanceiroFluxo() {
                                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
                                   Parâmetros de Êxito Negativo — Reclamada
                                 </h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 gap-4">
                                   <div className="space-y-1">
                                     <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
                                       Percentual de Êxito (% sobre o que deixar de pagar)
@@ -2992,7 +3366,7 @@ export default function FinanceiroFluxo() {
                                     <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
                                     Parâmetros de Honorários de Êxito Negativos
                                   </h4>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="grid grid-cols-1 gap-4">
                                     <div className="space-y-1">
                                       <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
                                         Percentual de Êxito Negativo
@@ -3041,7 +3415,7 @@ export default function FinanceiroFluxo() {
                                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
                                   Parâmetros de Êxito Previdenciário — Benefícios Temporários
                                 </h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 gap-4">
                                   <div className="space-y-1 md:col-span-2">
                                     <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
                                       Válido para o Contrato de:
@@ -3114,7 +3488,7 @@ export default function FinanceiroFluxo() {
                                     <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
                                     Parâmetros de Êxito Previdenciário — Aposentadorias e BPC
                                   </h4>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="grid grid-cols-1 gap-4">
                                     <div className="space-y-1 md:col-span-2">
                                       <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
                                         Sub-área / Benefício Previdenciário:
@@ -3188,9 +3562,9 @@ export default function FinanceiroFluxo() {
                         {!["exito_simples", "exito_trabalhista_reclamante", "exito_trabalhista_reclamada", "exito_previdenciario_beneficio_temporario"].includes(modeloHonorariosForm) && (
                           <div className="bg-slate-50/50 border border-slate-150 p-4 rounded-xl space-y-4 animate-fadeIn">
                             <h4 className="text-xs font-black uppercase text-slate-900 tracking-wider flex items-center gap-1.5 font-mono">
-                              Parâmetros de Recebimento
+                              Parâmetros de Recebimento de honorários fixos
                             </h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4">
                               <div className="space-y-1">
                                 <label className="text-[10px] font-bold uppercase text-gray-450 tracking-wide font-mono">
                                   Tipo de Recebimento
@@ -3504,371 +3878,40 @@ export default function FinanceiroFluxo() {
                     </span>
                   </div>
 
-                  {/* Body Content: Two main columns */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Body Content: Centered/Max-width column for Condições Operacionais */}
+                  <div className="max-w-2xl mx-auto space-y-6">
                     {/* Column 1: Condições Operacionais */}
-                    <div className="space-y-4">
+                    <div className="space-y-5">
                       <h4 className="text-xs font-black uppercase text-indigo-950 tracking-wider flex items-center gap-1.5 pb-2 border-b border-gray-100/50">
                         <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
-                        Condições Operacionais do Contrato
+                        Condições Gerais e Faturamento do Contrato
                       </h4>
 
-                      <div className="space-y-3.5 text-xs">
-                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
-                          <span className="text-gray-500 font-bold">
-                            Serviço Contratado:
-                          </span>
-                          <span className="font-extrabold text-gray-900 text-right">
-                            {tipoServicoContratadoForm || "—"}
-                          </span>
+                      {/* SECTION 1: Read-Only Structural Context */}
+                      <div className="bg-slate-50/50 p-4 border border-slate-100 rounded-2xl space-y-3 text-xs">
+                        <div className="flex justify-between items-center py-1 border-b border-slate-100/50">
+                          <span className="text-gray-500 font-bold">Serviço Contratado:</span>
+                          <span className="font-extrabold text-gray-900 text-right">{tipoServicoContratadoForm || "—"}</span>
                         </div>
 
-                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
-                          <span className="text-gray-500 font-bold">
-                            Tipo de Honorários:
-                          </span>
-                          <span className="font-extrabold text-gray-950">
-                            {tipoHonorarioForm || "—"}
-                          </span>
+                        <div className="flex justify-between items-center py-1 border-b border-slate-100/50">
+                          <span className="text-gray-500 font-bold">Tipo de Honorários:</span>
+                          <span className="font-extrabold text-indigo-950 uppercase tracking-wide">{tipoHonorarioForm || "—"}</span>
                         </div>
 
                         {tipoHonorarioForm?.includes("Êxito") && (
-                          <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
-                            <span className="text-gray-500 font-bold">
-                              Percentual de Êxito:
-                            </span>
-                            <span className="font-extrabold text-indigo-700">
-                              {honorarioExitoPercentualForm || "—"}
-                            </span>
+                          <div className="flex justify-between items-center py-1 border-b border-slate-100/50">
+                            <span className="text-gray-500 font-bold">Percentual de Êxito:</span>
+                            <span className="font-extrabold text-indigo-600">{honorarioExitoPercentualForm || "—"}</span>
                           </div>
                         )}
 
-                        {(tipoHonorarioForm?.includes("Fixo") ||
-                          tipoHonorarioForm?.includes("Fixos")) && (
-                          <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
-                            <span className="text-gray-500 font-bold">
-                              Valor de Honorários Fixos:
-                            </span>
-                            <span className="font-extrabold text-gray-900">
-                              R$ {honorarioFixoValorForm || "0,00"}
-                            </span>
+                        {(tipoHonorarioForm?.includes("Fixo") || tipoHonorarioForm?.includes("Fixos")) && (
+                          <div className="flex justify-between items-center py-1">
+                            <span className="text-gray-500 font-bold">Valor de Honorários Fixos:</span>
+                            <span className="font-extrabold text-gray-950">R$ {honorarioFixoValorForm || "0,00"}</span>
                           </div>
                         )}
-
-                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
-                          <span className="text-gray-500 font-bold">
-                            Forma de Pagamento:
-                          </span>
-                          <span className="font-semibold text-gray-850">
-                            {formaPagamentoForm || "—"}
-                          </span>
-                        </div>
-
-                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
-                          <span className="text-gray-500 font-bold">
-                            Meio de Recebimento:
-                          </span>
-                          <span className="font-semibold text-gray-850">
-                            {tipoRecebimentoForm || "—"}
-                          </span>
-                        </div>
-
-                        {tipoRecebimentoForm === "PIX" && (
-                          <>
-                            <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
-                              <span className="text-gray-500 font-bold">
-                                Banco Recebimento:
-                              </span>
-                              <span className="font-semibold text-gray-850">
-                                {pixBancoForm || "—"}
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center py-1.5 border-b border-gray-50 border-dashed">
-                              <span className="text-gray-500 font-bold">
-                                Chave PIX:
-                              </span>
-                              <span className="font-semibold text-gray-850 font-mono text-[11px] select-all bg-gray-55/75 px-1.5 py-0.5 rounded">
-                                {pixChaveForm || "—"}
-                              </span>
-                            </div>
-                          </>
-                        )}
-
-                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
-                          <span className="text-gray-500 font-bold">
-                            Quantidade de Parcelas:
-                          </span>
-                          <span className="font-extrabold text-gray-900">
-                            {quantidadeParcelasForm}x
-                          </span>
-                        </div>
-
-                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
-                          <span className="text-gray-500 font-bold">
-                            Valor da Parcela:
-                          </span>
-                          <span className="font-extrabold text-gray-900">
-                            R$ {valorParcelaForm || "0,00"}
-                          </span>
-                        </div>
-
-
-
-                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
-                          <span className="text-gray-500 font-bold">
-                            Valor de Entrada:
-                          </span>
-                          <span className="font-extrabold text-gray-900">
-                            R$ {valorEntradaForm || "0,00"}
-                          </span>
-                        </div>
-
-                        {dataPrimeiroVencimentoForm && (
-                          <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
-                            <span className="text-gray-500 font-bold">
-                              Primeiro Vencimento:
-                            </span>
-                            <span className="font-mono text-gray-800">
-                              {new Date(
-                                dataPrimeiroVencimentoForm,
-                              ).toLocaleDateString("pt-BR")}
-                            </span>
-                          </div>
-                        )}
-
-                        <div className="flex justify-between items-center py-1.5">
-                          <span className="text-gray-500 font-bold">
-                            Cobrança Automática Ativa:
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
-                              cobrancaAutomaticaIntegForm === "Sim"
-                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                : "bg-rose-50 text-rose-700 border border-rose-200"
-                            }`}
-                          >
-                            {cobrancaAutomaticaIntegForm || "Não"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Column 2: Checklist e Auditoria */}
-                    <div className="space-y-4">
-                      <h4 className="text-xs font-black uppercase text-indigo-950 tracking-wider flex items-center gap-1.5 pb-2 border-b border-gray-100/50">
-                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
-                        Histórico e Auditoria do Contrato
-                      </h4>
-
-                      <div className="space-y-3.5 text-xs">
-                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
-                          <span className="text-gray-500 font-bold">
-                            3.1 Contrato Gerado?
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
-                              wizardState.q3_1 === "sim"
-                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                : "bg-amber-50 text-amber-700 border border-amber-200"
-                            }`}
-                          >
-                            {wizardState.q3_1 || "não preenchido"}
-                          </span>
-                        </div>
-
-                        {wizardState.q3_1 === "sim" && (
-                          <>
-                            <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
-                              <span className="text-gray-500 font-bold">
-                                3.2 Modelo Contratual:
-                              </span>
-                              <span className="font-semibold text-gray-805">
-                                {wizardState.q3_2 === "exito" && "Êxito"}
-                                {wizardState.q3_2 === "fixo" && "Fixo"}
-                                {wizardState.q3_2 === "exito_fixo" &&
-                                  "Êxito + Fixo"}
-                                {!wizardState.q3_2 && "—"}
-                              </span>
-                            </div>
-
-                            <div className="flex flex-col gap-1 py-1.5 border-b border-gray-50">
-                              <span className="text-gray-500 font-bold">
-                                3.3 Meio(s) de Entrega Utilizados:
-                              </span>
-                              <div className="flex flex-wrap gap-1.5 mt-1">
-                                {Array.isArray(wizardState.q3_3) &&
-                                wizardState.q3_3.length > 0 ? (
-                                  wizardState.q3_3.map((method: string) => {
-                                    let label = method;
-                                    if (method === "fisica")
-                                      label = "Física/Impressa";
-                                    if (method === "whatsapp")
-                                      label = "WhatsApp";
-                                    if (method === "email") label = "E-mail";
-                                    if (method === "outro")
-                                      label = `Outro (${wizardState.q3_3_outro || "—"})`;
-                                    return (
-                                      <span
-                                        key={method}
-                                        className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-150 rounded text-[10px] font-bold"
-                                      >
-                                        {label}
-                                      </span>
-                                    );
-                                  })
-                                ) : (
-                                  <span className="text-gray-400 italic">
-                                    Nenhum selecionado
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
-                              <span className="text-gray-500 font-bold">
-                                3.4 Assinado pelo Cliente 🖋️?
-                              </span>
-                              <span
-                                className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
-                                  wizardState.q3_4 === "sim"
-                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                    : "bg-rose-50 text-rose-700 border border-rose-200"
-                                }`}
-                              >
-                                {wizardState.q3_4 || "não preenchido"}
-                              </span>
-                            </div>
-
-                            <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
-                              <span className="text-gray-500 font-bold">
-                                3.5 Assinado pelo Advogado 🖋️?
-                              </span>
-                              <span
-                                className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
-                                  wizardState.q3_5 === "sim"
-                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                    : "bg-rose-50 text-rose-700 border border-rose-200"
-                                }`}
-                              >
-                                {wizardState.q3_5 || "não preenchido"}
-                              </span>
-                            </div>
-
-                            <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
-                              <span className="text-gray-500 font-bold">
-                                3.6 Recebeu o Contrato Digitalizado?
-                              </span>
-                              <span
-                                className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
-                                  wizardState.q3_6 === "sim"
-                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                    : "bg-rose-50 text-rose-700 border border-rose-200"
-                                }`}
-                              >
-                                {wizardState.q3_6 || "não preenchido"}
-                              </span>
-                            </div>
-
-                            <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
-                              <span className="text-gray-500 font-bold">
-                                3.7 Recebeu o Contrato Digitalizado 🖨️?
-                              </span>
-                              <span
-                                className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
-                                  wizardState.q3_7 === "sim"
-                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                    : "bg-rose-50 text-rose-700 border border-rose-200"
-                                }`}
-                              >
-                                {wizardState.q3_7 || "não preenchido"}
-                              </span>
-                            </div>
-
-                            <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
-                              <span className="text-gray-500 font-bold">
-                                3.8 Financeiro Informado?
-                              </span>
-                              <span
-                                className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
-                                  wizardState.q3_8 === "sim"
-                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                    : "bg-rose-50 text-rose-700 border border-rose-200"
-                                }`}
-                              >
-                                {wizardState.q3_8 || "não preenchido"}
-                              </span>
-                            </div>
-                          </>
-                        )}
-
-                        {/* Google Docs Url */}
-                        {caseObj?.contratoHonorariosGoogleDocsUrl && (
-                          <div className="pt-1.5">
-                            <span className="text-gray-500 font-bold block mb-1.5">
-                              Link do Modelo de Contrato Gerado:
-                            </span>
-                            <div className="space-y-2">
-                              <a
-                                href={caseObj.contratoHonorariosGoogleDocsUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-xs text-indigo-650 hover:underline font-semibold flex items-center gap-1 select-all truncate bg-gray-55/75 p-2.5 rounded-xl border border-gray-150"
-                              >
-                                <FileText
-                                  size={14}
-                                  className="text-indigo-600 shrink-0"
-                                />
-                                <span className="truncate">
-                                  {caseObj.contratoHonorariosGoogleDocsUrl}
-                                </span>
-                                <ExternalLink size={12} className="shrink-0" />
-                              </a>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleOpenContrato(
-                                    caseObj.contratoHonorariosGoogleDocsUrl,
-                                  )
-                                }
-                                className="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-sm"
-                              >
-                                <FileText size={14} />
-                                <span>Ver contrato de honorários gerado</span>
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Uploaded Contract Files list */}
-                        {wizardState.contratoFiles &&
-                          wizardState.contratoFiles.length > 0 && (
-                            <div className="pt-1">
-                              <span className="text-gray-500 font-bold block mb-1.5">
-                                Anexo(s) do Contrato Assinado:
-                              </span>
-                              <div className="space-y-1.5">
-                                {wizardState.contratoFiles.map(
-                                  (f: any, idx: number) => (
-                                    <div
-                                      key={idx}
-                                      className="flex items-center gap-1.5 p-2 bg-indigo-50 border border-indigo-150 rounded-xl text-xs"
-                                    >
-                                      <FileText
-                                        size={12}
-                                        className="text-indigo-605 shrink-0"
-                                      />
-                                      <span className="truncate font-semibold text-indigo-900 font-mono flex-11 font-bold">
-                                        {f.name}{" "}
-                                        <span className="text-[10px] text-indigo-400 font-normal">
-                                          ({f.size})
-                                        </span>
-                                      </span>
-                                    </div>
-                                  ),
-                                )}
-                              </div>
-                            </div>
-                          )}
                       </div>
                     </div>
                   </div>
@@ -4321,59 +4364,7 @@ export default function FinanceiroFluxo() {
                   </div>
                 )}
 
-                {/* CARD: APURAÇÃO ÊXITO SIMPLES */}
-                {["exito_simples", "fixo_mais_exito_simples"].includes(modeloHonorariosForm) && (
-                  <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-6 animate-fadeIn">
-                    {/* Header */}
-                    <div className="pb-4 border-b border-gray-100 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Coins className="text-indigo-650" size={20} />
-                        <h3 className="text-sm font-black uppercase text-gray-900 tracking-wider">
-                          Liquidação e Apuração de Êxito Simples
-                        </h3>
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs font-sans">
-                      <div className="space-y-4">
-                        <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Simulador de Proveito Econômico</h4>
-                        
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-bold text-gray-500 uppercase font-mono">Insira o Proveito Econômico Estimado (R$):</label>
-                          <input
-                            type="text"
-                            value={valSImuladoExito}
-                            onChange={(e) => setValSimuladoExito(e.target.value)}
-                            className="w-full px-3 py-2 bg-gray-50/50 border border-gray-200 focus:bg-white focus:border-indigo-500 rounded-xl text-xs font-bold text-gray-800 outline-none transition font-mono"
-                            placeholder="Ex: 50000"
-                          />
-                        </div>
-
-                        <div className="p-4 bg-indigo-50 border border-indigo-150 rounded-xl space-y-2">
-                          <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest block font-mono">Honorários Simulados</span>
-                          <div className="text-xl font-bold text-indigo-950 font-mono">
-                            R$ {(((parseFloat((valSImuladoExito || "0").replace("R$", "").replace(/\./g, "").replace(",", ".").trim()) || 0) * (parseFloat((percentualExitoForm || "30").replace("%", "").trim()) / 100 || 0.3))).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </div>
-                          <span className="text-[9px] text-indigo-500 font-medium block">Cálculo: Proveito econômico multiplicado pelo percentual contratado ({percentualExitoForm || "30%"}).</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-4">
-                        <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider">Premissas Operacionais</h4>
-                        <div className="space-y-3.5">
-                          <div className="flex justify-between items-center py-1 border-b border-gray-50">
-                            <span className="text-gray-500 font-medium">Percentual Pactuado:</span>
-                            <span className="font-bold text-slate-900">{percentualExitoForm || "30%"}</span>
-                          </div>
-                          <div className="flex flex-col gap-1 py-1 border-b border-gray-55">
-                            <span className="text-gray-500 font-medium font-bold text-slate-700">Base de Cálculo Contratual:</span>
-                            <p className="font-semibold text-slate-600 leading-normal text-[11px] bg-slate-50 p-2 rounded-lg border border-slate-100">{baseCalculoExitoForm || "Proveito econômico obtido."}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
 
                 {/* CARD: Tabela analítica do contrato de honorários */}
                 <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-6">
@@ -5492,6 +5483,227 @@ export default function FinanceiroFluxo() {
                     </div>
                   )}
                 </div>
+
+                {/* NEW CARD: HISTÓRICO E AUDITORIA DO CONTRATO */}
+                <div className="bg-white border border-gray-150 rounded-2xl p-6 shadow-sm space-y-4 animate-fadeIn">
+                  <div className="pb-3 border-b border-gray-100 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-indigo-600 animate-pulse"></span>
+                    <h4 className="text-xs font-black uppercase text-indigo-950 tracking-wider">
+                      Histórico e Auditoria do Contrato
+                    </h4>
+                  </div>
+
+                  <div className="space-y-3.5 text-xs">
+                    <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                      <span className="text-gray-500 font-bold">
+                        3.1 Contrato Gerado?
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                          wizardState.q3_1 === "sim"
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : "bg-amber-50 text-amber-700 border border-amber-200"
+                        }`}
+                      >
+                        {wizardState.q3_1 || "não preenchido"}
+                      </span>
+                    </div>
+
+                    {wizardState.q3_1 === "sim" && (
+                      <>
+                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                          <span className="text-gray-500 font-bold">
+                            3.2 Modelo Contratual:
+                          </span>
+                          <span className="font-semibold text-gray-805">
+                            {wizardState.q3_2 === "exito" && "Êxito"}
+                            {wizardState.q3_2 === "fixo" && "Fixo"}
+                            {wizardState.q3_2 === "exito_fixo" &&
+                              "Êxito + Fixo"}
+                            {!wizardState.q3_2 && "—"}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col gap-1 py-1.5 border-b border-gray-50">
+                          <span className="text-gray-500 font-bold">
+                            3.3 Meio(s) de Entrega Utilizados:
+                          </span>
+                          <div className="flex flex-wrap gap-1.5 mt-1">
+                            {Array.isArray(wizardState.q3_3) &&
+                            wizardState.q3_3.length > 0 ? (
+                              wizardState.q3_3.map((method: string) => {
+                                let label = method;
+                                if (method === "fisica")
+                                  label = "Física/Impressa";
+                                if (method === "whatsapp")
+                                  label = "WhatsApp";
+                                if (method === "email") label = "E-mail";
+                                if (method === "outro")
+                                  label = `Outro (${wizardState.q3_3_outro || "—"})`;
+                                return (
+                                  <span
+                                    key={method}
+                                    className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-150 rounded text-[10px] font-bold"
+                                  >
+                                    {label}
+                                  </span>
+                                );
+                              })
+                            ) : (
+                              <span className="text-gray-400 italic">
+                                Nenhum selecionado
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                          <span className="text-gray-500 font-bold">
+                            3.4 Assinado pelo Cliente 🖋️?
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                              wizardState.q3_4 === "sim"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-rose-50 text-rose-700 border border-rose-200"
+                            }`}
+                          >
+                            {wizardState.q3_4 || "não preenchido"}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                          <span className="text-gray-500 font-bold">
+                            3.5 Assinado pelo Advogado 🖋️?
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                              wizardState.q3_5 === "sim"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-rose-50 text-rose-700 border border-rose-200"
+                            }`}
+                          >
+                            {wizardState.q3_5 || "não preenchido"}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                          <span className="text-gray-500 font-bold">
+                            3.6 Recebeu o Contrato Digitalizado?
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                              wizardState.q3_6 === "sim"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-rose-50 text-rose-700 border border-rose-200"
+                            }`}
+                          >
+                            {wizardState.q3_6 || "não preenchido"}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                          <span className="text-gray-500 font-bold">
+                            3.7 Recebeu o Contrato Digitalizado 🖨️?
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                              wizardState.q3_7 === "sim"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-rose-50 text-rose-700 border border-rose-200"
+                            }`}
+                          >
+                            {wizardState.q3_7 || "não preenchido"}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
+                          <span className="text-gray-500 font-bold">
+                            3.8 Financeiro Informado?
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                              wizardState.q3_8 === "sim"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-rose-50 text-rose-700 border border-rose-200"
+                            }`}
+                          >
+                            {wizardState.q3_8 || "não preenchido"}
+                          </span>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Google Docs Url */}
+                    {caseObj?.contratoHonorariosGoogleDocsUrl && (
+                      <div className="pt-1.5">
+                        <span className="text-gray-500 font-bold block mb-1.5">
+                          Link do Modelo de Contrato Gerado:
+                        </span>
+                        <div className="space-y-2">
+                          <a
+                            href={caseObj.contratoHonorariosGoogleDocsUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-indigo-650 hover:underline font-semibold flex items-center gap-1 select-all truncate bg-gray-55/75 p-2.5 rounded-xl border border-gray-150"
+                          >
+                            <FileText
+                              size={14}
+                              className="text-indigo-600 shrink-0"
+                            />
+                            <span className="truncate">
+                              {caseObj.contratoHonorariosGoogleDocsUrl}
+                            </span>
+                            <ExternalLink size={12} className="shrink-0" />
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleOpenContrato(
+                                caseObj.contratoHonorariosGoogleDocsUrl,
+                              )
+                            }
+                            className="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-sm"
+                          >
+                            <FileText size={14} />
+                            <span>Ver contrato de honorários gerado</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Uploaded Contract Files list */}
+                    {wizardState.contratoFiles &&
+                      wizardState.contratoFiles.length > 0 && (
+                        <div className="pt-1">
+                          <span className="text-gray-500 font-bold block mb-1.5">
+                            Anexo(s) do Contrato Assinado:
+                          </span>
+                          <div className="space-y-1.5">
+                            {wizardState.contratoFiles.map(
+                              (f: any, idx: number) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-center gap-1.5 p-2 bg-indigo-50 border border-indigo-150 rounded-xl text-xs"
+                                >
+                                  <FileText
+                                    size={12}
+                                    className="text-indigo-605 shrink-0"
+                                  />
+                                  <span className="truncate font-semibold text-indigo-900 font-mono flex-11 font-bold">
+                                    {f.name}{" "}
+                                    <span className="text-[10px] text-indigo-400 font-normal">
+                                      ({f.size})
+                                    </span>
+                                  </span>
+                                </div>
+                              ),
+                            )}
+                          </div>
+                        </div>
+                      )}
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -5501,11 +5713,23 @@ export default function FinanceiroFluxo() {
         <div className="flex flex-col sm:flex-row sm:justify-between items-center gap-4 pt-6 border-t border-gray-150">
           <button
             type="button"
-            onClick={() => navigate(flowRoutes.solicitacoesInformacoes(caseId))}
+            onClick={() => {
+              if (activeSubStep === 1) {
+                navigate(flowRoutes.solicitacoesInformacoes(caseId));
+              } else if (activeSubStep === 2) {
+                navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/financeiro/Criar Contrato de Honorários`);
+              } else if (activeSubStep === 3) {
+                navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/financeiro/ver.detalhes.do.contrato.de.honorarios`);
+              }
+            }}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer"
           >
             <ArrowLeft size={14} />
-            Voltar para Solicitação de Informações Complementares
+            {activeSubStep === 1
+              ? "Voltar para Solicitação de Informações Complementares"
+              : activeSubStep === 2
+              ? "Voltar para Subetapa 01 do Financeiro"
+              : "Voltar para Subetapa 02 do Financeiro"}
           </button>
 
           <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
@@ -5518,21 +5742,37 @@ export default function FinanceiroFluxo() {
               Salvar e Sair
             </button>
 
-            <button
-              type="button"
-              disabled={saving}
-              onClick={handleSaveAndAdvance}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gray-950 hover:bg-black text-white px-8 py-3.5 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-md"
-            >
-              {saving ? (
-                <Loader2 size={13} className="animate-spin" />
-              ) : (
-                <>
-                  <span>Salvar e Avançar</span>
-                  <ArrowRight size={14} />
-                </>
+            <div className="relative w-full sm:w-auto">
+              {showUnsavedBalloon && (
+                <div className="absolute bottom-full mb-3 right-0 w-80 p-3.5 bg-amber-600 text-white rounded-xl shadow-xl text-xs font-semibold leading-snug animate-bounce z-50">
+                  <div className="relative">
+                    <span>⚠️ Condições não foram gravadas! Isso pode afetar o gDI e a subetapa 02. Grave a operação antes de prosseguir.</span>
+                    <div className="absolute top-full right-8 w-3 h-3 bg-amber-600 rotate-45 transform translate-y-1.5"></div>
+                  </div>
+                </div>
               )}
-            </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleSaveAndAdvance}
+                className="w-full inline-flex items-center justify-center gap-2 bg-gray-950 hover:bg-black text-white px-8 py-3.5 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-md"
+              >
+                {saving ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <>
+                    <span>
+                      {activeSubStep === 1
+                        ? "Avançar para Subetapa 02 do Financeiro"
+                        : activeSubStep === 2
+                        ? "Avançar para Subetapa 03 do Financeiro"
+                        : "Concluir Financeiro e Avançar"}
+                    </span>
+                    <ArrowRight size={14} />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>

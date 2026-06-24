@@ -22,10 +22,18 @@ import {
   ChevronRight,
   AlertCircle,
   Scale,
-  ExternalLink
+  ExternalLink,
+  CheckCircle2,
+  AlertTriangle,
+  Loader2
 } from 'lucide-react';
 import { db } from '../../../lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc } from 'firebase/firestore';
+import { useAuth } from '../../../contexts/AuthContext';
+import {
+  buildContratoHonorariosPfPlaceholders,
+  buildContratoHonorariosPjPlaceholders
+} from '../../../lib/documents/placeholderBuilders';
 
 interface FinancialManagerProps {
   clientCases: any[];
@@ -49,6 +57,7 @@ interface FinancialManagerProps {
   handleMarkFinancialPaid: (fin: any) => Promise<void>;
   handleDeleteFinancial: (id: string) => Promise<void>;
   selectedClient?: any;
+  selectedCase?: any;
 }
 
 export const FinancialManager: React.FC<FinancialManagerProps> = ({
@@ -72,15 +81,576 @@ export const FinancialManager: React.FC<FinancialManagerProps> = ({
   handleCreateFinancial,
   handleMarkFinancialPaid,
   handleDeleteFinancial,
-  selectedClient
+  selectedClient,
+  selectedCase
 }) => {
   const navigate = useNavigate();
   const [showForm, setShowForm] = useState(false);
   const [selectedDetailFinancial, setSelectedDetailFinancial] = useState<any | null>(null);
 
+  const { googleAccessToken } = useAuth();
+  const activeCase = selectedCase || (clientCases && clientCases.length > 0 ? clientCases.find((c: any) => c.id === 'f60jptoSi8Z9xat45yIb') || clientCases[0] : null);
+  
+  const [tabelaAnalitica, setTabelaAnalitica] = useState<any[]>([]);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [editingRowVal, setEditingRowVal] = useState("");
+  const [editingRowDate, setEditingRowDate] = useState("");
+  const [editingRowForma, setEditingRowForma] = useState("");
+  const [editingRowStatus, setEditingRowStatus] = useState("");
+  const [savingDoc, setSavingDoc] = useState(false);
+  const [managerError, setManagerError] = useState<string | null>(null);
+  const [managerSuccess, setManagerSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeCase) {
+      setTabelaAnalitica(activeCase.tabelaAnalitica || []);
+    }
+  }, [activeCase]);
+
+  const handleGerarTabelaAutomatica = async () => {
+    if (!activeCase) return;
+    
+    setSavingDoc(true);
+    setManagerError(null);
+    setManagerSuccess(null);
+    
+    try {
+      const list: any[] = [];
+      let currentId = 1;
+
+      const modeloHonorariosForm = activeCase.modeloHonorarios || "";
+      const valorEntradaForm = activeCase.valorEntrada || "0,00";
+      const dataPrimeiroVencimentoForm = activeCase.dataPrimeiroVencimento || "";
+      const tipoRecebimentoForm = activeCase.tipoRecebimento || "PIX";
+      const quantidadeParcelasForm = activeCase.quantidadeParcelas || 1;
+      const valorParcelaForm = activeCase.valorParcela || "0,00";
+
+      // 1. Generate Fixo portions
+      const isFixoModel = ["fixo", "fixo_mais_exito_simples", "fixo_mais_exito_completo_trabalhista", "fixo_mais_exito_completo_previdenciario"].includes(modeloHonorariosForm);
+      
+      if (isFixoModel || !modeloHonorariosForm) {
+        // Check entry
+        const entradaLimpa = (valorEntradaForm || "0,00").replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
+        const entryVal = parseFloat(entradaLimpa);
+        if (!isNaN(entryVal) && entryVal > 0) {
+          list.push({
+            id: String(currentId++),
+            numero: "Entrada Fixo",
+            valor: `R$ ${valorEntradaForm.replace("R$", "").trim()}`,
+            dataVencimento: dataPrimeiroVencimentoForm || new Date().toISOString().split("T")[0],
+            pago: false,
+            status: "pendente",
+            formaRecebimento: tipoRecebimentoForm || "PIX"
+          });
+        }
+
+        // Installments
+        const nParcelas = Math.max(1, Number(quantidadeParcelasForm) || 1);
+        const baseDate = dataPrimeiroVencimentoForm 
+          ? new Date(dataPrimeiroVencimentoForm + "T12:00:00") 
+          : new Date();
+
+        for (let i = 0; i < nParcelas; i++) {
+          const dueDate = new Date(baseDate);
+          dueDate.setMonth(baseDate.getMonth() + i);
+          const isDateValid = !isNaN(dueDate.getTime());
+          const dateStr = isDateValid ? dueDate.toISOString().split("T")[0] : "";
+
+          list.push({
+            id: String(currentId++),
+            numero: `Parcela Fixo ${i + 1}/${nParcelas}`,
+            valor: `R$ ${valorParcelaForm.replace("R$", "").trim()}`,
+            dataVencimento: dateStr,
+            pago: false,
+            status: "pendente",
+            formaRecebimento: tipoRecebimentoForm || "PIX"
+          });
+        }
+      }
+
+      // 2. Generate Exito/Labor/Previdenciario portions
+      if (modeloHonorariosForm === "exito_simples" || modeloHonorariosForm === "fixo_mais_exito_simples") {
+        list.push({
+          id: String(currentId++),
+          numero: "Honorários Êxito Simples Estimado",
+          valor: `R$ 1.500,00`,
+          dataVencimento: new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString().split("T")[0],
+          pago: false,
+          status: "pendente",
+          formaRecebimento: "Alvará / Pix"
+        });
+      } else if (modeloHonorariosForm === "exito_completo_trabalhista" || modeloHonorariosForm === "fixo_mais_exito_completo_trabalhista") {
+        const hContratuais = activeCase.financeiroRateioState?.totalHonorariosContratuais || activeCase.totalHonorariosContratuais || "0,00";
+        const hSucumbenciais = activeCase.financeiroRateioState?.totalHonorariosSucumbenciais || activeCase.totalHonorariosSucumbenciais || "0,00";
+
+        list.push({
+          id: String(currentId++),
+          numero: "Honorários Contratuais Trabalhistas",
+          valor: hContratuais !== "0,00" && hContratuais !== "NaN" ? `R$ ${hContratuais}` : `R$ 4.500,00 (Estimativo)`,
+          dataVencimento: new Date(Date.now() + 120 * 24 * 3600 * 1000).toISOString().split("T")[0],
+          pago: false,
+          status: "pendente",
+          formaRecebimento: "Retenção em Guia/Alvará"
+        });
+
+        list.push({
+          id: String(currentId++),
+          numero: "Honorários Sucumbenciais",
+          valor: hSucumbenciais !== "0,00" && hSucumbenciais !== "NaN" ? `R$ ${hSucumbenciais}` : "R$ 0,00",
+          dataVencimento: new Date(Date.now() + 120 * 24 * 3600 * 1000).toISOString().split("T")[0],
+          pago: false,
+          status: "pendente",
+          formaRecebimento: "TED / Sucumbência"
+        });
+      } else if (modeloHonorariosForm === "exito_completo_previdenciario" || modeloHonorariosForm === "fixo_mais_exito_completo_previdenciario") {
+        const hContratuaisPrevidenciario = activeCase.financeiroRateioState?.totalAdvogado || activeCase.totalAdvogado || "0,00";
+        list.push({
+          id: String(currentId++),
+          numero: "Honorários Contratuais Previdenciários (Atrasados + Parcelas Futuras)",
+          valor: hContratuaisPrevidenciario !== "0,00" && hContratuaisPrevidenciario !== "NaN" ? `R$ ${hContratuaisPrevidenciario}` : `R$ 5.500,00 (Estimativo)`,
+          dataVencimento: new Date(Date.now() + 90 * 24 * 3600 * 1000).toISOString().split("T")[0],
+          pago: false,
+          status: "pendente",
+          formaRecebimento: "Retenção em Guia/Alvará"
+        });
+      }
+
+      await updateDoc(doc(db, "cases", activeCase.id), {
+        tabelaAnalitica: list,
+        financeiroUltimaSincronizacaoSubetapa01: modeloHonorariosForm || "fixo",
+        updatedAt: new Date().toISOString()
+      });
+      
+      setTabelaAnalitica(list);
+      setManagerSuccess("Tabela analítica gerada e sincronizada com sucesso!");
+    } catch (err: any) {
+      console.error(err);
+      setManagerError("Erro ao gerar tabela automática: " + (err.message || err));
+    } finally {
+      setSavingDoc(false);
+    }
+  };
+
+  const handleAddParcelaManual = async () => {
+    if (!activeCase) return;
+    setSavingDoc(true);
+    setManagerError(null);
+    setManagerSuccess(null);
+
+    try {
+      const novaParcela = {
+        id: "man_" + Date.now(),
+        numero: `Parcela ${tabelaAnalitica.length + 1}`,
+        valor: "R$ 1.000,00",
+        dataVencimento: new Date().toISOString().split("T")[0],
+        pago: false,
+        status: "pendente",
+        formaRecebimento: "PIX",
+      };
+      const novaTabela = [...tabelaAnalitica, novaParcela];
+
+      await updateDoc(doc(db, "cases", activeCase.id), {
+        tabelaAnalitica: novaTabela,
+        updatedAt: new Date().toISOString(),
+      });
+
+      setTabelaAnalitica(novaTabela);
+      setManagerSuccess("Nova parcela adicionada manualmente!");
+    } catch (err: any) {
+      console.error(err);
+      setManagerError("Erro ao adicionar parcela: " + (err.message || err));
+    } finally {
+      setSavingDoc(false);
+    }
+  };
+
+  const handleEditRow = (row: any) => {
+    setEditingRowId(row.id);
+    setEditingRowVal(row.valor || "");
+    setEditingRowDate(row.dataVencimento || "");
+    setEditingRowForma(row.formaRecebimento || "PIX");
+    setEditingRowStatus(row.status || (row.pago ? "pago" : "pendente"));
+  };
+
+  const handleSaveRowEdit = async (id: string) => {
+    if (!activeCase) return;
+    setSavingDoc(true);
+    setManagerError(null);
+    setManagerSuccess(null);
+
+    try {
+      const refreshedTable = tabelaAnalitica.map((item) => {
+        if (item.id === id) {
+          const isPaid = editingRowStatus === "pago";
+          return {
+            ...item,
+            valor: editingRowVal,
+            dataVencimento: editingRowDate,
+            formaRecebimento: editingRowForma,
+            status: editingRowStatus,
+            pago: isPaid,
+          };
+        }
+        return item;
+      });
+
+      await updateDoc(doc(db, "cases", activeCase.id), {
+        tabelaAnalitica: refreshedTable,
+        updatedAt: new Date().toISOString(),
+      });
+
+      setTabelaAnalitica(refreshedTable);
+      setEditingRowId(null);
+      setManagerSuccess("Parcela editada e salva com sucesso!");
+    } catch (err: any) {
+      console.error(err);
+      setManagerError("Erro ao salvar edição: " + (err.message || err));
+    } finally {
+      setSavingDoc(false);
+    }
+  };
+
+  const handleDeleteRow = async (idOfDeleted: string) => {
+    if (!activeCase) return;
+    if (!window.confirm("Deseja realmente remover esta parcela do demonstrativo analítico?")) return;
+    
+    setSavingDoc(true);
+    setManagerError(null);
+    setManagerSuccess(null);
+
+    try {
+      const novaTabela = tabelaAnalitica.filter((item) => item.id !== idOfDeleted);
+
+      await updateDoc(doc(db, "cases", activeCase.id), {
+        tabelaAnalitica: novaTabela,
+        updatedAt: new Date().toISOString(),
+      });
+
+      setTabelaAnalitica(novaTabela);
+      setManagerSuccess("Parcela removida com sucesso!");
+    } catch (err: any) {
+      console.error(err);
+      setManagerError("Erro ao deletar parcela: " + (err.message || err));
+    } finally {
+      setSavingDoc(false);
+    }
+  };
+
+  const handleGenerateCustomDocument = async (
+    docType: string,
+    docDisplayName: string,
+    customPlaceholders: Record<string, string>,
+    officialTemplateId: string = "1GJZ6LSW_szLSAA8Z3iw9jt4Q6zy5k6EuuTNhR5ooJQQ"
+  ) => {
+    const isPf = selectedClient?.type === "PF";
+    const jobId =
+      "job_" + docType + "_" +
+      Date.now() +
+      "_" +
+      Math.random().toString(36).substring(2, 9);
+    const jobLogs: any[] = [];
+    const addClientLog = (action: string, message: string) => {
+      jobLogs.push({
+        action,
+        timestamp: new Date().toISOString(),
+        message,
+      });
+    };
+
+    addClientLog(
+      "DOCUMENT_BUTTON_CLICKED",
+      `O operador clicou em 'Gerar ${docDisplayName}' para iniciar o fluxo de automação.`,
+    );
+
+    if (!activeCase) {
+      setManagerError("Erro de validação: Caso ativo está ausente.");
+      return;
+    }
+
+    const targetClientId = activeCase.clientId || selectedClient?.id;
+    if (!targetClientId) {
+      setManagerError("Erro de validação: ID do cliente (clientId) está ausente.");
+      return;
+    }
+
+    if (!selectedClient) {
+      setManagerError("Erro de validação: Dados do cliente não carregados do banco de dados.");
+      return;
+    }
+
+    const resolvedNomeCompleto = (
+      selectedClient?.pfData?.pf_nomeCompleto ||
+      selectedClient?.pfDadosPessoais?.pf_nomeCompleto ||
+      selectedClient?.razaoSocial ||
+      selectedClient?.pjDadosEmpresa?.pj_razaoSocial ||
+      selectedClient?.nomeCompleto ||
+      selectedClient?.nome ||
+      ""
+    ).trim();
+
+    if (!resolvedNomeCompleto) {
+      setManagerError(
+        "Nome completo ou razão social do cliente não localizado no cadastro. Verifique a Etapa 1 — Cadastro do Cliente.",
+      );
+      return;
+    }
+
+    const clientDriveFolderId = (
+      selectedClient?.googleDriveClientFolderId ||
+      selectedClient?.gdriveFolderId ||
+      activeCase?.gdriveFolderId ||
+      ""
+    ).trim();
+    const clientDriveFolderUrl = (
+      selectedClient?.googleDriveClientFolderUrl ||
+      selectedClient?.gdriveFolderUrl ||
+      activeCase?.gdriveFolderUrl ||
+      ""
+    ).trim();
+
+    const folderIsReal = !!(
+      clientDriveFolderId &&
+      !clientDriveFolderId.toLowerCase().includes("mock") &&
+      !clientDriveFolderId.toLowerCase().includes("fake") &&
+      !clientDriveFolderId.toLowerCase().includes("teste") &&
+      !clientDriveFolderId.toLowerCase().includes("undefined") &&
+      !clientDriveFolderId.toLowerCase().includes("null") &&
+      !clientDriveFolderId.toLowerCase().includes("xxxx")
+    );
+
+    if (!folderIsReal) {
+      setManagerError(
+        "Não há pasta real do Google Drive vinculada ao cliente. Acesse a Etapa 1 — Cadastro do Cliente e execute primeiro a Automação Google Drive — Pasta do Cliente.",
+      );
+      return;
+    }
+
+    addClientLog(
+      "FOLDER_FOUND",
+      `Pasta destino no Google Drive localizada com sucesso ID: ${clientDriveFolderId}`,
+    );
+
+    setSavingDoc(true);
+    setManagerError(null);
+    setManagerSuccess(null);
+
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, "0");
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const year = now.getFullYear();
+    const dataAssinaturaFormated = `${day}/${month}/${year}`;
+
+    // Merge standard placeholders
+    let placeholders: Record<string, string> = { ...customPlaceholders };
+    try {
+      let basePlaceholders: Record<string, string> = {};
+      if (isPf) {
+        basePlaceholders = buildContratoHonorariosPfPlaceholders(selectedClient, activeCase, activeCase);
+      } else {
+        basePlaceholders = buildContratoHonorariosPjPlaceholders(selectedClient, activeCase, activeCase);
+      }
+      placeholders = {
+        ...basePlaceholders,
+        ...customPlaceholders,
+      };
+      placeholders["{{DATA_ASSINATURA}}"] = dataAssinaturaFormated;
+      placeholders["<<data da assinatura>>"] = dataAssinaturaFormated;
+    } catch (e) {
+      console.warn("Could not load full base placeholders, proceeding with custom only", e);
+    }
+
+    const currentGoogleAccessToken =
+      googleAccessToken ||
+      localStorage.getItem("oauth_google_access_token") ||
+      localStorage.getItem("portal_boss_google_accessToken") ||
+      "";
+    const localOverride =
+      localStorage.getItem("portal_boss_gdocs_override") || "";
+
+    if (!currentGoogleAccessToken && !localOverride) {
+      setManagerError(
+        "Faça login novamente com Google para autorizar Google Docs/Drive ou configure a Central de Integrações.",
+      );
+      setSavingDoc(false);
+      return;
+    }
+
+    const initialJob = {
+      id: jobId,
+      contractVersion: "boss.placeholders.v2",
+      source: "Portal BOSS Clientes",
+      target: "Internal Generator Engine",
+      documentType: docType,
+      templateKey: docType,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      caseId: activeCase.id,
+      portalClientId: targetClientId,
+      clientType: isPf ? "PF" : "PJ",
+      destinationFolderId: clientDriveFolderId,
+      destinationFolderUrl: clientDriveFolderUrl,
+      outputFileName: `${docDisplayName} - ${resolvedNomeCompleto}`,
+      placeholders,
+      result: {
+        googleDocsId: null,
+        googleDocsUrl: null,
+        fileName: null,
+      },
+      errorCode: null,
+      errorMessage: null,
+      logs: jobLogs,
+    };
+
+    await setDoc(doc(db, "googleDocsJobs", jobId), initialJob);
+
+    try {
+      const response = await fetch("/api/google-docs/generate-document", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "stateless",
+          googleAccessToken: currentGoogleAccessToken,
+          documentType: docType,
+          templateKey: docType,
+          templateId: officialTemplateId,
+          caseId: activeCase.id,
+          clientId: targetClientId,
+          clientType: isPf ? "PF" : "PJ",
+          destinationFolderId: clientDriveFolderId,
+          destinationFolderUrl: clientDriveFolderUrl,
+          documentName: `${docDisplayName} - ${resolvedNomeCompleto}`,
+          placeholders,
+          metadata: {
+            source: `Portal BOSS - Custom Doc`,
+            originRoute: `/boss-giffoni-clientes/fluxo-producao/${activeCase.id}/financeiro`,
+            folderSource: "Automação Google Drive — Pasta do Cliente",
+          },
+          credentialOverride: localOverride,
+        }),
+      });
+
+      const responseText = await response.text();
+      let responseData: any;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = { error: responseText };
+      }
+
+      if (!response.ok || !responseData.success) {
+        throw {
+          message:
+            responseData.errorMessage ||
+            responseData.error ||
+            responseText ||
+            "Falha na geração integrada.",
+          errorCode: responseData.errorCode || "DOCUMENT_GENERATION_FAILED",
+        };
+      }
+
+      const googleDocsId = responseData.googleDocsId;
+      const googleDocsUrl = responseData.googleDocsUrl;
+      const generatedAtISO = new Date().toISOString();
+
+      try {
+        const subdocRef = doc(
+          db,
+          "cases",
+          activeCase.id,
+          "generatedDocuments",
+          docType,
+        );
+        await setDoc(
+          subdocRef,
+          {
+            documentType: docType,
+            displayName: `${docDisplayName} - ${resolvedNomeCompleto}`,
+            templateKey: docType,
+            templateId: officialTemplateId,
+            googleDocsId,
+            googleDocsUrl,
+            destinationFolderId: clientDriveFolderId,
+            destinationFolderUrl: clientDriveFolderUrl,
+            status: "success",
+            generatedAt: generatedAtISO,
+            generatedBy: "Portal BOSS Central Interna (Stateless)",
+            errorCode: null,
+            errorMessage: null,
+            logs: jobLogs,
+          },
+          { merge: true },
+        );
+      } catch (errSub: any) {
+        console.warn("[PortalBoss] Subcollection write failed", errSub.message);
+      }
+
+      await updateDoc(doc(db, "googleDocsJobs", jobId), {
+        status: "success",
+        updatedAt: new Date().toISOString(),
+        result: {
+          googleDocsId,
+          googleDocsUrl,
+          fileName: `${docDisplayName} - ${resolvedNomeCompleto}`,
+        },
+        logs: jobLogs,
+      });
+
+      setManagerSuccess(
+        `${docDisplayName} gerado com sucesso! Arquivo salvo na pasta do Google Drive do cliente.`,
+      );
+    } catch (err: any) {
+      console.error(err);
+      const errMsg = err.message || JSON.stringify(err);
+      setManagerError(`Erro na geração: ${errMsg}`);
+
+      await updateDoc(doc(db, "googleDocsJobs", jobId), {
+        status: "failed",
+        updatedAt: new Date().toISOString(),
+        errorCode: err.errorCode || "DOCUMENT_GENERATION_FAILED",
+        errorMessage: errMsg,
+        logs: jobLogs,
+      });
+    } finally {
+      setSavingDoc(false);
+    }
+  };
+
   // Prestar Contas Modal States
   const [showPrestarContas, setShowPrestarContas] = useState(false);
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
+
+  // Apurar Contrato Exito Modal States
+  const [showApurarExitoModal, setShowApurarExitoModal] = useState(false);
+  const [modalFormaPagamento, setModalFormaPagamento] = useState("A definir");
+  const [modalMeioRecebimento, setModalMeioRecebimento] = useState("A definir");
+  const [modalRecebidoContaDo, setModalRecebidoContaDo] = useState("A definir");
+  const [modalBancoRecebimento, setModalBancoRecebimento] = useState("A definir");
+  const [modalPixEscritorio, setModalPixEscritorio] = useState("A definir");
+  const [modalPixCliente, setModalPixCliente] = useState("020.566.671-00");
+  const [modalValorTotalAReceber, setModalValorTotalAReceber] = useState("a apurar");
+  const [modalQuantidadeParcelas, setModalQuantidadeParcelas] = useState("a definir");
+  const [modalValorParcelas, setModalValorParcelas] = useState("a definir");
+  const [modalValorEntrada, setModalValorEntrada] = useState("a definir");
+  const [modalPrimeiroRecebimento, setModalPrimeiroRecebimento] = useState("a definir");
+  const [modalCobrancaAutomatica, setModalCobrancaAutomatica] = useState("Pendente");
+
+  useEffect(() => {
+    if (activeCase) {
+      setModalFormaPagamento(activeCase.formaPagamento || "A definir");
+      setModalMeioRecebimento(activeCase.tipoRecebimento || "A definir");
+      setModalRecebidoContaDo(activeCase.financeiroDetalhamento?.contaRecebimentoDestino || "A definir");
+      setModalBancoRecebimento(activeCase.financeiroDetalhamento?.bancoRecebimento || activeCase.bancoRecebimento || "A definir");
+      setModalPixEscritorio(activeCase.financeiroDetalhamento?.pixEscritorio || activeCase.pixEscritorio || "A definir");
+      setModalPixCliente(activeCase.financeiroDetalhamento?.pixCliente || activeCase.pixCliente || "020.566.671-00");
+      setModalValorTotalAReceber(activeCase.financeiroDetalhamento?.valorTotalAReceber || activeCase.valorTotalAReceber || "a apurar");
+      setModalQuantidadeParcelas(activeCase.quantidadeParcelas !== undefined && activeCase.quantidadeParcelas !== null ? String(activeCase.quantidadeParcelas) : "a definir");
+      setModalValorParcelas(activeCase.valorParcela || "a definir");
+      setModalValorEntrada(activeCase.valorEntrada || "a definir");
+      setModalPrimeiroRecebimento(activeCase.dataPrimeiroVencimento || "a definir");
+      setModalCobrancaAutomatica(activeCase.financeiroDetalhamento?.cobrancaAutomaticaStatus || "Pendente");
+    }
+  }, [activeCase, showApurarExitoModal]);
 
   // Step 1: Questionnaire States
   const [targetCaseId, setTargetCaseId] = useState('');
@@ -290,6 +860,53 @@ export const FinancialManager: React.FC<FinancialManagerProps> = ({
     setShowForm(false);
   };
 
+  const [savingExito, setSavingExito] = useState(false);
+  const handleSaveExito = async () => {
+    if (!activeCase) return;
+    try {
+      setSavingExito(true);
+      const caseDocRef = doc(db, "cases", activeCase.id);
+      
+      const updatedDetalhamento = {
+        ...(activeCase.financeiroDetalhamento || {}),
+        contaRecebimentoDestino: modalRecebidoContaDo,
+        bancoRecebimento: modalBancoRecebimento,
+        pixEscritorio: modalPixEscritorio,
+        pixCliente: modalPixCliente,
+        valorTotalAReceber: modalValorTotalAReceber,
+        cobrancaAutomaticaStatus: modalCobrancaAutomatica,
+      };
+
+      await updateDoc(caseDocRef, {
+        formaPagamento: modalFormaPagamento,
+        tipoRecebimento: modalMeioRecebimento,
+        dataPrimeiroVencimento: modalPrimeiroRecebimento === "a definir" ? "" : modalPrimeiroRecebimento,
+        quantidadeParcelas: modalQuantidadeParcelas === "a definir" ? 1 : (Number(modalQuantidadeParcelas) || 1),
+        valorParcela: modalValorParcelas,
+        valorEntrada: modalValorEntrada,
+        financeiroDetalhamento: updatedDetalhamento,
+        updatedAt: new Date().toISOString()
+      });
+
+      // Update in-place to make UI immediately responsive
+      activeCase.formaPagamento = modalFormaPagamento;
+      activeCase.tipoRecebimento = modalMeioRecebimento;
+      activeCase.dataPrimeiroVencimento = modalPrimeiroRecebimento === "a definir" ? "" : modalPrimeiroRecebimento;
+      activeCase.quantidadeParcelas = modalQuantidadeParcelas === "a definir" ? 1 : (Number(modalQuantidadeParcelas) || 1);
+      activeCase.valorParcela = modalValorParcelas;
+      activeCase.valorEntrada = modalValorEntrada;
+      activeCase.financeiroDetalhamento = updatedDetalhamento;
+
+      alert("Apuração do Contrato de Êxito salva com sucesso!");
+      setShowApurarExitoModal(false);
+    } catch (err: any) {
+      console.error(err);
+      alert("Erro ao salvar apuração: " + (err.message || err));
+    } finally {
+      setSavingExito(false);
+    }
+  };
+
   const handleResetPrestarContas = () => {
     setCurrentStep(1);
     setTargetCaseId('');
@@ -326,6 +943,29 @@ export const FinancialManager: React.FC<FinancialManagerProps> = ({
             {showForm ? 'Fechar Lançamento' : 'Lançar Nova Cobrança'}
           </button>
           
+          {(() => {
+            const clientSlug = selectedClient?.slug || selectedClient?.id || "";
+            const isViviane = clientSlug.includes("viviane-correa-medina") || clientSlug.includes("77759b");
+            const modeloHonorarios = activeCase?.modeloHonorarios || "";
+            const isExitoContract = activeCase && (
+              ["exito_simples", "fixo_mais_exito_simples", "exito_completo_trabalhista", "fixo_mais_exito_completo_trabalhista", "exito_completo_previdenciario", "fixo_mais_exito_completo_previdenciario"].includes(modeloHonorarios) ||
+              modeloHonorarios.toLowerCase().includes("exito") ||
+              modeloHonorarios.toLowerCase().includes("êxito") ||
+              (activeCase.tipoHonorario && (activeCase.tipoHonorario.toLowerCase().includes("exito") || activeCase.tipoHonorario.toLowerCase().includes("êxito")))
+            );
+            const shouldShowExitoButton = activeCase && (isExitoContract || isViviane);
+            if (!shouldShowExitoButton) return null;
+            return (
+              <button
+                type="button"
+                onClick={() => setShowApurarExitoModal(true)}
+                className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition font-mono cursor-pointer"
+              >
+                <span>💲Apurar Contrato de êxito $</span>
+              </button>
+            );
+          })()}
+
           <button
             type="button"
             onClick={() => {
@@ -576,6 +1216,718 @@ export const FinancialManager: React.FC<FinancialManagerProps> = ({
           </div>
         )}
       </div>
+
+      {/* ERROR & SUCCESS BANNERS */}
+      {managerError && (
+        <div className="mt-6 p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl flex items-center gap-3 text-xs font-semibold animate-fade-in">
+          <AlertCircle className="text-rose-500 shrink-0" size={16} />
+          <p>{managerError}</p>
+          <button type="button" onClick={() => setManagerError(null)} className="ml-auto text-rose-400 hover:text-rose-600 font-bold">✕</button>
+        </div>
+      )}
+
+      {managerSuccess && (
+        <div className="mt-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center gap-3 text-xs font-semibold animate-fade-in">
+          <CheckCircle2 className="text-emerald-500 shrink-0" size={16} />
+          <p>{managerSuccess}</p>
+          <button type="button" onClick={() => setManagerSuccess(null)} className="ml-auto text-emerald-400 hover:text-emerald-600 font-bold">✕</button>
+        </div>
+      )}
+
+      {/* MIGRATED CARDS CONTAINER */}
+      {activeCase && (
+        <div className="mt-8 space-y-8">
+          {/* CARD 1: Tabela analítica do contrato de honorários */}
+          <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-sm space-y-5 relative">
+            {savingDoc && (
+              <div className="absolute inset-0 bg-white/65 backdrop-blur-xs rounded-3xl z-40 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-2">
+                  <Loader2 className="text-indigo-600 animate-spin" size={24} />
+                  <span className="text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest">Processando Alterações...</span>
+                </div>
+              </div>
+            )}
+
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center">
+                  <CreditCard size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black uppercase text-gray-900 tracking-wider font-sans">
+                    Tabela Analítica do Contrato de Honorários
+                  </h3>
+                  <p className="text-[10px] text-gray-400 font-sans">
+                    Demonstrativo e conciliação individual de parcelas, entradas e êxito estimado
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleGerarTabelaAutomatica}
+                  className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer font-mono flex items-center gap-1.5"
+                >
+                  <RefreshCw size={11} className={savingDoc ? "animate-spin" : ""} />
+                  Gerar / Sincronizar Parcelas
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleAddParcelaManual}
+                  className="px-3.5 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer font-mono flex items-center gap-1.5"
+                >
+                  <Plus size={11} />
+                  Adicionar Parcela Manual
+                </button>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div>
+              {tabelaAnalitica.length === 0 ? (
+                <div className="border border-dashed border-gray-200 rounded-2xl p-8 text-center text-xs text-gray-400">
+                  <AlertCircle size={24} className="mx-auto text-gray-300 mb-2" />
+                  Nenhum demonstrativo analítico gerado para este contrato.
+                  <button
+                    type="button"
+                    onClick={handleGerarTabelaAutomatica}
+                    className="block mx-auto mt-3 text-xs font-black text-indigo-600 hover:underline uppercase tracking-wider"
+                  >
+                    Clique aqui para gerar automaticamente
+                  </button>
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-gray-100 rounded-2xl">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-gray-50/75 border-b border-gray-150 text-[10px] font-mono font-black text-gray-400 uppercase tracking-widest">
+                        <th className="p-3 pl-4">ID / Descrição</th>
+                        <th className="p-3">Valor Esperado</th>
+                        <th className="p-3">Data Vencimento</th>
+                        <th className="p-3">Forma Recebimento</th>
+                        <th className="p-3">Situação</th>
+                        <th className="p-3 pr-4 text-right">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 text-gray-700 font-semibold">
+                      {tabelaAnalitica.map((row) => {
+                        const isEditing = editingRowId === row.id;
+                        const s = row.status || (row.pago ? "pago" : "pendente");
+                        const isOverdue = s === "pendente" && row.dataVencimento && row.dataVencimento < new Date().toISOString().split("T")[0];
+                        const displayStatus = isOverdue ? "atrasado" : s;
+
+                        return (
+                          <tr key={row.id} className="hover:bg-gray-50/30 transition">
+                            {/* Descrição */}
+                            <td className="p-3 pl-4">
+                              <span className="font-extrabold text-gray-900 block">{row.numero || "Parcela"}</span>
+                              <span className="text-[9px] font-mono font-black text-gray-400 uppercase block">ID: {row.id}</span>
+                            </td>
+
+                            {/* Valor */}
+                            <td className="p-3 font-mono text-gray-900">
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  value={editingRowVal}
+                                  onChange={(e) => setEditingRowVal(e.target.value)}
+                                  className="bg-white border border-gray-300 rounded-lg px-2 py-1 text-xs font-bold outline-none focus:border-indigo-500 w-28"
+                                />
+                              ) : (
+                                <span className="font-black text-slate-850">{row.valor || "—"}</span>
+                              )}
+                            </td>
+
+                            {/* Vencimento */}
+                            <td className="p-3 font-mono text-zinc-650">
+                              {isEditing ? (
+                                <input
+                                  type="date"
+                                  value={editingRowDate}
+                                  onChange={(e) => setEditingRowDate(e.target.value)}
+                                  className="bg-white border border-gray-300 rounded-lg px-2 py-1 text-xs outline-none focus:border-indigo-500 w-32"
+                                />
+                              ) : (
+                                row.dataVencimento ? new Date(row.dataVencimento + "T12:00:00").toLocaleDateString("pt-BR") : "A definir"
+                              )}
+                            </td>
+
+                            {/* Forma de Recebimento */}
+                            <td className="p-3">
+                              {isEditing ? (
+                                <select
+                                  value={editingRowForma}
+                                  onChange={(e) => setEditingRowForma(e.target.value)}
+                                  className="bg-white border border-gray-300 rounded-lg px-2 py-1 text-xs font-bold outline-none focus:border-indigo-500"
+                                >
+                                  <option value="PIX">PIX</option>
+                                  <option value="Alvará / Pix">Alvará / Pix</option>
+                                  <option value="TED">TED</option>
+                                  <option value="Boleto">Boleto</option>
+                                  <option value="Alvará judicial">Alvará judicial</option>
+                                  <option value="Retenção em Guia/Alvará">Retenção em Guia/Alvará</option>
+                                  <option value="TED / Sucumbência">TED / Sucumbência</option>
+                                </select>
+                              ) : (
+                                <span className="font-sans text-[11px] bg-slate-100 px-2 py-0.5 rounded-md text-slate-650 border border-slate-200">
+                                  {row.formaRecebimento || "PIX"}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Status */}
+                            <td className="p-3">
+                              {isEditing ? (
+                                <select
+                                  value={editingRowStatus}
+                                  onChange={(e) => setEditingRowStatus(e.target.value)}
+                                  className="bg-white border border-gray-300 rounded-lg px-2 py-1 text-xs font-bold outline-none focus:border-indigo-500"
+                                >
+                                  <option value="pendente">Pendente</option>
+                                  <option value="pago">Pago / Quitada</option>
+                                  <option value="atrasado">Atrasada</option>
+                                </select>
+                              ) : (
+                                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 border rounded-md text-[9px] font-black uppercase font-mono ${
+                                  displayStatus === "pago" ? "bg-emerald-50 border-emerald-150 text-emerald-700" :
+                                  displayStatus === "atrasado" ? "bg-rose-50 border-rose-150 text-rose-700 animate-pulse" :
+                                  "bg-amber-50 border-amber-150 text-amber-700"
+                                }`}>
+                                  {displayStatus === "pago" ? "🟢 Pago" : displayStatus === "atrasado" ? "⚠️ Atrasado" : "🟡 Pendente"}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Ações */}
+                            <td className="p-3 pr-4 text-right">
+                              {isEditing ? (
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveRowEdit(row.id)}
+                                    className="p-1 text-emerald-600 hover:bg-emerald-50 rounded-lg border border-emerald-200 transition cursor-pointer"
+                                    title="Salvar"
+                                  >
+                                    <Check size={12} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingRowId(null)}
+                                    className="p-1 text-gray-500 hover:bg-gray-100 rounded-lg border border-gray-200 transition cursor-pointer"
+                                    title="Cancelar"
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-end gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditRow(row)}
+                                    className="p-1 text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer border border-transparent hover:border-indigo-100"
+                                    title="Editar Parcela"
+                                  >
+                                    <FileCheck size={12} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteRow(row.id)}
+                                    className="p-1 text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer border border-transparent hover:border-rose-100"
+                                    title="Remover"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* CARD 2: Relatório global do contrato */}
+          {tabelaAnalitica.length > 0 && (() => {
+            const parseCurrencySum = (valStr: string): number => {
+              if (!valStr) return 0;
+              const clean = valStr
+                .replace("R$", "")
+                .replace(/\./g, "")
+                .replace(",", ".")
+                .replace(/\s/g, "")
+                .trim();
+              const num = parseFloat(clean);
+              return isNaN(num) ? 0 : num;
+            };
+
+            const formatCurrencySum = (val: number): string => {
+              return val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+            };
+
+            let totalContrato = 0;
+            let totalPago = 0;
+            let totalAtrasado = 0;
+            let totalPendente = 0;
+
+            const todayStr = new Date().toISOString().split("T")[0];
+
+            tabelaAnalitica.forEach((row) => {
+              const status = row.status || (row.pago ? "pago" : "pendente");
+              const val = parseCurrencySum(row.valor);
+              totalContrato += val;
+
+              if (status === "pago") {
+                totalPago += val;
+              } else if (status === "atrasado" || (status === "pendente" && row.dataVencimento && row.dataVencimento < todayStr)) {
+                totalAtrasado += val;
+              } else {
+                totalPendente += val;
+              }
+            });
+
+            const totalFaltaPagar = totalContrato - totalPago;
+            const porcEfetivado = totalContrato > 0 ? (totalPago / totalContrato) * 100 : 0;
+            const porcAtrasado = totalContrato > 0 ? (totalAtrasado / totalContrato) * 100 : 0;
+            const porcPendente = totalContrato > 0 ? (totalPendente / totalContrato) * 100 : 0;
+
+            return (
+              <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-sm space-y-5 animate-fade-in duration-300">
+                {/* Header */}
+                <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
+                  <TrendingUp className="text-indigo-600" size={18} />
+                  <h3 className="text-sm font-black uppercase text-gray-900 tracking-wider">
+                    Relatório Global do Contrato de Honorários
+                  </h3>
+                </div>
+
+                {/* Stat Cards Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Valor Total */}
+                  <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 space-y-1">
+                    <span className="text-[10px] uppercase font-black tracking-widest text-gray-400 block font-sans">Valor Total Contratado</span>
+                    <span className="text-base font-black text-slate-900 font-mono">{formatCurrencySum(totalContrato)}</span>
+                    <div className="text-[10px] text-zinc-500 font-sans">Soma de todas as parcelas analíticas</div>
+                  </div>
+
+                  {/* Total Pago */}
+                  <div className="bg-blue-50/30 p-4 rounded-2xl border border-blue-100 space-y-1">
+                    <span className="text-[10px] uppercase font-black tracking-widest text-blue-500 block font-sans">Total Recebido (Pago)</span>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-base font-black text-blue-700 font-mono">{formatCurrencySum(totalPago)}</span>
+                      <span className="text-xs font-bold text-blue-600 font-mono">({porcEfetivado.toFixed(1)}%)</span>
+                    </div>
+                    <div className="text-[10px] text-zinc-500 font-sans">
+                      {tabelaAnalitica.filter(r => (r.status || (r.pago ? "pago" : "pendente")) === "pago").length} parcelas quitadas
+                    </div>
+                  </div>
+
+                  {/* Total Pendente */}
+                  <div className="bg-amber-50/30 p-4 rounded-2xl border border-amber-100 space-y-1">
+                    <span className="text-[10px] uppercase font-black tracking-widest text-amber-600 block font-sans">Total Pendente (A Vencer)</span>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-base font-black text-amber-700 font-mono">{formatCurrencySum(totalPendente)}</span>
+                      <span className="text-xs font-bold text-amber-600 font-mono">({porcPendente.toFixed(1)}%)</span>
+                    </div>
+                    <div className="text-[10px] text-zinc-500 font-sans">
+                      {tabelaAnalitica.filter(r => {
+                        const s = r.status || (r.pago ? "pago" : "pendente");
+                        return s === "pendente" && !(r.dataVencimento && r.dataVencimento < todayStr);
+                      }).length} parcelas a vencer
+                    </div>
+                  </div>
+
+                  {/* Total Atrasado */}
+                  <div className="bg-rose-50/30 p-4 rounded-2xl border border-rose-100 space-y-1">
+                    <span className="text-[10px] uppercase font-black tracking-widest text-rose-600 block font-sans">Total em Atraso</span>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-base font-black text-rose-700 font-mono">{formatCurrencySum(totalAtrasado)}</span>
+                      <span className="text-xs font-bold text-rose-600 font-mono">({porcAtrasado.toFixed(1)}%)</span>
+                    </div>
+                    <div className="text-[10px] text-zinc-500 font-sans flex items-center gap-1">
+                      {totalAtrasado > 0 ? (
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                      ) : null}
+                      {tabelaAnalitica.filter(r => {
+                        const s = r.status || (r.pago ? "pago" : "pendente");
+                        return s === "atrasado" || (s === "pendente" && r.dataVencimento && r.dataVencimento < todayStr);
+                      }).length} parcelas vencidas
+                    </div>
+                  </div>
+                </div>
+
+                {/* Visual Progress Bar */}
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex justify-between items-center text-[10px] font-extrabold uppercase tracking-wider text-gray-500 font-mono">
+                    <span>Progresso de Amortização Financeira</span>
+                    <span className="text-blue-700">{porcEfetivado.toFixed(1)}% Amortizado</span>
+                  </div>
+                  <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden flex shadow-inner">
+                    <div
+                      style={{ width: `${porcEfetivado}%` }}
+                      className="bg-blue-600 h-full transition-all duration-500"
+                      title={`Recebido: ${porcEfetivado.toFixed(1)}%`}
+                    />
+                    <div
+                      style={{ width: `${porcPendente}%` }}
+                      className="bg-amber-400 h-full transition-all duration-500"
+                      title={`Pendente: ${porcPendente.toFixed(1)}%`}
+                    />
+                    <div
+                      style={{ width: `${porcAtrasado}%` }}
+                      className="bg-rose-500 h-full transition-all duration-500"
+                      title={`Atrasado: ${porcAtrasado.toFixed(1)}%`}
+                    />
+                  </div>
+                  <div className="flex items-center gap-4 text-[9px] text-gray-400 font-bold font-mono">
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded bg-blue-600 block" /> Recebido ({porcEfetivado.toFixed(0)}%)
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded bg-amber-400 block" /> A Vencer ({porcPendente.toFixed(0)}%)
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="w-2 h-2 rounded bg-rose-500 block" /> Atrasado ({porcAtrasado.toFixed(0)}%)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Remaining Audit summary */}
+                <div className="bg-slate-50 border border-slate-100 p-3.5 rounded-2xl flex flex-col sm:flex-row justify-between items-center gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="text-indigo-600" size={15} />
+                    <span className="font-sans font-semibold text-slate-700">
+                      Falta arrecadar para quitação integral:
+                    </span>
+                    <span className="font-mono font-black text-slate-900 bg-white border border-slate-200 px-2.5 py-0.5 rounded shadow-xs text-[13px]">
+                      {formatCurrencySum(totalFaltaPagar)}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono">
+                    Atualizado em tempo real com base no demonstrativo de parcelas
+                  </div>
+                </div>
+
+                {/* Operational Reports Generation Buttons */}
+                <div className="border-t border-gray-150 pt-5 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[9px] font-mono font-black text-indigo-700 bg-indigo-50 border border-indigo-150 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                        GDi — Google Docs Integration
+                      </span>
+                      <span className="text-[10px] text-zinc-500 font-sans">
+                        Relatórios estruturados gerados na pasta de destino do cliente
+                      </span>
+                    </div>
+
+                    {(() => {
+                      const driveUrl = (
+                        selectedClient?.googleDriveClientFolderUrl ||
+                        selectedClient?.gdriveFolderUrl ||
+                        activeCase?.gdriveFolderUrl ||
+                        ""
+                      ).trim();
+                      if (!driveUrl) return null;
+                      return (
+                        <a
+                          href={driveUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-[9px] font-black uppercase tracking-wider text-slate-700 transition-colors cursor-pointer font-sans"
+                        >
+                          <ExternalLink size={10} className="text-slate-500 shrink-0" />
+                          <span>Destino: Drive do Cliente</span>
+                        </a>
+                      );
+                    })()}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-3">
+                    <button
+                      type="button"
+                      disabled={savingDoc}
+                      onClick={() => {
+                        const placeholderData = {
+                          "{{VALOR_TOTAL}}": formatCurrencySum(totalContrato),
+                          "{{TOTAL_PAGO}}": formatCurrencySum(totalPago),
+                          "{{TOTAL_ATRASADO}}": formatCurrencySum(totalAtrasado),
+                          "{{TOTAL_PENDENTE}}": formatCurrencySum(totalPendente),
+                          "{{FALTA_ARRECADAR}}": formatCurrencySum(totalFaltaPagar),
+                          "{{PROG_AMORTIZACAO}}": `${porcEfetivado.toFixed(1)}%`,
+                        };
+                        handleGenerateCustomDocument(
+                          "relatorio_global_contrato",
+                          "Relatório Global do Contrato de Honorários",
+                          placeholderData
+                        );
+                      }}
+                      className="w-full sm:w-auto px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer font-mono"
+                    >
+                      {savingDoc ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />}
+                      Gerar Relatório Global (GDi)
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={savingDoc}
+                      onClick={() => {
+                        const today = new Date().toISOString().split("T")[0];
+                        const tabelaTexto = tabelaAnalitica.map((p, idx) => {
+                          const s = p.status || (p.pago ? "pago" : "pendente");
+                          const resolvedStatus = s === "atrasado" || (s === "pendente" && p.dataVencimento && p.dataVencimento < today) ? "VENCIDO" : s.toUpperCase();
+                          return `${idx + 1}. Parcela: ${p.valor} | Vencimento: ${p.dataVencimento || "N/A"} | Status: ${resolvedStatus}`;
+                        }).join("\n");
+
+                        const placeholderData = {
+                          "{{VALOR_TOTAL}}": formatCurrencySum(totalContrato),
+                          "{{TOTAL_PAGO}}": formatCurrencySum(totalPago),
+                          "{{TOTAL_ATRASADO}}": formatCurrencySum(totalAtrasado),
+                          "{{TOTAL_PENDENTE}}": formatCurrencySum(totalPendente),
+                          "{{FALTA_ARRECADAR}}": formatCurrencySum(totalFaltaPagar),
+                          "{{PROG_AMORTIZACAO}}": `${porcEfetivado.toFixed(1)}%`,
+                          "{{TABELA_ANALITICA_DETALHADA}}": tabelaTexto,
+                        };
+                        handleGenerateCustomDocument(
+                          "relatorio_tabela_analitica",
+                          "Relatório de Tabela Analítica do Contrato de Honorários",
+                          placeholderData
+                        );
+                      }}
+                      className="w-full sm:w-auto px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-black text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer font-mono"
+                    >
+                      {savingDoc ? <Loader2 size={13} className="animate-spin" /> : <TrendingUp size={13} />}
+                      Gerar Tabela Analítica (GDi)
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* CARD 3: Google Docs Integration - Jurídico Interno */}
+          {tabelaAnalitica.length > 0 && (() => {
+            const parseValue = (valStr: string): number => {
+              if (!valStr) return 0;
+              const clean = valStr
+                .replace("R$", "")
+                .replace(/\./g, "")
+                .replace(",", ".")
+                .replace(/\s/g, "")
+                .trim();
+              const num = parseFloat(clean);
+              return isNaN(num) ? 0 : num;
+            };
+
+            const formatCurrency = (val: number): string => {
+              return val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+            };
+
+            let totalContrato = 0;
+            let totalPago = 0;
+            let totalAtrasado = 0;
+            let totalPendente = 0;
+            const todayStr = new Date().toISOString().split("T")[0];
+
+            tabelaAnalitica.forEach((row) => {
+              const status = row.status || (row.pago ? "pago" : "pendente");
+              const val = parseValue(row.valor);
+              totalContrato += val;
+
+              if (status === "pago") {
+                totalPago += val;
+              } else if (status === "atrasado" || (status === "pendente" && row.dataVencimento && row.dataVencimento < todayStr)) {
+                totalAtrasado += val;
+              } else {
+                totalPendente += val;
+              }
+            });
+
+            const totalFaltaPagar = totalContrato - totalPago;
+
+            const clientDriveFolderUrl = (
+              selectedClient?.googleDriveClientFolderUrl ||
+              selectedClient?.gdriveFolderUrl ||
+              activeCase?.gdriveFolderUrl ||
+              ""
+            ).trim();
+
+            return (
+              <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-sm space-y-5 animate-fade-in duration-300">
+                {/* Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <Scale className="text-amber-600 animate-pulse" size={20} />
+                    <div>
+                      <h3 className="text-sm font-black uppercase text-gray-900 tracking-wider font-sans">
+                        Google Docs Integration - Jurídico Interno
+                      </h3>
+                      <p className="text-[10px] text-gray-400 font-sans">
+                        Geração automatizada de peças e atos de cobrança diretamente no Google Drive do cliente
+                      </p>
+                    </div>
+                  </div>
+
+                  {clientDriveFolderUrl && (
+                    <a
+                      href={clientDriveFolderUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-150 hover:bg-indigo-100 rounded-xl text-[10px] font-black uppercase tracking-wider text-indigo-750 transition-colors cursor-pointer font-sans"
+                      id="gdocs-juridico-drive-folder-link"
+                    >
+                      <ExternalLink size={12} className="text-indigo-600 shrink-0" />
+                      <span>Abrir Pasta de Destino</span>
+                    </a>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* CARD 1: Notificação Extrajudicial para cobrança */}
+                  <div className="bg-slate-50 border border-slate-150 p-4 rounded-2xl flex flex-col justify-between space-y-4">
+                    <div className="space-y-1">
+                      <span className="text-[8px] font-mono font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                        Atos Preparatórios
+                      </span>
+                      <h4 className="text-xs font-extrabold text-slate-800 tracking-tight leading-snug font-sans">
+                        Notificação Extrajudicial para cobrança
+                      </h4>
+                      <p className="text-[10px] text-slate-400 font-sans leading-normal">
+                        Gere uma minuta em PDF pronto para assinatura e notificação fática do cliente em atraso.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={savingDoc}
+                      onClick={() => {
+                        const today = new Date().toISOString().split("T")[0];
+                        const tabelaTexto = tabelaAnalitica.map((p, idx) => {
+                          const s = p.status || (p.pago ? "pago" : "pendente");
+                          const resolvedStatus = s === "atrasado" || (s === "pendente" && p.dataVencimento && p.dataVencimento < today) ? "VENCIDO" : s.toUpperCase();
+                          return `${idx + 1}. Parcela: ${p.valor} | Vencimento: ${p.dataVencimento || "N/A"} | Status: ${resolvedStatus}`;
+                        }).join("\n");
+
+                        handleGenerateCustomDocument(
+                          "notificacao_extrajudicial_cobranca",
+                          "Notificação Extrajudicial para Cobrança de Honorários",
+                          {
+                            "{{VALOR_TOTAL}}": formatCurrency(totalContrato),
+                            "{{TOTAL_PAGO}}": formatCurrency(totalPago),
+                            "{{TOTAL_ATRASADO}}": formatCurrency(totalAtrasado),
+                            "{{TOTAL_PENDENTE}}": formatCurrency(totalPendente),
+                            "{{FALTA_ARRECADAR}}": formatCurrency(totalFaltaPagar),
+                            "{{TABELA_ANALITICA_DETALHADA}}": tabelaTexto,
+                          }
+                        );
+                      }}
+                      className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white font-mono font-black text-[10px] uppercase tracking-wider rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      {savingDoc ? <Loader2 size={11} className="animate-spin" /> : <FileText size={11} />}
+                      Gerar Notificação
+                    </button>
+                  </div>
+
+                  {/* CARD 2: Protesto extrajudicial do contrato de honorários */}
+                  <div className="bg-slate-50 border border-slate-150 p-4 rounded-2xl flex flex-col justify-between space-y-4">
+                    <div className="space-y-1">
+                      <span className="text-[8px] font-mono font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                        Frustração de Acordo
+                      </span>
+                      <h4 className="text-xs font-extrabold text-slate-800 tracking-tight leading-snug font-sans">
+                        Protesto extrajudicial do contrato de honorários
+                      </h4>
+                      <p className="text-[10px] text-slate-400 font-sans leading-normal">
+                        Aponta o título executivo e o contrato inadimplido perante o Cartório de Protestos competente.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={savingDoc}
+                      onClick={() => {
+                        const today = new Date().toISOString().split("T")[0];
+                        const tabelaTexto = tabelaAnalitica.map((p, idx) => {
+                          const s = p.status || (p.pago ? "pago" : "pendente");
+                          const resolvedStatus = s === "atrasado" || (s === "pendente" && p.dataVencimento && p.dataVencimento < today) ? "VENCIDO" : s.toUpperCase();
+                          return `${idx + 1}. Parcela: ${p.valor} | Vencimento: ${p.dataVencimento || "N/A"} | Status: ${resolvedStatus}`;
+                        }).join("\n");
+
+                        handleGenerateCustomDocument(
+                          "protesto_extrajudicial_contrato",
+                          "Protesto Extrajudicial do Contrato de Honorários",
+                          {
+                            "{{VALOR_TOTAL}}": formatCurrency(totalContrato),
+                            "{{TOTAL_PAGO}}": formatCurrency(totalPago),
+                            "{{TOTAL_ATRASADO}}": formatCurrency(totalAtrasado),
+                            "{{TOTAL_PENDENTE}}": formatCurrency(totalPendente),
+                            "{{FALTA_ARRECADAR}}": formatCurrency(totalFaltaPagar),
+                            "{{TABELA_ANALITICA_DETALHADA}}": tabelaTexto,
+                          }
+                        );
+                      }}
+                      className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white font-mono font-black text-[10px] uppercase tracking-wider rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      {savingDoc ? <Loader2 size={11} className="animate-spin" /> : <AlertTriangle size={11} />}
+                      Gerar Protesto
+                    </button>
+                  </div>
+
+                  {/* CARD 3: Ação de cobrança de Honorários Advocatícios */}
+                  <div className="bg-slate-50 border border-slate-150 p-4 rounded-2xl flex flex-col justify-between space-y-4">
+                    <div className="space-y-1">
+                      <span className="text-[8px] font-mono font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                        Atos Judiciais
+                      </span>
+                      <h4 className="text-xs font-extrabold text-slate-800 tracking-tight leading-snug font-sans">
+                        Ação de cobrança de Honorários Advocatícios
+                      </h4>
+                      <p className="text-[10px] text-slate-400 font-sans leading-normal">
+                        Minuta de petição inicial fática para ajuizamento da execução de título extrajudicial de honorários.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={savingDoc}
+                      onClick={() => {
+                        const today = new Date().toISOString().split("T")[0];
+                        const tabelaTexto = tabelaAnalitica.map((p, idx) => {
+                          const s = p.status || (p.pago ? "pago" : "pendente");
+                          const resolvedStatus = s === "atrasado" || (s === "pendente" && p.dataVencimento && p.dataVencimento < today) ? "VENCIDO" : s.toUpperCase();
+                          return `${idx + 1}. Parcela: ${p.valor} | Vencimento: ${p.dataVencimento || "N/A"} | Status: ${resolvedStatus}`;
+                        }).join("\n");
+
+                        handleGenerateCustomDocument(
+                          "acao_cobranca_honorarios",
+                          "Ação de Cobrança de Honorários Advocatícios",
+                          {
+                            "{{VALOR_TOTAL}}": formatCurrency(totalContrato),
+                            "{{TOTAL_PAGO}}": formatCurrency(totalPago),
+                            "{{TOTAL_ATRASADO}}": formatCurrency(totalAtrasado),
+                            "{{TOTAL_PENDENTE}}": formatCurrency(totalPendente),
+                            "{{FALTA_ARRECADAR}}": formatCurrency(totalFaltaPagar),
+                            "{{TABELA_ANALITICA_DETALHADA}}": tabelaTexto,
+                          }
+                        );
+                      }}
+                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-mono font-black text-[10px] uppercase tracking-wider rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      {savingDoc ? <Loader2 size={11} className="animate-spin" /> : <Scale size={11} />}
+                      Gerar Petição Inicial
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       {/* Modal / Multi-step Questionnaire: Prestar Contas */}
       {showPrestarContas && (
@@ -1250,6 +2602,242 @@ export const FinancialManager: React.FC<FinancialManagerProps> = ({
                 className="w-full py-2.5 bg-gray-900 hover:bg-gray-950 text-white rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer"
               >
                 Voltar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Apuração do Contrato de Exito */}
+      {showApurarExitoModal && activeCase && (
+        <div className="fixed inset-0 bg-gray-950/65 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="bg-white border border-gray-150 rounded-[2rem] p-6 md:p-8 max-w-lg w-full shadow-2xl relative text-left space-y-5 max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-50 border border-indigo-100 text-indigo-650 rounded-2xl flex items-center justify-center shadow-2xs">
+                  <Coins size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-gray-900 tracking-tight">Apuração do Contrato de Exito</h3>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider font-mono">Caso Ativo: {activeCase.id}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowApurarExitoModal(false)}
+                className="w-7 h-7 rounded-lg bg-gray-50 hover:bg-gray-100 text-gray-400 hover:text-gray-600 flex items-center justify-center transition border border-gray-150 cursor-pointer"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Vertical Options Form */}
+            <div className="space-y-4">
+              {/* 1. Forma de Pagamento */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider block">
+                  Forma de Pagamento
+                </label>
+                <select
+                  value={modalFormaPagamento}
+                  onChange={(e) => setModalFormaPagamento(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                >
+                  <option value="A definir">A definir</option>
+                  <option value="À vista">À vista</option>
+                  <option value="Parcelado">Parcelado</option>
+                  <option value="Entrada + Parcelado">Entrada + Parcelado</option>
+                  <option value="A combinar">A combinar</option>
+                </select>
+              </div>
+
+              {/* 2. Meio de Recebimento */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider block">
+                  Meio de Recebimento
+                </label>
+                <select
+                  value={modalMeioRecebimento}
+                  onChange={(e) => setModalMeioRecebimento(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                >
+                  <option value="A definir">A definir</option>
+                  <option value="PIX">PIX</option>
+                  <option value="Boleto">Boleto</option>
+                  <option value="Cartão de Crédito">Cartão de Crédito</option>
+                  <option value="Depósito">Depósito</option>
+                  <option value="A combinar">A combinar</option>
+                </select>
+              </div>
+
+              {/* 3. Valor total recebido na conta do: */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider block">
+                  Valor total recebido na conta do:
+                </label>
+                <select
+                  value={modalRecebidoContaDo}
+                  onChange={(e) => setModalRecebidoContaDo(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                >
+                  <option value="A definir">A definir</option>
+                  <option value="Cliente">Cliente</option>
+                  <option value="Escritório">Escritório</option>
+                </select>
+              </div>
+
+              {/* 4. Banco de Recebimento */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider block">
+                  Banco de Recebimento
+                </label>
+                <select
+                  value={modalBancoRecebimento}
+                  onChange={(e) => setModalBancoRecebimento(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                >
+                  <option value="A definir">A definir</option>
+                  <option value="Banco do Brasil">Banco do Brasil</option>
+                  <option value="Itaú">Itaú</option>
+                  <option value="Bradesco">Bradesco</option>
+                  <option value="Santander">Santander</option>
+                  <option value="Nubank">Nubank</option>
+                  <option value="Caixa Econômica">Caixa Econômica</option>
+                  <option value="Outro">Outro</option>
+                </select>
+              </div>
+
+              {/* 5. Chave Pix do Escritório */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider block">
+                  Chave Pix do Escritório
+                </label>
+                <input
+                  type="text"
+                  value={modalPixEscritorio}
+                  onChange={(e) => setModalPixEscritorio(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 focus:border-indigo-500 rounded-xl text-xs font-bold text-gray-800 outline-none transition font-mono"
+                  placeholder="A definir"
+                />
+              </div>
+
+              {/* 6. Chave Pix do Cliente (Etapa 01) */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider block">
+                  Chave Pix do Cliente (Etapa 01)
+                </label>
+                <input
+                  type="text"
+                  value={modalPixCliente}
+                  onChange={(e) => setModalPixCliente(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 focus:border-indigo-500 rounded-xl text-xs font-bold text-gray-800 outline-none transition font-mono"
+                  placeholder="020.566.671-00"
+                />
+              </div>
+
+              {/* 7. Valor Total a Receber */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider block">
+                  Valor Total a Receber
+                </label>
+                <input
+                  type="text"
+                  value={modalValorTotalAReceber}
+                  onChange={(e) => setModalValorTotalAReceber(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 focus:border-indigo-500 rounded-xl text-xs font-bold text-gray-800 outline-none transition font-mono"
+                  placeholder="a apurar"
+                />
+              </div>
+
+              {/* 8. Quantidade de Parcelas */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider block">
+                  Quantidade de Parcelas
+                </label>
+                <input
+                  type="text"
+                  value={modalQuantidadeParcelas}
+                  onChange={(e) => setModalQuantidadeParcelas(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 focus:border-indigo-500 rounded-xl text-xs font-bold text-gray-800 outline-none transition font-mono"
+                  placeholder="a definir"
+                />
+              </div>
+
+              {/* 9. Valor das Parcelas (R$) */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider block">
+                  Valor das Parcelas (R$)
+                </label>
+                <input
+                  type="text"
+                  value={modalValorParcelas}
+                  onChange={(e) => setModalValorParcelas(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 focus:border-indigo-500 rounded-xl text-xs font-bold text-gray-800 outline-none transition font-mono"
+                  placeholder="a definir"
+                />
+              </div>
+
+              {/* 10. Valor de Entrada (R$) */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider block">
+                  Valor de Entrada (R$)
+                </label>
+                <input
+                  type="text"
+                  value={modalValorEntrada}
+                  onChange={(e) => setModalValorEntrada(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 focus:border-indigo-500 rounded-xl text-xs font-bold text-gray-800 outline-none transition font-mono"
+                  placeholder="a definir"
+                />
+              </div>
+
+              {/* 11. Primeiro Recebimento */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider block">
+                  Primeiro Recebimento
+                </label>
+                <input
+                  type="text"
+                  value={modalPrimeiroRecebimento}
+                  onChange={(e) => setModalPrimeiroRecebimento(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 focus:border-indigo-500 rounded-xl text-xs font-bold text-gray-800 outline-none transition font-mono"
+                  placeholder="a definir"
+                />
+              </div>
+
+              {/* 12. Cobrança Automática */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider block">
+                  Cobrança Automática
+                </label>
+                <select
+                  value={modalCobrancaAutomatica}
+                  onChange={(e) => setModalCobrancaAutomatica(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-gray-200 focus:border-indigo-500 rounded-xl text-xs font-semibold text-gray-800 outline-none transition"
+                >
+                  <option value="Pendente">Pendente</option>
+                  <option value="Ativada">Ativada</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="pt-3 border-t border-gray-100 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowApurarExitoModal(false)}
+                className="flex-1 py-2.5 bg-gray-150 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveExito}
+                disabled={savingExito}
+                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer flex items-center justify-center gap-1"
+              >
+                {savingExito ? 'Salvando...' : 'Confirmar e Salvar'}
               </button>
             </div>
           </div>

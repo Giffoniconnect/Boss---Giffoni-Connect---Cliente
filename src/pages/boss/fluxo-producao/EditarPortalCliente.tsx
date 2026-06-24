@@ -2414,6 +2414,8 @@ export default function EditarPortalCliente() {
                   handleCreateFinancial={handleCreateFinancial}
                   handleMarkFinancialPaid={handleMarkFinancialPaid}
                   handleDeleteFinancial={handleDeleteFinancial}
+                  selectedClient={selectedClient}
+                  selectedCase={selectedCase}
                 />
               )}
 
