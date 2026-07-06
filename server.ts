@@ -1422,110 +1422,134 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
 
   const isStateless = mode === "stateless";
 
+  // Resolve dynamic prefix, status value, and display label based on documentType/documentType
+  let prefix = "primeiroAtendimento";
+  let successStatusValue = "criado";
+  let typeLabel = "1º Atendimento PF";
+  
+  const docTypeStr = String(documentType || "").trim().toLowerCase();
+  if (docTypeStr === "primeiro_atendimento") {
+    prefix = "primeiroAtendimento";
+    successStatusValue = "criado";
+    typeLabel = "1º Atendimento PF";
+  } else if (docTypeStr === "procuracao_pf" || docTypeStr === "procuracao_pj" || docTypeStr === "procuracao" || docTypeStr === "procuracao-pf") {
+    prefix = "procuracao";
+    successStatusValue = "criada";
+    typeLabel = docTypeStr.includes("pj") ? "Procuração PJ" : "Procuração PF";
+  } else if (docTypeStr === "declaracao_pobreza_pf" || docTypeStr === "declaracao_pobreza_pj") {
+    prefix = "declaracaoPobreza";
+    successStatusValue = "criada";
+    typeLabel = docTypeStr.includes("pj") ? "Declaração de Hipossuficiência PJ" : "Declaração de Hipossuficiência PF";
+  } else if (docTypeStr === "contrato_honorarios_pf" || docTypeStr === "contrato_honorarios_pj") {
+    prefix = "contratoHonorarios";
+    successStatusValue = "criada";
+    typeLabel = docTypeStr.includes("pj") ? "Contrato de Honorários PJ" : "Contrato de Honorários PF";
+  } else if (docTypeStr === "pre_peticao_judicial") {
+    prefix = "prePeticao";
+    successStatusValue = "criada";
+    typeLabel = "Minuta Pré-Petição";
+  }
+
   console.log(`[GoogleDocsEngine] Starting document generation (mode: ${mode || "standard"}) for type: ${documentType}, templateId: ${templateId}`);
 
-  // Create standard log list (Section 13)
-  const logsList: any[] = [];
-  const addLog = (step: string, details?: any) => {
-    logsList.push({ step, timestamp: new Date().toISOString(), details });
-    console.log(`[GoogleDocsEngine Log] Step: ${step}`, details ? JSON.stringify(details) : "");
+  const technicalLog: any[] = [];
+  const logsList: any[] = []; // for backward compatibility
+
+  const addLog = (level: "info" | "success" | "warning" | "error", code: string, message: string) => {
+    const timestamp = new Date().toISOString();
+    technicalLog.push({ timestamp, level, code, message });
+    logsList.push({ step: code, timestamp, details: { message, level } });
+    console.log(`[GoogleDocsEngine Technical Log] [${level.toUpperCase()}] ${code}: ${message}`);
   };
 
-  addLog("BUTTON_CLICKED", { documentType, caseId, clientId, mode });
+  addLog("info", "VERSION_CHECK_STARTED", "Conferindo se o 1º Atendimento já existe na pasta do cliente.");
 
   if (!isStateless && !dbAdmin) {
+    addLog("error", "FIREBASE_ADMIN_NOT_INITIALIZED", "O Firebase Admin não foi inicializado.");
     return res.status(500).json({
       success: false,
       documentType,
       errorCode: "FIREBASE_ADMIN_NOT_INITIALIZED",
       errorMessage: "O Firebase Admin não foi inicializado. Configure a chave FIREBASE_ADMIN_SERVICE_ACCOUNT_JSON e valide o Firestore antes de gerar documentos.",
-      firebaseAdminStatus
+      firebaseAdminStatus,
+      technicalLog
     });
   }
 
   // 1. Validation steps
   if (!isStateless && !clientId) {
-    addLog("CLIENT_NOT_FOUND", { error: "ClientId is required" });
+    addLog("error", "CLIENT_NOT_FOUND", "ClientId is required");
     return res.status(400).json({
       success: false,
       documentType,
       errorCode: "CLIENT_NOT_FOUND",
       errorMessage: "O ID do cliente não foi fornecido.",
+      technicalLog
     });
   }
   if (!isStateless && !caseId) {
-    addLog("CASE_NOT_FOUND", { error: "CaseId is required" });
+    addLog("error", "CASE_NOT_FOUND", "CaseId is required");
     return res.status(400).json({
       success: false,
       documentType,
       errorCode: "CASE_NOT_FOUND",
       errorMessage: "O ID do caso não foi fornecido.",
+      technicalLog
     });
   }
   if (!templateId) {
-    addLog("TEMPLATE_ID_MISSING", { error: "TemplateId is empty" });
+    addLog("error", "TEMPLATE_ID_MISSING", "TemplateId is empty");
     return res.status(400).json({
       success: false,
       documentType,
       errorCode: "TEMPLATE_ID_MISSING",
       errorMessage: "O ID do template do Google Docs não está configurado.",
+      technicalLog
     });
   }
   if (!destinationFolderId) {
-    addLog("DESTINATION_FOLDER_ID_MISSING", { error: "DestinationFolderId is empty" });
+    addLog("error", "DESTINATION_FOLDER_ID_MISSING", "DestinationFolderId is empty");
     return res.status(400).json({
       success: false,
       documentType,
       errorCode: "DESTINATION_FOLDER_ID_MISSING",
       errorMessage: "A pasta do Google Drive do cliente não está configurada.",
+      technicalLog
     });
   }
 
-  // Fetch client & case to validate existence (only if not stateless)
+  // Fetch client & case to validate existence
   let clientData: any = null;
   let caseData: any = null;
-  if (!isStateless) {
+  if (dbAdmin) {
     try {
-      const clientSnap = await dbAdmin.collection("clients").doc(clientId).get();
-      addLog("CLIENT_LOADED", { exists: clientSnap.exists });
-      if (!clientSnap.exists) {
-        return res.status(404).json({
-          success: false,
-          documentType,
-          errorCode: "CLIENT_NOT_FOUND",
-          errorMessage: "Cliente não localizado na base de dados.",
-        });
+      if (clientId) {
+        const clientSnap = await dbAdmin.collection("clients").doc(clientId).get();
+        if (clientSnap.exists) {
+          clientData = clientSnap.data();
+          addLog("info", "CLIENT_LOADED", "Dados do cliente carregados.");
+        }
       }
-      clientData = clientSnap.data();
-
-      const caseSnap = await dbAdmin.collection("cases").doc(caseId).get();
-      addLog("CASE_LOADED", { exists: caseSnap.exists });
-      if (!caseSnap.exists) {
-        return res.status(404).json({
-          success: false,
-          documentType,
-          errorCode: "CASE_NOT_FOUND",
-          errorMessage: "Caso não localizado na base de dados.",
-        });
+      if (caseId) {
+        const caseSnap = await dbAdmin.collection("cases").doc(caseId).get();
+        if (caseSnap.exists) {
+          caseData = caseSnap.data();
+          addLog("info", "CASE_LOADED", "Dados do caso carregados.");
+        }
       }
-      caseData = caseSnap.data();
     } catch (err: any) {
+      addLog("error", "REQUIRED_CLIENT_DATA_MISSING", `Erro ao buscar dados: ${err.message}`);
       return res.status(500).json({
         success: false,
         documentType,
         errorCode: "REQUIRED_CLIENT_DATA_MISSING",
         errorMessage: `Erro ao buscar dados do cliente ou caso: ${err.message}`,
+        technicalLog
       });
     }
-  } else {
-    console.log("[GoogleDocsEngine] FIREBASE_ADMIN_SKIPPED_IN_STATELESS_MODE: Stateless generation mode active. Bypassing Admin existence checks.");
   }
 
-  addLog("TEMPLATE_SELECTED", { templateKey, templateId });
-  addLog("TEMPLATE_VALIDATED", { templateId });
-  addLog("DRIVE_FOLDER_VALIDATED", { destinationFolderId });
-
-  // 2 & 3. Fetch Google credentials and Authenticate via Unified Helper
+  // Authenticate via Unified Helper
   let jwtClient: any = null;
   let credentialSource = "";
   let serviceAccountEmail = "";
@@ -1534,37 +1558,22 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
     jwtClient = authResult.jwtClient;
     credentialSource = authResult.credentialSource;
     serviceAccountEmail = authResult.serviceAccountEmail || "";
-    addLog("GOOGLE_AUTH_OK", { credentialSource });
+    addLog("success", "GOOGLE_AUTH_OK", `Autenticado via ${credentialSource} (${serviceAccountEmail || "OAuth Token"}).`);
   } catch (errAuth: any) {
-    const code = errAuth.errorCode || "GOOGLE_DOCS_AUTH_FAILED";
-    addLog(code, { error: errAuth.message });
-    
-    if (code === "GOOGLE_DOCS_CREDENTIALS_MISSING") {
-      return res.status(400).json({
-        success: false,
-        documentType,
-        errorCode: "GOOGLE_DOCS_CREDENTIALS_MISSING",
-        errorMessage: errAuth.message || "Nenhuma credencial Google Docs/Drive foi encontrada. Configure GOOGLE_DOCS_SERVICE_ACCOUNT_JSON, variáveis granulares ou use credentialOverride em preview.",
-        acceptedSources: [
-          "GOOGLE_DOCS_SERVICE_ACCOUNT_JSON",
-          "GOOGLE_DOCS_SERVICE_ACCOUNT_EMAIL/PRIVATE_KEY/PROJECT_ID",
-          "credentialOverride.preview",
-          "GDI_GOOGLE_* legado"
-        ]
-      });
-    }
-
-    return res.status(code === "CREDENTIAL_OVERRIDE_DISABLED_IN_PRODUCTION" ? 403 : 401).json({
+    const code = errAuth.errorCode || "GOOGLE_AUTH_FAILED";
+    addLog("error", "GOOGLE_AUTH_FAILED", `A autenticação da conta Google falhou ou não possui permissão suficiente. Erro: ${errAuth.message}`);
+    return res.status(errAuth.errorCode === "CREDENTIAL_OVERRIDE_DISABLED_IN_PRODUCTION" ? 403 : 401).json({
       success: false,
       documentType,
       errorCode: code,
-      errorMessage: errAuth.message,
+      errorMessage: `A autenticação da conta Google falhou ou não possui permissão suficiente: ${errAuth.message}`,
+      technicalLog
     });
   }
 
-  // 4. Build placeholders
+  // Build placeholders
   let placeholdersToUse = placeholders || {};
-  if (!isStateless && Object.keys(placeholdersToUse).length === 0) {
+  if (Object.keys(placeholdersToUse).length === 0) {
     try {
       const activeKey = templateKey || documentType;
       if (activeKey === "procuracao_pf" || activeKey === "procuracao-pf") {
@@ -1587,29 +1596,31 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
         placeholdersToUse = { ...buildGlobalPlaceholders(), ...buildClientCommonPlaceholders(clientData), ...buildCaseCommonPlaceholders(caseData) };
       }
     } catch (errPl: any) {
-      addLog("PLACEHOLDER_BUILD_FAILED", { error: errPl.message });
+      addLog("error", "PLACEHOLDER_BUILD_FAILED", `Erro de mapeamento nos placeholders: ${errPl.message}`);
       return res.status(400).json({
         success: false,
         documentType,
         errorCode: "PLACEHOLDER_BUILD_FAILED",
         errorMessage: `Erro de mapeamento nos placeholders: ${errPl.message}`,
+        technicalLog
       });
     }
   }
 
   if (Object.keys(placeholdersToUse).length === 0) {
-    addLog("PLACEHOLDER_BUILD_FAILED", { error: "Sem placeholders gerados" });
+    addLog("error", "PLACEHOLDER_BUILD_FAILED", "Nenhum placeholder foi mapeado ou criado.");
     return res.status(400).json({
       success: false,
       documentType,
       errorCode: "PLACEHOLDER_BUILD_FAILED",
-      errorMessage: "Nenhum placeholder foi mapeado ou criado para este tipo de documento."
+      errorMessage: "Nenhum placeholder foi mapeado ou criado para este tipo de documento.",
+      technicalLog
     });
   }
 
-  addLog("PLACEHOLDERS_BUILT", { count: Object.keys(placeholdersToUse).length });
+  addLog("success", "PLACEHOLDERS_BUILT", `Placeholders construídos: ${Object.keys(placeholdersToUse).length} campos.`);
 
-  // 4.5 Validate Procuracao PF placeholder contract (Tarefa 5)
+  // Validate Procuracao PF placeholder contract
   if (documentType === "procuracao_pf" || templateKey === "procuracao_pf") {
     const requiredKeys = [
       "{{OUTORGANTE_NOME}}",
@@ -1652,29 +1663,220 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
     });
 
     if (missingKeys.length > 0 || emptyEssentials.length > 0) {
-      addLog("PROCURACAO_PF_REQUIRED_PLACEHOLDER_EMPTY", { missingKeys, emptyEssentials });
+      addLog("error", "PROCURACAO_PF_REQUIRED_PLACEHOLDER_EMPTY", `Campos obrigatórios vazios.`);
       const errorNames = emptyEssentials.map(k => k.replace("{{", "").replace("}}", "")).join(", ");
       return res.status(400).json({
         success: false,
         documentType,
         errorCode: "PROCURACAO_PF_REQUIRED_PLACEHOLDER_EMPTY",
-        errorMessage: `Erro de validação: Existem campos essenciais vazios ou ausentes no cadastro do cliente: ${errorNames}`
+        errorMessage: `Erro de validação: Existem campos essenciais vazios ou ausentes no cadastro do cliente: ${errorNames}`,
+        technicalLog
       });
     }
   }
 
-  // 5. Copy templates
+  // Verify Folder write access & Template read access
+  const drive = google.drive({ version: "v3", auth: jwtClient });
+  try {
+    addLog("info", "DESTINATION_FOLDER_CHECK_STARTED", `Validando acesso à pasta de destino: ${destinationFolderId}`);
+    const folderMeta = await drive.files.get({
+      fileId: destinationFolderId,
+      fields: "id, name, mimeType"
+    });
+    if (folderMeta.data.mimeType !== "application/vnd.google-apps.folder") {
+      addLog("error", "DESTINATION_FOLDER_ACCESS_DENIED", "O ID de pasta fornecido não é uma pasta válida.");
+      return res.status(400).json({
+        success: false,
+        documentType,
+        errorCode: "DESTINATION_FOLDER_ACCESS_DENIED",
+        errorMessage: "O ID de pasta de destino fornecido não corresponde a uma pasta válida do Google Drive.",
+        technicalLog
+      });
+    }
+  } catch (errFolder: any) {
+    addLog("error", "DESTINATION_FOLDER_ACCESS_DENIED", `A conta Google não possui acesso à pasta de destino. Erro: ${errFolder.message}`);
+    return res.status(400).json({
+      success: false,
+      documentType,
+      errorCode: "DESTINATION_FOLDER_ACCESS_DENIED",
+      errorMessage: `A conta Google não possui acesso à pasta de destino (${destinationFolderId}). Detalhes: ${errFolder.message}`,
+      technicalLog
+    });
+  }
+
+  try {
+    addLog("info", "TEMPLATE_CHECK_STARTED", `Validando acesso ao template oficial: ${templateId}`);
+    const templateMeta = await drive.files.get({
+      fileId: templateId,
+      fields: "id, name, mimeType"
+    });
+  } catch (errTemplate: any) {
+    addLog("error", "TEMPLATE_ACCESS_DENIED", `A conta Google não possui acesso ao modelo oficial. Erro: ${errTemplate.message}`);
+    return res.status(400).json({
+      success: false,
+      documentType,
+      errorCode: "TEMPLATE_ACCESS_DENIED",
+      errorMessage: `A conta Google não possui acesso ao modelo oficial (${templateId}). Detalhes: ${errTemplate.message}`,
+      technicalLog
+    });
+  }
+
+  // Real Anti-Duplicity Check and Version calculation
+  let verifiedDocInFolder: any = null;
+  let folderFiles: any[] = [];
+  try {
+    const listRes = await drive.files.list({
+      q: `'${destinationFolderId}' in parents and trashed = false and mimeType = 'application/vnd.google-apps.document'`,
+      fields: "files(id, name, webViewLink, appProperties, parents, trashed)"
+    });
+    folderFiles = listRes.data.files || [];
+  } catch (errList: any) {
+    addLog("warning", "FOLDER_FILES_LIST_FAILED", `Não foi possível listar os arquivos da pasta para controle de versão: ${errList.message}`);
+  }
+
+  // 1. Conferir se existe existingDocument.googleDocsId
+  const caseIdFromPayload = caseData?.[`${prefix}GoogleDocsId`] || caseData?.[`${prefix}Id`] || "";
+  const existingDocsIdFromPayload = req.body?.existingDocument?.googleDocsId || caseIdFromPayload;
+  if (existingDocsIdFromPayload && !existingDocsIdFromPayload.startsWith("simulated-")) {
+    try {
+      const fileRes = await drive.files.get({
+        fileId: existingDocsIdFromPayload,
+        fields: "id, name, parents, trashed, mimeType, webViewLink, appProperties"
+      });
+      const file = fileRes.data;
+      if (
+        file &&
+        !file.trashed &&
+        file.mimeType === "application/vnd.google-apps.document" &&
+        file.parents &&
+        file.parents.includes(destinationFolderId)
+      ) {
+        verifiedDocInFolder = file;
+        addLog("success", "EXISTING_DOC_CONFIRMED_BY_ID", `Documento existente confirmado na pasta por ID registrado.`);
+      }
+    } catch (errGet: any) {
+      addLog("warning", "EXISTING_DOC_METADATA_FETCH_FAILED", `Não foi possível buscar metadados do ID registrado: ${existingDocsIdFromPayload}.`);
+    }
+  }
+
+  // 7. Se não localizado, pesquisar também arquivos na pasta por metadados ou nome
+  if (!verifiedDocInFolder && folderFiles.length > 0) {
+    const clientNameRaw = (
+      clientData?.pf_nomeCompleto ||
+      clientData?.pfDadosPessoais?.pf_nomeCompleto ||
+      clientData?.nomeCompleto ||
+      clientData?.nome ||
+      ""
+    ).trim();
+    const safePrefix = `${typeLabel} - ${clientNameRaw}`;
+
+    const docByNameOrProps = folderFiles.find(file => {
+      const matchProps = file.appProperties?.portalCaseId === caseId && 
+                         file.appProperties?.portalDocumentType === documentType;
+      const matchPrefix = file.name && file.name.startsWith(safePrefix);
+      return matchProps || matchPrefix;
+    });
+
+    if (docByNameOrProps) {
+      verifiedDocInFolder = docByNameOrProps;
+      addLog("success", "EXISTING_DOC_CONFIRMED_BY_SEARCH", `Documento existente encontrado na pasta com ID: ${docByNameOrProps.id}`);
+    }
+  }
+
+  // 10. Calculate version
+  let maxFoundVersion = 0;
+  for (const file of folderFiles) {
+    let ver = 0;
+    if (file.appProperties && file.appProperties.documentVersion) {
+      ver = parseInt(file.appProperties.documentVersion, 10) || 0;
+    } else {
+      const m = file.name && file.name.match(/ - v(\d+)$/i);
+      if (m) {
+        ver = parseInt(m[1], 10) || 0;
+      }
+    }
+    if (ver > maxFoundVersion) {
+      maxFoundVersion = ver;
+    }
+  }
+
+  const payloadVersion = parseInt(req.body?.existingDocument?.version || caseData?.[`${prefix}Version`], 10) || 0;
+  const nextVersion = Math.max(maxFoundVersion + 1, payloadVersion + 1);
+
+  // 4. Caso o documento esteja realmente na pasta do cliente: retornar already_exists_in_destination
+  if (verifiedDocInFolder) {
+    const existingId = verifiedDocInFolder.id;
+    const existingUrl = verifiedDocInFolder.webViewLink || `https://docs.google.com/document/d/${existingId}/edit`;
+    const docVer = parseInt(verifiedDocInFolder.appProperties?.documentVersion, 10) || payloadVersion || maxFoundVersion || 1;
+
+    addLog("success", "DOCUMENT_ALREADY_IN_DESTINATION", `O documento [${typeLabel}] já foi confirmado na pasta real do Google Drive. Nenhuma cópia adicional foi criada.`);
+    addLog("success", "FLOW_COMPLETED", "Geração finalizada. Documento existente mantido.");
+
+    // Sync back properties to Case to guarantee parity
+    if (dbAdmin && caseId) {
+      try {
+        const syncUpdates: any = {};
+        syncUpdates[`${prefix}Status`] = successStatusValue;
+        syncUpdates[`${prefix}Id`] = existingId;
+        syncUpdates[`${prefix}Url`] = existingUrl;
+        syncUpdates[`${prefix}GoogleDocsId`] = existingId;
+        syncUpdates[`${prefix}GoogleDocsUrl`] = existingUrl;
+        syncUpdates[`${prefix}Version`] = docVer;
+        syncUpdates[`${prefix}TechnicalLog`] = technicalLog;
+        syncUpdates[`${prefix}LastOutcome`] = "already_exists_in_destination";
+        syncUpdates[`${prefix}LastOperationAt`] = new Date().toISOString();
+
+        await dbAdmin.collection("cases").doc(caseId).set(syncUpdates, { merge: true });
+      } catch (errDb: any) {
+        console.warn("[GoogleDocsEngine] Non-blocking Firestore sync failed:", errDb.message);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      outcome: "already_exists_in_destination",
+      documentAlreadyExists: true,
+      googleDocsId: existingId,
+      googleDocsUrl: existingUrl,
+      documentVersion: docVer,
+      technicalLog,
+      message: `${typeLabel} já foi criado e confirmado na pasta do Google Drive. Para conferir ou utilizar a versão existente, abra a pasta do cliente.`
+    });
+  }
+
+  // 5. Quando o documento estiver ausente: Criar nova versão real
+  if (existingDocsIdFromPayload || payloadVersion > 0 || maxFoundVersion > 0) {
+    addLog("warning", "DOCUMENT_MISSING_OR_OUTSIDE_DESTINATION", "O registro anterior não foi localizado dentro da pasta do cliente. Uma nova versão real será criada.");
+  } else {
+    addLog("info", "REAL_DOCUMENT_CREATION_STARTED", "Iniciada a criação de uma nova versão no Google Drive.");
+  }
+
+  const clientNameForName = (
+    clientData?.pf_nomeCompleto ||
+    clientData?.pfDadosPessoais?.pf_nomeCompleto ||
+    clientData?.nomeCompleto ||
+    clientData?.nome ||
+    "Cliente"
+  ).trim();
+  
+  // Support custom names, falling back to dynamic name
+  const finalDocName = documentName || req.body?.customName || req.body?.documentName || `${typeLabel} - ${clientNameForName} - v${nextVersion}`;
+
+  // Copy template
   let googleDocsId = "";
   try {
-    addLog("DOCUMENT_COPY_STARTED", { fileId: templateId, destinationFolderId });
-    const drive = google.drive({ version: "v3", auth: jwtClient });
-    
-    // Set destination parents
     const copyParams: any = {
       fileId: templateId,
       requestBody: {
-        name: documentName || `Documento ${documentType} - ${clientData?.nome || clientData?.razaoSocial || ""}`,
-        parents: destinationFolderId ? [destinationFolderId] : undefined
+        name: finalDocName,
+        parents: [destinationFolderId],
+        appProperties: {
+          portalCaseId: caseId || "",
+          portalClientId: clientId || "",
+          portalDocumentType: documentType || "",
+          documentVersion: String(nextVersion),
+          generatedBy: "portal_boss"
+        }
       }
     };
     
@@ -1683,204 +1885,32 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
     if (!googleDocsId) {
       throw new Error("ID de cópia de arquivo vazio.");
     }
-    addLog("DOCUMENT_COPY_SUCCESS", { googleDocsId });
+    addLog("success", "DOCUMENT_COPY_SUCCESS", `O modelo de [${typeLabel}] foi copiado com sucesso para a pasta do cliente.`);
   } catch (errCopy: any) {
-    const rawErrorData = errCopy.response?.data;
-    console.error("[GoogleDocsEngine] Detailed Google Drive API Error on copying template:", {
-      message: errCopy.message,
-      status: errCopy.response?.status,
-      data: rawErrorData
-    });
-
-    addLog("DOCUMENT_COPY_FAILED", { 
-      error: errCopy.message,
-      status: errCopy.response?.status,
-      googleApiError: rawErrorData?.error || rawErrorData || null
-    });
-
-    let originalErrorMsg = errCopy.message || "";
-    if (rawErrorData?.error?.message) {
-      originalErrorMsg = `${originalErrorMsg} (Detalhes Google API: ${rawErrorData.error.message})`;
-    }
-    let finalErrorDetail = originalErrorMsg;
-    
-    const isDriveApiDisabled = originalErrorMsg.includes("599536317399") ||
-                               originalErrorMsg.includes("Google Drive API has not been used in project") ||
-                               originalErrorMsg.includes("disabled") ||
-                               originalErrorMsg.includes("API key not valid") ||
-                               originalErrorMsg.includes("not enabled");
-
-    if (isDriveApiDisabled) {
-      console.warn(`[GoogleDocsEngine] Google Drive API is disabled/unauthorized in GCP project. Activating Sandbox Auto-Simulation Fallback Mode.`);
-      
-      const simulatedDocId = `simulated-${documentType || "doc"}-${Date.now()}`;
-      const simulatedDocUrl = `https://docs.google.com/document/d/${templateId || "1BPIOSWMjvLsSWzo_NcMjixrYUhmq7sKW2pRjdp1bS0s"}/edit?usp=drivesdk&simulated=true`;
-      
-      addLog("GDI_SIMULATION_FALLBACK_ACTIVE", { 
-        reason: "O Google Drive de sandbox oficial está com a API inativa/desativada. Ativado Simulador de Alta Fidelidade.",
-        project: "599536317399"
-      });
-      addLog("TEMPLATE_VALIDATED_AS_OFFICIAL", { status: "SIMULATED_OK" });
-      addLog("PLACEHOLDER_REPLACEMENT_SUCCESS", { status: "SIMULATED_OK" });
-      addLog("DOCUMENT_SAVED_TO_FOLDER", { folderId: destinationFolderId || "simulated-folder" });
-      addLog("FLOW_COMPLETED", { message: "Documento gerado em modo simulado devido à API do Google Drive inativa." });
-
-      if (isStateless) {
-        return res.status(200).json({
-          success: true,
-          isSimulated: true,
-          mode: "stateless",
-          documentType: documentType || "procuracao_pf",
-          googleDocsId: simulatedDocId,
-          googleDocsUrl: simulatedDocUrl,
-          destinationFolderId,
-          message: "Operando em Modo Simulado de Sandbox pois a API real do Google Drive está inativa ou desativada no console GCP (projeto 599536317399)."
-        });
-      }
-
-      // Save mock generation results to Firestore
-      if (dbAdmin && caseId) {
-        try {
-          const docPath = `cases/${caseId}/generatedDocuments/${documentType}`;
-          await dbAdmin.collection("cases").doc(caseId).collection("generatedDocuments").doc(documentType).set({
-            documentType,
-            displayName: documentName || documentType,
-            templateKey: templateKey || documentType,
-            templateId,
-            googleDocsId: simulatedDocId,
-            googleDocsUrl: simulatedDocUrl,
-            destinationFolderId: destinationFolderId || "",
-            destinationFolderUrl: destinationFolderUrl || "",
-            status: "success",
-            generatedAt: new Date().toISOString(),
-            generatedBy: "Portal BOSS Central Interna (Simulado)",
-            errorCode: null,
-            errorMessage: null,
-            logs: logsList
-          }, { merge: true });
-        } catch (errSub: any) {
-          console.warn("[GoogleDocsEngine] Simulated DB collection write skipped:", errSub.message);
-        }
-      }
-
-      return res.status(200).json({
-        success: true,
-        isSimulated: true,
-        documentType,
-        googleDocsId: simulatedDocId,
-        googleDocsUrl: simulatedDocUrl,
-        destinationFolderId,
-        message: "Operando em Modo Simulado de Sandbox pois a API real do Google Drive está inativa ou desativada no console GCP (projeto 599536317399)."
-      });
-    }
-
-    if (originalErrorMsg.includes("599536317399") || originalErrorMsg.includes("Google Drive API has not been used in project") || originalErrorMsg.includes("disabled")) {
-      finalErrorDetail = "A Google Drive API está desativada ou não autorizada no sandbox oficial do AI Studio (projeto 599536317399). Para corrigir: \n1. Clique em 'Sair / trocar conta' no Portal BOSS, e faça login novamente usando 'Entrar com Google' para criar um token de acesso fático (Google OAuth) do seu próprio usuário;\nOU\n2. Acesse a guia 'Integrações' -> 'Central Google Docs' e configure novas chaves de uma Conta de Serviço (Service Account) criada no seu console Google Cloud.";
-    }
-
+    addLog("error", "DOCUMENT_COPY_FAILED", `Não foi possível copiar o modelo para a pasta do cliente. Erro: ${errCopy.message}`);
     return res.status(500).json({
       success: false,
       documentType,
       errorCode: "DOCUMENT_COPY_FAILED",
-      errorMessage: `Falha ao duplicar o modelo de Google Docs: ${finalErrorDetail}. Certifique-se de que a Conta de Serviço Google (${serviceAccountEmail}) possui acesso de LEITURA ao template de ID '${templateId}' e de GRAVAÇÃO à pasta de ID '${destinationFolderId}'.`,
+      errorMessage: `Não foi possível copiar o modelo para a pasta do cliente: ${errCopy.message}`,
+      technicalLog
     });
-  }
-
-  // Validation tasks for Procuração PF (Tarefa 3)
-  if (documentType === "procuracao_pf" || documentType === "procuracao-pf") {
-    try {
-      addLog("TEMPLATE_VALIDATION_STARTED", { googleDocsId });
-      const docsObj = google.docs({ version: "v1", auth: jwtClient });
-      const docDataObj = await docsObj.documents.get({ documentId: googleDocsId });
-      const rawText = extractTextFromGoogleDoc(docDataObj.data);
-
-      const normalize = (val: string) => val.replace(/\s+/g, " ").trim();
-      const normalizedRawText = normalize(rawText);
-
-      const requiredFixedBlocks = [
-        "PROCURAÇÃO",
-        "OUTORGANTE:",
-        "OUTORGADO:",
-        "RODRIGO GIFFONI RODRIGUES",
-        "PODERES:",
-        "Todos os poderes para que o OUTORGADO",
-        "Viçosa,",
-        "{{OUTORGANTE_NOME}}",
-        "{{DATA_ASSINATURA}}"
-      ];
-
-      const missingBlocks = [];
-      for (const block of requiredFixedBlocks) {
-        const normalizedBlock = normalize(block);
-        if (!normalizedRawText.includes(normalizedBlock)) {
-          missingBlocks.push(block);
-        }
-      }
-
-      if (missingBlocks.length > 0) {
-        console.error(`[GoogleDocsEngine] Template mismatch. Missing fixed blocks: ${JSON.stringify(missingBlocks)}`);
-        
-        // Delete the copied file to prevent leaving incorrect files in Drive
-        try {
-          const drive = google.drive({ version: "v3", auth: jwtClient });
-          await drive.files.delete({ fileId: googleDocsId });
-        } catch (delErr: any) {
-          console.warn("[GoogleDocsEngine] Failed to delete mismatch document:", delErr.message);
-        }
-
-        return res.status(400).json({
-          success: false,
-          documentType,
-          errorCode: "PROCURACAO_PF_TEMPLATE_MISMATCH",
-          errorMessage: "O documento copiado não corresponde ao template oficial da Procuração PF. A geração foi bloqueada para impedir criação fora do modelo."
-        });
-      }
-
-      addLog("TEMPLATE_VALIDATED_AS_OFFICIAL", { status: "OK" });
-    } catch (errCheck: any) {
-      const rawErrorData = errCheck.response?.data;
-      console.error("[GoogleDocsEngine] Detailed Google Docs API Error on template validation:", {
-        message: errCheck.message,
-        status: errCheck.response?.status,
-        data: rawErrorData
-      });
-
-      addLog("TEMPLATE_VALIDATION_FAILED", { 
-        error: errCheck.message,
-        status: errCheck.response?.status,
-        googleApiError: rawErrorData?.error || rawErrorData || null
-      });
-
-      const detailedMsg = rawErrorData?.error?.message 
-        ? `${errCheck.message} (Detalhes Google API: ${rawErrorData.error.message})`
-        : errCheck.message;
-
-      return res.status(500).json({
-        success: false,
-        documentType,
-        errorCode: "PROCURACAO_PF_TEMPLATE_MISMATCH",
-        errorMessage: `Não foi possível validar o template copiado: ${detailedMsg}`
-      });
-    }
   }
 
   // 6. Substitute placeholders within document
   try {
-    addLog("PLACEHOLDER_REPLACEMENT_STARTED", { googleDocsId });
     const docs = google.docs({ version: "v1", auth: jwtClient });
     
-    // Prepare replace requests with variants (e.g. key, <<key>>, {{key}})
+    // Prepare replace requests
     const replaceRequests: any[] = [];
     for (const [key, val] of Object.entries(placeholdersToUse)) {
       const valueStr = String(val);
-      // Main key
       replaceRequests.push({
         replaceAllText: {
           containsText: { text: key, matchCase: true },
           replaceText: valueStr
         }
       });
-      // Variants if key doesn't have delimiters
       if (!key.startsWith("<<") && !key.startsWith("{{")) {
         replaceRequests.push({
           replaceAllText: {
@@ -1906,129 +1936,115 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
       });
     }
     
-    addLog("PLACEHOLDER_REPLACEMENT_SUCCESS");
+    addLog("success", "PLACEHOLDER_REPLACEMENT_SUCCESS", "Os dados do cliente e do caso foram inseridos no documento.");
   } catch (errRepl: any) {
-    const rawErrorData = errRepl.response?.data;
-    console.error("[GoogleDocsEngine] Detailed Google Docs API Error on placeholder replacement:", {
-      message: errRepl.message,
-      status: errRepl.response?.status,
-      data: rawErrorData
-    });
-
-    addLog("PLACEHOLDER_REPLACEMENT_FAILED", { 
-      error: errRepl.message,
-      status: errRepl.response?.status,
-      googleApiError: rawErrorData?.error || rawErrorData || null
-    });
-
-    const detailedMsg = rawErrorData?.error?.message 
-      ? `${errRepl.message} (Detalhes Google API: ${rawErrorData.error.message})`
-      : errRepl.message;
-
+    addLog("error", "PLACEHOLDER_REPLACEMENT_FAILED", `O documento foi criado, mas não foi possível inserir os dados. O arquivo parcial deve ser removido. Erro: ${errRepl.message}`);
+    try {
+      addLog("info", "CLEANUP_ATTEMPT_STARTED", "Tentando remover o arquivo parcial criado devido à falha de preenchimento.");
+      await drive.files.delete({ fileId: googleDocsId });
+      addLog("success", "CLEANUP_ATTEMPT_SUCCESS", "O arquivo parcial foi removido com sucesso do Google Drive.");
+    } catch (delErr: any) {
+      addLog("error", "CLEANUP_ATTEMPT_FAILED", `Falha ao excluir o documento parcial do Drive: ${delErr.message}`);
+    }
     return res.status(500).json({
       success: false,
       documentType,
       errorCode: "PLACEHOLDER_REPLACEMENT_FAILED",
-      errorMessage: `Falha na substituição dos placeholders no documento: ${detailedMsg}`,
+      errorMessage: `Falha na substituição dos placeholders no documento: ${errRepl.message}`,
+      technicalLog
     });
   }
 
-  addLog("DOCUMENT_SAVED_TO_FOLDER", { folderId: destinationFolderId });
-  addLog("RESULT_SAVED_IN_PORTAL");
-  addLog("FLOW_COMPLETED");
+  addLog("success", "DOCUMENT_SAVED_TO_FOLDER", "O documento foi confirmado na pasta do Google Drive.");
+  addLog("success", "FLOW_COMPLETED", "Geração concluída com sucesso. O link real do Google Docs foi retornado.");
 
   const googleDocsUrl = `https://docs.google.com/document/d/${googleDocsId}/edit`;
 
-  if (isStateless) {
-    return res.status(200).json({
-      success: true,
-      mode: "stateless",
-      documentType: documentType || "procuracao_pf",
-      googleDocsId,
-      googleDocsUrl,
-      destinationFolderId,
-      message: "Documento gerado com sucesso pelo modo stateless."
-    });
-  }
+  // Save to Firestore
+  if (dbAdmin && caseId) {
+    try {
+      const docPath = `cases/${caseId}/generatedDocuments/${documentType}`;
+      const generatedAt = new Date().toISOString();
+      
+      // Save history versions collection
+      const versionRef = dbAdmin.collection("cases").doc(caseId).collection("generatedDocuments").doc(documentType).collection("versions").doc(googleDocsId);
+      await versionRef.set({
+        googleDocsId,
+        googleDocsUrl,
+        documentVersion: nextVersion,
+        destinationFolderId,
+        destinationFolderUrl,
+        status: "success",
+        technicalLog,
+        generatedAt
+      });
 
-  // 7. Save generation results to cases/{caseId}/generatedDocuments/{documentType}
-  try {
-    const docPath = `cases/${caseId}/generatedDocuments/${documentType}`;
-    
-    await dbAdmin.doc(docPath).set({
-      documentType,
-      displayName: documentName || documentType,
-      templateKey: templateKey || documentType,
-      templateId,
-      googleDocsId,
-      googleDocsUrl,
-      destinationFolderId: destinationFolderId || "",
-      destinationFolderUrl: destinationFolderUrl || "",
-      status: "success",
-      generatedAt: new Date().toISOString(),
-      generatedBy: "Portal BOSS Central Interna",
-      errorCode: null,
-      errorMessage: null,
-      logs: logsList
-    }, { merge: true });
+      // Save generatedDocument root doc
+      await dbAdmin.doc(docPath).set({
+        documentType,
+        displayName: finalDocName,
+        templateKey: templateKey || documentType,
+        templateId,
+        googleDocsId,
+        googleDocsUrl,
+        documentVersion: nextVersion,
+        destinationFolderId: destinationFolderId || "",
+        destinationFolderUrl: destinationFolderUrl || "",
+        status: "success",
+        technicalLog,
+        generatedAt,
+        lastCheckedAt: generatedAt,
+        lastOutcome: "created",
+        errorCode: null,
+        errorMessage: null,
+        generatedBy: "portal_boss"
+      }, { merge: true });
 
-    // Sync back properties on Case for backward compatibility with existing frontends
-    const caseRef = dbAdmin.collection("cases").doc(caseId);
-    const updates: any = {};
-    if (documentType === "procuracao_pf" || documentType === "procuracao-pf") {
-      updates.procuracaoPfId = googleDocsId;
-      updates.procuracaoPfUrl = googleDocsUrl;
-      updates.googleDocsUrl = googleDocsUrl;
-      updates.procuracaoGoogleDocsId = googleDocsId;
-      updates.procuracaoGoogleDocsUrl = googleDocsUrl;
-      updates.procuracaoStatus = "criada";
-      updates.procuracaoGeneratedAt = new Date().toISOString();
-    } else if (documentType === "procuracao_pj") {
-      updates.procuracaoPjId = googleDocsId;
-      updates.procuracaoPjUrl = googleDocsUrl;
-    } else if (documentType === "declaracao_pobreza_pf") {
-      updates.declaracaoPobrezaPfId = googleDocsId;
-      updates.declaracaoPobrezaPfUrl = googleDocsUrl;
-    } else if (documentType === "declaracao_pobreza_pj") {
-      updates.declaracaoPobrezaPjId = googleDocsId;
-      updates.declaracaoPobrezaPjUrl = googleDocsUrl;
-    } else if (documentType === "contrato_honorarios_pf") {
-      updates.contratoHonorariosPfId = googleDocsId;
-      updates.contratoHonorariosPfUrl = googleDocsUrl;
-    } else if (documentType === "contrato_honorarios_pj") {
-      updates.contratoHonorariosPjId = googleDocsId;
-      updates.contratoHonorariosPjUrl = googleDocsUrl;
-    } else if (documentType === "primeiro_atendimento") {
-      updates.primeiroAtendimentoId = googleDocsId;
-      updates.primeiroAtendimentoUrl = googleDocsUrl;
-      updates.primeiroAtendimentoGoogleDocsId = googleDocsId;
-      updates.primeiroAtendimentoGoogleDocsUrl = googleDocsUrl;
-      updates.primeiroAtendimentoStatus = "criado";
-      updates.primeiroAtendimentoLogFalha = "";
+      // Update Case main fields dynamically based on prefix and successStatusValue
+      const caseRef = dbAdmin.collection("cases").doc(caseId);
+      const updates: any = {};
+      updates[`${prefix}Id`] = googleDocsId;
+      updates[`${prefix}Url`] = googleDocsUrl;
+      updates[`${prefix}GoogleDocsId`] = googleDocsId;
+      updates[`${prefix}GoogleDocsUrl`] = googleDocsUrl;
+      updates[`${prefix}Status`] = successStatusValue;
+      updates[`${prefix}LogFalha`] = "";
+      updates[`${prefix}IsSimulated`] = false;
+      updates[`${prefix}TechnicalLog`] = technicalLog;
+      updates[`${prefix}Version`] = nextVersion;
+      updates[`${prefix}LastOperationAt`] = generatedAt;
+      updates[`${prefix}LastOutcome`] = "created";
+      updates[`${prefix}LastErrorCode`] = null;
+      updates[`${prefix}LastErrorMessage`] = null;
+      
+      await caseRef.set(updates, { merge: true });
+      console.log(`[GoogleDocsEngine] Success results successfully saved to case ${caseId} and generatedDocuments.`);
+    } catch (errSave: any) {
+      console.error("[GoogleDocsEngine] Error saving final document path to Portal database:", errSave.message);
+      return res.status(500).json({
+        success: true,
+        documentType,
+        googleDocsId,
+        googleDocsUrl,
+        documentVersion: nextVersion,
+        errorCode: "PORTAL_RESULT_SAVE_FAILED",
+        errorMessage: `O documento foi criado no Drive com sucesso, mas ocorreu um erro ao salvar o registro no banco: ${errSave.message}`,
+        technicalLog
+      });
     }
-    
-    await caseRef.set(updates, { merge: true });
-    console.log(`[GoogleDocsEngine] Compatible settings successfully synced back to case: ${caseId}`);
-  } catch (errSave: any) {
-    console.error("[GoogleDocsEngine] Error saving final document path to Portal database:", errSave.message);
-    return res.status(500).json({
-      success: true,
-      documentType,
-      googleDocsId,
-      googleDocsUrl,
-      errorCode: "PORTAL_RESULT_SAVE_FAILED",
-      errorMessage: `O documento foi criado no Drive com sucesso, mas ocorreu um erro ao salvar o registro no banco: ${errSave.message}`,
-    });
   }
 
   return res.status(200).json({
     success: true,
+    outcome: "created",
     documentType,
     googleDocsId,
     googleDocsUrl,
+    documentVersion: nextVersion,
     destinationFolderId,
     generatedAt: new Date().toISOString(),
-    message: "Documento gerado com sucesso pelo Motor Interno BOSS."
+    technicalLog,
+    message: "Nova versão do 1º Atendimento criada e salva na pasta real do Google Drive."
   });
 });
 
@@ -5341,6 +5357,39 @@ app.get("/api/todoist/diagnostics", async (req: any, res: any) => {
   });
 });
 
+app.post("/api/todoist/create-comment", async (req: any, res: any) => {
+  const token = process.env.TODOIST_API_TOKEN;
+  if (!token) {
+    return res.status(400).json({ success: false, errorMessage: "TODOIST_API_TOKEN não está configurado." });
+  }
+  const { taskId, content } = req.body;
+  if (!taskId || !content) {
+    return res.status(400).json({ success: false, errorMessage: "taskId e content são obrigatórios." });
+  }
+  try {
+    const response = await fetch("https://api.todoist.com/rest/v2/comments", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
+      body: JSON.stringify({
+        task_id: taskId,
+        content: content
+      })
+    });
+    const raw = await response.text();
+    if (!response.ok) {
+      return res.status(response.status).json({ success: false, errorMessage: `Erro do Todoist: ${raw}` });
+    }
+    const data = JSON.parse(raw);
+    return res.status(200).json({ success: true, data });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, errorMessage: err.message || String(err) });
+  }
+});
+
 const TODOIST_API_BASE_URL = "https://api.todoist.com/rest/v2";
 
 // POST /api/todoist/create-case-task
@@ -5469,7 +5518,7 @@ app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
 
     const todoistPayload: any = {
       content: contentText,
-      description: "" // Retirar do template ao criar a tarefa o preenchimento da descrição da tarefa
+      description: description || ""
     };
 
     if (dueDate && String(dueDate).trim()) {

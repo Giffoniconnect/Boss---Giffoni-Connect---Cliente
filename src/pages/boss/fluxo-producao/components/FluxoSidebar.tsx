@@ -235,7 +235,10 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
 
     if (stepId === 'financeiro') {
       if (!caseObj) return 'uninitiated';
-      return (caseObj.financeiroStatus === 'faturado' || caseObj.financialCompleted) ? 'complete' : 'uninitiated';
+      const isComplete = (caseObj.financeiroStatus === 'faturado' || caseObj.financialCompleted);
+      if (isComplete) return 'complete';
+      const isStarted = !!(caseObj.financeiroStatus || caseObj.financialCompleted || caseObj.contratoHonorariosGoogleDocsUrl || caseObj.financeiroAuditStarted);
+      return isStarted ? 'incomplete' : 'uninitiated';
     }
 
     if (stepId === 'edrp') {

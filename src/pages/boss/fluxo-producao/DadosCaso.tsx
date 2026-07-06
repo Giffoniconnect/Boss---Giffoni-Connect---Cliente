@@ -24,7 +24,8 @@ import {
   BookOpen,
   Settings,
   ExternalLink,
-  Copy
+  Copy,
+  Terminal
 } from 'lucide-react';
 import { flowRoutes } from './utils/flowRoutes';
 import { useUnsavedChangesGuard } from './hooks/useUnsavedChangesGuard';
@@ -187,6 +188,65 @@ const GoogleDriveIcon = ({ size = 16, className = "" }: { size?: number; classNa
   </svg>
 );
 
+const translateErrorCode = (code: string | null | undefined, rawMessage: string | null | undefined): string => {
+  const normCode = (code || '').toUpperCase();
+  const normMsg = (rawMessage || '').toUpperCase();
+
+  if (normCode === 'GOOGLE_DOCS_CREDENTIALS_MISSING' || normMsg.includes('GOOGLE_DOCS_CREDENTIALS_MISSING')) {
+    return 'A autenticação com Google Docs e Google Drive não está configurada.';
+  }
+  if (normCode === 'GOOGLE_DOCS_AUTH_FAILED' || normMsg.includes('GOOGLE_DOCS_AUTH_FAILED')) {
+    return 'A autenticação da conta Google falhou ou expirou.';
+  }
+  if (normCode === 'DOCUMENT_COPY_FAILED' || normMsg.includes('DOCUMENT_COPY_FAILED')) {
+    return 'Não foi possível copiar o modelo oficial para a pasta do cliente.';
+  }
+  if (normCode === 'DESTINATION_FOLDER_ID_MISSING' || normMsg.includes('DESTINATION_FOLDER_ID_MISSING')) {
+    return 'A pasta de destino do cliente ainda não está vinculada ao cadastro.';
+  }
+  if (normCode === 'DESTINATION_FOLDER_ACCESS_DENIED' || normMsg.includes('DESTINATION_FOLDER_ACCESS_DENIED')) {
+    return 'A conta Google configurada não possui permissão para gravar documentos nesta pasta.';
+  }
+  if (normCode === 'TEMPLATE_ACCESS_DENIED' || normMsg.includes('TEMPLATE_ACCESS_DENIED')) {
+    return 'A conta Google configurada não possui acesso ao modelo oficial do 1º Atendimento.';
+  }
+  if (normCode === 'TEMPLATE_ID_MISSING' || normMsg.includes('TEMPLATE_ID_MISSING')) {
+    return 'O modelo oficial do 1º Atendimento não está configurado.';
+  }
+  if (normCode === 'PLACEHOLDER_REPLACEMENT_FAILED' || normMsg.includes('PLACEHOLDER_REPLACEMENT_FAILED')) {
+    return 'O modelo foi copiado, mas ocorreu falha ao inserir os dados do cliente e do caso.';
+  }
+  if (normCode === 'PORTAL_RESULT_SAVE_FAILED' || normMsg.includes('PORTAL_RESULT_SAVE_FAILED')) {
+    return 'O documento foi criado no Google Drive, mas houve falha ao registrar o link no Portal BOSS.';
+  }
+
+  // Fallback map checks based on some substrings in rawMessage:
+  const msg = (rawMessage || '').toLowerCase();
+  if (msg.includes('credential') || msg.includes('autentica') || msg.includes('token') || msg.includes('permiss')) {
+    if (msg.includes('pasta') || msg.includes('folder') || msg.includes('grav')) {
+      return 'A conta Google configurada não possui permissão para gravar documentos nesta pasta.';
+    }
+    if (msg.includes('modelo') || msg.includes('template')) {
+      return 'A conta Google configurada não possui acesso ao modelo oficial do 1º Atendimento.';
+    }
+    return 'A autenticação da conta Google falhou ou expirou.';
+  }
+  if (msg.includes('folder id') || msg.includes('pasta de destino') || msg.includes('gdrivefolderid')) {
+    return 'A pasta de destino do cliente ainda não está vinculada ao cadastro.';
+  }
+  if (msg.includes('template id') || msg.includes('modelo oficial')) {
+    return 'O modelo oficial do 1º Atendimento não está configurado.';
+  }
+  if (msg.includes('copy') || msg.includes('copiar')) {
+    return 'Não foi possível copiar o modelo oficial para a pasta do cliente.';
+  }
+  if (msg.includes('placeholder') || msg.includes('substitu')) {
+    return 'O modelo foi copiado, mas ocorreu falha ao inserir os dados do cliente e do caso.';
+  }
+
+  return rawMessage || 'Ocorreu um erro desconhecido no motor de geração.';
+};
+
 export default function DadosCaso() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
@@ -216,6 +276,8 @@ export default function DadosCaso() {
   const [primeiroAtendimentoIsSimulated, setPrimeiroAtendimentoIsSimulated] = useState<boolean>(false);
   const [forceNewVersion, setForceNewVersion] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [primeiroAtendimentoTechnicalLog, setPrimeiroAtendimentoTechnicalLog] = useState<any[]>([]);
+  const [primeiroAtendimentoVersion, setPrimeiroAtendimentoVersion] = useState<number>(1);
 
   // Integration config modal/balloon states
   const [showIntegrationConfig, setShowIntegrationConfig] = useState<boolean>(false);
@@ -356,6 +418,8 @@ export default function DadosCaso() {
         setPrimeiroAtendimentoGoogleDocsUrl(data.primeiroAtendimentoGoogleDocsUrl || '');
         setPrimeiroAtendimentoLogFalha(data.primeiroAtendimentoLogFalha || '');
         setPrimeiroAtendimentoIsSimulated(data.primeiroAtendimentoIsSimulated === true);
+        setPrimeiroAtendimentoTechnicalLog(data.primeiroAtendimentoTechnicalLog || []);
+        setPrimeiroAtendimentoVersion(data.primeiroAtendimentoVersion || 1);
 
         // Reconcile and migrate narrative blocks safely (Solution 1)
         const loadedEntrevista = data.entrevistaPadrao || '';
@@ -700,7 +764,7 @@ export default function DadosCaso() {
     });
   };
 
-  const handleGeneratePrimeiroAtendimento = async () => {
+  const handleGeneratePrimeiroAtendimento = async (intent: 'initial' | 'new_version' = 'initial') => {
     setError(null);
     setSuccess(null);
     setGeneratingDoc(true);
@@ -823,7 +887,13 @@ export default function DadosCaso() {
           caseId: targetCaseId,
           clientId: targetClientId
         },
-        credentialOverride: localOverride
+        credentialOverride: localOverride,
+        generationIntent: intent,
+        existingDocument: intent === 'initial' && primeiroAtendimentoStatus === 'criado' ? {
+          googleDocsId: caseObj?.primeiroAtendimentoGoogleDocsId || caseObj?.primeiroAtendimentoId || '',
+          googleDocsUrl: primeiroAtendimentoGoogleDocsUrl || caseObj?.primeiroAtendimentoGoogleDocsUrl || caseObj?.primeiroAtendimentoUrl || '',
+          version: primeiroAtendimentoVersion || caseObj?.primeiroAtendimentoVersion || 1
+        } : null
       };
 
       const response = await fetch(targetEndpoint, {
@@ -837,17 +907,57 @@ export default function DadosCaso() {
       try {
         responseData = JSON.parse(responseText);
       } catch {
-        responseData = { error: responseText };
+        responseData = { error: responseText, success: false };
       }
+
+      // Update immediate state and persist in Firestore
+      const newLogs = responseData.technicalLog || [
+        {
+          timestamp: new Date().toISOString(),
+          level: response.ok && responseData.success ? "success" : "error",
+          code: response.ok && responseData.success ? "FLOW_COMPLETED" : "GENERATION_FAILED",
+          message: responseData.errorMessage || responseData.error || responseText || "Ocorreu uma falha no fluxo."
+        }
+      ];
+      setPrimeiroAtendimentoTechnicalLog(newLogs);
+
+      const caseDocRef = doc(db, 'cases', targetCaseId);
 
       if (!response.ok || !responseData.success) {
-        const errorDetail = responseData.errorMessage || responseData.error || responseText || "Falha na geração integrada.";
-        throw new Error(errorDetail);
+        const errorDetail = responseData.errorMessage || responseData.error || "Falha na geração integrada.";
+        setPrimeiroAtendimentoStatus('falha');
+        setPrimeiroAtendimentoLogFalha(errorDetail);
+        setError(`Falha ao gerar o 1º Atendimento no motor interno: ${errorDetail}`);
+
+        // Update case with failure state and log
+        await updateDoc(caseDocRef, {
+          primeiroAtendimentoStatus: "falha",
+          primeiroAtendimentoLogFalha: errorDetail,
+          primeiroAtendimentoTechnicalLog: newLogs,
+          primeiroAtendimentoLastOperationAt: new Date().toISOString(),
+          primeiroAtendimentoLastOutcome: "error",
+          primeiroAtendimentoLastErrorCode: responseData.errorCode || "GENERATION_FAILED",
+          primeiroAtendimentoLastErrorMessage: errorDetail
+        });
+
+        const subdocRef = doc(db, 'cases', targetCaseId, 'generatedDocuments', 'primeiro_atendimento');
+        await setDoc(subdocRef, {
+          status: "failure",
+          technicalLog: newLogs,
+          lastOutcome: "error",
+          errorCode: responseData.errorCode || "GENERATION_FAILED",
+          errorMessage: errorDetail,
+          lastCheckedAt: new Date().toISOString()
+        }, { merge: true });
+
+        return;
       }
 
+      // Handle Success Modes
       const googleDocsId = responseData.googleDocsId;
       const googleDocsUrl = responseData.googleDocsUrl;
-      const isSimulated = responseData.isSimulated === true;
+      const outcome = responseData.outcome;
+      const docVer = responseData.documentVersion || 1;
 
       // VALIDAR URL DO GOOGLE DOCS REAL
       if (!googleDocsUrl || !googleDocsUrl.startsWith("https://docs.google.com/document/d/")) {
@@ -856,53 +966,73 @@ export default function DadosCaso() {
 
       setPrimeiroAtendimentoStatus('criado');
       setPrimeiroAtendimentoGoogleDocsUrl(googleDocsUrl);
-      setPrimeiroAtendimentoIsSimulated(isSimulated);
+      setPrimeiroAtendimentoIsSimulated(false);
       setPrimeiroAtendimentoLogFalha('');
-      setForceNewVersion(false);
-      setSuccess(isSimulated 
-        ? 'Comando executado! Documento gerado em MODO DE SIMULAÇÃO (Sandbox).' 
-        : 'Comando de automação disparado com sucesso! Link gerado abaixo.');
+      setPrimeiroAtendimentoVersion(docVer);
 
-      // Update Case in Firestore
-      const caseDocRef = doc(db, 'cases', targetCaseId);
+      if (outcome === "already_exists_in_destination") {
+        setSuccess('1º Atendimento já foi criado e confirmado na pasta do Google Drive. Para conferir ou utilizar a versão existente, abra a pasta do cliente.');
+      } else {
+        setSuccess(`Nova versão do 1º Atendimento criada e salva na pasta real do Google Drive (Versão v${docVer}).`);
+      }
+
+      // Update case with success states and logs
       await updateDoc(caseDocRef, {
         primeiroAtendimentoStatus: "criado",
         primeiroAtendimentoId: googleDocsId,
         primeiroAtendimentoUrl: googleDocsUrl,
         primeiroAtendimentoGoogleDocsId: googleDocsId,
         primeiroAtendimentoGoogleDocsUrl: googleDocsUrl,
-        primeiroAtendimentoIsSimulated: isSimulated,
+        primeiroAtendimentoIsSimulated: false,
         primeiroAtendimentoGeneratedAt: new Date().toISOString(),
         primeiroAtendimentoDestinationFolderId: googleDriveClientFolderId,
         primeiroAtendimentoDestinationFolderUrl: googleDriveClientFolderUrl,
-        primeiroAtendimentoLogFalha: ""
+        primeiroAtendimentoLogFalha: "",
+        primeiroAtendimentoTechnicalLog: newLogs,
+        primeiroAtendimentoVersion: docVer,
+        primeiroAtendimentoLastOperationAt: new Date().toISOString(),
+        primeiroAtendimentoLastOutcome: outcome || "success",
+        primeiroAtendimentoLastErrorCode: null,
+        primeiroAtendimentoLastErrorMessage: null
       });
 
-      // Salvar em cases/{caseId}/generatedDocuments/primeiro_atendimento
+      // Save to cases/{caseId}/generatedDocuments/primeiro_atendimento
       const subdocRef = doc(db, 'cases', targetCaseId, 'generatedDocuments', 'primeiro_atendimento');
       await setDoc(subdocRef, {
         documentType: "primeiro_atendimento",
-        displayName: `1º Atendimento PF - ${nomeCompleto}`,
+        displayName: `1º Atendimento PF - ${nomeCompleto} - v${docVer}`,
         templateKey: "primeiro_atendimento",
         templateId: officialTemplateId,
         googleDocsId,
         googleDocsUrl,
-        isSimulated,
+        isSimulated: false,
         destinationFolderId: googleDriveClientFolderId,
         destinationFolderUrl: googleDriveClientFolderUrl,
         status: "success",
         generatedAt: new Date().toISOString(),
-        generatedBy: isSimulated ? "Portal BOSS Central Interna (Simulado)" : "Portal BOSS Central Interna (Stateless)",
+        generatedBy: "Portal BOSS Central Interna (Stateless)",
         errorCode: null,
         errorMessage: null,
-        logs: [
-          "1ST_PF_FLOW_INITIATED: Fluxo do Primeiro Atendimento PF iniciado.",
-          `1ST_PF_TEMPLATE_ID: Configurado para o template ID oficial ${officialTemplateId}.`,
-          isSimulated 
-            ? `1ST_PF_GEN_SIMULATED: Documento gerado no MODO SIMULADO devido a restrições de API Drive.`
-            : `1ST_PF_GEN_SUCCESS: Sucesso na geração real do documento ID: ${googleDocsId}`
-        ]
-      });
+        technicalLog: newLogs,
+        documentVersion: docVer,
+        lastCheckedAt: new Date().toISOString(),
+        lastOutcome: outcome || "success"
+      }, { merge: true });
+
+      // Save version history entry if created a new version
+      if (outcome === "created") {
+        const versionSubdocRef = doc(db, 'cases', targetCaseId, 'generatedDocuments', 'primeiro_atendimento', 'versions', googleDocsId);
+        await setDoc(versionSubdocRef, {
+          googleDocsId,
+          googleDocsUrl,
+          documentVersion: docVer,
+          destinationFolderId: googleDriveClientFolderId,
+          destinationFolderUrl: googleDriveClientFolderUrl,
+          status: "success",
+          technicalLog: newLogs,
+          generatedAt: new Date().toISOString()
+        });
+      }
 
     } catch (err: any) {
       console.error(err);
@@ -944,6 +1074,39 @@ export default function DadosCaso() {
         : (client.pjDadosEmpresa?.pj_razaoSocial || client.pjData?.pj_razaoSocial || 'Sem Razão Social'))
     : '';
   const clientSlug = client?.slug || '';
+
+  const nomeRealDoCliente = (
+    client?.pfData?.pf_nomeCompleto ||
+    client?.pfDadosPessoais?.pf_nomeCompleto ||
+    client?.portalMirror?.pfDadosPessoais?.nomeCompleto ||
+    client?.nomeCompleto ||
+    client?.nome ||
+    client?.name ||
+    clientName ||
+    "Cliente"
+  ).trim();
+
+  const isSimulatedDoc = !!(
+    primeiroAtendimentoIsSimulated || 
+    caseObj?.primeiroAtendimentoIsSimulated === true ||
+    (primeiroAtendimentoGoogleDocsUrl && primeiroAtendimentoGoogleDocsUrl.includes('simulated=true')) ||
+    (caseObj?.primeiroAtendimentoGoogleDocsId && caseObj?.primeiroAtendimentoGoogleDocsId.startsWith('simulated-'))
+  );
+
+  const hasRealSuccess = !!(
+    primeiroAtendimentoStatus === 'criado' &&
+    primeiroAtendimentoGoogleDocsUrl &&
+    primeiroAtendimentoGoogleDocsUrl.startsWith("https://docs.google.com/document/d/") &&
+    clientDriveFolderId &&
+    !isSimulatedDoc
+  );
+
+  const techCode = primeiroAtendimentoStatus === 'criado' 
+    ? (caseObj?.primeiroAtendimentoLastOutcome || "SUCCESS") 
+    : (caseObj?.primeiroAtendimentoLastErrorCode || "GENERATION_FAILED");
+  const techTimestamp = caseObj?.primeiroAtendimentoLastOperationAt || caseObj?.primeiroAtendimentoGeneratedAt || caseObj?.updatedAt || "";
+  const techDocId = caseObj?.primeiroAtendimentoGoogleDocsId || caseObj?.primeiroAtendimentoId || "";
+  const techDocVer = primeiroAtendimentoVersion || caseObj?.primeiroAtendimentoVersion || 1;
 
   return (
     <FluxoStepLayout stepName="Dados do Caso" caseId={caseId} statusText={caseObj?.status === 'rascunho' ? 'Rascunho' : 'Caso Ativo'}>
@@ -1232,222 +1395,190 @@ export default function DadosCaso() {
               </div>
 
               <div className="space-y-4">
-                {/* Atalho para as configurações de integração */}
-                <div className="relative">
-                  <div className="flex justify-start">
-                    <button
-                      type="button"
-                      onClick={() => setShowIntegrationConfig(!showIntegrationConfig)}
-                      className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-3xs border ${
-                        showIntegrationConfig
-                          ? 'bg-indigo-600 border-indigo-700 text-white hover:bg-indigo-700'
-                          : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 border-indigo-150 hover:border-indigo-300'
-                      }`}
-                    >
-                      <Settings size={13} className={showIntegrationConfig ? "text-white" : "text-indigo-500"} />
-                      Ver Configurações de integração
-                    </button>
-                  </div>
+                {/* Botoes de acao de integracao empilhados verticalmente à esquerda */}
+                <div className="flex flex-col items-start gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowIntegrationConfig(!showIntegrationConfig)}
+                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-3xs border ${
+                      showIntegrationConfig
+                        ? 'bg-indigo-600 border-indigo-700 text-white hover:bg-indigo-700'
+                        : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 border-indigo-150 hover:border-indigo-300'
+                    }`}
+                  >
+                    <Settings size={13} className={showIntegrationConfig ? "text-white" : "text-indigo-500"} />
+                    Ver Configurações de integração
+                  </button>
 
-                  {showIntegrationConfig && (
-                    <div className="mt-3 p-5 bg-white border border-gray-150 rounded-2xl space-y-4 shadow-lg animate-in slide-in-from-top-1 duration-250 relative z-10 max-w-xl">
-                      <div className="absolute top-3 right-3">
-                        <button
-                          type="button"
-                          onClick={() => setShowIntegrationConfig(false)}
-                          className="p-1 hover:bg-gray-100 rounded text-gray-405 hover:text-gray-700 transition"
-                          title="Fechar"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                      
-                      <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-                        <Settings size={15} className="text-indigo-600" />
-                        <h4 className="text-xs font-black text-gray-800 uppercase tracking-wider font-mono">
-                          Informações Técnicas & Configurações GDI
-                        </h4>
-                      </div>
-
-                      <div className="space-y-3.5 text-xs">
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block font-mono">
-                            Destino Técnico da Pasta do Cliente
-                          </label>
-                          <p className="text-[11px] text-gray-700 font-bold leading-relaxed">
-                            Pasta do Google Drive de {clientName || 'Cliente'}
-                          </p>
-                        </div>
-
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between">
-                            <label className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block font-mono">
-                              Pasta ID (googleDriveClientFolderId)
-                            </label>
-                            {clientDriveFolderId && (
-                              <button
-                                type="button"
-                                onClick={() => handleCopyLink(clientDriveFolderId)}
-                                className="text-[9px] font-black uppercase text-indigo-650 hover:text-indigo-850 cursor-pointer"
-                              >
-                                {copied ? "Copiado!" : "Copiar ID"}
-                              </button>
-                            )}
-                          </div>
-                          {clientDriveFolderId ? (
-                            <div className="p-2.5 bg-gray-50 border border-gray-150 rounded-xl font-mono text-[10.5px] text-gray-800 break-all select-all flex items-center justify-between gap-2 leading-relaxed">
-                              <span>{clientDriveFolderId}</span>
-                            </div>
-                          ) : (
-                            <div className="p-2.5 bg-gray-50/50 border border-gray-100 border-dashed rounded-xl text-[11px] text-gray-400 italic">
-                              Não definido. Execute primeiro a criação da Pasta do Cliente.
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between">
-                            <label className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block font-mono">
-                              Pasta URL (googleDriveClientFolderUrl)
-                            </label>
-                            {clientDriveFolderUrl && (
-                              <button
-                                type="button"
-                                onClick={() => handleCopyLink(clientDriveFolderUrl)}
-                                className="text-[9px] font-black uppercase text-indigo-650 hover:text-indigo-850 cursor-pointer"
-                              >
-                                {copied ? "Copiado!" : "Copiar URL"}
-                              </button>
-                            )}
-                          </div>
-                          {clientDriveFolderUrl ? (
-                            <div className="p-2.5 bg-gray-50 border border-gray-150 rounded-xl font-mono text-[10.5px] text-gray-800 break-all select-all flex items-center justify-between gap-2 leading-relaxed">
-                              <span className="truncate flex-1">{clientDriveFolderUrl}</span>
-                            </div>
-                          ) : (
-                            <div className="p-2.5 bg-gray-50/50 border border-gray-100 border-dashed rounded-xl text-[11px] text-gray-400 italic">
-                              Não definido. Execute primeiro a criação da Pasta do Cliente.
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="space-y-1 pb-1">
-                          <label className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block font-mono">
-                            Template de Referência (Documento Base)
-                          </label>
-                          <div className="space-y-2">
-                            <p className="text-[11px] text-gray-500 font-medium">
-                              Modelo padrão utilizado para preenchimento de metadados fáticos (1º Atendimento PF):
-                            </p>
-                            <a
-                              href={`https://docs.google.com/document/d/${integrationTemplateId}/edit`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-50/70 hover:bg-indigo-100 border border-indigo-150 text-indigo-750 hover:text-indigo-900 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer shadow-3xs"
-                            >
-                              <FileText size={13} className="text-indigo-500" />
-                              <span>Abrir Template de Referência Google Docs</span>
-                              <ExternalLink size={10} className="opacity-70" />
-                            </a>
-                            <div className="p-2 bg-gray-50 border border-gray-150 rounded-xl text-[9px] font-mono select-all text-gray-500 flex items-center justify-between gap-2">
-                              <span className="truncate">ID: {integrationTemplateId}</span>
-                              <button
-                                type="button"
-                                onClick={() => handleCopyLink(integrationTemplateId)}
-                                className="text-indigo-650 hover:text-indigo-850 font-black uppercase tracking-wider cursor-pointer"
-                              >
-                                Copiar ID
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Informações da pasta do cliente */}
-                <div className="p-4 bg-white border border-gray-150 rounded-2xl text-xs flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-3xs animate-in fade-in">
-                  <div className="space-y-2 flex-1">
-                    <p className="font-extrabold text-gray-500 text-[10px] uppercase tracking-wider block">
-                      Destino da Pasta do Cliente: Pasta do Google Drive de {clientName || 'Cliente'}
-                    </p>
-                    <p className="text-[11px] text-indigo-700 font-extrabold uppercase tracking-wider">
-                      Fonte: Automação Google Drive — Pasta do Cliente
-                    </p>
-                    {folderIsReal ? (
-                      <div className="space-y-1.5 pt-1">
-                        <p className="text-slate-700 font-bold flex flex-wrap items-center gap-1">
-                          <span>Pasta ID:</span>
-                          <span className="font-mono bg-slate-50 border border-gray-150 rounded px-2 py-0.5 select-all text-slate-800 font-extrabold">{clientDriveFolderId}</span>
-                        </p>
-                        <p className="text-slate-700 font-bold flex flex-wrap items-center gap-1 leading-normal">
-                          <span>URL:</span>
-                          <span className="font-mono bg-slate-50 border border-gray-150 rounded px-2 py-0.5 select-all truncate text-[11px] max-w-lg text-indigo-800 font-extrabold">{clientDriveFolderUrl}</span>
-                        </p>
-                        <p className="text-emerald-700 font-black text-[11px] flex items-center gap-1.5 mt-1 animate-pulse">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0" />
-                          <span>Pasta real vinculada ao cliente. O 1º Atendimento será salvo nesta pasta.</span>
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="pt-1">
-                        <p className="text-amber-700 font-bold flex items-center gap-1.5 text-[11px]">
-                          <AlertCircle size={14} className="text-amber-500 shrink-0" />
-                          <span>Pasta do cliente ainda não criada. Execute primeiro a Automação Google Drive — Pasta do Cliente.</span>
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  {folderIsReal && clientDriveFolderUrl && (
+                  {folderIsReal && clientDriveFolderUrl ? (
                     <a
                       href={clientDriveFolderUrl}
                       target="_blank"
                       referrerPolicy="no-referrer"
                       rel="noopener noreferrer"
-                      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 text-emerald-800 font-extrabold rounded-xl text-xs transition-colors cursor-pointer shrink-0 self-start md:self-center"
+                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 text-emerald-800 font-extrabold rounded-xl text-xs transition-colors cursor-pointer shadow-3xs"
                     >
                       <GoogleDriveIcon size={14} className="text-emerald-600" />
                       <span>Abrir pasta no Google Drive</span>
                     </a>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-100 border border-gray-250 text-gray-400 font-extrabold rounded-xl text-xs cursor-not-allowed opacity-60"
+                    >
+                      <GoogleDriveIcon size={14} className="grayscale opacity-50" />
+                      <span>Pasta do Google Drive ainda não disponível</span>
+                    </button>
                   )}
                 </div>
 
-                {primeiroAtendimentoStatus === 'criado' && primeiroAtendimentoGoogleDocsUrl && !forceNewVersion ? (
+                {showIntegrationConfig && (
+                  <div className="p-5 bg-white border border-gray-150 rounded-2xl space-y-4 shadow-lg animate-in slide-in-from-top-1 duration-250 max-w-xl text-left">
+                    <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                      <div className="flex items-center gap-2">
+                        <Settings size={15} className="text-indigo-600" />
+                        <h4 className="text-xs font-black text-gray-800 uppercase tracking-wider font-mono">
+                          Informações Técnicas & Configurações GDI
+                        </h4>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowIntegrationConfig(false)}
+                        className="p-1 hover:bg-gray-100 rounded text-gray-405 hover:text-gray-700 transition"
+                        title="Fechar"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+
+                    <div className="space-y-4 text-xs">
+                      {/* DESTINO DA PASTA DO CLIENTE */}
+                      <div className="space-y-2.5 p-3.5 bg-slate-50 border border-slate-150 rounded-xl">
+                        <h5 className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider font-mono">
+                          DESTINO DA PASTA DO CLIENTE
+                        </h5>
+                        <div className="space-y-1.5 text-[11px] leading-relaxed text-slate-700">
+                          <p className="font-bold text-slate-850">
+                            Pasta do Google Drive de {nomeRealDoCliente}
+                          </p>
+                          <p className="text-slate-500 font-semibold">
+                            Fonte: Automação Google Drive — Pasta do Cliente
+                          </p>
+                          <div className="pt-1.5 space-y-1.5 border-t border-slate-200/50">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-semibold text-slate-600 truncate">Pasta ID: {clientDriveFolderId || 'Não definida'}</span>
+                              {clientDriveFolderId && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyLink(clientDriveFolderId)}
+                                  className="text-[9px] font-black uppercase text-indigo-650 hover:text-indigo-850 cursor-pointer shrink-0"
+                                >
+                                  {copied ? "Copiado!" : "Copiar ID"}
+                                </button>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-semibold text-slate-600 truncate flex-1">URL: {clientDriveFolderUrl || 'Não definida'}</span>
+                              {clientDriveFolderUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyLink(clientDriveFolderUrl)}
+                                  className="text-[9px] font-black uppercase text-indigo-650 hover:text-indigo-850 cursor-pointer shrink-0"
+                                >
+                                  {copied ? "Copiado!" : "Copiar URL"}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Template de Referência (Documento Base) */}
+                      <div className="space-y-2 pb-1">
+                        <label className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block font-mono">
+                          Template de Referência (Documento Base)
+                        </label>
+                        <div className="space-y-2">
+                          <p className="text-[11px] text-gray-500 font-medium">
+                            Modelo padrão utilizado para preenchimento de metadados fáticos (1º Atendimento PF):
+                          </p>
+                          <a
+                            href={`https://docs.google.com/document/d/${integrationTemplateId}/edit`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-50/70 hover:bg-indigo-100 border border-indigo-150 text-indigo-750 hover:text-indigo-900 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer shadow-3xs"
+                          >
+                            <FileText size={13} className="text-indigo-500" />
+                            <span>Abrir Template de Referência Google Docs</span>
+                            <ExternalLink size={10} className="opacity-70" />
+                          </a>
+                          <div className="p-2 bg-gray-50 border border-gray-150 rounded-xl text-[9px] font-mono select-all text-gray-500 flex items-center justify-between gap-2">
+                            <span className="truncate">ID: {integrationTemplateId}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyLink(integrationTemplateId)}
+                              className="text-indigo-650 hover:text-indigo-850 font-black uppercase tracking-wider cursor-pointer"
+                            >
+                              Copiar ID do Template
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Botao fechar */}
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowIntegrationConfig(false)}
+                          className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[10px] font-black uppercase rounded-lg transition-all cursor-pointer"
+                        >
+                          Fechar painel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {generatingDoc ? (
+                  <div className="bg-white border border-indigo-150 rounded-2xl p-5 space-y-4 shadow-3xs animate-pulse font-sans">
+                    <div className="flex items-center justify-between gap-3 border-b border-gray-100 pb-3">
+                      <div className="flex items-center gap-2">
+                        <RefreshCw className="text-indigo-600 animate-spin" size={17} />
+                        <span className="text-xs font-black uppercase text-indigo-700 tracking-wider">
+                          Gerando primeiro atendimento seguro... Por favor, aguarde alguns instantes.
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                        <div className="bg-indigo-600 h-full rounded-full animate-infinite-loading w-3/4"></div>
+                      </div>
+                    </div>
+                  </div>
+                ) : primeiroAtendimentoStatus === 'criado' && primeiroAtendimentoGoogleDocsUrl ? (
                   <div className="bg-white border border-slate-150 rounded-2xl p-5 space-y-4 shadow-3xs animate-in slide-in-from-top-1 duration-200">
                     <div className="flex items-start gap-3">
                       <div className="p-2.5 bg-indigo-50 border border-indigo-150 rounded-xl text-indigo-600">
                         <FileText size={20} />
                       </div>
                       <div className="space-y-1">
-                        <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">1º Atendimento Gerado</h3>
+                        <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
+                          1º Atendimento Gerado - v{primeiroAtendimentoVersion}
+                        </h3>
                         <p className="text-xs text-slate-500 leading-relaxed font-semibold">
-                          O documento de 1º Atendimento PF já foi indexado e está disponível para visualização.
+                          O documento de Primeiro Atendimento PF real foi localizado, preenchido e confirmado na pasta real do Google Drive.
                         </p>
                       </div>
                     </div>
 
-                    {primeiroAtendimentoIsSimulated && (
-                      <div className="p-4 bg-amber-50 border border-amber-250 rounded-xl text-amber-950 text-xs flex flex-col gap-2 font-semibold">
-                        <div className="flex items-center gap-1.5 text-amber-800 font-bold">
-                          <AlertCircle size={15} className="text-amber-600 shrink-0" />
-                          <span className="text-[11px] font-black uppercase tracking-wider">Modo de Simulação Ativo (Sandbox)</span>
-                        </div>
-                        <p className="text-[11px] text-amber-900 leading-normal font-sans font-medium">
-                          O arquivo acima foi gerado como rascunho de alta fidelidade porque o Google Drive corporativo está operando em sandbox ou a Google Drive API está inativa no projeto atual (599536317399). O arquivo não foi criado fisicamente na sua pasta real de destino.
-                        </p>
-                        <div className="border-t border-amber-200/50 pt-2 text-[10px] text-amber-800/80 font-semibold font-sans">
-                          Para gravação física real, configure as chaves da sua Conta de Serviço (Service Account) na aba <strong>Integrações &rarr; Central Google Docs</strong> e habilite a Google Drive API.
-                        </div>
-                      </div>
-                    )}
-                    
                     <div className="flex flex-wrap gap-2.5 pt-1.5">
                       <a
                         href={primeiroAtendimentoGoogleDocsUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 px-4.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase rounded-xl transition-all shadow-3xs cursor-pointer font-bold animate-in"
+                        className="inline-flex items-center gap-2 px-4.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase rounded-xl transition-all shadow-3xs cursor-pointer font-bold"
                       >
                         <ExternalLink size={13} />
                         Abrir 1º Atendimento
@@ -1466,102 +1597,151 @@ export default function DadosCaso() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          setError(null);
-                          setSuccess(null);
-                          setForceNewVersion(true);
-                        }}
-                        className="px-4.5 py-2 bg-white hover:bg-gray-50 border border-gray-250 text-slate-800 text-xs font-black uppercase rounded-xl transition-all shadow-3xs cursor-pointer font-bold"
+                        disabled={generatingDoc}
+                        onClick={() => handleGeneratePrimeiroAtendimento('new_version')}
+                        className="px-4.5 py-2 bg-white hover:bg-gray-50 border border-gray-250 text-slate-800 text-xs font-black uppercase rounded-xl transition-all shadow-3xs cursor-pointer font-bold disabled:opacity-50"
                       >
-                        Gerar nova versão
+                        {generatingDoc ? "Gerando..." : "Gerar nova versão"}
                       </button>
                     </div>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {/* Se estiver aguardando / processando o job */}
-                    {generatingDoc ? (
-                      <div className="bg-white border border-indigo-150 rounded-2xl p-5 space-y-4 shadow-3xs animate-pulse font-sans">
-                        <div className="flex items-center justify-between gap-3 border-b border-gray-100 pb-3">
-                          <div className="flex items-center gap-2">
-                            <RefreshCw className="text-indigo-600 animate-spin" size={17} />
-                            <span className="text-xs font-black uppercase text-indigo-700 tracking-wider">
-                              Gerando primeiro atendimento seguro... Por favor, aguarde alguns instantes.
-                            </span>
-                          </div>
-                        </div>
+                    {/* Motor Integrado info display */}
+                    <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs animate-fadeIn">
+                      <p className="font-extrabold text-slate-700 uppercase tracking-widest text-[9px] font-mono flex items-center gap-1.5 align-middle">
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+                        <span>Motor documental preparado para validar e executar geração real.</span>
+                      </p>
+                      <p className="text-slate-500 leading-normal text-[11px]">
+                        A geração documental do primeiro atendimento está configurada e pronta para execução real, aguardando validação de pastas e arquivos fáticos.
+                      </p>
+                    </div>
 
-                        <div className="space-y-2">
-                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                            <div className="bg-indigo-600 h-full rounded-full animate-infinite-loading w-3/4"></div>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {forceNewVersion && (
-                          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-4 animate-in slide-in-from-top-1 text-xs">
-                            <div className="flex items-center gap-2 text-amber-950 font-semibold md:truncate">
-                              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 animate-ping" />
-                              <span>Iniciando controle de versão. Uma nova cópia será salva.</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setForceNewVersion(false)}
-                              className="text-xs font-black text-slate-500 hover:text-slate-800 uppercase cursor-pointer whitespace-nowrap"
-                            >
-                              Cancelar
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Motor Integrado info display - omitido se falhou */}
-                        {primeiroAtendimentoStatus !== 'falha' && (
-                          <div className="p-3.5 bg-emerald-50/60 border border-emerald-100 rounded-xl space-y-1.5 text-xs animate-fadeIn">
-                            <p className="font-extrabold text-emerald-950 uppercase tracking-widest text-[9px] font-mono flex items-center gap-1.5 align-middle">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0" />
-                              <span>CONEXÃO COM MOTOR DE GOOGLE DOCS ATIVO (INTEGRADO)</span>
-                            </p>
-                            <p className="text-emerald-900 leading-normal text-[11px]">
-                              A geração documental do primeiro atendimento está configurada de forma nativa ao Portal BOSS Clientes, utilizando a Conta de Serviço Google autorizada.
-                            </p>
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-between gap-3 pt-1">
-                          <button
-                            type="button"
-                            disabled={generatingDoc}
-                            onClick={handleGeneratePrimeiroAtendimento}
-                            className="w-full md:w-auto px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm hover:shadow transition-all cursor-pointer font-bold"
-                          >
-                            <Sparkles size={14} />
-                            <span>{forceNewVersion ? 'Gerar Nova Versão' : 'Gerar 1º Atendimento'}</span>
-                          </button>
-                        </div>
-
-                      </div>
-                    )}
+                    <div className="flex items-center justify-between gap-3 pt-1">
+                      <button
+                        type="button"
+                        disabled={generatingDoc}
+                        onClick={() => handleGeneratePrimeiroAtendimento('initial')}
+                        className="w-full md:w-auto px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm hover:shadow transition-all cursor-pointer font-bold"
+                      >
+                        <Sparkles size={14} />
+                        <span>Gerar 1º Atendimento</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* Blanket preparado para o log técnico de falha */}
-              <div className="space-y-2">
+              {/* Log Técnico da Automação */}
+              <div className="space-y-3">
                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
                   Log Técnico da Automação (Motor de Geração de Google Docs)
                 </span>
-                {primeiroAtendimentoStatus === 'falha' && primeiroAtendimentoLogFalha ? (
-                  <div className="p-4 bg-red-950 text-red-100 rounded-xl border border-red-900 font-mono text-xs leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap select-all shadow-inner animate-fadeIn">
-                    <div className="flex items-center gap-1.5 text-xs font-black tracking-widest text-red-400 uppercase leading-none pb-2 border-b border-red-900 mb-2">
-                      <AlertCircle size={12} />
-                      <span>LOG DE FALHA PROCESSUAL RECENTE</span>
+
+                {hasRealSuccess ? (
+                  /* SUCESSO REAL */
+                  <div className="p-5 bg-emerald-50 border border-emerald-150 rounded-2xl space-y-4 animate-in fade-in duration-200">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-emerald-100 rounded-xl text-emerald-800 shrink-0">
+                        <CheckCircle2 size={18} />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="text-sm font-black text-emerald-950 leading-relaxed">
+                          ✅ 1º Atendimento criado com sucesso na pasta de destino: {nomeRealDoCliente}.
+                        </h4>
+                        <p className="text-xs text-emerald-800 font-semibold">
+                          Documento salvo no Google Drive e vinculado ao caso em {techTimestamp ? new Date(techTimestamp).toLocaleString() : new Date().toLocaleString()}.
+                        </p>
+                      </div>
                     </div>
-                    {primeiroAtendimentoLogFalha}
+                  </div>
+                ) : primeiroAtendimentoStatus === 'falha' ? (
+                  /* FALHA REAL */
+                  <div className="p-5 bg-red-50 border border-red-150 rounded-2xl space-y-4 animate-in fade-in duration-200">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-red-100 rounded-xl text-red-800 shrink-0">
+                        <X size={18} />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="text-sm font-black text-red-950 leading-relaxed">
+                          ❌ Não foi possível criar o 1º Atendimento na pasta de destino: {nomeRealDoCliente}.
+                        </h4>
+                        <p className="text-xs font-extrabold text-red-900 mt-2">
+                          Motivo: {translateErrorCode(caseObj?.primeiroAtendimentoLastErrorCode, primeiroAtendimentoLogFalha)}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 ) : (
+                  /* SEM OPERAÇÃO RECENTE OU EM ESPERA */
                   <div className="p-4 bg-gray-50 text-gray-400 rounded-xl border border-gray-150 font-mono text-xs italic text-center">
                     Área técnica reservada para saída de logs. Atualmente limpa e pronta para receber o espelhamento do build.
+                  </div>
+                )}
+
+                {/* DETALHES TÉCNICOS COMPLEMENTARES - EXIBIR SOMENTE QUANDO EXISTIR */}
+                {(techCode || techTimestamp || techDocId || techDocVer) && (primeiroAtendimentoStatus === 'criado' || primeiroAtendimentoStatus === 'falha') && (
+                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-600 text-xs font-mono space-y-1.5">
+                    <p className="font-extrabold text-[10px] uppercase text-slate-400 tracking-wider font-sans mb-1">
+                      Detalhes técnicos
+                    </p>
+                    <p>Código: <span className="font-bold text-slate-800">{techCode || 'N/A'}</span></p>
+                    {techTimestamp && <p>Executado em: <span className="font-bold text-slate-850">{new Date(techTimestamp).toLocaleString()}</span></p>}
+                    {techDocId && <p>Documento: <span className="font-bold text-indigo-700 select-all">{techDocId}</span></p>}
+                    {primeiroAtendimentoStatus === 'criado' && <p>Versão: <span className="font-bold text-slate-800">{techDocVer}</span></p>}
+                  </div>
+                )}
+
+                {/* Timeline de eventos técnicos de desenvolvimento, se houver log de auditoria */}
+                {primeiroAtendimentoTechnicalLog && primeiroAtendimentoTechnicalLog.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-gray-150/50">
+                    <span className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block pb-2">
+                      Histórico de Eventos do Motor ({primeiroAtendimentoTechnicalLog.length} eventos)
+                    </span>
+                    
+                    <div className="p-5 bg-slate-900 text-slate-100 rounded-2xl border border-slate-800 font-mono text-xs leading-relaxed max-h-52 overflow-y-auto space-y-4 shadow-inner">
+                      <div className="space-y-3 relative before:absolute before:inset-y-0 before:left-3.5 before:w-0.5 before:bg-slate-800">
+                        {primeiroAtendimentoTechnicalLog.map((log: any, idx: number) => {
+                          let dotColor = "bg-blue-500";
+                          let textColor = "text-blue-300";
+                          let levelLabel = "INFO";
+                          if (log.level === "success") {
+                            dotColor = "bg-emerald-500";
+                            textColor = "text-emerald-300";
+                            levelLabel = "SUCESSO";
+                          } else if (log.level === "warning") {
+                            dotColor = "bg-amber-500";
+                            textColor = "text-amber-300";
+                            levelLabel = "ALERTA";
+                          } else if (log.level === "error") {
+                            dotColor = "bg-rose-500";
+                            textColor = "text-rose-300";
+                            levelLabel = "ERRO";
+                          }
+
+                          const dateFormatted = log.timestamp 
+                            ? new Date(log.timestamp).toLocaleTimeString() 
+                            : new Date().toLocaleTimeString();
+
+                          return (
+                            <div key={idx} className="flex gap-4 items-start relative">
+                              <span className={`w-2.5 h-2.5 rounded-full ${dotColor} mt-1 ring-4 ring-slate-900 z-10 shrink-0`} />
+                              <div className="space-y-0.5 min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-x-2 text-[10px] text-slate-500 font-sans font-bold">
+                                  <span>[{dateFormatted}]</span>
+                                  <span className={textColor}>[{levelLabel}]</span>
+                                  <span className="text-slate-400 font-mono text-[9px] bg-slate-800 px-1 py-0.5 rounded uppercase tracking-wider">{log.code || "EVENT"}</span>
+                                </div>
+                                <p className="text-slate-200 text-xs font-sans leading-normal font-medium">
+                                  {log.message}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

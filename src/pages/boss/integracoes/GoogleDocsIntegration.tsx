@@ -3,6 +3,32 @@ import { useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { BossLayout } from '../../../components/Layout';
+
+/**
+ * INVESTIGAÇÃO TÉCNICA E RESOLUÇÃO DA GERAÇÃO/MOVIMENTAÇÃO DE DOCUMENTOS (GDI):
+ * 
+ * Durante a auditoria deste módulo e do respectivo motor de geração (/server.ts),
+ * identificamos o motivo pelo qual arquivos gerados (como Procuração, Declaração, Contratos)
+ * não estavam sendo catalogados, localizados ou criados corretamente na pasta destino do cliente:
+ * 
+ * 1. NOMEAÇÃO E BUSCA HARDCODED: No motor do servidor, o nome final dos arquivos (`finalDocName`)
+ *    e o prefixo de busca anti-duplicidade (`safePrefix`) estavam fixados estritamente como
+ *    "1º Atendimento PF - ...". Isso fazia com que qualquer outro tipo de documento gerado fosse
+ *    salvo com o nome incorreto ou não fosse detectado na pasta do cliente, gerando arquivos soltos.
+ * 
+ * 2. PROPRIEDADE DE AUTOMAÇÃO FIXA: Ao salvar os registros principais e de controle de versão
+ *    no Firestore (`cases/${caseId}`), os campos atualizados estavam fixos como `primeiroAtendimentoStatus`,
+ *    `primeiroAtendimentoId`, etc. Isso causava colisões críticas e impedia a atualização correta
+ *    dos status individuais de cada documento (ex: `procuracaoStatus`, `declaracaoPobrezaStatus`, etc.).
+ * 
+ * RESOLUÇÃO IMPLEMENTADA NO SERVIDOR:
+ * - O motor de geração foi refatorado para determinar dinamicamente o título/rótulo do documento (`typeLabel`)
+ *   com base no `documentType` fornecido na chamada.
+ * - O prefixo de busca na pasta de destino (`safePrefix`) e as propriedades salvas no Google Drive
+ *   agora utilizam o tipo real do documento, garantindo auditoria robusta.
+ * - Os campos de escrita no Firestore agora são gerados dinamicamente com base no prefixo correspondente
+ *   (ex: `procuracao`, `declaracaoPobreza`, `contratoHonorarios`, `prePeticao`), mantendo a integridade.
+ */
 import { 
   ArrowLeft, 
   Settings, 

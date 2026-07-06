@@ -54,6 +54,9 @@ import {
   QrCode,
   Barcode,
   Banknote,
+  Settings,
+  Sparkles,
+  X,
 } from "lucide-react";
 import { flowRoutes } from "./utils/flowRoutes";
 
@@ -106,6 +109,29 @@ interface CaseFinancial {
   updatedAt: string;
 }
 
+const GoogleDriveIcon = ({ size = 16, className = "" }: { size?: number; className?: string }) => (
+  <svg
+    viewBox="0 0 87.3 78"
+    width={size}
+    height={size}
+    className={className}
+  >
+    <path
+      fill="#0066da"
+      d="m6.6 66.85 15.4-26.65c.9-1.6 2.6-2.6 4.4-2.6h45.5l-15.4 26.65c-.9 1.6-2.6 2.6-4.4 2.6H11c-1.8 0-3.5-1-4.4-2.65Z"
+    />
+    <path
+      fill="#00a852"
+      d="m56.5 40.2 15.4 26.65c.9 1.6.9 3.6 0 5.2s-2.6 2.6-4.4 2.6H22l15.4-26.65c.9-1.6 2.6-2.6 4.4-2.6h10.3c1.8 0 3.5 1 4.4 2.6Z"
+    />
+    <path
+      fill="#ffcc00"
+      d="m1.25 15.6 15.4-26.65C17.55-12.65 19.25-13.6 21-13.6h30.8L36.4 13c-.9 1.6-2.6 2.6-4.4 2.6H5.65c-1.8 0-3.5-1-4.4-2.65c-.9-1.55-.9-3.55 0-5.15"
+      transform="matrix(-1 0 0 1 54.3 54)"
+    />
+  </svg>
+);
+
 export default function FinanceiroFluxo() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
@@ -118,6 +144,13 @@ export default function FinanceiroFluxo() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isRenewingGoogle, setIsRenewingGoogle] = useState(false);
+  const [showContratoIntegrationConfig, setShowContratoIntegrationConfig] = useState(false);
+  const [copiedText, setCopiedText] = useState(false);
+  const handleCopyLink = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedText(true);
+    setTimeout(() => setCopiedText(false), 2000);
+  };
 
   const handleRenewGoogle = async () => {
     setIsRenewingGoogle(true);
@@ -2737,6 +2770,63 @@ export default function FinanceiroFluxo() {
       return;
     }
 
+    if (activeSubStep === 3) {
+      const url = caseObj?.contratoHonorariosGoogleDocsUrl || "";
+      const isUrlValid = 
+        url.startsWith("https://docs.google.com/document/d/") &&
+        !url.includes("simulated=true") &&
+        !url.includes("mock") &&
+        !url.includes("fake") &&
+        !url.includes("demo") &&
+        !url.includes("showcase") &&
+        !url.includes("undefined") &&
+        !url.includes("null");
+
+      const q3_1_ok = wizardState?.q3_1 === "sim";
+      const q3_2_ok = !!wizardState?.q3_2;
+      const q3_3_ok = Array.isArray(wizardState?.q3_3) && wizardState?.q3_3.length > 0;
+      const q3_4_ok = wizardState?.q3_4 === "sim";
+      const q3_5_ok = wizardState?.q3_5 === "sim";
+      const q3_6_ok = wizardState?.q3_6 === "sim";
+      const q3_7_ok = wizardState?.q3_7 === "sim";
+      const q3_8_ok = wizardState?.q3_8 === "sim";
+
+      if (!q3_1_ok || !isUrlValid || !q3_2_ok || !q3_3_ok || !q3_4_ok || !q3_5_ok || !q3_6_ok || !q3_7_ok || !q3_8_ok) {
+        setError("Não é possível concluir o Financeiro. Finalize a Auditoria do Contrato de Honorários, incluindo geração real, assinaturas, entrega, recebimento do documento digitalizado e informação ao Financeiro.");
+        setSaving(false);
+        return;
+      }
+
+      try {
+        const payload = {
+          financeiroStatus: "faturado",
+          financialCompleted: true,
+          financeiroAuditCompleted: true,
+          financeiroAuditCompletedAt: nowISO,
+          financeiroCompletedAt: nowISO,
+          financeiroCompletionSource: "auditoria_contrato_honorarios",
+          productionStage: "edrp",
+          updatedAt: nowISO,
+        };
+
+        await updateDoc(doc(db, "cases", caseId!), payload);
+
+        try {
+          await setDoc(doc(db, "casos", caseId!), payload, { merge: true });
+        } catch (mirrorErr) {
+          console.warn('Silent mirror save warning:', mirrorErr);
+        }
+
+        navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId!}/edrp`);
+      } catch (err: any) {
+        console.error(err);
+        setError(`Erro ao atualizar etapa de faturamento e produção: ${err.message}`);
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     try {
       await updateDoc(doc(db, "cases", caseId!), {
         productionStage: "edrp",
@@ -4015,7 +4105,7 @@ export default function FinanceiroFluxo() {
                   <button
                     type="submit"
                     disabled={saving}
-                    className="px-5 py-2.5 hover:bg-indigo-700 bg-indigo-600 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-all shadow-3xs cursor-pointer disabled:opacity-50"
+                    className="px-5 py-2.5 hover:bg-indigo-700 bg-indigo-600 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-all shadow-3xs cursor-pointer disabled:opacity-50 font-bold"
                   >
                     {saving ? (
                       <Loader2 size={13} className="animate-spin" />
@@ -4027,163 +4117,338 @@ export default function FinanceiroFluxo() {
                 </div>
               </form>
 
-              {/* CARD 2: GOOGLE DOCS AUTOMATION IN BLUE */}
-              <div className="bg-blue-50 border border-blue-200 rounded-2xl p-5 space-y-4 shadow-xs">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-blue-150">
-                  <h4 className="text-xs font-black uppercase text-blue-950 tracking-wider flex items-center gap-1.5">
-                    <FileCheck2
-                      size={16}
-                      className="text-blue-600 animate-pulse"
-                    />{" "}
-                    Google Docs Integração - Gerar Automaticamente Contrato de
-                    Honorários - Pessoa Física
-                  </h4>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black uppercase text-blue-400 font-mono">
-                      STATUS:
-                    </span>
-                    {renderStatusBadge()}
-                  </div>
-                </div>
+              {(() => {
+                const clientDriveFolderId = (
+                  client?.googleDriveClientFolderId ||
+                  client?.gdriveFolderId ||
+                  caseObj?.gdriveFolderId ||
+                  ""
+                ).trim();
+                const clientDriveFolderUrl = (
+                  client?.googleDriveClientFolderUrl ||
+                  client?.gdriveFolderUrl ||
+                  caseObj?.gdriveFolderUrl ||
+                  ""
+                ).trim();
+                const folderIsReal = 
+                  clientDriveFolderId &&
+                  !clientDriveFolderId.toLowerCase().includes("mock") &&
+                  !clientDriveFolderId.toLowerCase().includes("fake") &&
+                  !clientDriveFolderId.toLowerCase().includes("teste") &&
+                  !clientDriveFolderId.toLowerCase().includes("undefined") &&
+                  !clientDriveFolderId.toLowerCase().includes("null") &&
+                  !clientDriveFolderId.toLowerCase().includes("xxxx");
 
-                {caseObj?.contratoHonorariosLogFalha && (
-                  <div className="p-3.5 border border-rose-100 bg-rose-50/50 rounded-xl text-[11px] text-rose-750 font-medium leading-relaxed space-y-3">
-                    <div>
-                      ⚠️ Falha na última tentativa:{" "}
-                      <code className="font-mono text-[10px] bg-white px-1 py-0.5 rounded border border-rose-105 block mt-1 break-words select-all">
-                        {caseObj.contratoHonorariosLogFalha}
-                      </code>
+                const resolvedNomeCompleto = (
+                  client?.pfData?.pf_nomeCompleto ||
+                  client?.pfDadosPessoais?.pf_nomeCompleto ||
+                  client?.razaoSocial ||
+                  client?.pjDadosEmpresa?.pj_razaoSocial ||
+                  client?.nomeCompleto ||
+                  client?.nome ||
+                  clientName ||
+                  "Cliente"
+                ).trim();
+
+                const officialTemplateId = "1GJZ6LSW_szLSAA8Z3iw9jt4Q6zy5k6EuuTNhR5ooJQQ";
+
+                return (
+                  <div className="bg-gradient-to-br from-blue-50/60 to-sky-50/20 border border-blue-150 rounded-3xl p-6 shadow-3xs space-y-5 animate-in fade-in">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="p-1 px-2.5 bg-blue-100 text-blue-800 rounded-full font-black text-[9px] uppercase tracking-wider font-mono">
+                            Automação Ativa
+                          </span>
+                          <Sparkles size={16} className="text-blue-600 animate-pulse" />
+                        </div>
+                        <h3 className="text-sm font-black text-slate-900">
+                          Automação Google Docs — Contrato de Honorários
+                        </h3>
+                        <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
+                          Esta ferramenta envia os dados consolidados do faturamento e do cliente diretamente ao build receptor do Google Docs para preenchimento de placeholders, indexação e arquivamento automatizado na pasta em tempo real.
+                        </p>
+                      </div>
                     </div>
 
-                    {(caseObj.contratoHonorariosLogFalha.toLowerCase().includes("expirou") ||
-                      caseObj.contratoHonorariosLogFalha.toLowerCase().includes("sessão") ||
-                      caseObj.contratoHonorariosLogFalha.toLowerCase().includes("token") ||
-                      caseObj.contratoHonorariosLogFalha.toLowerCase().includes("autorização") ||
-                      caseObj.contratoHonorariosLogFalha.toLowerCase().includes("credentials")) && (
-                      <div className="pt-1.5 flex flex-wrap gap-2.5 items-center">
+                    <div className="space-y-4">
+                      {/* Botoes de acao de integracao empilhados verticalmente à esquerda */}
+                      <div className="flex flex-col items-start gap-2.5">
                         <button
                           type="button"
-                          disabled={isRenewingGoogle}
-                          onClick={handleRenewGoogle}
-                          className="inline-flex items-center gap-1.5 bg-rose-650 hover:bg-rose-700 text-white font-bold px-3 py-2 rounded-xl text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                          onClick={() => setShowContratoIntegrationConfig(!showContratoIntegrationConfig)}
+                          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-3xs border ${
+                            showContratoIntegrationConfig
+                              ? 'bg-blue-600 border-blue-700 text-white hover:bg-blue-700'
+                              : 'bg-blue-50 hover:bg-blue-100 text-blue-700 hover:text-blue-900 border-blue-150 hover:border-blue-300'
+                          }`}
                         >
-                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M21.35 11.1H12V12.9H19.6C18.9 16.5 15.8 18.9 12 18.9C8.1 18.9 5.0 15.8 5.0 12C5.0 8.2 8.1 5.1 12 5.1C13.7 5.1 15.3 5.7 16.5 6.8L18.4 4.9C16.7 3.2 14.5 2.1 12 2.1C6.5 2.1 2 6.6 2 12.1C2 17.6 6.5 22.1 12 22.1C17.5 22.1 22 17.6 22 12.1C22 11.7 21.9 11.4 21.35 11.1H21.35Z" fill="currentColor"/>
-                          </svg>
-                          {isRenewingGoogle ? "Conectando..." : "Conectar / Renovar Conta Google em 1-Clique"}
+                          <Settings size={13} className={showContratoIntegrationConfig ? "text-white" : "text-blue-500"} />
+                          Ver Configurações de integração
                         </button>
-                        <span className="text-[10px] text-rose-600 font-extrabold">
-                          Renove o seu acesso seguro sem deslogar!
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
 
-                {caseObj?.contratoHonorariosGoogleDocsUrl && (
-                  <div className="p-4 bg-blue-100/50 border border-blue-200 rounded-2xl space-y-3.5 animate-in fade-in duration-300">
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                      <div>
-                        <span className="text-[10px] font-black uppercase text-blue-600 block font-mono">
-                          Documento
-                        </span>
-                        <span className="font-extrabold text-blue-900">
-                          Contrato de Honorários {client?.type || "PF"}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-black uppercase text-blue-600 block font-mono">
-                          Data Geração
-                        </span>
-                        <span className="font-extrabold text-blue-900">
-                          {caseObj.contratoHonorariosGeneratedAt
-                            ? new Date(
-                                caseObj.contratoHonorariosGeneratedAt,
-                              ).toLocaleDateString("pt-BR", {
-                                day: "2-digit",
-                                month: "2-digit",
-                                year: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
-                            : "Gerado recentemente"}
-                        </span>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-[10px] font-black uppercase text-blue-600 block font-mono">
-                          Nome do arquivo
-                        </span>
-                        <span className="font-bold text-blue-900 font-mono tracking-tight bg-white px-2 py-1 border border-blue-200 rounded-lg block truncate font-semibold">
-                          Contrato de Honorários - {clientName}
-                        </span>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-[10px] font-black uppercase text-blue-600 block font-mono">
-                          Link de Acesso
-                        </span>
-                        <a
-                          href={caseObj.contratoHonorariosGoogleDocsUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-750 font-bold hover:underline font-mono truncate block text-[11px]"
-                        >
-                          {caseObj.contratoHonorariosGoogleDocsUrl}
-                        </a>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2 pt-2 border-t border-blue-200">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleOpenContrato(
-                            caseObj.contratoHonorariosGoogleDocsUrl,
-                          )
-                        }
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer font-semibold"
-                      >
-                        <ExternalLink size={13} />
-                        Abrir Contrato
-                      </button>
-
-                      <button
-                        type="button"
-                        disabled={saving}
-                        onClick={handleGenerateContratoHonorarios}
-                        className="px-4 py-2 bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
-                      >
-                        {saving ? (
-                          <Loader2 size={13} className="animate-spin" />
+                        {folderIsReal && clientDriveFolderUrl ? (
+                          <a
+                            href={clientDriveFolderUrl}
+                            target="_blank"
+                            referrerPolicy="no-referrer"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 text-emerald-800 font-extrabold rounded-xl text-xs transition-colors cursor-pointer shadow-3xs font-semibold"
+                          >
+                            <GoogleDriveIcon size={14} className="text-emerald-600" />
+                            <span>Abrir pasta no Google Drive</span>
+                          </a>
                         ) : (
-                          <RefreshCw size={12} />
+                          <button
+                            type="button"
+                            disabled
+                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-100 border border-gray-250 text-gray-400 font-extrabold rounded-xl text-xs cursor-not-allowed opacity-60"
+                          >
+                            <GoogleDriveIcon size={14} className="grayscale opacity-50" />
+                            <span>Pasta do Google Drive ainda não disponível</span>
+                          </button>
                         )}
-                        Gerar Novamente
-                      </button>
+                      </div>
+
+                      {showContratoIntegrationConfig && (
+                        <div className="p-5 bg-white border border-gray-150 rounded-2xl space-y-4 shadow-lg animate-in slide-in-from-top-1 duration-250 max-w-xl text-left">
+                          <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                            <div className="flex items-center gap-2">
+                              <Settings size={15} className="text-blue-600" />
+                              <h4 className="text-xs font-black text-gray-800 uppercase tracking-wider font-mono">
+                                Informações Técnicas & Configurações GDI
+                              </h4>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setShowContratoIntegrationConfig(false)}
+                              className="p-1 hover:bg-gray-100 rounded text-gray-405 hover:text-gray-700 transition"
+                              title="Fechar"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+
+                          <div className="space-y-4 text-xs">
+                            {/* DESTINO DA PASTA DO CLIENTE */}
+                            <div className="space-y-2.5 p-3.5 bg-slate-50 border border-slate-150 rounded-xl">
+                              <h5 className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider font-mono">
+                                DESTINO DA PASTA DO CLIENTE
+                              </h5>
+                              <div className="space-y-1.5 text-[11px] leading-relaxed text-slate-700">
+                                <p className="font-bold text-slate-850">
+                                  Pasta do Google Drive de {resolvedNomeCompleto}
+                                </p>
+                                <p className="text-slate-500 font-semibold">
+                                  Fonte: Automação Google Drive — Pasta do Cliente
+                                </p>
+                                <div className="pt-1.5 space-y-1.5 border-t border-slate-200/50">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-semibold text-slate-600 truncate">Pasta ID: {clientDriveFolderId || 'Não definida'}</span>
+                                    {clientDriveFolderId && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCopyLink(clientDriveFolderId)}
+                                        className="text-[9px] font-black uppercase text-blue-650 hover:text-blue-850 cursor-pointer shrink-0"
+                                      >
+                                        {copiedText ? "Copiado!" : "Copiar ID"}
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-semibold text-slate-600 truncate flex-1">URL: {clientDriveFolderUrl || 'Não definida'}</span>
+                                    {clientDriveFolderUrl && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCopyLink(clientDriveFolderUrl)}
+                                        className="text-[9px] font-black uppercase text-blue-650 hover:text-blue-850 cursor-pointer shrink-0"
+                                      >
+                                        {copiedText ? "Copiado!" : "Copiar URL"}
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Template de Referência (Documento Base) */}
+                            <div className="space-y-2 pb-1">
+                              <label className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block font-mono">
+                                Template de Referência (Documento Base)
+                              </label>
+                              <div className="space-y-2">
+                                <p className="text-[11px] text-gray-500 font-medium">
+                                  Modelo padrão utilizado para preenchimento de placeholders do Contrato de Honorários:
+                                </p>
+                                <a
+                                  href={`https://docs.google.com/document/d/${officialTemplateId}/edit`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 px-3 py-2 bg-blue-50/70 hover:bg-blue-100 border border-blue-150 text-blue-750 hover:text-blue-900 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer shadow-3xs"
+                                >
+                                  <FileText size={13} className="text-blue-500" />
+                                  <span>Abrir Template de Referência Google Docs</span>
+                                  <ExternalLink size={10} className="opacity-70" />
+                                </a>
+                                <div className="p-2 bg-gray-50 border border-gray-150 rounded-xl text-[9px] font-mono select-all text-gray-500 flex items-center justify-between gap-2">
+                                  <span className="truncate">ID: {officialTemplateId}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyLink(officialTemplateId)}
+                                    className="text-[9px] font-black uppercase text-blue-650 hover:text-blue-850 cursor-pointer shrink-0"
+                                  >
+                                    {copiedText ? "Copiado!" : "Copiar ID"}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Log de falhas se houver */}
+                      {caseObj?.contratoHonorariosLogFalha && (
+                        <div className="p-3.5 border border-rose-100 bg-rose-50/50 rounded-xl text-[11px] text-rose-750 font-medium leading-relaxed space-y-3">
+                          <div>
+                            ⚠️ Falha na última tentativa:{" "}
+                            <code className="font-mono text-[10px] bg-white px-1 py-0.5 rounded border border-rose-105 block mt-1 break-words select-all">
+                              {caseObj.contratoHonorariosLogFalha}
+                            </code>
+                          </div>
+
+                          {(caseObj.contratoHonorariosLogFalha.toLowerCase().includes("expirou") ||
+                            caseObj.contratoHonorariosLogFalha.toLowerCase().includes("sessão") ||
+                            caseObj.contratoHonorariosLogFalha.toLowerCase().includes("token") ||
+                            caseObj.contratoHonorariosLogFalha.toLowerCase().includes("autorização") ||
+                            caseObj.contratoHonorariosLogFalha.toLowerCase().includes("credentials")) && (
+                            <div className="pt-1.5 flex flex-wrap gap-2.5 items-center">
+                              <button
+                                type="button"
+                                disabled={isRenewingGoogle}
+                                onClick={handleRenewGoogle}
+                                className="inline-flex items-center gap-1.5 bg-rose-650 hover:bg-rose-700 text-white font-bold px-3 py-2 rounded-xl text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                              >
+                                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M21.35 11.1H12V12.9H19.6C18.9 16.5 15.8 18.9 12 18.9C8.1 18.9 5.0 15.8 5.0 12C5.0 8.2 8.1 5.1 12 5.1C13.7 5.1 15.3 5.7 16.5 6.8L18.4 4.9C16.7 3.2 14.5 2.1 12 2.1C6.5 2.1 2 6.6 2 12.1C2 17.6 6.5 22.1 12 22.1C17.5 22.1 22 17.6 22 12.1C22 11.7 21.9 11.4 21.35 11.1H21.35Z" fill="currentColor"/>
+                                </svg>
+                                {isRenewingGoogle ? "Conectando..." : "Conectar / Renovar Conta Google em 1-Clique"}
+                              </button>
+                              <span className="text-[10px] text-rose-600 font-extrabold">
+                                Renove o seu acesso seguro sem deslogar!
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Contrato de honorários gerado com sucesso */}
+                      {caseObj?.contratoHonorariosGoogleDocsUrl && (
+                        <div className="p-5 bg-blue-50/80 border border-blue-150 rounded-2xl space-y-4 animate-in fade-in duration-300">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2.5 bg-blue-100 border border-blue-150 rounded-xl text-blue-600">
+                              <FileCheck2 size={20} />
+                            </div>
+                            <div className="space-y-1">
+                              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
+                                Contrato de Honorários Gerado
+                              </h3>
+                              <p className="text-xs text-slate-500 leading-relaxed font-semibold">
+                                O Contrato de Honorários real foi gerado com sucesso no Google Docs e arquivado de forma automatizada na pasta do cliente.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs pt-1 border-t border-blue-100">
+                            <div>
+                              <span className="text-[10px] font-black uppercase text-blue-600 block font-mono">
+                                Documento
+                              </span>
+                              <span className="font-extrabold text-blue-950">
+                                Contrato de Honorários {client?.type || "PF"}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-black uppercase text-blue-600 block font-mono">
+                                Data Geração
+                              </span>
+                              <span className="font-extrabold text-blue-950">
+                                {caseObj.contratoHonorariosGeneratedAt
+                                  ? new Date(caseObj.contratoHonorariosGeneratedAt).toLocaleDateString("pt-BR", {
+                                      day: "2-digit",
+                                      month: "2-digit",
+                                      year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })
+                                  : "Gerado recentemente"}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2 pt-2">
+                            <a
+                              href={caseObj.contratoHonorariosGoogleDocsUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 px-4.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase rounded-xl transition-all shadow-3xs cursor-pointer font-bold"
+                            >
+                              <ExternalLink size={13} />
+                              Abrir Contrato GDocs
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyLink(caseObj.contratoHonorariosGoogleDocsUrl)}
+                              className={`inline-flex items-center gap-1.5 px-4.5 py-2 rounded-xl text-xs font-black uppercase transition-all border shadow-3xs cursor-pointer font-bold ${
+                                copiedText
+                                  ? "bg-emerald-50 border-emerald-250 text-emerald-800"
+                                  : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                              }`}
+                            >
+                              {copiedText ? "Copiado!" : "Copiar Link"}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={saving}
+                              onClick={handleGenerateContratoHonorarios}
+                              className="inline-flex items-center gap-1.5 px-4.5 py-2 bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-3xs font-bold"
+                            >
+                              {saving ? (
+                                <Loader2 size={13} className="animate-spin" />
+                              ) : (
+                                <RefreshCw size={12} />
+                              )}
+                              Gerar Novamente
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Botão de gerar se não gerado */}
+                      {!caseObj?.contratoHonorariosGoogleDocsUrl && (
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={handleGenerateContratoHonorarios}
+                          className="w-full md:w-auto px-6 py-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm hover:shadow transition-all cursor-pointer font-bold"
+                        >
+                          {saving ? (
+                            <>
+                              <Loader2 size={15} className="animate-spin" />
+                              Gerando minuta oficial no GDocs...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles size={14} />
+                              Criar Contrato de Honorários
+                            </>
+                          )}
+                        </button>
+                      )}
+
                     </div>
                   </div>
-                )}
-
-                {!caseObj?.contratoHonorariosGoogleDocsUrl && (
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={handleGenerateContratoHonorarios}
-                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-black uppercase tracking-wider text-xs rounded-xl flex items-center justify-center gap-2 cursor-pointer transition shadow-xs"
-                  >
-                    {saving ? (
-                      <>
-                        <Loader2 size={15} className="animate-spin" />
-                        Gerando minuta oficial no GDocs...
-                      </>
-                    ) : (
-                      <>
-                        <FileCheck2 size={16} />
-                        Criar Contrato de Honorários
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
+                );
+              })()}
             </div>
           </div>
         )}
