@@ -142,6 +142,9 @@ const EDRPFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/EDRPFluxo
 const DelegacaoFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/DelegacaoFluxo'));
 const RevisaoFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/RevisaoFluxo'));
 const ProtocoloFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/ProtocoloFluxo'));
+const PrazosFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/PrazosFluxo'));
+const AudienciasFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/AudienciasFluxo'));
+const PericiasFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/PericiasFluxo'));
 const ComplianceFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/ComplianceFluxo'));
 const NovoCasoFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/NovoCasoFluxo'));
 const PrePeticionamentoIaFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/PrePeticionamentoIaFluxo'));
@@ -309,6 +312,9 @@ const bossRouter = createBrowserRouter(
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/revisao" element={<SafeRoute children={<RevisaoFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/protocolo" element={<SafeRoute children={<ProtocoloFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/compliance" element={<SafeRoute children={<ComplianceFluxo />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/prazos" element={<SafeRoute children={<PrazosFluxo />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/agendar-audiencias" element={<SafeRoute children={<AudienciasFluxo />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/agendar-pericia" element={<SafeRoute children={<PericiasFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/novo-caso" element={<SafeRoute children={<NovoCasoFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/pre-peticionamento-ia" element={<SafeRoute children={<PrePeticionamentoIaFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/controladoria" element={<SafeRoute children={<ControladoriaFluxo />} />} />

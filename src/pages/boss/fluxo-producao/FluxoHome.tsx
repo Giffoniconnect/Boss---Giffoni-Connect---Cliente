@@ -22,7 +22,10 @@ import {
   Sparkles,
   Loader2,
   AlertTriangle,
-  FolderOpen
+  FolderOpen,
+  Clock,
+  Calendar,
+  Activity
 } from 'lucide-react';
 import { flowSteps } from './utils/flowSteps';
 import { flowRoutes } from './utils/flowRoutes';
@@ -153,6 +156,9 @@ export default function FluxoHome() {
       case 'edrp': return Lock;
       case 'revisao': return Eye;
       case 'protocolo': return ShieldCheck;
+      case 'prazos': return Clock;
+      case 'agendar-audiencias': return Calendar;
+      case 'agendar-pericia': return Activity;
       case 'novo-caso': return ShieldCheck;
       case 'controladoria': return Cpu;
       case 'relatorio-integridade': return HeartPulse;
@@ -173,6 +179,9 @@ export default function FluxoHome() {
       case 'edrp': return 'bg-red-50 text-red-600';
       case 'revisao': return 'bg-cyan-50 text-cyan-600';
       case 'protocolo': return 'bg-indigo-50 text-indigo-600';
+      case 'prazos': return 'bg-orange-50 text-orange-600';
+      case 'agendar-audiencias': return 'bg-yellow-50 text-yellow-600';
+      case 'agendar-pericia': return 'bg-fuchsia-50 text-fuchsia-600';
       case 'novo-caso': return 'bg-indigo-50 text-indigo-600';
       case 'controladoria': return 'bg-violet-50 text-violet-600';
       case 'relatorio-integridade': return 'bg-pink-50 text-pink-600';
@@ -228,6 +237,15 @@ export default function FluxoHome() {
         break;
       case 'protocolo':
         navigate(flowRoutes.protocolo(caseIdParam));
+        break;
+      case 'prazos':
+        navigate(flowRoutes.prazos(caseIdParam));
+        break;
+      case 'agendar-audiencias':
+        navigate(flowRoutes.agendarAudiencias(caseIdParam));
+        break;
+      case 'agendar-pericia':
+        navigate(flowRoutes.agendarPericia(caseIdParam));
         break;
       case 'compliance':
         navigate(flowRoutes.compliance(caseIdParam));

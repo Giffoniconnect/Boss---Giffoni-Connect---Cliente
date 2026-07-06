@@ -860,11 +860,11 @@ export default function RelatorioIntegridadeFluxo() {
         <div className="flex flex-col sm:flex-row sm:justify-between items-center gap-4 pt-6 border-t border-gray-150">
           <button
             type="button"
-            onClick={() => navigate(flowRoutes.compliance(caseId!))}
+            onClick={() => navigate(flowRoutes.agendarPericia(caseId!))}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-200 hover:border-gray-300 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white"
           >
             <ArrowLeft size={14} />
-            Voltar para Compliance
+            Voltar para Perícias
           </button>
 
           <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto">
@@ -880,10 +880,10 @@ export default function RelatorioIntegridadeFluxo() {
 
             <button
               type="button"
-              onClick={() => navigate(flowRoutes.controladoria(caseId!))}
+              onClick={() => navigate(flowRoutes.arquivamento(caseId!))}
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-950 text-white px-7 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-sm"
             >
-              <span>Avançar para Controladoria</span>
+              <span>Salvar e Avançar</span>
               <ChevronRight size={14} />
             </button>
           </div>

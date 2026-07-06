@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { flowSteps } from '../utils/flowSteps';
 import { flowRoutes } from '../utils/flowRoutes';
-import { Lock, ArrowLeft, Check, X, FolderKanban } from 'lucide-react';
+import { Lock, ArrowLeft, Check, X, FolderKanban, ExternalLink } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
 
@@ -88,6 +88,9 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
           else if (s.id === 'delegacao') shortLabel = 'Delegação';
           else if (s.id === 'revisao') shortLabel = 'Revisão';
           else if (s.id === 'protocolo') shortLabel = 'Protocolo';
+          else if (s.id === 'prazos') shortLabel = 'Prazos';
+          else if (s.id === 'agendar-audiencias') shortLabel = 'Audiências';
+          else if (s.id === 'agendar-pericia') shortLabel = 'Perícias';
           else if (s.id === 'compliance') shortLabel = 'Compliance';
           else if (s.id === 'relatorio-integridade') shortLabel = 'Relatório de Integridade e Auditoria';
           else if (s.id === 'controladoria') shortLabel = 'Controladoria';
@@ -326,26 +329,41 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
           </div>
         </div>
 
-        {/* PROGRESS METRIC BLOCK */}
-        <div className="flex items-center gap-4 bg-gray-50/55 border border-gray-100 px-4 py-2 rounded-2xl shrink-0 self-start md:self-auto">
-          <div className="text-left">
-            <span className="text-[12px] font-black uppercase text-gray-400 block tracking-widest leading-none">
-              Avanço Administrativo
-            </span>
-            <span className="text-xs font-black text-gray-900 block mt-1">
-              Etapa {currentIndex !== -1 ? currentIndex + 1 : 1} de {activeSteps.length}
-            </span>
-          </div>
+        <div className="flex flex-wrap items-center gap-3 shrink-0 self-start md:self-auto">
+          {/* BUTTON EDIDAR PORTAL DO CLIENTE */}
+          {(clientObj || caseObj?.clientId) && (
+            <button
+              type="button"
+              onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${clientObj?.slug || clientObj?.clientId || caseObj?.clientId}`)}
+              className="inline-flex items-center gap-1.5 px-4 py-3 border bg-orange-100/80 hover:bg-orange-200/80 text-orange-800 border-orange-200 hover:border-orange-300 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 shadow-3xs cursor-pointer h-[44px]"
+              title="Editar dados ou portal do cliente"
+            >
+              <ExternalLink size={12} />
+              <span>Editar Portal do Cliente</span>
+            </button>
+          )}
 
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-black text-orange-600 font-mono">
-              {progressPercent}%
-            </span>
-            <div className="w-16 bg-gray-200 h-2 rounded-full overflow-hidden">
-              <div 
-                className="bg-orange-600 h-full rounded-full transition-all duration-300" 
-                style={{ width: `${progressPercent}%` }}
-              />
+          {/* PROGRESS METRIC BLOCK */}
+          <div className="flex items-center gap-4 bg-gray-50/55 border border-gray-100 px-4 py-2 rounded-2xl shrink-0 h-[44px]">
+            <div className="text-left">
+              <span className="text-[10px] md:text-[12px] font-black uppercase text-gray-400 block tracking-widest leading-none">
+                Avanço Administrativo
+              </span>
+              <span className="text-[11px] md:text-xs font-black text-gray-900 block mt-1">
+                Etapa {currentIndex !== -1 ? currentIndex + 1 : 1} de {activeSteps.length}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-black text-orange-600 font-mono">
+                {progressPercent}%
+              </span>
+              <div className="w-16 bg-gray-200 h-2 rounded-full overflow-hidden">
+                <div 
+                  className="bg-orange-600 h-full rounded-full transition-all duration-300" 
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
             </div>
           </div>
         </div>

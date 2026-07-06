@@ -1011,20 +1011,20 @@ export default function ComplianceFluxo() {
         <div className="flex flex-col sm:flex-row sm:justify-between items-center gap-4 pt-6 border-t border-gray-150">
           <button
             type="button"
-            onClick={() => navigate(flowRoutes.protocolo(caseId!))}
+            onClick={() => navigate(flowRoutes.revisao(caseId!))}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-200 hover:border-gray-300 text-gray-600 px-6 py-3.5 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white shadow-2xs"
           >
             <ArrowLeft size={14} />
-            Voltar para Protocolo
+            Voltar para Revisão
           </button>
 
           <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto">
             <button
               type="button"
-              onClick={() => navigate(flowRoutes.relatorioIntegridade(caseId!))}
+              onClick={() => navigate(flowRoutes.protocolo(caseId!))}
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-950 text-white px-7 py-3.5 rounded-xl font-extrabold transition-all text-xs cursor-pointer shadow-xs"
             >
-              <span>Relatório de Integridade</span>
+              <span>Salvar e Avançar</span>
               <ChevronRight size={14} />
             </button>
           </div>

@@ -543,7 +543,7 @@ export default function ProtocoloFluxo() {
       if (action === 'exit') {
         navigate('/boss-giffoni-clientes/fluxo-producao');
       } else if (action === 'advance') {
-        navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/compliance`);
+        navigate(flowRoutes.controladoria(caseId!));
       }
 
       return true;
@@ -690,10 +690,7 @@ export default function ProtocoloFluxo() {
             
             {[
               { id: 1, title: '1. Cadastrar Protocolo', desc: 'Dados do processo / CNJ', icon: FileText },
-              { id: 2, title: '2. Perícia Marcada?', desc: 'Laudos e exames fáticos', icon: Activity },
-              { id: 3, title: '3. Prazo em Aberto?', desc: 'Prazos processuais', icon: Clock },
-              { id: 4, title: '4. Audiência Marcada?', desc: 'Ritos virtuais ou físicos', icon: Calendar },
-              { id: 5, title: '5. Conferir Andamento', desc: 'Certidão recente de trâmite', icon: FileCheck },
+              { id: 2, title: '2. Conferir Andamento', desc: 'Certidão recente de trâmite', icon: FileCheck },
             ].map((sub) => {
               const isActive = activeSubetapa === sub.id;
               
@@ -702,12 +699,6 @@ export default function ProtocoloFluxo() {
               if (sub.id === 1) {
                 isComplete = protocol.clientsList.length > 0 && isCNJValid(protocol.processNumber);
               } else if (sub.id === 2) {
-                isComplete = !protocol.periciaMarked || (protocol.periciaMarked && !!protocol.periciaDate);
-              } else if (sub.id === 3) {
-                isComplete = !protocol.prazoMarked || (protocol.prazoMarked && !!protocol.prazoFatal);
-              } else if (sub.id === 4) {
-                isComplete = !protocol.audienciaMarked || (protocol.audienciaMarked && !!protocol.audienciaDate);
-              } else if (sub.id === 5) {
                 isComplete = !protocol.andamentoConferido || (protocol.andamentoConferido && !!protocol.andamentoResumo);
               }
 
@@ -976,544 +967,16 @@ export default function ProtocoloFluxo() {
               </div>
             )}
 
-            {/* SUBETAPA 2: IF PERÍCIA MARKED */}
+            {/* SUBETAPA 2: RECENT UPDATES / ANDAMENTO */}
             {activeSubetapa === 2 && (
               <div className="border border-gray-150 rounded-3xl p-6 space-y-6 bg-white shadow-3xs animate-in fade-in duration-200">
                 <div className="flex items-center justify-between border-b border-gray-100 pb-4">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 font-bold text-xs">
+                    <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 font-bold text-xs font-sans">
                       02
                     </div>
                     <div>
-                      <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Subetapa 2 — Se possui Perícia Marcada?</h3>
-                      <p className="text-[10.5px] text-gray-400">Informe se o juiz designou perícia, exame fático ou auditoria judicial.</p>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-1.5 border border-gray-200 p-1.5 rounded-2xl bg-gray-50/50">
-                    <button
-                      type="button"
-                      onClick={() => handleChange('periciaMarked', true)}
-                      className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        protocol.periciaMarked ? 'bg-indigo-600 text-white shadow-3xs' : 'text-gray-500 hover:text-gray-900'
-                      }`}
-                    >
-                      Sim
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleChange('periciaMarked', false)}
-                      className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        !protocol.periciaMarked ? 'bg-gray-250 text-gray-800 shadow-3xs' : 'text-gray-500 hover:text-gray-900'
-                      }`}
-                    >
-                      Não
-                    </button>
-                  </div>
-                </div>
-
-                {protocol.periciaMarked ? (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5 animate-in slide-in-from-top-3 duration-200">
-                    <div className="space-y-1.5">
-                      <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400">Dia da Perícia</label>
-                      <input
-                        type="date"
-                        value={protocol.periciaDate}
-                        onChange={(e) => handleChange('periciaDate', e.target.value)}
-                        className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2 text-xs font-medium"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400">Horário</label>
-                      <input
-                        type="time"
-                        value={protocol.periciaTime}
-                        onChange={(e) => handleChange('periciaTime', e.target.value)}
-                        className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2 text-xs font-medium"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400">Perito Responsável</label>
-                      <input
-                        type="text"
-                        value={protocol.periciaPerito}
-                        onChange={(e) => handleChange('periciaPerito', e.target.value)}
-                        placeholder="Expert designado pelo juiz"
-                        className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2 text-xs font-semibold placeholder-gray-300"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5 md:col-span-2">
-                      <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400">Local da Perícia</label>
-                      <input
-                        type="text"
-                        value={protocol.periciaLocal}
-                        onChange={(e) => handleChange('periciaLocal', e.target.value)}
-                        placeholder="Clínica, IML, ou endereço de vistoria"
-                        className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-xs font-semibold placeholder-gray-300"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400">Modalidade de Perícia</label>
-                      <div className="flex gap-2 border border-gray-150 p-1 rounded-xl bg-gray-50/55 h-[38px] items-center">
-                        <button
-                          type="button"
-                          onClick={() => handleChange('periciaType', 'presencial')}
-                          className={`flex-1 text-center text-[11px] font-bold py-1 rounded-lg transition-all cursor-pointer ${
-                            protocol.periciaType === 'presencial' ? 'bg-indigo-600 text-white shadow-3xs' : 'text-gray-500'
-                          }`}
-                        >
-                          Presencial
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleChange('periciaType', 'online')}
-                          className={`flex-1 text-center text-[11px] font-bold py-1 rounded-lg transition-all cursor-pointer ${
-                            protocol.periciaType === 'online' ? 'bg-indigo-600 text-white shadow-3xs' : 'text-gray-500'
-                          }`}
-                        >
-                          Online
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="md:col-span-3 flex items-center gap-3 bg-indigo-50/50 p-3.5 border border-indigo-100 rounded-2xl">
-                      <input
-                        type="checkbox"
-                        id="periciaEscritorioComparecer"
-                        checked={protocol.periciaEscritorioComparecer}
-                        onChange={(e) => handleChange('periciaEscritorioComparecer', e.target.checked)}
-                        className="w-4.5 h-4.5 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer text-indigo-600"
-                      />
-                      <label htmlFor="periciaEscritorioComparecer" className="text-xs text-indigo-900 font-bold select-none cursor-pointer">
-                        O escritório precisa comparecer faticamente para assistir judicialmente o cliente?
-                      </label>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-4 bg-slate-50 border border-slate-150 text-gray-500 rounded-2xl text-xs text-center font-semibold">
-                    Caso não possui perícia designada faticamente nos autos.
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* SUBETAPA 3: IF DEADLINE OPEN */}
-            {activeSubetapa === 3 && (
-              <div className="border border-gray-150 rounded-3xl p-6 space-y-6 bg-white shadow-3xs animate-in fade-in duration-200">
-                <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 font-bold text-xs font-sans">
-                      03
-                    </div>
-                    <div>
-                      <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Subetapa 3 — Se possui prazo em aberto?</h3>
-                      <p className="text-[10.5px] text-gray-400">Insira as obrigações judiciais com dia e hora fatal em aberto.</p>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-1.5 border border-gray-200 p-1.5 rounded-2xl bg-gray-50/50">
-                    <button
-                      type="button"
-                      onClick={() => handleChange('prazoMarked', true)}
-                      className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        protocol.prazoMarked ? 'bg-indigo-600 text-white shadow-3xs' : 'text-gray-500 hover:text-gray-900'
-                      }`}
-                    >
-                      Sim
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleChange('prazoMarked', false)}
-                      className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        !protocol.prazoMarked ? 'bg-gray-250 text-gray-800 shadow-3xs' : 'text-gray-500 hover:text-gray-900'
-                      }`}
-                    >
-                      Não
-                    </button>
-                  </div>
-                </div>
-
-                {protocol.prazoMarked ? (
-                  <div className="space-y-5 animate-in slide-in-from-top-3 duration-200">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-                      <div className="space-y-1.5 md:col-span-2">
-                        <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400">Qual prazo está aberto?</label>
-                        <input
-                          type="text"
-                          value={protocol.prazoQual}
-                          onChange={(e) => handleChange('prazoQual', e.target.value)}
-                          placeholder="Ex: Réplica, manifestação sobre o laudo fático"
-                          className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-xs font-semibold placeholder-gray-300"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="block text-[10px] font-black uppercase tracking-wider text-red-500 font-black">PRAZO FATAL *</label>
-                        <input
-                          type="date"
-                          value={protocol.prazoFatal}
-                          onChange={(e) => handleChange('prazoFatal', e.target.value)}
-                          className="w-full bg-white border border-red-200 text-red-900 focus:border-red-500 focus:ring-1 focus:ring-red-500 rounded-xl px-3.5 py-2 text-xs font-bold"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400">Responsável</label>
-                        <input
-                          type="text"
-                          value={protocol.prazoResponsavel}
-                          onChange={(e) => handleChange('prazoResponsavel', e.target.value)}
-                          placeholder="Dr. Arthur, Mariana..."
-                          className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-xs font-semibold placeholder-gray-300"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-                      <div className="space-y-1.5">
-                        <label className="block text-[10px] font-black uppercase tracking-wider text-indigo-600 font-bold">PRAZO SEGURANÇA *</label>
-                        <input
-                          type="date"
-                          value={protocol.prazoSeguranca}
-                          onChange={(e) => handleChange('prazoSeguranca', e.target.value)}
-                          className="w-full bg-white border border-indigo-200 text-indigo-900 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2 text-xs font-bold"
-                        />
-                      </div>
-
-                      {/* Depends block */}
-                      <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="p-3.5 border border-indigo-100 rounded-2xl bg-indigo-50/20 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-black text-indigo-950 uppercase tracking-wider">Depende de INFO do cliente?</span>
-                            <div className="flex gap-1">
-                              <button
-                                type="button"
-                                onClick={() => handleChange('prazoDependeClienteInfo', true)}
-                                className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase transition-all ${
-                                  protocol.prazoDependeClienteInfo ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border border-gray-200'
-                                }`}
-                              >
-                                Sim
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleChange('prazoDependeClienteInfo', false)}
-                                className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase transition-all ${
-                                  !protocol.prazoDependeClienteInfo ? 'bg-gray-600 text-white' : 'bg-white text-gray-500 border border-gray-200'
-                                }`}
-                              >
-                                Não
-                              </button>
-                            </div>
-                          </div>
-
-                          {protocol.prazoDependeClienteInfo && (
-                            <div className="space-y-1.5 animate-fadeIn">
-                              <input
-                                type="text"
-                                value={protocol.prazoQualInfo}
-                                onChange={(e) => handleChange('prazoQualInfo', e.target.value)}
-                                placeholder="Descreva a informação pendente..."
-                                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-2.5 py-1.5 text-[11px] font-medium"
-                              />
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="p-3.5 border border-purple-100 rounded-2xl bg-purple-50/20 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-black text-purple-950 uppercase tracking-wider">Depende de PROVAS do cliente?</span>
-                            <div className="flex gap-1">
-                              <button
-                                type="button"
-                                className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase transition-all ${
-                                  protocol.prazoDependeClienteProva ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 border border-gray-200'
-                                }`}
-                                onClick={() => handleChange('prazoDependeClienteProva', true)}
-                              >
-                                Sim
-                              </button>
-                              <button
-                                type="button"
-                                className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase transition-all ${
-                                  !protocol.prazoDependeClienteProva ? 'bg-gray-600 text-white' : 'bg-white text-gray-500 border border-gray-200'
-                                }`}
-                                onClick={() => handleChange('prazoDependeClienteProva', false)}
-                              >
-                                Não
-                              </button>
-                            </div>
-                          </div>
-
-                          {protocol.prazoDependeClienteProva && (
-                            <div className="space-y-1.5 animate-fadeIn">
-                              <input
-                                type="text"
-                                value={protocol.prazoQualProva}
-                                onChange={(e) => handleChange('prazoQualProva', e.target.value)}
-                                placeholder="Descreva quais documentos faltam..."
-                                className="w-full bg-white border border-gray-200 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 rounded-lg px-2.5 py-1.5 text-[11px] font-medium"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* VER PRAZO CADASTRADO PREVIEW */}
-                    {protocol.prazoFatal && (
-                      <div className="border border-indigo-150 bg-indigo-50/20 p-5 rounded-2xl space-y-3 animate-in slide-in-from-top-3 duration-200">
-                        <h4 className="text-xs font-black text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
-                          <CheckCircle2 size={14} className="text-indigo-600 shrink-0" />
-                          Visualizar Prazo Cadastrado
-                        </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-semibold text-gray-700">
-                          <div>
-                            <span className="text-[9px] text-gray-400 block font-black uppercase">Obrigação Judicial / Descrição</span>
-                            <span className="text-gray-900 font-bold">{protocol.prazoQual || "Prazo geral / Manifestação fática"}</span>
-                          </div>
-                          <div>
-                            <span className="text-[9px] text-gray-400 block font-black uppercase">Responsável Designado</span>
-                            <span className="text-gray-900 font-bold">{protocol.prazoResponsavel || "Não designado"}</span>
-                          </div>
-                          <div className="p-3 bg-red-50 border border-red-100 rounded-xl">
-                            <span className="text-[9px] text-red-600 block font-black uppercase">Data Limite Fatal</span>
-                            <span className="text-red-900 font-mono font-black text-[13px]">{protocol.prazoFatal}</span>
-                          </div>
-                          <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl">
-                            <span className="text-[9px] text-indigo-600 block font-black uppercase">Filtro de Segurança</span>
-                            <span className="text-indigo-900 font-mono font-black text-[13px]">{protocol.prazoSeguranca || "Sem margem de segurança"}</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="p-4 bg-slate-50 border border-slate-150 text-gray-500 rounded-2xl text-xs text-center font-semibold">
-                    Caso não possui prazos fatais abertos nos autos judicialmente.
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* SUBETAPA 4: IF AUDIENCIA MARKED */}
-            {activeSubetapa === 4 && (
-              <div className="border border-gray-150 rounded-3xl p-6 space-y-6 bg-white shadow-3xs animate-in fade-in duration-200">
-                <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 font-bold text-xs">
-                      04
-                    </div>
-                    <div>
-                      <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Subetapa 4 — Se possui audiência marcada?</h3>
-                      <p className="text-[10.5px] text-gray-400">Insira a pauta judicial e rito em que o tribunal designou audiência.</p>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-1.5 border border-gray-200 p-1.5 rounded-2xl bg-gray-50/50">
-                    <button
-                      type="button"
-                      onClick={() => handleChange('audienciaMarked', true)}
-                      className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        protocol.audienciaMarked ? 'bg-indigo-600 text-white shadow-3xs' : 'text-gray-500 hover:text-gray-900'
-                      }`}
-                    >
-                      Sim
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleChange('audienciaMarked', false)}
-                      className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        !protocol.audienciaMarked ? 'bg-gray-250 text-gray-800 shadow-3xs' : 'text-gray-500 hover:text-gray-900'
-                      }`}
-                    >
-                      Não
-                    </button>
-                  </div>
-                </div>
-
-                {protocol.audienciaMarked ? (
-                  <div className="space-y-5 animate-in slide-in-from-top-3 duration-200">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-                      <div className="space-y-1.5">
-                        <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400">Dia da Audiência</label>
-                        <input
-                          type="date"
-                          value={protocol.audienciaDate}
-                          onChange={(e) => handleChange('audienciaDate', e.target.value)}
-                          className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2 text-xs font-medium"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400">Horário da Sessão</label>
-                        <input
-                          type="time"
-                          value={protocol.audienciaTime}
-                          onChange={(e) => handleChange('audienciaTime', e.target.value)}
-                          className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2 text-xs font-medium"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400">Vara / Juízo Designado</label>
-                        <input
-                          type="text"
-                          value={protocol.audienciaJuizo}
-                          onChange={(e) => handleChange('audienciaJuizo', e.target.value)}
-                          placeholder="Ex: Vara de Família de Osasco"
-                          className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-xs font-semibold placeholder-gray-300"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5 md:col-span-2">
-                        <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400">
-                          {protocol.audienciaType === 'presencial' ? 'Endereço Completo da Audiência *' : 'Local ou Fórum'}
-                        </label>
-                        <input
-                          type="text"
-                          value={protocol.audienciaLocal}
-                          onChange={(e) => handleChange('audienciaLocal', e.target.value)}
-                          placeholder={protocol.audienciaType === 'presencial' ? 'Informe o endereço físico completo da audiência' : 'Rua fática do Fórum ou Tribunal'}
-                          className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2.5 text-xs font-semibold placeholder-gray-300"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                      <div className="space-y-1.5">
-                        <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400">Modalidade</label>
-                        <div className="flex gap-2 border border-gray-150 p-1 rounded-xl bg-gray-50/55 h-[38px] items-center">
-                          <button
-                            type="button"
-                            onClick={() => handleChange('audienciaType', 'presencial')}
-                            className={`flex-1 text-center text-[11px] font-bold py-1 rounded-lg transition-all cursor-pointer ${
-                              protocol.audienciaType === 'presencial' ? 'bg-indigo-600 text-white shadow-3xs' : 'text-gray-500'
-                            }`}
-                          >
-                            Presencial
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleChange('audienciaType', 'online')}
-                            className={`flex-1 text-center text-[11px] font-bold py-1 rounded-lg transition-all cursor-pointer ${
-                              protocol.audienciaType === 'online' ? 'bg-indigo-600 text-white shadow-3xs' : 'text-gray-500'
-                            }`}
-                          >
-                            Online
-                          </button>
-                        </div>
-                      </div>
-
-                      {protocol.audienciaType === 'online' && (
-                        <>
-                          <div className="space-y-1.5">
-                            <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400">Tipo de Sistema</label>
-                            <select
-                              value={protocol.audienciaPlatformType}
-                              onChange={(e) => handleChange('audienciaPlatformType', e.target.value)}
-                              className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2 text-xs font-bold h-[38px]"
-                            >
-                              <option value="MEET">MEET</option>
-                              <option value="Zoom">Zoom</option>
-                              <option value="Microsoft TEAMS">Microsoft TEAMS</option>
-                              <option value="Cisco Webex">Cisco Webex</option>
-                              <option value="outro">outro (blancket)</option>
-                            </select>
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <label className="block text-[10px] font-black uppercase tracking-wider text-gray-400">Link de Conexão Virtual</label>
-                            <input
-                              type="text"
-                              value={protocol.audienciaLink}
-                              onChange={(e) => handleChange('audienciaLink', e.target.value)}
-                              placeholder="https://..."
-                              className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-3.5 py-2 text-xs font-mono"
-                            />
-                          </div>
-                        </>
-                      )}
-
-                      <div className="md:col-span-3 flex items-center gap-3 bg-emerald-50/50 p-3.5 border border-emerald-100 rounded-2xl">
-                        <input
-                          type="checkbox"
-                          id="audienciaClienteAvisado"
-                          checked={protocol.audienciaClienteAvisado}
-                          onChange={(e) => handleChange('audienciaClienteAvisado', e.target.checked)}
-                          className="w-4.5 h-4.5 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer text-indigo-600"
-                        />
-                        <label htmlFor="audienciaClienteAvisado" className="text-xs text-emerald-950 font-bold select-none cursor-pointer">
-                          O cliente foi devidamente avisado faticamente de todos os detalhes desta audiência?
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* VER AUDIÊNCIA MARCADA PREVIEW */}
-                    {protocol.audienciaDate && (
-                      <div className="border border-violet-150 bg-violet-50/20 p-5 rounded-2xl space-y-3 animate-in slide-in-from-top-3 duration-200">
-                        <h4 className="text-xs font-black text-violet-950 uppercase tracking-wider flex items-center gap-1.5">
-                          <CheckCircle2 size={14} className="text-violet-600 shrink-0" />
-                          Visualizar Audiência Marcada
-                        </h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-semibold text-gray-700">
-                          <div>
-                            <span className="text-[9px] text-gray-400 block font-black uppercase">Juízo / Vara Designado</span>
-                            <span className="text-gray-900 font-bold">{protocol.audienciaJuizo || "Juízo do caso"}</span>
-                          </div>
-                          <div>
-                            <span className="text-[9px] text-gray-400 block font-black uppercase">Data e Horário</span>
-                            <span className="text-gray-900 font-black text-violet-950">{protocol.audienciaDate} às {protocol.audienciaTime || '00:00'}</span>
-                          </div>
-                          <div className={protocol.audienciaType === 'presencial' ? "sm:col-span-2 p-3 bg-violet-50 border border-violet-100 rounded-xl" : "p-3 bg-violet-50 border border-violet-100 rounded-xl"}>
-                            <span className="text-[9px] text-violet-600 block font-black uppercase">Modalidade / {protocol.audienciaType === 'presencial' ? 'Endereço Físico' : 'Sistema'}</span>
-                            <span className="text-violet-900 font-bold">
-                              {protocol.audienciaType === 'presencial' 
-                                ? `Presencial - ${protocol.audienciaLocal || 'Não informado'}` 
-                                : `Online - Plataforma: ${protocol.audienciaPlatformType || 'Sem plataforma'}`}
-                            </span>
-                          </div>
-                          {protocol.audienciaType === 'online' && (
-                            <div className="p-3 bg-white border border-gray-150 rounded-xl flex items-center justify-between">
-                              <div>
-                                <span className="text-[9px] text-gray-400 block font-black uppercase">Sala de Videoconferência</span>
-                                {protocol.audienciaLink ? (
-                                  <a href={protocol.audienciaLink} target="_blank" rel="noreferrer" className="text-indigo-650 hover:underline inline-flex items-center gap-1 font-bold">
-                                    <span>Acessar Sala Virtual</span>
-                                    <ExternalLink size={12} className="text-indigo-650" />
-                                  </a>
-                                ) : (
-                                  <span className="text-gray-400 italic">Link não inserido</span>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="p-4 bg-slate-50 border border-slate-150 text-gray-500 rounded-2xl text-xs text-center font-semibold">
-                    Caso não possui audiência designada faticamente nos autos.
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* SUBETAPA 5: RECENT UPDATES / ANDAMENTO */}
-            {activeSubetapa === 5 && (
-              <div className="border border-gray-150 rounded-3xl p-6 space-y-6 bg-white shadow-3xs animate-in fade-in duration-200">
-                <div className="flex items-center justify-between border-b border-gray-100 pb-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 font-bold text-xs font-sans">
-                      05
-                    </div>
-                    <div>
-                      <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Subetapa 5 — Conferir Andamento Processual</h3>
+                      <h3 className="text-xs font-black text-gray-900 uppercase tracking-widest">Subetapa 2 — Conferir Andamento Processual</h3>
                       <p className="text-[10.5px] text-gray-400">Verifique nos portais judiciais se houve nova publicação ou andamento relevante.</p>
                     </div>
                   </div>
@@ -1571,13 +1034,13 @@ export default function ProtocoloFluxo() {
               </button>
 
               <span className="text-[10px] font-black text-gray-400 uppercase font-mono">
-                {activeSubetapa} / 5
+                {activeSubetapa} / 2
               </span>
 
               <button
                 type="button"
-                disabled={activeSubetapa === 5}
-                onClick={() => setActiveSubetapa((prev) => Math.min(5, prev + 1))}
+                disabled={activeSubetapa === 2}
+                onClick={() => setActiveSubetapa((prev) => Math.min(2, prev + 1))}
                 className="inline-flex items-center gap-1.5 text-xs font-black text-slate-800 hover:text-slate-950 transition-colors disabled:opacity-40 cursor-pointer"
               >
                 Próxima Subetapa
@@ -1591,11 +1054,11 @@ export default function ProtocoloFluxo() {
         <div className="flex flex-col sm:flex-row sm:justify-between items-center gap-4 pt-6 border-t border-gray-150">
           <button
             type="button"
-            onClick={() => navigate(flowRoutes.revisao(caseId!))}
+            onClick={() => navigate(flowRoutes.compliance(caseId!))}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-200 hover:border-gray-300 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white"
           >
             <ArrowLeft size={14} />
-            Voltar para Revisão
+            Voltar para Compliance
           </button>
 
           <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto">
