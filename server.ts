@@ -1685,8 +1685,23 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
     }
     addLog("DOCUMENT_COPY_SUCCESS", { googleDocsId });
   } catch (errCopy: any) {
-    addLog("DOCUMENT_COPY_FAILED", { error: errCopy.message });
+    const rawErrorData = errCopy.response?.data;
+    console.error("[GoogleDocsEngine] Detailed Google Drive API Error on copying template:", {
+      message: errCopy.message,
+      status: errCopy.response?.status,
+      data: rawErrorData
+    });
+
+    addLog("DOCUMENT_COPY_FAILED", { 
+      error: errCopy.message,
+      status: errCopy.response?.status,
+      googleApiError: rawErrorData?.error || rawErrorData || null
+    });
+
     let originalErrorMsg = errCopy.message || "";
+    if (rawErrorData?.error?.message) {
+      originalErrorMsg = `${originalErrorMsg} (Detalhes Google API: ${rawErrorData.error.message})`;
+    }
     let finalErrorDetail = originalErrorMsg;
     
     const isDriveApiDisabled = originalErrorMsg.includes("599536317399") ||
@@ -1823,12 +1838,28 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
 
       addLog("TEMPLATE_VALIDATED_AS_OFFICIAL", { status: "OK" });
     } catch (errCheck: any) {
-      addLog("TEMPLATE_VALIDATION_FAILED", { error: errCheck.message });
+      const rawErrorData = errCheck.response?.data;
+      console.error("[GoogleDocsEngine] Detailed Google Docs API Error on template validation:", {
+        message: errCheck.message,
+        status: errCheck.response?.status,
+        data: rawErrorData
+      });
+
+      addLog("TEMPLATE_VALIDATION_FAILED", { 
+        error: errCheck.message,
+        status: errCheck.response?.status,
+        googleApiError: rawErrorData?.error || rawErrorData || null
+      });
+
+      const detailedMsg = rawErrorData?.error?.message 
+        ? `${errCheck.message} (Detalhes Google API: ${rawErrorData.error.message})`
+        : errCheck.message;
+
       return res.status(500).json({
         success: false,
         documentType,
         errorCode: "PROCURACAO_PF_TEMPLATE_MISMATCH",
-        errorMessage: `Não foi possível validar o template copiado: ${errCheck.message}`
+        errorMessage: `Não foi possível validar o template copiado: ${detailedMsg}`
       });
     }
   }
@@ -1877,12 +1908,28 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
     
     addLog("PLACEHOLDER_REPLACEMENT_SUCCESS");
   } catch (errRepl: any) {
-    addLog("PLACEHOLDER_REPLACEMENT_FAILED", { error: errRepl.message });
+    const rawErrorData = errRepl.response?.data;
+    console.error("[GoogleDocsEngine] Detailed Google Docs API Error on placeholder replacement:", {
+      message: errRepl.message,
+      status: errRepl.response?.status,
+      data: rawErrorData
+    });
+
+    addLog("PLACEHOLDER_REPLACEMENT_FAILED", { 
+      error: errRepl.message,
+      status: errRepl.response?.status,
+      googleApiError: rawErrorData?.error || rawErrorData || null
+    });
+
+    const detailedMsg = rawErrorData?.error?.message 
+      ? `${errRepl.message} (Detalhes Google API: ${rawErrorData.error.message})`
+      : errRepl.message;
+
     return res.status(500).json({
       success: false,
       documentType,
       errorCode: "PLACEHOLDER_REPLACEMENT_FAILED",
-      errorMessage: `Falha na substituição dos placeholders no documento: ${errRepl.message}`,
+      errorMessage: `Falha na substituição dos placeholders no documento: ${detailedMsg}`,
     });
   }
 

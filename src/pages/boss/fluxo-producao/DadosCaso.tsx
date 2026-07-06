@@ -213,6 +213,7 @@ export default function DadosCaso() {
   const [primeiroAtendimentoStatus, setPrimeiroAtendimentoStatus] = useState<'aguardando' | 'criado' | 'falha'>('aguardando');
   const [primeiroAtendimentoGoogleDocsUrl, setPrimeiroAtendimentoGoogleDocsUrl] = useState('');
   const [primeiroAtendimentoLogFalha, setPrimeiroAtendimentoLogFalha] = useState('');
+  const [primeiroAtendimentoIsSimulated, setPrimeiroAtendimentoIsSimulated] = useState<boolean>(false);
   const [forceNewVersion, setForceNewVersion] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -354,6 +355,7 @@ export default function DadosCaso() {
         setPrimeiroAtendimentoStatus(data.primeiroAtendimentoStatus || 'aguardando');
         setPrimeiroAtendimentoGoogleDocsUrl(data.primeiroAtendimentoGoogleDocsUrl || '');
         setPrimeiroAtendimentoLogFalha(data.primeiroAtendimentoLogFalha || '');
+        setPrimeiroAtendimentoIsSimulated(data.primeiroAtendimentoIsSimulated === true);
 
         // Reconcile and migrate narrative blocks safely (Solution 1)
         const loadedEntrevista = data.entrevistaPadrao || '';
@@ -845,6 +847,7 @@ export default function DadosCaso() {
 
       const googleDocsId = responseData.googleDocsId;
       const googleDocsUrl = responseData.googleDocsUrl;
+      const isSimulated = responseData.isSimulated === true;
 
       // VALIDAR URL DO GOOGLE DOCS REAL
       if (!googleDocsUrl || !googleDocsUrl.startsWith("https://docs.google.com/document/d/")) {
@@ -853,9 +856,12 @@ export default function DadosCaso() {
 
       setPrimeiroAtendimentoStatus('criado');
       setPrimeiroAtendimentoGoogleDocsUrl(googleDocsUrl);
+      setPrimeiroAtendimentoIsSimulated(isSimulated);
       setPrimeiroAtendimentoLogFalha('');
       setForceNewVersion(false);
-      setSuccess('Comando de automação disparado com sucesso! Link gerado abaixo.');
+      setSuccess(isSimulated 
+        ? 'Comando executado! Documento gerado em MODO DE SIMULAÇÃO (Sandbox).' 
+        : 'Comando de automação disparado com sucesso! Link gerado abaixo.');
 
       // Update Case in Firestore
       const caseDocRef = doc(db, 'cases', targetCaseId);
@@ -865,6 +871,7 @@ export default function DadosCaso() {
         primeiroAtendimentoUrl: googleDocsUrl,
         primeiroAtendimentoGoogleDocsId: googleDocsId,
         primeiroAtendimentoGoogleDocsUrl: googleDocsUrl,
+        primeiroAtendimentoIsSimulated: isSimulated,
         primeiroAtendimentoGeneratedAt: new Date().toISOString(),
         primeiroAtendimentoDestinationFolderId: googleDriveClientFolderId,
         primeiroAtendimentoDestinationFolderUrl: googleDriveClientFolderUrl,
@@ -880,17 +887,20 @@ export default function DadosCaso() {
         templateId: officialTemplateId,
         googleDocsId,
         googleDocsUrl,
+        isSimulated,
         destinationFolderId: googleDriveClientFolderId,
         destinationFolderUrl: googleDriveClientFolderUrl,
         status: "success",
         generatedAt: new Date().toISOString(),
-        generatedBy: "Portal BOSS Central Interna (Stateless)",
+        generatedBy: isSimulated ? "Portal BOSS Central Interna (Simulado)" : "Portal BOSS Central Interna (Stateless)",
         errorCode: null,
         errorMessage: null,
         logs: [
           "1ST_PF_FLOW_INITIATED: Fluxo do Primeiro Atendimento PF iniciado.",
           `1ST_PF_TEMPLATE_ID: Configurado para o template ID oficial ${officialTemplateId}.`,
-          `1ST_PF_GEN_SUCCESS: Sucesso na geração do documento ID: ${googleDocsId}`
+          isSimulated 
+            ? `1ST_PF_GEN_SIMULATED: Documento gerado no MODO SIMULADO devido a restrições de API Drive.`
+            : `1ST_PF_GEN_SUCCESS: Sucesso na geração real do documento ID: ${googleDocsId}`
         ]
       });
 
@@ -1416,6 +1426,21 @@ export default function DadosCaso() {
                         </p>
                       </div>
                     </div>
+
+                    {primeiroAtendimentoIsSimulated && (
+                      <div className="p-4 bg-amber-50 border border-amber-250 rounded-xl text-amber-950 text-xs flex flex-col gap-2 font-semibold">
+                        <div className="flex items-center gap-1.5 text-amber-800 font-bold">
+                          <AlertCircle size={15} className="text-amber-600 shrink-0" />
+                          <span className="text-[11px] font-black uppercase tracking-wider">Modo de Simulação Ativo (Sandbox)</span>
+                        </div>
+                        <p className="text-[11px] text-amber-900 leading-normal font-sans font-medium">
+                          O arquivo acima foi gerado como rascunho de alta fidelidade porque o Google Drive corporativo está operando em sandbox ou a Google Drive API está inativa no projeto atual (599536317399). O arquivo não foi criado fisicamente na sua pasta real de destino.
+                        </p>
+                        <div className="border-t border-amber-200/50 pt-2 text-[10px] text-amber-800/80 font-semibold font-sans">
+                          Para gravação física real, configure as chaves da sua Conta de Serviço (Service Account) na aba <strong>Integrações &rarr; Central Google Docs</strong> e habilite a Google Drive API.
+                        </div>
+                      </div>
+                    )}
                     
                     <div className="flex flex-wrap gap-2.5 pt-1.5">
                       <a
