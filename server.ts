@@ -5390,6 +5390,119 @@ app.post("/api/todoist/create-comment", async (req: any, res: any) => {
   }
 });
 
+function sha256(ascii: string): string {
+  function rightRotate(value: number, amount: number) {
+    return (value >>> amount) | (value << (32 - amount));
+  }
+  let i, j;
+  let result = '';
+  const words: number[] = [];
+  const asciiLength = ascii.length * 8;
+  let hash = [
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+  ];
+  const k = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+  ];
+  let asciiBitLength = ascii.length * 8;
+  const wordsCount = ((asciiBitLength + 64) >>> 9 << 4) + 16;
+  for (i = 0; i < wordsCount; i++) words[i] = 0;
+  for (i = 0; i < ascii.length; i++) {
+    words[i >>> 2] |= (ascii.charCodeAt(i) & 0xff) << (24 - (i % 4) * 8);
+  }
+  words[ascii.length >>> 2] |= 0x80 << (24 - (ascii.length % 4) * 8);
+  words[wordsCount - 1] = asciiBitLength;
+  for (i = 0; i < wordsCount; i += 16) {
+    const w = words.slice(i, i + 16);
+    const oldHash = hash.slice(0);
+    for (j = 0; j < 64; j++) {
+      if (j >= 16) {
+        const w15 = w[j - 15], w2 = w[j - 2], w16 = w[j - 16], w7 = w[j - 7];
+        const s0 = rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15 >>> 3);
+        const s1 = rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2 >>> 10);
+        w[j] = (w16 + s0 + w7 + s1) | 0;
+      }
+      const h = hash;
+      const s0 = rightRotate(h[0], 2) ^ rightRotate(h[0], 13) ^ rightRotate(h[0], 22);
+      const maj = (h[0] & h[1]) ^ (h[0] & h[2]) ^ (h[1] & h[2]);
+      const t2 = s0 + maj;
+      const s1 = rightRotate(h[4], 6) ^ rightRotate(h[4], 11) ^ rightRotate(h[4], 25);
+      const ch = (h[4] & h[5]) ^ (~h[4] & h[6]);
+      const t1 = h[7] + s1 + ch + k[j] + w[j];
+      hash = [(t1 + t2) | 0, h[0], h[1], h[2], (h[3] + t1) | 0, h[4], h[5], h[6]];
+    }
+    for (j = 0; j < 8; j++) {
+      hash[j] = (hash[j] + oldHash[j]) | 0;
+    }
+  }
+  for (i = 0; i < 8; i++) {
+    const word = hash[i];
+    const hex = (word >>> 0).toString(16);
+    result += '00000000'.substring(hex.length) + hex;
+  }
+  return result;
+}
+
+function sanitizeTodoistPlainText(value: string): string {
+  if (!value) return "";
+  let text = value.replace(/&nbsp;/gi, " ").replace(/\u00A0/g, " ");
+  text = text.replace(/<[^>]*>/g, " ");
+  text = text.replace(/&[a-z0-9#]+;/gi, " ");
+  text = text.replace(/\s+/g, " ").trim();
+
+  const regex = /a\s+ação\s+indenizatória\s+é\s+fatídica/gi;
+  if (regex.test(text)) {
+    text = text.replace(regex, "");
+    text = text.replace(/\s+/g, " ").trim();
+  }
+  const regexNoAccents = /a\s+acao\s+indenizatoria\s+e\s+fatidica/gi;
+  if (regexNoAccents.test(text)) {
+    text = text.replace(regexNoAccents, "");
+    text = text.replace(/\s+/g, " ").trim();
+  }
+  const regexShort = /ação\s+indenizatória\s+é\s+fatídica/gi;
+  if (regexShort.test(text)) {
+    text = text.replace(regexShort, "");
+    text = text.replace(/\s+/g, " ").trim();
+  }
+  const regexShortNoAccents = /acao\s+indenizatoria\s+e\s+fatidica/gi;
+  if (regexShortNoAccents.test(text)) {
+    text = text.replace(regexShortNoAccents, "");
+    text = text.replace(/\s+/g, " ").trim();
+  }
+  return text;
+}
+
+function normalizeTodoistTaskForDuplicateCheck(value: string): string {
+  const sanitized = sanitizeTodoistPlainText(value);
+  let text = sanitized.toLowerCase();
+  text = text.replace(/[\r\n\t]+/g, " ");
+  text = text.replace(/\s+/g, " ");
+  return text.trim();
+}
+
+function buildTodoistTaskFingerprint(projectId: string, content: string): string {
+  const normalizedContent = normalizeTodoistTaskForDuplicateCheck(content);
+  const fingerprintSource = `${projectId}::${normalizedContent}`;
+  return sha256(fingerprintSource);
+}
+
+function isLegacyHtmlArtifact(value: string): boolean {
+  if (!value) return false;
+  const normalized = sanitizeTodoistPlainText(value).toLowerCase();
+  return normalized.includes("a ação indenizatória é fatídica") ||
+         normalized.includes("acao indenizatoria e fatidica") ||
+         value.toLowerCase().includes("a ação indenizatória é fatídica") ||
+         value.toLowerCase().includes("ação indenizatória é fatídica");
+}
+
 const TODOIST_API_BASE_URL = "https://api.todoist.com/rest/v2";
 
 // POST /api/todoist/create-case-task
@@ -5464,20 +5577,10 @@ app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
       previousTodoistTaskUrl,
       isDuplicateCreationAttempt,
       parentId,
-      parent_id
+      parent_id,
+      taskFingerprint,
+      normalizedContent
     } = req.body || {};
-
-    if (isDuplicateCreationAttempt) {
-      addLog(
-        "warning",
-        "BACKEND_DUPLICATE_CREATION_ACCEPTED",
-        "Backend recebeu tentativa confirmada de criação de nova tarefa para caso que já possuía tarefa anterior.",
-        {
-          previousTodoistTaskId,
-          previousTodoistTaskUrl
-        }
-      );
-    }
 
     if (!caseId) {
       return fail(400, "TODOIST_CASE_ID_MISSING", "caseId é obrigatório.");
@@ -5487,7 +5590,58 @@ app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
       return fail(400, "TODOIST_CONTENT_MISSING", "O conteúdo da tarefa é obrigatório.");
     }
 
-    const contentText = String(content).trim();
+    // 1. Exact Duplicate Verification on Backend
+    const cleanProjectId = projectId || "__TODOIST_INBOX__";
+    const cleanContent = sanitizeTodoistPlainText(content);
+    const resolvedFingerprint = taskFingerprint || buildTodoistTaskFingerprint(cleanProjectId, cleanContent);
+
+    const caseSnap = await dbAdmin.collection("cases").doc(caseId).get();
+    const caseData = caseSnap.exists ? caseSnap.data() : null;
+    const history = caseData && Array.isArray(caseData.todoistTaskHistory) ? caseData.todoistTaskHistory : [];
+    
+    const verifiedHistory = history.filter((entry: any) => entry.verified === true);
+    const exactDuplicate = verifiedHistory.find((entry: any) => 
+      entry.projectId === cleanProjectId && 
+      entry.fingerprint === resolvedFingerprint
+    );
+
+    if (exactDuplicate) {
+      addLog("warning", "TODOIST_EXACT_DUPLICATE_BLOCKED", "Tentativa de criação de tarefa idêntica bloqueada no backend.", {
+        projectId: cleanProjectId,
+        fingerprint: resolvedFingerprint,
+        existingTaskId: exactDuplicate.todoistTaskId
+      });
+      await appendTodoistLogs(caseId, logs).catch(() => {});
+      return res.status(409).json({
+        success: false,
+        verified: false,
+        outcome: "exact_duplicate_blocked",
+        errorCode: "TODOIST_EXACT_DUPLICATE_BLOCKED",
+        errorMessage: "Já existe uma tarefa idêntica no mesmo projeto do Todoist.",
+        existingTask: {
+          todoistTaskId: exactDuplicate.todoistTaskId,
+          todoistTaskUrl: exactDuplicate.todoistTaskUrl,
+          content: exactDuplicate.content,
+          projectId: exactDuplicate.projectId,
+          projectName: exactDuplicate.projectName,
+          createdAt: exactDuplicate.createdAt
+        },
+        logs
+      });
+    }
+
+    // 2. HTML Legacy Artifact Removal
+    let isLegacyDetected = false;
+    if (isLegacyHtmlArtifact(content || "") || isLegacyHtmlArtifact(description || "")) {
+      isLegacyDetected = true;
+    }
+
+    const contentText = sanitizeTodoistPlainText(content || "");
+    const descriptionText = sanitizeTodoistPlainText(description || "");
+
+    if (isLegacyDetected) {
+      addLog("warning", "LEGACY_HTML_ARTIFACT_REMOVED", "Um trecho HTML inválido foi removido da descrição antes do envio ao Todoist.");
+    }
 
     const forbiddenPlaceholders = [
       "[Assunto]",
@@ -5509,16 +5663,16 @@ app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
 
     addLog("success", "BACKEND_PAYLOAD_VALIDATED", "Payload validado com sucesso antes do envio ao Todoist.", {
       caseId,
-      projectId,
+      projectId: cleanProjectId,
       projectName,
       content: contentText
     });
 
-    const isInbox = projectId === "__TODOIST_INBOX__" || projectId === "**TODOIST_INBOX**" || !projectId;
+    const isInbox = cleanProjectId === "__TODOIST_INBOX__" || cleanProjectId === "**TODOIST_INBOX**" || !projectId;
 
     const todoistPayload: any = {
       content: contentText,
-      description: description || ""
+      description: descriptionText
     };
 
     if (dueDate && String(dueDate).trim()) {
@@ -5552,7 +5706,7 @@ app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
     addLog("info", "TODOIST_CREATE_STARTED", "Enviando tarefa para a API real do Todoist v1.", {
       endpoint: `${TODOIST_API_BASE_URL}/tasks`,
       isInbox,
-      hasProjectId: !!todoistPayload.project_id,
+      hasProjectId: !isInbox,
       todoistPayload
     });
 
@@ -5660,10 +5814,15 @@ app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
       todoistTaskId
     });
 
-    // Criar comentário: "Tarefa criada automaticamente através da Giffoni Connect" ou comentário customizado via commentText
+    // 3. Create Mandatory Comment
+    const mandatoryComment = "☄️Tarefa Criada automaticamente através da Giffoni Connect☄️";
+    addLog("info", "TODOIST_INITIAL_COMMENT_CREATE_STARTED", "Iniciada a criação do comentário automático obrigatório.");
+    
+    let commentVerified = false;
+    let todoistCommentId = "";
+    let commentErrorMsg = "";
+
     try {
-      addLog("info", "TODOIST_COMMENT_STARTED", "Adicionando comentário institucional na tarefa do Todoist.");
-      const commentContent = req.body?.commentText || "Tarefa criada automaticamente através da Giffoni Connect";
       const commentRes = await fetch(`${TODOIST_API_BASE_URL}/comments`, {
         method: "POST",
         headers: {
@@ -5673,34 +5832,77 @@ app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
         },
         body: JSON.stringify({
           task_id: todoistTaskId,
-          content: commentContent
+          content: mandatoryComment
         })
       });
       const commentRaw = await commentRes.text();
-      addLog("success", "TODOIST_COMMENT_CREATED", "Comentário adicionado com sucesso no Todoist.", {
-        httpStatus: commentRes.status,
-        rawPreview: commentRaw.slice(0, 150)
-      });
+      if (commentRes.ok) {
+        const commentData = JSON.parse(commentRaw);
+        todoistCommentId = String(commentData.id);
+        commentVerified = true;
+        addLog("success", "TODOIST_INITIAL_COMMENT_CREATED", "Comentário automático obrigatório criado e confirmado na tarefa.", {
+          todoistCommentId,
+          content: mandatoryComment
+        });
+      } else {
+        commentErrorMsg = `API Error: ${commentRaw}`;
+        addLog("error", "TODOIST_INITIAL_COMMENT_FAILED", "A tarefa foi criada, mas o comentário automático obrigatório não pôde ser confirmado.", {
+          response: commentRaw
+        });
+      }
     } catch (commentErr: any) {
-      addLog("warning", "TODOIST_COMMENT_FAILED", "Falha ao adicionar comentário na tarefa do Todoist.", {
-        errorMessage: commentErr.message || String(commentErr)
+      commentErrorMsg = commentErr.message || String(commentErr);
+      addLog("error", "TODOIST_INITIAL_COMMENT_FAILED", "A tarefa foi criada, mas o comentário automático obrigatório não pôde ser confirmado.", {
+        errorMessage: commentErrorMsg
       });
     }
 
     const now = new Date().toISOString();
 
-    const firestorePayload = {
-      todoistAutomationStatus: "criado",
+    const newHistoryEntry = {
       todoistTaskId,
       todoistTaskUrl,
-      todoistTaskLogFalha: "",
-      todoistProjectId: projectId || "__TODOIST_INBOX__",
+      projectId: cleanProjectId,
+      projectName: projectName || "Caixa de Entrada (Inbox)",
+      content: contentText,
+      normalizedContent: normalizeTodoistTaskForDuplicateCheck(contentText),
+      fingerprint: resolvedFingerprint,
+      verified: true,
+      createdAt: now
+    };
+
+    const updatedHistory = [...history, newHistoryEntry];
+
+    const firestorePayload: any = {
+      todoistTaskId,
+      todoistTaskUrl,
+      todoistLastCreatedTaskId: todoistTaskId,
+      todoistLastCreatedTaskUrl: todoistTaskUrl,
+      todoistLastCreatedAt: now,
+      todoistLastCreatedFingerprint: resolvedFingerprint,
+      todoistTaskHistory: updatedHistory,
+      todoistUpdatedAt: now,
+      todoistProjectId: cleanProjectId,
       todoistProjectName: projectName || "Caixa de Entrada (Inbox)",
       todoistFormula: contentText,
-      todoistCreatedAt: now,
-      todoistUpdatedAt: now,
+      todoistDescription: descriptionText,
       updatedAt: now
     };
+
+    if (commentVerified) {
+      firestorePayload.todoistInitialComment = mandatoryComment;
+      firestorePayload.todoistInitialCommentId = todoistCommentId;
+      firestorePayload.todoistInitialCommentStatus = "criado";
+      firestorePayload.todoistInitialCommentCreatedAt = now;
+      firestorePayload.todoistAutomationStatus = "criado";
+      firestorePayload.todoistTaskLogFalha = "";
+    } else {
+      firestorePayload.todoistInitialCommentStatus = "falha";
+      firestorePayload.todoistInitialCommentErrorCode = "TODOIST_INITIAL_COMMENT_FAILED";
+      firestorePayload.todoistInitialCommentErrorMessage = commentErrorMsg;
+      firestorePayload.todoistAutomationStatus = "criado";
+      firestorePayload.todoistTaskLogFalha = "Comentário obrigatório pendente: " + commentErrorMsg;
+    }
 
     await saveTodoistStatusToFirestore(caseId, firestorePayload).catch((err: any) => {
       addLog("warning", "FIRESTORE_UPDATE_WARNING", "Tarefa criada no Todoist, mas houve falha ao salvar no Firestore.", {
@@ -5713,17 +5915,31 @@ app.post("/api/todoist/create-case-task", async (req: any, res: any) => {
 
     await appendTodoistLogs(caseId, logs).catch(() => {});
 
-    return res.status(200).json({
-      success: true,
-      verified: true,
-      todoistTaskId,
-      todoistTaskUrl,
-      todoistProjectId: "__TODOIST_INBOX__",
-      todoistProjectName: "Caixa de Entrada (Inbox)",
-      rawTodoistTask: createdTask,
-      verifiedTodoistTask: verifiedTask,
-      logs
-    });
+    if (commentVerified) {
+      return res.status(200).json({
+        success: true,
+        verified: true,
+        commentVerified: true,
+        todoistTaskId,
+        todoistTaskUrl,
+        todoistCommentId,
+        todoistInitialComment: mandatoryComment,
+        logs
+      });
+    } else {
+      return res.status(200).json({
+        success: false,
+        verified: true,
+        taskCreated: true,
+        commentVerified: false,
+        outcome: "task_created_comment_failed",
+        todoistTaskId,
+        todoistTaskUrl,
+        errorCode: "TODOIST_INITIAL_COMMENT_FAILED",
+        errorMessage: commentErrorMsg,
+        logs
+      });
+    }
   } catch (err: any) {
     return fail(
       500,

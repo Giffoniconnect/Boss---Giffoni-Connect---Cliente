@@ -798,11 +798,7 @@ export default function FinanceiroFluxo() {
 
   useEffect(() => {
     if (caseObj) {
-      setTipoServicoContratadoForm(
-        caseObj.tipoServicoContratado ||
-          caseObj.assunto ||
-          "Serviço de Assessoria Jurídica",
-      );
+      setTipoServicoContratadoForm(caseObj.assunto || "");
       setTipoHonorarioForm(caseObj.tipoHonorario || "Honorários Fixos");
       setHonorarioExitoPercentualForm(
         caseObj.honorarioExitoPercentual || "30%",
@@ -906,11 +902,7 @@ export default function FinanceiroFluxo() {
       setFinanceiroTabelaAnaliticaVersion(caseObj.financeiroTabelaAnaliticaVersion || "v1");
 
       // Sync back legacy/backward compatibility variables
-      setTipoServicoContratado(
-        caseObj.tipoServicoContratado ||
-          caseObj.assunto ||
-          "Serviço de Assessoria Jurídica",
-      );
+      setTipoServicoContratado(caseObj.assunto || "");
       setHonorariosPercentual(
         caseObj.honorariosPercentual ||
           caseObj.honorarioExitoPercentual ||
@@ -981,8 +973,8 @@ export default function FinanceiroFluxo() {
     if (!caseObj) return false;
     
     // Check main operational fields
-    const defaultTipoServico = caseObj.assunto || "Serviço de Assessoria Jurídica";
-    if ((caseObj.tipoServicoContratado || defaultTipoServico) !== tipoServicoContratadoForm) return true;
+    const defaultTipoServico = caseObj.assunto || "";
+    if (defaultTipoServico !== tipoServicoContratadoForm) return true;
     if ((caseObj.tipoHonorario || "Honorários Fixos") !== tipoHonorarioForm) return true;
     if ((caseObj.honorarioFixoValor || "0,00") !== honorarioFixoValorForm) return true;
     if ((caseObj.formaPagamento || "À vista") !== formaPagamentoForm) return true;
@@ -1127,6 +1119,90 @@ export default function FinanceiroFluxo() {
     addClientLog(
       "CONTRATO_CLIENT_DATA_LOADED",
       "Dados cadastrais do cliente e do caso carregados com sucesso do banco.",
+    );
+
+    const assuntoContrato = String(caseObj?.assunto || "").trim();
+    if (!assuntoContrato) {
+      addClientLog(
+        "CONTRATO_REQUIRED_PLACEHOLDER_EMPTY",
+        isPf
+          ? "Não é possível gerar o Contrato de Honorários porque o campo “Assunto” não foi preenchido no Formulário — Petição Inicial. Retorne à etapa Tipo de Produção e informe o assunto do caso."
+          : "Não é possível gerar o Contrato de Honorários PJ porque o campo “Assunto” não foi preenchido no Formulário — Petição Inicial. Retorne à etapa Tipo de Produção e informe o assunto do caso."
+      );
+      setError(
+        isPf
+          ? "Não é possível gerar o Contrato de Honorários porque o campo “Assunto” não foi preenchido no Formulário — Petição Inicial. Retorne à etapa Tipo de Produção e informe o assunto do caso."
+          : "Não é possível gerar o Contrato de Honorários PJ porque o campo “Assunto” não foi preenchido no Formulário — Petição Inicial. Retorne à etapa Tipo de Produção e informe o assunto do caso."
+      );
+      return;
+    }
+
+    if (isPf) {
+      const getField = (keys: string[]): string => {
+        for (const key of keys) {
+          const val = client?.[key] ?? client?.pfDadosPessoais?.[key] ?? client?.pfData?.[key];
+          if (val !== undefined && val !== null) {
+            return String(val).trim();
+          }
+        }
+        return "";
+      };
+      const cpf = getField(["pf_cpf", "cpf"]) || client?.cpf || "";
+      if (!cpf) {
+        addClientLog(
+          "CONTRATO_REQUIRED_PLACEHOLDER_EMPTY",
+          "Não é possível gerar o Contrato de Honorários porque o CPF do cliente não está preenchido no cadastro."
+        );
+        setError("Não é possível gerar o Contrato de Honorários porque o CPF do cliente não está preenchido no cadastro.");
+        return;
+      }
+    } else {
+      const getField = (keys: string[]): string => {
+        for (const key of keys) {
+          const val = client?.[key] ?? client?.pjDadosEmpresa?.[key] ?? client?.pjData?.[key];
+          if (val !== undefined && val !== null) {
+            return String(val).trim();
+          }
+        }
+        return "";
+      };
+      const cnpj = getField(["pj_cnpj", "cnpj"]) || client?.cnpj || "";
+      const razaoSocial = getField(["pj_razaoSocial", "razaoSocial", "nomeEmpresa"]) || client?.razaoSocial || "";
+      const repNome = getField(["pj_nomeSocioAdministrador", "pj_socioNome", "socioNome"]) || client?.pjDadosRepresentante?.pj_representanteNomeCompleto || "";
+
+      if (!cnpj) {
+        addClientLog(
+          "CONTRATO_REQUIRED_PLACEHOLDER_EMPTY",
+          "Não é possível gerar o Contrato de Honorários PJ porque o CNPJ da empresa não está preenchido no cadastro do cliente."
+        );
+        setError("Não é possível gerar o Contrato de Honorários PJ porque o CNPJ da empresa não está preenchido no cadastro do cliente.");
+        return;
+      }
+      if (!razaoSocial) {
+        addClientLog(
+          "CONTRATO_REQUIRED_PLACEHOLDER_EMPTY",
+          "Não é possível gerar o Contrato de Honorários PJ porque a Razão Social da empresa não está preenchida no cadastro do cliente."
+        );
+        setError("Não é possível gerar o Contrato de Honorários PJ porque a Razão Social da empresa não está preenchida no cadastro do cliente.");
+        return;
+      }
+      if (!repNome) {
+        addClientLog(
+          "CONTRATO_REQUIRED_PLACEHOLDER_EMPTY",
+          "Não é possível gerar o Contrato de Honorários PJ porque o nome do Representante Legal / Sócio Administrador não está preenchido no cadastro do cliente."
+        );
+        setError("Não é possível gerar o Contrato de Honorários PJ porque o nome do Representante Legal / Sócio Administrador não está preenchido no cadastro do cliente.");
+        return;
+      }
+    }
+
+    addClientLog(
+      "CONTRATO_ASSUNTO_RESOLVIDO",
+      `Assunto do caso obtido com sucesso da Petição Inicial: "${assuntoContrato}".`
+    );
+    addClientLog(
+      "CONTRATO_MODELO_HONORARIOS_RESOLVIDO",
+      `Modelo de honorários resolvido: "${modeloHonorariosForm}".`
     );
 
     const resolvedNomeCompleto = (
@@ -3058,7 +3134,7 @@ export default function FinanceiroFluxo() {
 
                 <div className="grid grid-cols-1 gap-5">
                   {/* Extracted read-only Fields */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
                         <label className="text-[10px] font-bold uppercase text-indigo-500 tracking-wide font-mono">
@@ -3105,6 +3181,19 @@ export default function FinanceiroFluxo() {
                         readOnly
                         disabled
                         value={caseObj?.temSubArea === "sim" ? (caseObj?.subArea || "Sem sub-área") : "Não aplicável"}
+                        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-500 cursor-not-allowed outline-none font-sans"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold uppercase text-indigo-500 tracking-wide font-mono">
+                        Tipo do serviço contratado
+                      </label>
+                      <input
+                        type="text"
+                        readOnly
+                        disabled
+                        value={tipoServicoContratadoForm || "Não especificado"}
                         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold text-gray-500 cursor-not-allowed outline-none font-sans"
                       />
                     </div>

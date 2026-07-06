@@ -664,7 +664,7 @@ export function buildContratoHonorariosPfPlaceholders(clientData: any, caseData:
     ...global,
     ...client,
     ...casePls,
-    "{{TIPO_SERVICO}}": fin?.tipoServicoContratado || fin?.tipoServico || caseData?.tipoServicoContratado || caseData?.tipoServico || "Serviço de Assessoria Jurídica",
+    "{{TIPO_SERVICO}}": caseData?.assunto || fin?.tipoServicoContratado || fin?.tipoServico || caseData?.tipoServicoContratado || caseData?.tipoServico || "Serviço de Assessoria Jurídica",
     "{{FORMA_COBRANCA}}": fin?.formaPagamento || fin?.formaCobranca || "Parcelado",
     "{{VALOR_HONORARIOS}}": fin?.honorarioFixoValor || fin?.valorTotal || fin?.valorHonorarios || "A combinar",
     "{{ENTRADA}}": fin?.valorEntrada || fin?.entrada || "Não aplicável",
@@ -691,7 +691,7 @@ export function buildContratoHonorariosPfPlaceholders(clientData: any, caseData:
     "{{OUTORGANTE_EMAIL}}": solved.email || client["{{EMAIL}}"] || "",
 
     // NEW FINANCIAL PLACEHOLDERS
-    "{{TIPO_SERVICO_CONTRATADO}}": fin?.tipoServicoContratado || caseData?.tipoServicoContratado || fin?.tipoServico || caseData?.tipoServico || "Serviços Advocatícios",
+    "{{TIPO_SERVICO_CONTRATADO}}": caseData?.assunto || fin?.tipoServicoContratado || caseData?.tipoServicoContratado || fin?.tipoServico || caseData?.tipoServico || "Serviços Advocatícios",
     "{{TIPO_HONORARIO}}": fin?.tipoHonorario || caseData?.tipoHonorario || "Honorários Fixos",
     "{{HONORARIOS_PERCENTUAL}}": fin?.honorarioExitoPercentual || caseData?.honorarioExitoPercentual || "0%",
     "{{HONORARIO_EXITO_PERCENTUAL}}": fin?.honorarioExitoPercentual || caseData?.honorarioExitoPercentual || "0%",
@@ -768,7 +768,7 @@ export function buildContratoHonorariosPjPlaceholders(clientData: any, caseData:
     ...global,
     ...client,
     ...casePls,
-    "{{TIPO_SERVICO}}": fin?.tipoServicoContratado || fin?.tipoServico || caseData?.tipoServicoContratado || caseData?.tipoServico || "Serviço de Assessoria Jurídica Empresarial",
+    "{{TIPO_SERVICO}}": caseData?.assunto || fin?.tipoServicoContratado || fin?.tipoServico || caseData?.tipoServicoContratado || caseData?.tipoServico || "Serviço de Assessoria Jurídica Empresarial",
     "{{FORMA_COBRANCA}}": fin?.formaPagamento || fin?.formaCobranca || "Parcelado",
     "{{VALOR_HONORARIOS}}": fin?.honorarioFixoValor || fin?.valorTotal || fin?.valorHonorarios || "A combinar",
     "{{ENTRADA}}": fin?.valorEntrada || fin?.entrada || "Não aplicável",
@@ -777,7 +777,7 @@ export function buildContratoHonorariosPjPlaceholders(clientData: any, caseData:
     "{{CLAUSULAS_ESPECIFICAS}}": fin?.clausulas || "Nenhuma cláusula especial cadastrada.",
 
     // NEW FINANCIAL PLACEHOLDERS
-    "{{TIPO_SERVICO_CONTRATADO}}": fin?.tipoServicoContratado || caseData?.tipoServicoContratado || "Serviços Advocatícios",
+    "{{TIPO_SERVICO_CONTRATADO}}": caseData?.assunto || fin?.tipoServicoContratado || caseData?.tipoServicoContratado || "Serviços Advocatícios",
     "{{TIPO_HONORARIO}}": fin?.tipoHonorario || caseData?.tipoHonorario || "Honorários Fixos",
     "{{HONORARIOS_PERCENTUAL}}": fin?.honorarioExitoPercentual || caseData?.honorarioExitoPercentual || "0%",
     "{{HONORARIO_EXITO_PERCENTUAL}}": fin?.honorarioExitoPercentual || caseData?.honorarioExitoPercentual || "0%",

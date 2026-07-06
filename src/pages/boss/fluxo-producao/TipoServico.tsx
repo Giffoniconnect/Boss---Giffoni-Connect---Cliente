@@ -160,6 +160,7 @@ export default function TipoServico() {
   const [todoistTaskUrl, setTodoistTaskUrl] = useState('');
   const [todoistTaskLogFalha, setTodoistTaskLogFalha] = useState('');
   const [todoistAutomationStatus, setTodoistAutomationStatus] = useState('aguardando');
+  const [todoistInitialCommentStatus, setTodoistInitialCommentStatus] = useState('');
   const [todoistLogs, setTodoistLogs] = useState<any[]>([]);
 
   const appendFrontendLogs = async (newLogs: any[]) => {
@@ -316,6 +317,7 @@ export default function TipoServico() {
             setTodoistTaskUrl(loadedTaskUrl);
             setTodoistTaskLogFalha(loadedLogFalha);
             setTodoistAutomationStatus(loadedStatus);
+            setTodoistInitialCommentStatus(data.todoistInitialCommentStatus || '');
             setTodoistProjectId(loadedProjectId);
             setTodoistProjectName(loadedProjectName);
             setTodoistLogs(Array.isArray(data.todoistLogs) ? data.todoistLogs : []);
@@ -923,17 +925,19 @@ export default function TipoServico() {
         });
       }
 
-      if (
-        data.success === true &&
-        data.verified === true &&
-        data.todoistTaskId &&
-        data.todoistTaskUrl &&
-        !isInvalidTodoistTaskIdentity(data.todoistTaskId, data.todoistTaskUrl)
-      ) {
+      const isTaskCreatedSuccessfully = data && data.verified === true && data.todoistTaskId && data.todoistTaskUrl && !isInvalidTodoistTaskIdentity(data.todoistTaskId, data.todoistTaskUrl);
+
+      if (isTaskCreatedSuccessfully) {
         setTodoistAutomationStatus("criado");
+        setTodoistInitialCommentStatus(data.commentVerified ? "criado" : "falha");
         setTodoistTaskId(data.todoistTaskId);
         setTodoistTaskUrl(data.todoistTaskUrl);
-        setTodoistTaskLogFalha("");
+        
+        if (data.commentVerified) {
+          setTodoistTaskLogFalha("");
+        } else {
+          setTodoistTaskLogFalha("Comentário obrigatório pendente: " + (data.errorMessage || "Falha desconhecida"));
+        }
 
         // Dynamically create any pending subtasks in Todoist
         const createdSubtasks = [...todoistSubtasks];
@@ -968,10 +972,11 @@ export default function TipoServico() {
 
         // Auto-save the full details to Firestore
         const nowStr = new Date().toISOString();
-        const updatedPayload = {
+        const updatedPayload: any = {
           todoistTaskId: data.todoistTaskId,
           todoistTaskUrl: data.todoistTaskUrl,
           todoistAutomationStatus: "criado",
+          todoistInitialCommentStatus: data.commentVerified ? "criado" : "falha",
           todoistDescription,
           todoistSubtasks: createdSubtasks,
           todoistComments,
@@ -979,23 +984,35 @@ export default function TipoServico() {
           todoistLocation,
           updatedAt: nowStr
         };
+
+        if (data.commentVerified) {
+          updatedPayload.todoistTaskLogFalha = "";
+        } else {
+          updatedPayload.todoistTaskLogFalha = "Comentário obrigatório pendente: " + (data.errorMessage || "Falha ao criar comentário obrigatório");
+        }
+
         await updateDoc(doc(db, 'cases', safeCaseId), updatedPayload);
         await setDoc(doc(db, 'casos', safeCaseId), { id: safeCaseId, caseId: safeCaseId, ...updatedPayload }, { merge: true });
 
         await appendFrontendLogs([
           {
-            level: "success",
+            level: data.commentVerified ? "success" : "warning",
             step: "FRONTEND_BACKEND_SUCCESS",
-            message: "Backend confirmou criação real e verificada da tarefa no Todoist.",
+            message: data.commentVerified 
+              ? "Backend confirmou criação real e comentada da tarefa no Todoist."
+              : "Tarefa criada com sucesso, mas o comentário obrigatório automático falhou.",
             details: {
               todoistTaskId: data.todoistTaskId,
-              todoistTaskUrl: data.todoistTaskUrl
+              todoistTaskUrl: data.todoistTaskUrl,
+              commentVerified: data.commentVerified,
+              commentError: data.errorMessage || null
             }
           }
         ]);
       } else {
         const errMsg = data.errorMessage || "A API não confirmou a criação real da tarefa no Todoist.";
         setTodoistAutomationStatus("falha");
+        setTodoistInitialCommentStatus("falha");
         if (!previousTodoistTaskId) {
           setTodoistTaskId("");
           setTodoistTaskUrl("");
@@ -1019,6 +1036,7 @@ export default function TipoServico() {
       console.error("[Todoist Create Task Failed]", err);
       const errStr = err.message || err;
       setTodoistAutomationStatus("falha");
+      setTodoistInitialCommentStatus("falha");
       if (!previousTodoistTaskId) {
         setTodoistTaskId("");
         setTodoistTaskUrl("");
@@ -2073,10 +2091,92 @@ export default function TipoServico() {
                   {/* Two Column Layout Grid */}
                   <div className="grid grid-cols-1 xl:grid-cols-12 divide-y xl:divide-y-0 xl:divide-x divide-gray-100">
                     
-                    {/* LEFT COLUMN: Main Task Data (Title, Description, Subtasks, Comments, Actions) */}
+                    {/* LEFT COLUMN: Main Task Data (Actions, Status, Title, Description, Subtasks, Comments) */}
                     <div className="xl:col-span-8 p-6 space-y-6">
                       
-                      {/* 1. Task Title / Formula */}
+                      {/* 1. Main Action Button */}
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          disabled={todoistAutomationStatus === "gerando" || !todoistProjectId}
+                          onClick={handleCreateTodoistTask}
+                          className="w-full inline-flex items-center justify-center gap-2 bg-[#e44332] hover:bg-[#c53222] text-white font-extrabold px-6 py-4 rounded-2xl transition-all text-xs cursor-pointer shadow-md disabled:opacity-50 select-none transform hover:-translate-y-0.5 active:translate-y-0"
+                        >
+                          {todoistAutomationStatus === 'gerando' ? (
+                            <>
+                              <Loader2 size={14} className="animate-spin" />
+                              <span>Sincronizando com Todoist...</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckSquare size={14} />
+                              <span>
+                                {todoistAutomationStatus === 'criado' ? "Criar outra tarefa no Todoist" :
+                                 todoistAutomationStatus === 'falha' ? "Tentar criar tarefa novamente" :
+                                 "Criar Tarefa no Todoist"}
+                              </span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* 2. Status de Execução da Automação */}
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block font-mono">
+                          Status de Execução da Automação
+                        </span>
+                        <div className="mt-1">
+                          {todoistAutomationStatus === 'criado' && todoistTaskId && todoistInitialCommentStatus !== 'falha' ? (
+                            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-900 text-xs flex items-center gap-2.5 font-bold animate-fadeIn font-sans">
+                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                              <div className="min-w-0">
+                                <p>Tarefa vinculada com sucesso no Todoist</p>
+                                <p className="text-[9px] font-mono text-emerald-600 font-normal mt-0.5">ID: {todoistTaskId}</p>
+                              </div>
+                            </div>
+                          ) : todoistAutomationStatus === 'criado' && todoistTaskId && todoistInitialCommentStatus === 'falha' ? (
+                            <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 text-xs flex flex-col gap-1.5 animate-fadeIn font-semibold font-sans">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+                                <span className="font-bold">Tarefa criada com sucesso, mas o comentário obrigatório automático falhou.</span>
+                              </div>
+                              <p className="text-[9px] font-mono text-amber-600 font-normal">ID: {todoistTaskId}</p>
+                              {todoistTaskLogFalha && (
+                                <div className="w-full bg-amber-100/40 p-2.5 rounded-xl border border-amber-200 text-amber-900 font-mono text-[10px] max-h-24 overflow-y-auto">
+                                  {todoistTaskLogFalha}
+                                </div>
+                              )}
+                            </div>
+                          ) : todoistAutomationStatus === 'gerando' ? (
+                            <div className="p-3 bg-blue-50 border border-blue-200 rounded-2xl text-blue-900 text-xs flex items-center gap-2.5 font-bold animate-fadeIn font-sans">
+                              <span className="w-2.5 h-2.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                              <span>Criando pauta de tarefa real via REST API...</span>
+                            </div>
+                          ) : todoistAutomationStatus === 'falha' ? (
+                            <div className="p-3 bg-red-50 border border-red-200 rounded-2xl text-red-950 text-xs flex flex-col gap-2 animate-fadeIn font-semibold font-sans">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0" />
+                                <span className="font-bold">Falha ao provisionar tarefa</span>
+                              </div>
+                              {todoistTaskLogFalha && (
+                                <div className="w-full bg-red-100/40 p-2.5 rounded-xl border border-red-200 text-red-900 font-mono text-[10px] max-h-24 overflow-y-auto">
+                                  {todoistTaskLogFalha}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="p-3 bg-stone-50 border border-gray-200 rounded-2xl text-gray-500 text-xs flex items-center gap-2.5 font-semibold font-sans">
+                              <span className="w-2.5 h-2.5 rounded-full bg-gray-400 shrink-0" />
+                              <span>Aguardando comando de envio para pauta</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Divider */}
+                      <hr className="border-gray-100" />
+
+                      {/* 3. Task Title / Formula */}
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-black uppercase text-gray-400 tracking-wider block font-mono">
                           Título da Tarefa (Fórmula)
@@ -2291,72 +2391,6 @@ export default function TipoServico() {
                             </div>
                           </div>
                         )}
-                      </div>
-
-                      {/* 5. Automation Status Area & Action Button */}
-                      <div className="pt-4 border-t border-gray-50 space-y-3.5">
-                        <div>
-                          <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider block font-mono">
-                            Status de Execução da Automação
-                          </span>
-                          <div className="mt-2">
-                            {todoistAutomationStatus === 'criado' && todoistTaskId ? (
-                              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-900 text-xs flex items-center gap-2.5 font-bold animate-fadeIn">
-                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                                <div className="min-w-0">
-                                  <p>Tarefa vinculada com sucesso no Todoist</p>
-                                  <p className="text-[9px] font-mono text-emerald-600 font-normal mt-0.5">ID: {todoistTaskId}</p>
-                                </div>
-                              </div>
-                            ) : todoistAutomationStatus === 'gerando' ? (
-                              <div className="p-3 bg-blue-50 border border-blue-200 rounded-2xl text-blue-900 text-xs flex items-center gap-2.5 font-bold animate-fadeIn">
-                                <span className="w-2.5 h-2.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
-                                <span>Criando pauta de tarefa real via REST API...</span>
-                              </div>
-                            ) : todoistAutomationStatus === 'falha' ? (
-                              <div className="p-3 bg-red-50 border border-red-200 rounded-2xl text-red-950 text-xs flex flex-col gap-2 animate-fadeIn font-semibold">
-                                <div className="flex items-center gap-2">
-                                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0" />
-                                  <span className="font-bold">Falha ao provisionar tarefa</span>
-                                </div>
-                                {todoistTaskLogFalha && (
-                                  <div className="w-full bg-red-100/40 p-2.5 rounded-xl border border-red-200 text-red-900 font-mono text-[10px] max-h-24 overflow-y-auto">
-                                    {todoistTaskLogFalha}
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 text-xs flex items-center gap-2.5 font-bold">
-                                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
-                                <span>Aguardando comando de envio para pauta</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Main Creation Trigger Button */}
-                        <button
-                          type="button"
-                          disabled={todoistAutomationStatus === "gerando" || !todoistProjectId}
-                          onClick={handleCreateTodoistTask}
-                          className="w-full inline-flex items-center justify-center gap-2 bg-[#e44332] hover:bg-[#c53222] text-white font-extrabold px-6 py-3.5 rounded-2xl transition-all text-xs cursor-pointer shadow-md disabled:opacity-50 select-none"
-                        >
-                          {todoistAutomationStatus === 'gerando' ? (
-                            <>
-                              <Loader2 size={14} className="animate-spin" />
-                              <span>Sincronizando com Todoist...</span>
-                            </>
-                          ) : (
-                            <>
-                              <CheckSquare size={14} />
-                              <span>
-                                {todoistAutomationStatus === 'criado' ? "Criar outra tarefa no Todoist" :
-                                 todoistAutomationStatus === 'falha' ? "Tentar criar tarefa novamente" :
-                                 "Criar Tarefa no Todoist"}
-                              </span>
-                            </>
-                          )}
-                        </button>
                       </div>
 
                     </div>
