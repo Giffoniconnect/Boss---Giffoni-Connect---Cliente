@@ -1,7 +1,20 @@
-# Portal BOSS - Giffoni Connect Cliente
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
+</div>
 
-Este projeto é uma aplicação full-stack para gerenciamento de clientes e fluxos de produção jurídica, integrado ao ecossistema BOSS.
+# Run and deploy your AI Studio app
 
-## Regra de Engenharia
+This contains everything you need to run your app locally.
 
-Antes de qualquer alteração técnica, consultar obrigatoriamente o repositório atual e o arquivo `docs/REGRA-OBRIGATORIA-CONSULTA-GITHUB.md`.
+View your app in AI Studio: https://ai.studio/apps/ffebafe8-f1b5-4749-87a5-7b28a5c05e6c
+
+## Run Locally
+
+**Prerequisites:**  Node.js
+
+
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`
