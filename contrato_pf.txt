@@ -301,135 +301,6 @@ export default function ContratoHonorariosPF() {
     setTimeout(() => setSuccess(null), 2500);
   };
 
-
-  // Preview states
-  const [previewId, setPreviewId] = React.useState<string | null>(null);
-  const [previewPdfUrl, setPreviewPdfUrl] = React.useState<string | null>(null);
-  const [previewHash, setPreviewHash] = React.useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = React.useState(false);
-  const [previewError, setPreviewError] = React.useState<string | null>(null);
-  const [previewLogs, setPreviewLogs] = React.useState<any[]>([]);
-  const [showTechnicalDetails, setShowTechnicalDetails] = React.useState(false);
-
-  const calculatePayloadHash = async (payload: any) => {
-    const msgUint8 = new TextEncoder().encode(JSON.stringify(payload));
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  };
-
-  const getCanonicalPayload = () => {
-    const resolvedChargeType = formChargeType === 'Outro' ? customChargeType.trim() : formChargeType;
-    const parsedAmount = parseFloat(formTotalAmount) || 0;
-    const calculatedInstallments = formPaymentMode === 'avista' ? 1 : (Number(formInstallments) || 1);
-    const calculatedInstallmentAmount = parseFloat((parsedAmount / calculatedInstallments).toFixed(2)) || 0;
-
-    let finalContractedServiceType = contractedServiceType.trim();
-    if (!finalContractedServiceType) {
-      finalContractedServiceType = caseObj?.contractedServiceType || caseObj?.tipoServicoContratado || caseObj?.tipoServico || caseObj?.assunto || '';
-    }
-
-    const formatCurrency = (val: number | string) => {
-      const num = typeof val === 'string' ? parseFloat(val) : val;
-      if (isNaN(num)) return '0,00';
-      return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    };
-
-    const formatDate = (dateStr: string) => {
-      if (!dateStr) return '';
-      const parts = dateStr.split('-');
-      if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
-      return dateStr;
-    };
-
-    const normalizedFinancialData = {
-      contractedServiceType: finalContractedServiceType,
-      tipoServicoContratado: finalContractedServiceType,
-      tipoServico: finalContractedServiceType,
-      chargeType: resolvedChargeType,
-      formaPagamento: formPaymentMode === 'avista' ? 'À vista' : 'Parcelado',
-      formaCobranca: resolvedChargeType,
-      totalAmount: formatCurrency(parsedAmount),
-      valorTotal: formatCurrency(parsedAmount),
-      valorHonorarios: formatCurrency(parsedAmount),
-      honorarioFixoValor: formatCurrency(parsedAmount),
-      quantidadeParcelas: calculatedInstallments,
-      parcelas: calculatedInstallments,
-      valorParcela: formatCurrency(calculatedInstallmentAmount),
-      dataPrimeiroVencimento: formatDate(formFirstDueDate),
-      vencimento: formatDate(formFirstDueDate),
-      notes: formNotes.trim(),
-      cobrancaAutomaticaInteg: formPaymentProvider,
-      paymentMethod: formPaymentMethod,
-      paymentMode: formPaymentMode,
-      tipoRecebimento: formPaymentMethod
-    };
-
-    const placeholders = buildContratoHonorariosPfPlaceholders(client || {}, { ...caseObj, ...normalizedFinancialData }, normalizedFinancialData);
-    
-    const now = new Date();
-    const day = String(now.getDate()).padStart(2, '0');
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const year = now.getFullYear();
-    const dataAssinaturaFormated = `${day}/${month}/${year}`;
-    
-    placeholders["{{DATA_ASSINATURA}}"] = dataAssinaturaFormated;
-    placeholders["<<data da assinatura>>"] = dataAssinaturaFormated;
-    
-    return placeholders;
-  };
-
-  const handleGeneratePreview = async () => {
-    setPreviewLoading(true);
-    setPreviewError(null);
-    setPreviewLogs([]);
-    try {
-      const currentGoogleAccessToken = googleAccessToken || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken') || '';
-      const localOverride = localStorage.getItem('portal_boss_gdocs_override') || '';
-
-      const payload = getCanonicalPayload();
-      const hash = await calculatePayloadHash(payload);
-      
-      if (previewHash === hash && previewId) {
-        setPreviewLoading(false);
-        return; // Already generated for this state
-      }
-
-      const response = await fetch("/api/google-docs/contract-preview", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${currentGoogleAccessToken || localOverride || "simulated_token"}`
-        },
-        body: JSON.stringify({
-          documentType: "contrato_honorarios_pf",
-          templateId: "1GJZ6LSW_szLSAA8Z3iw9jt4Q6zy5k6EuuTNhR5ooJQQ",
-          caseId,
-          clientId: client?.id || caseObj?.clientId,
-          placeholders: payload,
-          payloadHash: hash,
-          previewRequestId: `req-${Date.now()}`
-        })
-      });
-
-      const result = await response.json();
-      setPreviewLogs(result.logs || []);
-
-      if (!response.ok) {
-        throw new Error(result.errorMessage || `Falha técnica ${result.errorCode}`);
-      }
-
-      setPreviewId(result.previewId);
-      setPreviewHash(result.payloadHash);
-      setPreviewPdfUrl(`/api/google-docs/contract-preview/${result.previewId}/pdf`);
-      
-    } catch (err: any) {
-      setPreviewError(err.message || "Erro ao gerar prévia.");
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
-
   const handleGenerateContratoGDocs = async (intent: 'initial' | 'new_version' = 'initial') => {
     if (generationInFlightRef.current) {
       console.warn("[DUPLICATE CLICK] Geração de Contrato PF ignorada.");
@@ -535,16 +406,69 @@ export default function ContratoHonorariosPF() {
     const officialTemplateId = "1GJZ6LSW_szLSAA8Z3iw9jt4Q6zy5k6EuuTNhR5ooJQQ";
     addClientLog("CONTR_PF_OFFICIAL_TEMPLATE_SELECTED", `Template oficial de Contrato PF selecionado unicamente como fonte da verdade: ${officialTemplateId}`);
 
+    const resolvedChargeType = formChargeType === 'Outro' ? customChargeType.trim() : formChargeType;
+    const parsedAmount = parseFloat(formTotalAmount) || 0;
+    const calculatedInstallments = formPaymentMode === 'avista' ? 1 : (Number(formInstallments) || 1);
+    const calculatedInstallmentAmount = parseFloat((parsedAmount / calculatedInstallments).toFixed(2)) || 0;
 
-    const placeholders = getCanonicalPayload();
-    const currentHash = await calculatePayloadHash(placeholders);
+    let finalContractedServiceType = contractedServiceType.trim();
+    if (!finalContractedServiceType) {
+      finalContractedServiceType = caseObj?.contractedServiceType || caseObj?.tipoServicoContratado || caseObj?.tipoServico || caseObj?.assunto || '';
+    }
 
-    if (intent !== "new_version") {
-      if (!previewHash || previewHash !== currentHash || !previewId) {
-        setError("Os dados foram alterados após a prévia. Atualize a Prévia Real antes de gerar o contrato oficial.");
-        generationInFlightRef.current = false;
-        return;
-      }
+    const formatCurrency = (val: number | string) => {
+      const num = typeof val === 'string' ? parseFloat(val) : val;
+      if (isNaN(num)) return '0,00';
+      return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+
+    const formatDate = (dateStr: string) => {
+      if (!dateStr) return '';
+      const parts = dateStr.split('-');
+      if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      return dateStr;
+    };
+
+    const normalizedFinancialData = {
+      contractedServiceType: finalContractedServiceType,
+      tipoServicoContratado: finalContractedServiceType,
+      tipoServico: finalContractedServiceType,
+      chargeType: resolvedChargeType,
+      formaPagamento: formPaymentMode === 'avista' ? 'À vista' : 'Parcelado',
+      formaCobranca: resolvedChargeType,
+      totalAmount: formatCurrency(parsedAmount),
+      valorTotal: formatCurrency(parsedAmount),
+      valorHonorarios: formatCurrency(parsedAmount),
+      honorarioFixoValor: formatCurrency(parsedAmount),
+      quantidadeParcelas: calculatedInstallments,
+      parcelas: calculatedInstallments,
+      valorParcela: formatCurrency(calculatedInstallmentAmount),
+      dataPrimeiroVencimento: formatDate(formFirstDueDate),
+      vencimento: formatDate(formFirstDueDate),
+      notes: formNotes.trim(),
+      cobrancaAutomaticaInteg: formPaymentProvider,
+      paymentMethod: formPaymentMethod,
+      paymentMode: formPaymentMode,
+      tipoRecebimento: formPaymentMethod
+    };
+
+    let placeholders: Record<string, string>;
+    try {
+      placeholders = buildContratoHonorariosPfPlaceholders(client, { ...caseObj, ...normalizedFinancialData }, normalizedFinancialData);
+
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      const dataAssinaturaFormated = `${day}/${month}/${year}`;
+      
+      placeholders["{{DATA_ASSINATURA}}"] = dataAssinaturaFormated;
+      placeholders["<<data da assinatura>>"] = dataAssinaturaFormated;
+
+      addClientLog("CONTR_PF_PLACEHOLDERS_BUILT", "Todas as chaves e valores de placeholders foram processados e vinculados com sucesso.");
+    } catch (errPl: any) {
+      setError(`Erro ao construir placeholders: ${errPl.message}`);
+      return;
     }
 
     const essentialKeys = [
@@ -599,14 +523,12 @@ export default function ContratoHonorariosPF() {
 
       await setDoc(doc(db, 'googleDocsJobs', jobId), failedJob);
       setError(errorMsg);
-      generationInFlightRef.current = false;
       return;
     }
 
     addClientLog("CONTR_PF_REQUIRED_PLACEHOLDERS_VALIDATED", "Contrato de placeholders verificado contra especificações fáticas.");
 
     const currentGoogleAccessToken = googleAccessToken || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken') || '';
-
     const localOverride = localStorage.getItem('portal_boss_gdocs_override') || '';
 
     if (!currentGoogleAccessToken && !localOverride) {
@@ -1333,176 +1255,205 @@ export default function ContratoHonorariosPF() {
 
             {/* SUB-STEP 2 — AUTOMAÇÃO INTELIGENTE GOOGLE DOCS */}
             {activeSubStep === 2 && (
-  <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-2xs space-y-6 animate-fade-in">
-    <div className="border-b border-gray-100 pb-3 flex items-center justify-between">
-      <div>
-        <h4 className="text-xs font-black text-indigo-950 uppercase tracking-widest flex items-center gap-2">
-          <Sparkles size={18} className="text-blue-600 animate-pulse" /> SubEtapa 2 de 3 — Automação Inteligente Google Docs
-        </h4>
-        <p className="text-[11px] text-gray-400 mt-1">Gere a minuta oficial do Contrato de Honorários preenchida instantaneamente.</p>
-      </div>
-      <span className="text-[10px] font-mono font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded-md">
-        v2.1.0-clean
-      </span>
-    </div>
+              <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-2xs space-y-6 animate-fade-in">
+                <div className="border-b border-gray-100 pb-3 flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-black text-indigo-950 uppercase tracking-widest flex items-center gap-2">
+                      <Sparkles size={18} className="text-blue-600 animate-pulse" /> SubEtapa 2 de 3 — Automação Inteligente Google Docs
+                    </h4>
+                    <p className="text-[11px] text-gray-400 mt-1">Gere a minuta oficial do Contrato de Honorários preenchida instantaneamente.</p>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded-md">
+                    v2.1.0-clean
+                  </span>
+                </div>
 
-    {/* CARD 1 — Template oficial */}
-    <div className="flex flex-col p-4 bg-gray-50 border border-gray-150 rounded-2xl text-xs gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <div className="p-2 bg-indigo-50 text-indigo-650 rounded-xl">
-            <FileCode size={16} />
-          </div>
-          <div>
-            <span className="block font-extrabold text-gray-800">Modelo Oficial Contrato de Honorários PF</span>
-            <span className="text-[10px] text-gray-400 font-mono">Template ID: 1GJZ6LSW_szL...</span>
-          </div>
-        </div>
-        <a
-          href="https://docs.google.com/document/d/1GJZ6LSW_szLSAA8Z3iw9jt4Q6zy5k6EuuTNhR5ooJQQ/edit?tab=t.0"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="p-1 px-3 py-2 bg-white border border-gray-250 text-gray-700 hover:text-gray-950 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
-        >
-          Abrir Template de Referência Google Docs <ExternalLink size={10} />
-        </a>
-      </div>
-      <p className="text-[10.5px] text-gray-500 font-medium">
-        Este é o modelo oficial do Contrato de Honorários PF. A geração final criará uma cópia deste documento, preservando integralmente logomarca, cabeçalho, rodapé, imagens, margens, fontes e estrutura.
-      </p>
-    </div>
+                {/* TEMPLATE INFO */}
+                <div className="flex flex-col p-3.5 bg-gray-50 border border-gray-150 rounded-2xl text-xs gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-indigo-50 text-indigo-650 rounded-xl">
+                        <FileCode size={16} />
+                      </div>
+                      <div>
+                        <span className="block font-extrabold text-gray-800">Modelo Oficial Contrato de Honorários PF</span>
+                        <span className="text-[10px] text-gray-400 font-mono">Template ID: 1GJZ6LSW_szL...</span>
+                      </div>
+                    </div>
+                    <a
+                      href="https://docs.google.com/document/d/1GJZ6LSW_szLSAA8Z3iw9jt4Q6zy5k6EuuTNhR5ooJQQ/edit?tab=t.0"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1 px-2 bg-white border border-gray-250 text-gray-700 hover:text-gray-950 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
+                    >
+                      Abrir Template de Referência Google Docs <ExternalLink size={10} />
+                    </a>
+                  </div>
+                  <p className="text-[10.5px] text-gray-500 font-medium">
+                    Este é o modelo oficial do Contrato de Honorários PF. A geração final criará uma cópia deste documento, preservando integralmente logomarca, cabeçalho, rodapé, imagens, margens, fontes e estrutura.
+                  </p>
+                </div>
 
-    {/* PRÉVIA REAL */}
-    <div className="p-4 border border-indigo-150 bg-indigo-50/20 rounded-2xl space-y-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <h5 className="text-xs font-black text-indigo-900 uppercase tracking-widest">Prévia Real do Google Docs</h5>
-          <p className="text-[11px] text-indigo-700 mt-1">Visualização fiel da cópia temporária do template oficial, preenchida com os dados atuais do caso.</p>
-        </div>
-        <div className="flex gap-2">
-          {previewPdfUrl && (
-            <a
-              href={previewPdfUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-3 py-1.5 bg-white border border-indigo-200 text-indigo-700 hover:text-indigo-900 text-[10px] font-bold uppercase rounded-lg flex items-center gap-1.5"
-            >
-              Abrir Prévia em Nova Aba <ExternalLink size={10} />
-            </a>
-          )}
-          <button
-            type="button"
-            onClick={handleGeneratePreview}
-            disabled={previewLoading}
-            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold uppercase rounded-lg flex items-center gap-1.5 disabled:opacity-50"
-          >
-            {previewLoading ? <RefreshCw size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-            Atualizar Prévia Real
-          </button>
-        </div>
-      </div>
-      {previewError && (
-        <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-xs rounded-xl font-medium">
-          {previewError}
-        </div>
-      )}
-      {previewPdfUrl && !previewLoading && (
-        <div className="w-full h-96 border border-gray-200 rounded-xl overflow-hidden bg-white">
-          <iframe src={previewPdfUrl} width="100%" height="100%" title="Preview PDF" />
-        </div>
-      )}
-    </div>
+                {/* GENERATION STATE RENDERER */}
+                {localCaseObj?.contratoHonorariosStatus === 'gerando' && (
+                  <div className="p-8 border border-blue-150 bg-blue-50/20 rounded-2xl text-center space-y-3">
+                    <div className="w-8 h-8 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mx-auto"></div>
+                    <p className="text-xs font-black uppercase text-blue-900 tracking-wider font-mono">Gerando Contrato de Honorários...</p>
+                    <p className="text-[11px] text-blue-600 font-semibold max-w-md mx-auto leading-relaxed">
+                      O motor BOSS está gerando a cópia oficial da minuta no Google Drive do cliente e preenchendo todos os placeholders financeiros fáticos em background. Por favor, aguarde.
+                    </p>
+                  </div>
+                )}
 
-    {/* CARD 2 — Geração real */}
-    <div className="p-4 border border-emerald-150 bg-emerald-50/20 rounded-2xl space-y-4">
-      <h5 className="text-xs font-black text-emerald-900 uppercase tracking-widest">Geração Final do Contrato Oficial</h5>
-      
-      {localCaseObj?.contratoHonorariosStatus === 'gerando' && (
-        <div className="p-4 text-center space-y-2">
-          <div className="w-6 h-6 border-4 border-emerald-100 border-t-emerald-600 rounded-full animate-spin mx-auto"></div>
-          <p className="text-xs font-bold text-emerald-800">Gerando Contrato...</p>
-        </div>
-      )}
+                {localCaseObj?.contratoHonorariosStatus === 'criada' && (
+                  <div className="p-6 border border-emerald-150 bg-emerald-50/20 rounded-3xl space-y-4 animate-fade-in">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-emerald-100 text-emerald-700 rounded-2xl">
+                        <CheckCircle2 size={18} />
+                      </div>
+                      <div className="space-y-1">
+                        <h5 className="text-xs font-extrabold text-emerald-950">Contrato de Honorários Individual Gerado!</h5>
+                        <p className="text-[11px] text-emerald-800 font-medium">O documento foi criado faticamente na pasta do cliente no Google Drive da Giffoni Advogados.</p>
+                      </div>
+                    </div>
 
-      {localCaseObj?.contratoHonorariosStatus === 'criada' && (
-        <div className="flex flex-wrap gap-2 pt-1 font-sans">
-          <a
-            href={localCaseObj?.contratoHonorariosGoogleDocsUrl || localCaseObj?.contratoHonorariosPfUrl || '#'}
-            target="_blank"
-            referrerPolicy="no-referrer"
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10.5px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
-          >
-            <ExternalLink size={12} /> Abrir Contrato Oficial
-          </a>
-          <button
-            type="button"
-            onClick={() => {
-              const url = localCaseObj?.contratoHonorariosGoogleDocsUrl || localCaseObj?.contratoHonorariosPfUrl || '';
-              navigator.clipboard.writeText(url);
-              setSuccess("Link do contrato oficial copiado.");
-              setTimeout(() => setSuccess(null), 3000);
-            }}
-            className="px-4 py-2 bg-white border border-gray-250 text-gray-700 hover:text-gray-900 text-[10.5px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
-          >
-            <Copy size={12} /> Copiar Link
-          </button>
-          <button
-            type="button"
-            onClick={() => handleGenerateContratoGDocs('new_version')}
-            className="px-4 py-2 bg-gray-50 border border-gray-200 text-gray-600 hover:text-gray-800 text-[10.5px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
-          >
-            <RefreshCw size={12} /> Gerar Nova Versão Real
-          </button>
-        </div>
-      )}
+                    <div className="flex flex-wrap gap-2 pt-1 font-sans">
+                      <a
+                        href={localCaseObj?.contratoHonorariosGoogleDocsUrl || localCaseObj?.contratoHonorariosPfUrl || '#'}
+                        target="_blank"
+                        referrerPolicy="no-referrer"
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[10.5px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                      >
+                        <ExternalLink size={12} /> Abrir Contrato no Google Docs
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const url = localCaseObj?.contratoHonorariosGoogleDocsUrl || localCaseObj?.contratoHonorariosPfUrl || '';
+                          navigator.clipboard.writeText(url);
+                          setSuccess("Link do Contrato copiado para a área de transferência!");
+                          setTimeout(() => setSuccess(null), 3000);
+                        }}
+                        className="px-4 py-2 bg-white border border-gray-250 text-gray-700 hover:text-gray-900 text-[10.5px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Copy size={12} /> Copiar Link
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateContratoGDocs('new_version')}
+                        className="px-4 py-2 bg-gray-50 border border-gray-200 text-gray-600 hover:text-gray-800 text-[10.5px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <RefreshCw size={12} /> Gerar Nova Versão
+                      </button>
+                    </div>
+                  </div>
+                )}
 
-      {(!localCaseObj?.contratoHonorariosStatus || localCaseObj?.contratoHonorariosStatus === 'pendente' || localCaseObj?.contratoHonorariosStatus === 'falha') && (
-        <button
-          type="button"
-          disabled={!previewPdfUrl}
-          onClick={() => handleGenerateContratoGDocs('initial')}
-          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm disabled:opacity-50"
-        >
-          <Sparkles size={13} className="animate-pulse" /> Gerar Contrato Oficial no Google Docs
-        </button>
-      )}
-    </div>
+                {localCaseObj?.contratoHonorariosStatus === 'falha' && (
+                  <div className="p-5 border border-rose-150 bg-rose-55/15 rounded-3xl space-y-4 animate-fade-in">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-rose-100 text-rose-700 rounded-2xl">
+                        <ShieldAlert size={18} />
+                      </div>
+                      <div className="space-y-1">
+                        <h5 className="text-xs font-black text-rose-950 uppercase tracking-wide font-mono">Falha na Automação Google Docs</h5>
+                        <p className="text-[11px] text-rose-805 font-bold leading-normal">{localCaseObj?.contratoHonorariosLogFalha || 'Ocorreu um erro inesperado no preenchimento do contrato.'}</p>
+                      </div>
+                    </div>
 
-    {/* CARD 3 — Resultado técnico */}
-    <div className="p-4 border border-gray-200 bg-gray-50 rounded-2xl space-y-2">
-      <div className="flex justify-between items-center cursor-pointer" onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}>
-        <h5 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
-          <Info size={12} /> Detalhes Técnicos e Logs
-        </h5>
-        <ChevronRight size={14} className={`text-gray-400 transition-transform ${showTechnicalDetails ? 'rotate-90' : ''}`} />
-      </div>
-      {showTechnicalDetails && (
-        <div className="pt-2 text-[10px] font-mono text-gray-600 space-y-1">
-          <p><strong>Status:</strong> {localCaseObj?.contratoHonorariosStatus || 'N/A'}</p>
-          <p><strong>Google Docs ID:</strong> {localCaseObj?.contratoHonorariosGoogleDocsId || 'N/A'}</p>
-          <p><strong>Google Docs URL:</strong> {localCaseObj?.contratoHonorariosGoogleDocsUrl ? 'Vinculada' : 'N/A'}</p>
-          <p><strong>Versão:</strong> {localCaseObj?.contratoHonorariosVersion || '1'}</p>
-          <p><strong>Pasta Destino:</strong> {client?.googleDriveClientFolderId || client?.gdriveFolderId || localCaseObj?.gdriveFolderId || 'N/A'}</p>
-          
-          {previewLogs && previewLogs.length > 0 && (
-             <div className="mt-4 border-t border-gray-200 pt-2">
-               <strong className="text-gray-700 block mb-1">Logs de Prévia:</strong>
-               {previewLogs.map((log, i) => (
-                 <div key={i} className="text-[9px] mb-1">
-                   <span className="text-gray-400">[{log.timestamp.substring(11, 19)}]</span> 
-                   <span className={`ml-1 font-bold ${log.level === 'error' ? 'text-red-500' : log.level === 'success' ? 'text-emerald-500' : 'text-blue-500'}`}>[{log.code}]</span>
-                   <span className="ml-1 text-gray-700">{log.message}</span>
-                 </div>
-               ))}
-             </div>
-          )}
-        </div>
-      )}
-    </div>
+                    <div className="flex flex-wrap gap-2 pt-1 border-t border-rose-100 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateContratoGDocs('new_version')}
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-[10.5px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <RefreshCw size={12} /> Tentar Gerar Novamente
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRenewGoogle}
+                        disabled={isRenewingGoogle}
+                        className="px-4 py-2 bg-white border border-gray-250 text-gray-700 hover:text-gray-900 text-[10.5px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        <RefreshCw size={12} className={isRenewingGoogle ? "animate-spin" : ""} />
+                        {isRenewingGoogle ? 'Renovando...' : 'Renovar Credencial Google'}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
-  </div>
-)}
-{activeSubStep === 3 && (
+                {(!localCaseObj?.contratoHonorariosStatus || localCaseObj?.contratoHonorariosStatus === 'pendente') && (
+                  <div className="p-5 bg-indigo-50/30 border border-indigo-100 rounded-3xl space-y-3">
+                    <p className="text-xs font-bold text-indigo-950">Pronto para Geração Eletrônica</p>
+                    <p className="text-[11px] text-indigo-800 leading-normal">
+                      As metas financeiras da SubEtapa 1 foram agendadas. Clique no botão abaixo para gerar a cópia oficial estruturada e automatizada do Contrato de Honorários sob a pasta GDrive deste cliente.
+                    </p>
+                    <div className="pt-1 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateContratoGDocs('initial')}
+                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                      >
+                        <Sparkles size={13} className="animate-pulse" /> Gerar Contrato no Google Docs
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleConfirmGDocs}
+                        className="px-4 py-2 bg-white border border-gray-250 text-gray-700 hover:text-gray-900 text-[10.5px] font-bold uppercase rounded-xl"
+                      >
+                        Pular Geração GDocs
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* REAL-TIME JOB LOGS PANEL */}
+                {localCaseObj?.contratoHonorariosGoogleDocsJobLogs && localCaseObj?.contratoHonorariosGoogleDocsJobLogs.length > 0 && (
+                  <div className="border border-gray-150 rounded-2xl overflow-hidden shadow-2xs font-mono text-[10.5px]">
+                    <div className="bg-gray-900 text-gray-400 p-2.5 px-3 flex items-center justify-between">
+                      <span className="font-extrabold text-[9px] uppercase tracking-wider flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-ping"></span>
+                        LOGS DO MOTOR ELETRÔNICO GDocs (CONTR_PF_)
+                      </span>
+                      <span className="text-[8.5px] text-gray-500 font-bold">REAL-TIME FEEDBACK</span>
+                    </div>
+                    <div className="bg-gray-950 text-gray-200 p-3 max-h-40 overflow-y-auto space-y-1.5 leading-normal scrollbar-thin">
+                      {localCaseObj.contratoHonorariosGoogleDocsJobLogs.map((log: any, idx: number) => (
+                        <div key={idx} className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-3 border-b border-gray-900/40 pb-1 last:border-0 last:pb-0">
+                          <span className="text-indigo-400 font-bold shrink-0">{log.timestamp ? log.timestamp.split('T')[1].substring(0, 8) : '00:00:00'}</span>
+                          <span className="text-blue-300 font-semibold shrink-0">[{log.action}]</span>
+                          <span className="text-gray-300">{log.message}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* BOTTOM ACTION BAR */}
+                <div className="flex justify-between items-center pt-3 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSubStep(1)}
+                    className="p-2 px-4 bg-gray-50 hover:bg-gray-100 text-gray-600 hover:text-gray-900 border border-gray-200 text-[10px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1 transition-all"
+                  >
+                    Voltar ao Faturamento
+                  </button>
+                  {gdocsConfirmed && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveSubStep(3)}
+                      className="px-5 py-2.5 bg-indigo-650 hover:bg-indigo-700 text-white text-[11px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    >
+                      Seguir para Auditoria
+                      <ArrowRight size={13} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* SUB-STEP 3 — AUDITORIA INTELIGENTE DO CONTRATO */}
+            {activeSubStep === 3 && (
               <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-2xs space-y-5">
                 <div className="border-b border-gray-100 pb-3">
                   <h4 className="text-xs font-black text-indigo-950 uppercase tracking-widest flex items-center gap-2">
