@@ -1465,7 +1465,7 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
     console.log(`[GoogleDocsEngine Technical Log] [${level.toUpperCase()}] ${code}: ${message}`);
   };
 
-  addLog("info", "VERSION_CHECK_STARTED", "Conferindo se o 1º Atendimento já existe na pasta do cliente.");
+  addLog("info", "VERSION_CHECK_STARTED", `Conferindo se o documento [${typeLabel}] já existe na pasta do cliente.`);
 
   if (!isStateless && !dbAdmin) {
     addLog("error", "FIREBASE_ADMIN_NOT_INITIALIZED", "O Firebase Admin não foi inicializado.");
@@ -1697,12 +1697,18 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
       });
     }
   } catch (errFolder: any) {
-    addLog("error", "DESTINATION_FOLDER_ACCESS_DENIED", `A conta Google não possui acesso à pasta de destino. Erro: ${errFolder.message}`);
+    let errorCode = "DESTINATION_FOLDER_ACCESS_DENIED";
+    let errorMessage = `A conta Google não possui acesso à pasta de destino (${destinationFolderId}). Detalhes: ${errFolder.message}`;
+    if (errFolder.message && (errFolder.message.includes("API has not been used") || errFolder.message.includes("disabled"))) {
+      errorCode = "GOOGLE_DRIVE_API_DISABLED";
+      errorMessage = "A API do Google Drive não está habilitada. Por favor, habilite a Google Drive API no painel do Google Cloud Platform.";
+    }
+    addLog("error", errorCode, errorMessage);
     return res.status(400).json({
       success: false,
       documentType,
-      errorCode: "DESTINATION_FOLDER_ACCESS_DENIED",
-      errorMessage: `A conta Google não possui acesso à pasta de destino (${destinationFolderId}). Detalhes: ${errFolder.message}`,
+      errorCode,
+      errorMessage,
       technicalLog
     });
   }
@@ -1714,12 +1720,18 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
       fields: "id, name, mimeType"
     });
   } catch (errTemplate: any) {
-    addLog("error", "TEMPLATE_ACCESS_DENIED", `A conta Google não possui acesso ao modelo oficial. Erro: ${errTemplate.message}`);
+    let errorCode = "TEMPLATE_ACCESS_DENIED";
+    let errorMessage = `A conta Google não possui acesso ao modelo oficial (${templateId}). Detalhes: ${errTemplate.message}`;
+    if (errTemplate.message && (errTemplate.message.includes("API has not been used") || errTemplate.message.includes("disabled"))) {
+      errorCode = "GOOGLE_DRIVE_API_DISABLED";
+      errorMessage = "A API do Google Drive não está habilitada. Por favor, habilite a Google Drive API no painel do Google Cloud Platform.";
+    }
+    addLog("error", errorCode, errorMessage);
     return res.status(400).json({
       success: false,
       documentType,
-      errorCode: "TEMPLATE_ACCESS_DENIED",
-      errorMessage: `A conta Google não possui acesso ao modelo oficial (${templateId}). Detalhes: ${errTemplate.message}`,
+      errorCode,
+      errorMessage,
       technicalLog
     });
   }
@@ -1941,6 +1953,19 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
           requests: replaceRequests
         }
       });
+    }
+
+    if (documentType === "contrato_honorarios_pf") {
+      const docVerify = await docs.documents.get({ documentId: googleDocsId });
+      const docContent = JSON.stringify(docVerify.data.body || {});
+      const unresolved = [];
+      if (docContent.includes("<<Tipo do serviço contratado>>")) unresolved.push("<<Tipo do serviço contratado>>");
+      if (docContent.includes("<<clausula_segunda_varia_de_acordo_com_o_tipo_de_contrato_estabelecido>>")) unresolved.push("<<clausula_segunda_varia_de_acordo_com_o_tipo_de_contrato_estabelecido>>");
+      if (docContent.includes("<<data da assinatura>>")) unresolved.push("<<data da assinatura>>");
+      
+      if (unresolved.length > 0) {
+        throw { message: `Um ou mais placeholders não foram substituídos: ${unresolved.join(", ")}`, errorCode: "CONTRATO_PF_UNRESOLVED_PLACEHOLDER", unresolved };
+      }
     }
     
     addLog("success", "PLACEHOLDER_REPLACEMENT_SUCCESS", "Os dados do cliente e do caso foram inseridos no documento.");

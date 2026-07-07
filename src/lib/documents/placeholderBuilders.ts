@@ -651,34 +651,34 @@ export function buildClausulaSegunda(fin: any, caseData: any): string {
 
   // Check normalized model first
   if (modeloHonorarios === 'fixo') {
-    return `Cláusula Segunda: A título de honorários advocatícios contratuais, fica estabelecido o valor fixo de R$ ${honorarioFixoValor}, que será ${fixedDetailStr}.`;
+    return `A título de honorários advocatícios contratuais, fica estabelecido o valor fixo de R$ ${honorarioFixoValor}, que será ${fixedDetailStr}.`;
   } else if (modeloHonorarios === 'exito_simples') {
-    return `Cláusula Segunda: A título de honorários advocatícios em caso de êxito na demanda, fica estabelecido o percentual de ${percentualExito} sobre o proveito econômico efetivo obtido pela PARTE CONTRATANTE, devido apenas em caso de desfecho favorável.`;
+    return `A título de honorários advocatícios em caso de êxito na demanda, fica estabelecido o percentual de ${percentualExito} sobre o proveito econômico efetivo obtido pela PARTE CONTRATANTE, devido apenas em caso de desfecho favorável.`;
   } else if (modeloHonorarios === 'exito_completo_trabalhista') {
-    return `Cláusula Segunda: A título de honorários advocatícios em caso de êxito na demanda, fica estabelecido o percentual de ${percentualExito} incidentes sobre todos os valores efetivamente recebidos pela PARTE CONTRATANTE ou apurados em liquidação, acordo, alvará ou depósitos judiciais, apurados minuciosamente conforme tabela analítica de rateio.`;
+    return `A título de honorários advocatícios em caso de êxito na demanda, fica estabelecido o percentual de ${percentualExito} incidentes sobre todos os valores efetivamente recebidos pela PARTE CONTRATANTE ou apurados em liquidação, acordo, alvará ou depósitos judiciais, apurados minuciosamente conforme tabela analítica de rateio.`;
   } else if (modeloHonorarios === 'exito_completo_previdenciario') {
     const parcelasStr = qtdParcelasFuturas > 0 ? `, bem como o valor equivalente a ${qtdParcelasFuturas} parcelas mensais do benefício previdenciário concedido após sua implantação` : '';
-    return `Cláusula Segunda: A título de honorários advocatícios em caso de êxito na correspondente demanda previdenciária, fica estabelecido o percentual de ${percentualExitoRetroativo} incidentes sobre o montante total de valores atrasados (retroativos) recebidos pela PARTE CONTRATANTE${parcelasStr}, em conformidade com as regras de proveito previdenciário.`;
+    return `A título de honorários advocatícios em caso de êxito na correspondente demanda previdenciária, fica estabelecido o percentual de ${percentualExitoRetroativo} incidentes sobre o montante total de valores atrasados (retroativos) recebidos pela PARTE CONTRATANTE${parcelasStr}, em conformidade com as regras de proveito previdenciário.`;
   } else if (modeloHonorarios === 'fixo_mais_exito_simples') {
-    return `Cláusula Segunda: A título de honorários advocatícios, pactua-se de forma cumulada: (a) o valor fixo de R$ ${honorarioFixoValor}, sendo ${fixedDetailStr}; e (b) o percentual de ${percentualExito} sobre o proveito econômico final obtido pela PARTE CONTRATANTE como honorários de êxito.`;
+    return `A título de honorários advocatícios, pactua-se de forma cumulada: (a) o valor fixo de R$ ${honorarioFixoValor}, sendo ${fixedDetailStr}; e (b) o percentual de ${percentualExito} sobre o proveito econômico final obtido pela PARTE CONTRATANTE como honorários de êxito.`;
   } else if (modeloHonorarios === 'fixo_mais_exito_completo_trabalhista') {
-    return `Cláusula Segunda: A título de honorários advocatícios, pactua-se de forma cumulada: (a) o valor fixo de R$ ${honorarioFixoValor}, sendo ${fixedDetailStr}; e (b) o percentual de ${percentualExito} incidentes sobre todos os valores recebidos ou apurados em liquidação, acordo, alvará ou depósitos judiciais vinculados ao processo trabalhista, apurados em tabela analítica.`;
+    return `A título de honorários advocatícios, pactua-se de forma cumulada: (a) o valor fixo de R$ ${honorarioFixoValor}, sendo ${fixedDetailStr}; e (b) o percentual de ${percentualExito} incidentes sobre todos os valores recebidos ou apurados em liquidação, acordo, alvará ou depósitos judiciais vinculados ao processo trabalhista, apurados em tabela analítica.`;
   } else if (modeloHonorarios === 'fixo_mais_exito_completo_previdenciario') {
     const parcelasStr = qtdParcelasFuturas > 0 ? `, cumulado ainda com o valor de ${qtdParcelasFuturas} parcelas do benefício previdenciário implantado` : '';
-    return `Cláusula Segunda: A título de honorários advocatícios, pactua-se de forma cumulada: (a) o valor fixo de R$ ${honorarioFixoValor}, sendo ${fixedDetailStr}; e (b) o percentual de ${percentualExitoRetroativo} incidentes sobre os montante de parcelas atrasadas (retroativos)${parcelasStr}.`;
+    return `A título de honorários advocatícios, pactua-se de forma cumulada: (a) o valor fixo de R$ ${honorarioFixoValor}, sendo ${fixedDetailStr}; e (b) o percentual de ${percentualExitoRetroativo} incidentes sobre os montante de parcelas atrasadas (retroativos)${parcelasStr}.`;
   }
 
   // Legacy fallback behaviors
   if (tipoHonorario === 'Êxito') {
-    return `Cláusula Segunda: A título de honorários advocatícios, fica estabelecido o percentual de ${honorarioExitoPercentual} sobre o proveito econômico obtido pela PARTE CONTRATANTE, percentual este devido apenas em caso de êxito na demanda.`;
+    return `A título de honorários advocatícios, fica estabelecido o percentual de ${honorarioExitoPercentual} sobre o proveito econômico obtido pela PARTE CONTRATANTE, percentual este devido apenas em caso de êxito na demanda.`;
   } else if (tipoHonorario === 'Honorários Fixos' && formaPagamento === 'À vista') {
-    return `Cláusula Segunda: A título de honorários advocatícios, fica estabelecido o valor total de R$ ${honorarioFixoValor}, a ser pago à vista, mediante ${descricaoFormaPagamento}`;
+    return `A título de honorários advocatícios, fica estabelecido o valor total de R$ ${honorarioFixoValor}, a ser pago à vista, mediante ${descricaoFormaPagamento}`;
   } else if (tipoHonorario === 'Honorários Fixos' && formaPagamento === 'Parcelado') {
-    return `Cláusula Segunda: A título de honorários advocatícios, fica estabelecido o valor total de R$ ${honorarioFixoValor}, que será pago em ${quantidadeParcelas} parcelas mensais e sucessivas de R$ ${valorParcela}, vencendo-se a primeira em ${dataPrimeiroVencimento} e as demais todo dia ${diaVencimento} dos meses subsequentes, mediante ${descricaoFormaPagamento}`;
+    return `A título de honorários advocatícios, fica estabelecido o valor total de R$ ${honorarioFixoValor}, que será pago em ${quantidadeParcelas} parcelas mensais e sucessivas de R$ ${valorParcela}, vencendo-se a primeira em ${dataPrimeiroVencimento} e as demais todo dia ${diaVencimento} dos meses subsequentes, mediante ${descricaoFormaPagamento}`;
   } else if (tipoHonorario === 'Honorários Fixos' && formaPagamento === 'Entrada + Parcelado') {
-    return `Cláusula Segunda: A título de honorários advocatícios, fica estabelecido o valor total de R$ ${honorarioFixoValor}, sendo R$ ${valorEntrada} pagos a título de entrada e o saldo remanescente dividido em ${quantidadeParcelas} parcelas mensais e sucessivas de R$ ${valorParcela}, vencendo-se a primeira em ${dataPrimeiroVencimento} e as demais todo dia ${diaVencimento} dos meses subsequentes, mediante ${descricaoFormaPagamento}`;
+    return `A título de honorários advocatícios, fica estabelecido o valor total de R$ ${honorarioFixoValor}, sendo R$ ${valorEntrada} pagos a título de entrada e o saldo remanescente dividido em ${quantidadeParcelas} parcelas mensais e sucessivas de R$ ${valorParcela}, vencendo-se a primeira em ${dataPrimeiroVencimento} e as demais todo dia ${diaVencimento} dos meses subsequentes, mediante ${descricaoFormaPagamento}`;
   } else if (tipoHonorario === 'Misto (Fixo + Êxito)') {
-    return `Cláusula Segunda: A título de honorários advocatícios, fica estabelecido o valor fixo de R$ ${honorarioFixoValor}, pago mediante ${descricaoFormaPagamento}, bem como o percentual de ${honorarioExitoPercentual} sobre o proveito econômico obtido pela PARTE CONTRATANTE em caso de êxito na demanda.`;
+    return `A título de honorários advocatícios, fica estabelecido o valor fixo de R$ ${honorarioFixoValor}, pago mediante ${descricaoFormaPagamento}, bem como o percentual de ${honorarioExitoPercentual} sobre o proveito econômico obtido pela PARTE CONTRATANTE em caso de êxito na demanda.`;
   }
   return '';
 }
@@ -741,11 +741,22 @@ export function buildContratoHonorariosPfPlaceholders(clientData: any, caseData:
   const mHon = fin?.modeloHonorarios || caseData?.modeloHonorarios || "";
   const modelLabel = mHon ? (modeloLabels[mHon] || mHon) : (fin?.tipoHonorario || caseData?.tipoHonorario || "Honorários Fixos");
 
+  const resolvedServiceType = 
+    fin?.contractedServiceType ||
+    fin?.tipoServicoContratado ||
+    caseData?.contractedServiceType ||
+    caseData?.tipoServicoContratado ||
+    caseData?.tipoServico ||
+    caseData?.assunto ||
+    "Serviço de Assessoria Jurídica";
+
   return {
     ...global,
     ...client,
     ...casePls,
-    "{{TIPO_SERVICO}}": caseData?.assunto || fin?.tipoServicoContratado || fin?.tipoServico || caseData?.tipoServicoContratado || caseData?.tipoServico || "Serviço de Assessoria Jurídica",
+    "{{TIPO_SERVICO}}": resolvedServiceType,
+    "{{TIPO_SERVICO_CONTRATADO}}": resolvedServiceType,
+    "<<Tipo do serviço contratado>>": resolvedServiceType,
     "{{FORMA_COBRANCA}}": fin?.formaPagamento || fin?.formaCobranca || "Parcelado",
     "{{VALOR_HONORARIOS}}": fin?.honorarioFixoValor || fin?.valorTotal || fin?.valorHonorarios || "A combinar",
     "{{ENTRADA}}": fin?.valorEntrada || fin?.entrada || "Não aplicável",
@@ -772,7 +783,6 @@ export function buildContratoHonorariosPfPlaceholders(clientData: any, caseData:
     "{{OUTORGANTE_EMAIL}}": solved.email || client["{{EMAIL}}"] || "",
 
     // NEW FINANCIAL PLACEHOLDERS
-    "{{TIPO_SERVICO_CONTRATADO}}": caseData?.assunto || fin?.tipoServicoContratado || caseData?.tipoServicoContratado || fin?.tipoServico || caseData?.tipoServico || "Serviços Advocatícios",
     "{{TIPO_HONORARIO}}": fin?.tipoHonorario || caseData?.tipoHonorario || "Honorários Fixos",
     "{{HONORARIOS_PERCENTUAL}}": fin?.honorarioExitoPercentual || caseData?.honorarioExitoPercentual || "0%",
     "{{HONORARIO_EXITO_PERCENTUAL}}": fin?.honorarioExitoPercentual || caseData?.honorarioExitoPercentual || "0%",
@@ -788,6 +798,7 @@ export function buildContratoHonorariosPfPlaceholders(clientData: any, caseData:
     "{{VALOR_ENTRADA}}": fin?.valorEntrada || caseData?.valorEntrada || "0,00",
     "{{DATA_PRIMEIRO_VENCIMENTO}}": fin?.dataPrimeiroVencimento || caseData?.dataPrimeiroVencimento || "A combinar",
     "{{CLAUSULA_SEGUNDA}}": cl2,
+    "<<clausula_segunda_varia_de_acordo_com_o_tipo_de_contrato_estabelecido>>": cl2,
 
     // BRAND NEW PLACEHOLDERS
     "{{MODELO_HONORARIOS}}": modelLabel,

@@ -309,7 +309,7 @@ export default function ContratoHonorariosPF() {
     generationInFlightRef.current = true;
 
     try {
-      const jobId = 'job_contr_pf_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+      const jobId = crypto.randomUUID();
       const jobLogs: any[] = [];
       const addClientLog = (action: string, message: string) => {
         jobLogs.push({
@@ -411,27 +411,50 @@ export default function ContratoHonorariosPF() {
     const calculatedInstallments = formPaymentMode === 'avista' ? 1 : (Number(formInstallments) || 1);
     const calculatedInstallmentAmount = parseFloat((parsedAmount / calculatedInstallments).toFixed(2)) || 0;
 
-    const mockFinData = {
-      tipoServicoContratado: contractedServiceType.trim(),
-      tipoServico: contractedServiceType.trim(),
-      formaPagamento: formPaymentMethod,
+    let finalContractedServiceType = contractedServiceType.trim();
+    if (!finalContractedServiceType) {
+      finalContractedServiceType = caseObj?.contractedServiceType || caseObj?.tipoServicoContratado || caseObj?.tipoServico || caseObj?.assunto || '';
+    }
+
+    const formatCurrency = (val: number | string) => {
+      const num = typeof val === 'string' ? parseFloat(val) : val;
+      if (isNaN(num)) return '0,00';
+      return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+
+    const formatDate = (dateStr: string) => {
+      if (!dateStr) return '';
+      const parts = dateStr.split('-');
+      if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      return dateStr;
+    };
+
+    const normalizedFinancialData = {
+      contractedServiceType: finalContractedServiceType,
+      tipoServicoContratado: finalContractedServiceType,
+      tipoServico: finalContractedServiceType,
+      chargeType: resolvedChargeType,
+      formaPagamento: formPaymentMode === 'avista' ? 'À vista' : 'Parcelado',
       formaCobranca: resolvedChargeType,
-      totalAmount: parsedAmount,
-      valorTotal: parsedAmount,
-      valorHonorarios: parsedAmount,
-      honorarioFixoValor: parsedAmount,
+      totalAmount: formatCurrency(parsedAmount),
+      valorTotal: formatCurrency(parsedAmount),
+      valorHonorarios: formatCurrency(parsedAmount),
+      honorarioFixoValor: formatCurrency(parsedAmount),
       quantidadeParcelas: calculatedInstallments,
       parcelas: calculatedInstallments,
-      valorParcela: calculatedInstallmentAmount,
-      dataPrimeiroVencimento: formFirstDueDate,
-      vencimento: formFirstDueDate,
+      valorParcela: formatCurrency(calculatedInstallmentAmount),
+      dataPrimeiroVencimento: formatDate(formFirstDueDate),
+      vencimento: formatDate(formFirstDueDate),
       notes: formNotes.trim(),
-      cobrancaAutomaticaInteg: formPaymentProvider
+      cobrancaAutomaticaInteg: formPaymentProvider,
+      paymentMethod: formPaymentMethod,
+      paymentMode: formPaymentMode,
+      tipoRecebimento: formPaymentMethod
     };
 
     let placeholders: Record<string, string>;
     try {
-      placeholders = buildContratoHonorariosPfPlaceholders(client, { ...caseObj, ...mockFinData }, mockFinData);
+      placeholders = buildContratoHonorariosPfPlaceholders(client, { ...caseObj, ...normalizedFinancialData }, normalizedFinancialData);
 
       const now = new Date();
       const day = String(now.getDate()).padStart(2, '0');
@@ -560,6 +583,13 @@ export default function ContratoHonorariosPF() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "stateless",
+          intent,
+          forceNewVersion: intent === "new_version",
+          existingDocument: {
+            id: localCaseObj?.contratoHonorariosGoogleDocsId || localCaseObj?.contratoHonorariosPfId || null,
+            url: localCaseObj?.contratoHonorariosGoogleDocsUrl || localCaseObj?.contratoHonorariosPfUrl || null,
+            version: Number(localCaseObj?.contratoHonorariosVersion || 0)
+          },
           googleAccessToken: currentGoogleAccessToken,
           documentType: "contrato_honorarios_pf",
           templateKey: "contrato_honorarios_pf",
@@ -662,15 +692,18 @@ export default function ContratoHonorariosPF() {
       setActiveSubStep(3);
     } catch (err: any) {
       console.error("[Contract Generator Failed]", err);
-      const errorMessage = err.message || "Falha na execução integrada.";
       const errorCode = err.errorCode || "CONTR_PF_PLACEHOLDER_REPLACEMENT_FAILED";
+      let uiErrorMessage = err.message || "Falha na execução integrada.";
+      if (errorCode === "GOOGLE_DRIVE_API_DISABLED") {
+        uiErrorMessage = "A API do Google Drive está desativada no projeto do Google Cloud. Habilite-a para gerar documentos.";
+      }
 
-      addClientLog(errorCode, `Ocorreu uma falha no fluxo: ${errorMessage}`);
+      addClientLog(errorCode, `Ocorreu uma falha no fluxo: ${uiErrorMessage}`);
       addClientLog("CONTR_PF_CASE_UPDATE_FAILED", "Falha ao persistir erro no BD.");
 
       await updateDoc(caseDocRef, {
         contratoHonorariosStatus: "falha",
-        contratoHonorariosLogFalha: errorMessage,
+        contratoHonorariosLogFalha: uiErrorMessage,
         contratoHonorariosGeneratedAt: ""
       });
 
@@ -679,14 +712,14 @@ export default function ContratoHonorariosPF() {
           status: "failed",
           updatedAt: new Date().toISOString(),
           errorCode,
-          errorMessage,
+          errorMessage: uiErrorMessage,
           logs: jobLogs
         });
       } catch (errJob) {
         console.warn("Failed to update job status", errJob);
       }
 
-      setError(`Falha ao gerar Contrato PF no motor interno: ${errorMessage}`);
+      setError(`Falha ao gerar Contrato PF no motor interno: ${uiErrorMessage}`);
     } finally {
       setSaving(false);
     }
@@ -1236,24 +1269,29 @@ export default function ContratoHonorariosPF() {
                 </div>
 
                 {/* TEMPLATE INFO */}
-                <div className="flex items-center justify-between p-3.5 bg-gray-50 border border-gray-150 rounded-2xl text-xs gap-3">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 bg-indigo-50 text-indigo-650 rounded-xl">
-                      <FileCode size={16} />
+                <div className="flex flex-col p-3.5 bg-gray-50 border border-gray-150 rounded-2xl text-xs gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className="p-2 bg-indigo-50 text-indigo-650 rounded-xl">
+                        <FileCode size={16} />
+                      </div>
+                      <div>
+                        <span className="block font-extrabold text-gray-800">Modelo Oficial Contrato de Honorários PF</span>
+                        <span className="text-[10px] text-gray-400 font-mono">Template ID: 1GJZ6LSW_szL...</span>
+                      </div>
                     </div>
-                    <div>
-                      <span className="block font-extrabold text-gray-800">Modelo Oficial Contrato de Honorários PF</span>
-                      <span className="text-[10px] text-gray-400 font-mono">Template ID: 1GJZ6LSW_szL...</span>
-                    </div>
+                    <a
+                      href="https://docs.google.com/document/d/1GJZ6LSW_szLSAA8Z3iw9jt4Q6zy5k6EuuTNhR5ooJQQ/edit?tab=t.0"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1 px-2 bg-white border border-gray-250 text-gray-700 hover:text-gray-950 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
+                    >
+                      Abrir Template de Referência Google Docs <ExternalLink size={10} />
+                    </a>
                   </div>
-                  <a
-                    href="https://docs.google.com/document/d/1GJZ6LSW_szLSAA8Z3iw9jt4Q6zy5k6EuuTNhR5ooJQQ/edit"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-1 px-2 bg-white border border-gray-250 text-gray-700 hover:text-gray-950 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all"
-                  >
-                    Ver Minuta Base <ExternalLink size={10} />
-                  </a>
+                  <p className="text-[10.5px] text-gray-500 font-medium">
+                    Este é o modelo oficial do Contrato de Honorários PF. A geração final criará uma cópia deste documento, preservando integralmente logomarca, cabeçalho, rodapé, imagens, margens, fontes e estrutura.
+                  </p>
                 </div>
 
                 {/* GENERATION STATE RENDERER */}

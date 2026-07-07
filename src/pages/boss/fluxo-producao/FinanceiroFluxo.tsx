@@ -20,7 +20,6 @@ import {
 } from "../../../lib/documents/placeholderBuilders";
 import FluxoStepLayout from "./components/FluxoStepLayout";
 import EntregaDocumento from "./components/EntregaDocumento";
-import ContratoPreviewCard from "./components/ContratoPreviewCard";
 import LogList from "./components/LogList";
 import {
   ArrowLeft,
@@ -2334,50 +2333,6 @@ export default function FinanceiroFluxo() {
     }
   };
 
-  const triggerSimulation = async (
-    type:
-      | "Procuração"
-      | "Declaração de Pobreza"
-      | "Contrato de Honorários"
-      | "Checklist de Provas",
-    status: "criada" | "falha",
-  ) => {
-    setError(null);
-    setSaving(true);
-    try {
-      const mockUrl = `https://docs.google.com/document/d/mock-${type.toLowerCase().replace(/[^a-z]/g, "")}-${caseId}`;
-      const mockId = `mock-id-${type.slice(0, 3).toLowerCase()}-${caseId!.slice(0, 5)}`;
-
-      if (type === "Contrato de Honorários") {
-        const nextState = {
-          ...wizardState,
-          q3_1: "sim",
-          q3_4: status === "criada" ? "sim" : "nao",
-          q3_5: status === "criada" ? "sim" : "nao",
-          q3_6: status === "criada" ? "sim" : "nao",
-          step3_completed: status === "criada",
-        };
-        setWizardState(nextState);
-        await updateDoc(doc(db, "cases", caseId!), {
-          solicitacoesProvasWizardState: nextState,
-          contratoHonorariosStatus: status,
-          contratoHonorariosGoogleDocsUrl: status === "criada" ? mockUrl : "",
-          contratoHonorariosGoogleDocsId: status === "criada" ? mockId : "",
-          contratoHonorariosLogFalha:
-            status === "falha" ? "Limite quota de API excedido" : "",
-        });
-      }
-      setSuccess(
-        `Automação de ${type} executada de forma simulada: ${status.toUpperCase()}`,
-      );
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      setError(`Erro na simulação: ${err.message}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleCheckboxToggle = (field: string, val: string) => {
     const current = wizardState[field] || [];
     let next;
@@ -4329,34 +4284,6 @@ export default function FinanceiroFluxo() {
                 </div>
               </form>
 
-              <ContratoPreviewCard
-                client={client}
-                caseObj={caseObj}
-                clientName={clientName}
-                isPf={client?.type !== "PJ"}
-                modeloHonorariosForm={modeloHonorariosForm}
-                tipoHonorarioForm={tipoHonorarioForm}
-                honorarioExitoPercentualForm={honorarioExitoPercentualForm}
-                honorarioFixoValorForm={honorarioFixoValorForm}
-                formaPagamentoForm={formaPagamentoForm}
-                tipoRecebimentoForm={tipoRecebimentoForm}
-                pixBancoForm={pixBancoForm}
-                pixChaveForm={pixChaveForm}
-                quantidadeParcelasForm={quantidadeParcelasForm}
-                valorParcelaForm={valorParcelaForm}
-                diaVencimentoForm={diaVencimentoForm}
-                valorEntradaForm={valorEntradaForm}
-                dataPrimeiroVencimentoForm={dataPrimeiroVencimentoForm}
-                clausulasForm={caseObj?.clausulas || ""}
-                percentualExitoForm={percentualExitoForm}
-                percentualExitoSobreRetroativoForm={percentualExitoSobreRetroativoForm}
-                quantidadeParcelasExitoPrevidenciarioForm={quantidadeParcelasExitoPrevidenciarioForm}
-                financeiroApuracaoTrabalhistaState={financeiroApuracaoTrabalhistaState}
-                financeiroApuracaoPrevidenciariaState={financeiroApuracaoPrevidenciariaState}
-                onEditConditions={() => {
-                  document.getElementById("financeiro-operacional-form")?.scrollIntoView({ behavior: "smooth" });
-                }}
-              />
 
               {(() => {
                 const clientDriveFolderId = (
