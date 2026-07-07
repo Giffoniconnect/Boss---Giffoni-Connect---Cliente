@@ -756,7 +756,6 @@ export function buildContratoHonorariosPfPlaceholders(clientData: any, caseData:
     ...casePls,
     "{{TIPO_SERVICO}}": resolvedServiceType,
     "{{TIPO_SERVICO_CONTRATADO}}": resolvedServiceType,
-    "<<Tipo do serviço contratado>>": resolvedServiceType,
     "{{FORMA_COBRANCA}}": fin?.formaPagamento || fin?.formaCobranca || "Parcelado",
     "{{VALOR_HONORARIOS}}": fin?.honorarioFixoValor || fin?.valorTotal || fin?.valorHonorarios || "A combinar",
     "{{ENTRADA}}": fin?.valorEntrada || fin?.entrada || "Não aplicável",
@@ -798,9 +797,12 @@ export function buildContratoHonorariosPfPlaceholders(clientData: any, caseData:
     "{{VALOR_ENTRADA}}": fin?.valorEntrada || caseData?.valorEntrada || "0,00",
     "{{DATA_PRIMEIRO_VENCIMENTO}}": fin?.dataPrimeiroVencimento || caseData?.dataPrimeiroVencimento || "A combinar",
     "{{CLAUSULA_SEGUNDA}}": cl2,
-    "<<clausula_segunda_varia_de_acordo_com_o_tipo_de_contrato_estabelecido>>": cl2,
+    "<<clausula_segunda_varia_de_acordo_com_o_tipo_de_contrato_estabelecido>>": cl2.replace(/^Cláusula Segunda:\s*/i, ""),
 
     // BRAND NEW PLACEHOLDERS
+    "<<Tipo do serviço contratado>>": fin?.contractedServiceType || fin?.tipoServicoContratado || caseData?.contractedServiceType || caseData?.tipoServicoContratado || caseData?.tipoServico || caseData?.assunto || "Serviços Advocatícios",
+
+
     "{{MODELO_HONORARIOS}}": modelLabel,
     "{{CATEGORIA_EXITO}}": fin?.categoriaExito || caseData?.categoriaExito || "N/A",
     "{{CLASSE_EXITO}}": fin?.classeExito || caseData?.classeExito || "N/A",
@@ -887,6 +889,7 @@ export function buildContratoHonorariosPjPlaceholders(clientData: any, caseData:
     "{{CLAUSULA_SEGUNDA}}": cl2,
 
     // BRAND NEW PLACEHOLDERS
+    "<<Tipo do serviço contratado>>": fin?.contractedServiceType || fin?.tipoServicoContratado || caseData?.contractedServiceType || caseData?.tipoServicoContratado || caseData?.tipoServico || caseData?.assunto || "Serviços Advocatícios",
     "{{MODELO_HONORARIOS}}": modelLabel,
     "{{CATEGORIA_EXITO}}": fin?.categoriaExito || caseData?.categoriaExito || "N/A",
     "{{CLASSE_EXITO}}": fin?.classeExito || caseData?.classeExito || "N/A",
