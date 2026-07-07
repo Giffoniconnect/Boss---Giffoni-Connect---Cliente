@@ -344,6 +344,87 @@ function cleanHtmlToPlainText(html: string): string {
   return text.trim();
 }
 
+export function resolvePjClientData(clientData: any) {
+  if (!clientData) return {};
+  const getVal = (vals: any[]) => {
+    for (const v of vals) {
+      if (v !== undefined && v !== null && String(v).trim() !== "") {
+        return String(v).trim();
+      }
+    }
+    return "";
+  };
+
+  const razaoSocial = getVal([
+    clientData?.pjData?.pj_razaoSocial,
+    clientData?.pjDadosEmpresa?.pj_razaoSocial,
+    clientData?.razaoSocial,
+    clientData?.nomeEmpresa
+  ]);
+
+  const nomeFantasia = getVal([
+    clientData?.pjData?.pj_nomeFantasia,
+    clientData?.pjDadosEmpresa?.pj_nomeFantasia,
+    clientData?.nomeFantasia
+  ]);
+
+  const cnpj = getVal([
+    clientData?.pjData?.pj_cnpj,
+    clientData?.pjDadosEmpresa?.pj_cnpj,
+    clientData?.cnpj
+  ]);
+
+  const endereco = getVal([
+    clientData?.pjData?.pj_endereco,
+    clientData?.pjDadosEmpresa?.pj_endereco,
+    clientData?.endereco
+  ]);
+
+  const repNome = getVal([
+    clientData?.pjDadosRepresentante?.pj_representanteNomeCompleto,
+    clientData?.pjData?.pj_nomeSocioAdministrador,
+    clientData?.pj_socioNome,
+    clientData?.socioNome
+  ]);
+
+  return {
+    razaoSocial,
+    nomeFantasia,
+    cnpj,
+    endereco,
+    repNome
+  };
+}
+
+export function buildPrimeiroAtendimentoPjPlaceholders(clientData: any, caseData: any): Record<string, string> {
+  const global = buildGlobalPlaceholders();
+  const client = buildClientCommonPlaceholders(clientData);
+  const casePls = buildCaseCommonPlaceholders(caseData);
+  const pj = resolvePjClientData(clientData);
+
+  const rawEntrevista = caseData?.entrevistaPadrao || caseData?.entrevista_padrao || "";
+  const cleanEntrevista = cleanHtmlToPlainText(rawEntrevista);
+
+  return {
+    ...global,
+    ...client,
+    ...casePls,
+    "{{DATA_ATENDIMENTO}}": global["{{DATA_ATUAL}}"],
+    "{{EMPRESA_RAZAO_SOCIAL}}": pj.razaoSocial || client["{{RAZAO_SOCIAL}}"] || "",
+    "{{EMPRESA_NOME_FANTASIA}}": pj.nomeFantasia || "",
+    "{{EMPRESA_CNPJ}}": pj.cnpj || client["{{CNPJ}}"] || "",
+    "{{EMPRESA_ENDERECO}}": pj.endereco || client["{{ENDERECO_COMPLETO}}"] || "",
+    "{{SOCIOS_NOMES}}": pj.repNome || "",
+    "{{CONTATO_COMERCIAL}}": client["{{TELEFONE}}"] || client["{{EMAIL}}"] || "",
+    "{{TRIAGEM_MOTIVO}}": caseData?.assunto || "",
+    "<<Registro_da_Entrevista_Padrão>>": cleanEntrevista,
+    "<< Registro_da_Entrevista_Padrao>>": cleanEntrevista,
+    "<<Registro_da_Entrevista_Padrao>>": cleanEntrevista,
+    "{{REGISTRO_DA_ENTREVISTA_PADRAO}}": cleanEntrevista,
+    "{{Registro_da_Entrevista_Padrão}}": cleanEntrevista
+  };
+}
+
 export function buildPrimeiroAtendimentoPlaceholders(clientData: any, caseData: any): Record<string, string> {
   const global = buildGlobalPlaceholders();
   const client = buildClientCommonPlaceholders(clientData);

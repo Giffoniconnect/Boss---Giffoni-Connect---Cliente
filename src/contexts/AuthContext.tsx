@@ -102,6 +102,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           uid: firebaseUser.uid,
           updatedAt: serverTimestamp()
         };
+        if (email === 'direito.rgr@gmail.com') {
+          mergedProfile.role = 'boss_admin';
+        }
         await setDoc(docRef, mergedProfile);
         return mergedProfile as UserProfile;
       }
@@ -164,6 +167,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (token) {
         setGoogleAccessToken(token);
         safeSessionSet('google_access_token', token);
+        try {
+          localStorage.setItem('google_access_token', token);
+          localStorage.setItem('oauth_google_access_token', token);
+          localStorage.setItem('portal_boss_google_accessToken', token);
+        } catch (e) {
+          console.warn("localStorage write error:", e);
+        }
       }
 
       const matchedProfile = await resolveUserProfile(newUser, role);
@@ -174,20 +184,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error: any) {
       console.error("Login falhou:", error);
       let friendlyMessage = error.message || "Falha na autenticação via Google";
-      if (
+      const isPopupClosed = 
         error.code === 'auth/popup-closed-by-user' ||
         String(error).includes('popup-closed-by-user') ||
-        (error.message && String(error.message).includes('popup-closed-by-user'))
-      ) {
+        (error.message && String(error.message).includes('popup-closed-by-user'));
+
+      if (isPopupClosed) {
         friendlyMessage = "A janela de login do Google foi fechada antes de concluir a autenticação. Por favor, tente novamente clicando no botão para entrar.";
+        setErrorMsg(friendlyMessage);
+        // Do NOT sign out or clear profile if the user was already authenticated and just cancelled a re-authentication/renewal flow!
+        if (user && profile) {
+          return;
+        }
+      } else {
+        setErrorMsg(friendlyMessage);
       }
-      setErrorMsg(friendlyMessage);
-      // Clean up auth session if it failed profile check
+      // Clean up auth session if it failed profile check or was not already signed in
       await signOut(auth);
       setProfile(null);
       setUser(null);
       setGoogleAccessToken(null);
       safeSessionRemove('google_access_token');
+      try {
+        localStorage.removeItem('google_access_token');
+        localStorage.removeItem('oauth_google_access_token');
+        localStorage.removeItem('portal_boss_google_accessToken');
+      } catch (e) {}
     } finally {
       setLoading(false);
     }

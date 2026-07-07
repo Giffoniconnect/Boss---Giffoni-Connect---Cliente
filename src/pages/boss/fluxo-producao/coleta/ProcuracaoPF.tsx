@@ -76,7 +76,7 @@ export default function ProcuracaoPF() {
   const [copiedDiagnostics, setCopiedDiagnostics] = React.useState(false);
   const [isDiagnosticsOpen, setIsDiagnosticsOpen] = React.useState(false);
 
-  const [forceNewVersion, setForceNewVersion] = React.useState(false);
+  const generationInFlightRef = React.useRef(false);
   const [copied, setCopied] = React.useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
   const [sentPayload, setSentPayload] = React.useState<any>(null);
@@ -206,7 +206,6 @@ export default function ProcuracaoPF() {
     setSuccess(null);
     setCurrentAttemptJobId(null);
     setAttemptStartedAt(null);
-    setForceNewVersion(true);
     try {
       const caseDocRef = doc(db, 'cases', caseId);
       await updateDoc(caseDocRef, {
@@ -547,32 +546,42 @@ export default function ProcuracaoPF() {
     });
   };
 
-  const handleSendJob = async () => {
-    // 1. Antes de enviar, validar: caseId, clientId, googleDriveClientFolderId, googleDriveClientFolderUrl, nomeCompleto, cpf
-    const targetCaseId = caseId;
-    const targetClientId = currentCase?.clientId || '';
-    const googleDriveClientFolderId = driveFolderId || client?.googleDriveClientFolderId || '';
-    const googleDriveClientFolderUrl = driveFolderUrl || client?.googleDriveClientFolderUrl || '';
-    const destinationFolderId = googleDriveClientFolderId;
-    const destinationFolderUrl = googleDriveClientFolderUrl;
-    const nomeCompleto = client?.pfDadosPessoais?.pf_nomeCompleto || client?.pfData?.pf_nomeCompleto || '';
-    const cpf = client?.pfDadosPessoais?.pf_cpf || client?.pfData?.pf_cpf || '';
+  const handleSendJob = async (intent: 'initial' | 'new_version' = 'initial') => {
+    if (generationInFlightRef.current) {
+      console.warn("[DUPLICATE CLICK] Geração de Procuração PF ignorada.");
+      return;
+    }
+    generationInFlightRef.current = true;
 
-    const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const caseDocRef = doc(db, 'cases', targetCaseId);
+    try {
+      // 1. Antes de enviar, validar: caseId, clientId, googleDriveClientFolderId, googleDriveClientFolderUrl, nomeCompleto, cpf
+      const targetCaseId = caseId;
+      const targetClientId = currentCase?.clientId || '';
+      const googleDriveClientFolderId = driveFolderId || client?.googleDriveClientFolderId || '';
+      const googleDriveClientFolderUrl = driveFolderUrl || client?.googleDriveClientFolderUrl || '';
+      const destinationFolderId = googleDriveClientFolderId;
+      const destinationFolderUrl = googleDriveClientFolderUrl;
+      const nomeCompleto = client?.pfDadosPessoais?.pf_nomeCompleto || client?.pfData?.pf_nomeCompleto || '';
+      const cpf = client?.pfDadosPessoais?.pf_cpf || client?.pfData?.pf_cpf || '';
 
-    // Initial logs setup using the specified codes
-    const jobLogs: any[] = [];
-    const addClientLog = (action: string, message: string) => {
-      jobLogs.push({
-        action,
-        timestamp: new Date().toISOString(),
-        message
-      });
-    };
+      const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const caseDocRef = doc(db, 'cases', targetCaseId);
 
-    // Step 1: PROC_PF_BUTTON_CLICKED
-    addClientLog("PROC_PF_BUTTON_CLICKED", "O operador clicou em 'Gerar Procuração' para iniciar o fluxo de automação.");
+      // Initial logs setup using the specified codes
+      const jobLogs: any[] = [];
+      const addClientLog = (action: string, message: string) => {
+        jobLogs.push({
+          action,
+          timestamp: new Date().toISOString(),
+          message
+        });
+      };
+
+      const actionLog = intent === 'initial' ? 'DOCUMENT_SINGLE_CLICK_GENERATION_STARTED' : 'DOCUMENT_NEW_VERSION_SINGLE_CLICK_STARTED';
+      addClientLog(actionLog, `Geração de Procuração PF iniciada via clique único fático (${intent === 'initial' ? 'geração inicial' : 'nova versão'}).`);
+
+      // Step 1: PROC_PF_BUTTON_CLICKED
+      addClientLog("PROC_PF_BUTTON_CLICKED", "O operador clicou em 'Gerar Procuração' para iniciar o fluxo de automação.");
 
     if (!targetCaseId) {
       setError("Erro de validação: caseId do caso está ausente.");
@@ -868,7 +877,6 @@ export default function ProcuracaoPF() {
 
       await saveWizardStateUpdate({ q1_1: 'sim' });
 
-      setForceNewVersion(false);
       setSuccess("Procuração PF gerada e indexada localmente com absoluto sucesso!");
       setTimeout(() => setSuccess(null), 5000);
     } catch (err: any) {
@@ -904,6 +912,9 @@ export default function ProcuracaoPF() {
       setError(`Falha ao gerar procuração no motor interno: ${errorMessage}`);
     } finally {
       setSaving(false);
+    }
+    } finally {
+      generationInFlightRef.current = false;
     }
   };
 
@@ -1181,7 +1192,7 @@ export default function ProcuracaoPF() {
                     <div className="border border-gray-150 rounded-2xl p-5 bg-gray-50/50 space-y-2.5">
                       <p className="font-bold text-gray-500 text-[10px] uppercase tracking-widest font-mono">Status da Automação</p>
                       
-                      {currentCase?.procuracaoGoogleDocsUrl && !isMockUrl(currentCase.procuracaoGoogleDocsUrl) && !forceNewVersion ? (
+                      {currentCase?.procuracaoGoogleDocsUrl && !isMockUrl(currentCase.procuracaoGoogleDocsUrl) ? (
                         <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-950 text-xs font-bold flex items-center gap-2 animate-fadeIn">
                           <span>Procuração criada com sucesso ✅</span>
                         </div>
@@ -1204,7 +1215,7 @@ export default function ProcuracaoPF() {
                       )}
                     </div>
 
-                    {currentCase?.procuracaoGoogleDocsUrl && !isMockUrl(currentCase.procuracaoGoogleDocsUrl) && !forceNewVersion ? (
+                    {currentCase?.procuracaoGoogleDocsUrl && !isMockUrl(currentCase.procuracaoGoogleDocsUrl) ? (
                       <div className="bg-white border border-slate-150 rounded-2xl p-5 space-y-4 shadow-3xs animate-in slide-in-from-top-1 duration-200">
                         <div className="flex items-start gap-3">
                           <div className="p-2.5 bg-indigo-50 border border-indigo-150 rounded-xl text-indigo-600">
@@ -1242,11 +1253,8 @@ export default function ProcuracaoPF() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              setError(null);
-                              setSuccess(null);
-                              setForceNewVersion(true);
-                            }}
+                            disabled={saving}
+                            onClick={() => handleSendJob('new_version')}
                             className="px-4.5 py-2 bg-white hover:bg-gray-50 border border-gray-250 text-slate-800 text-xs font-black uppercase rounded-xl transition-all shadow-3xs cursor-pointer font-bold"
                           >
                             Gerar nova versão
@@ -1275,22 +1283,6 @@ export default function ProcuracaoPF() {
                           </div>
                         ) : (
                           <div className="space-y-4">
-                            {forceNewVersion && (
-                              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-4 animate-in slide-in-from-top-1 text-xs">
-                                <div className="flex items-center gap-2 text-amber-950 font-semibold md:truncate">
-                                  <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 animate-ping" />
-                                  <span>Iniciando controle de versão { (currentCase?.procuracaoVersion || 1) + 1 }. Uma nova cópia será salva.</span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => setForceNewVersion(false)}
-                                  className="text-xs font-black text-slate-500 hover:text-slate-800 uppercase cursor-pointer whitespace-nowrap"
-                                >
-                                  Cancelar
-                                </button>
-                              </div>
-                            )}
-
                             {/* Motor Integrado info display */}
                             <div className="p-3.5 bg-emerald-50/60 border border-emerald-100 rounded-xl space-y-1.5 text-xs animate-fadeIn">
                               <p className="font-extrabold text-emerald-950 uppercase tracking-widest text-[9px] font-mono flex items-center gap-1.5 align-middle">
@@ -1306,11 +1298,11 @@ export default function ProcuracaoPF() {
                               <button
                                 type="button"
                                 disabled={saving}
-                                onClick={handleSendJob}
+                                onClick={() => handleSendJob('initial')}
                                 className="w-full md:w-auto px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm hover:shadow transition-all cursor-pointer font-bold"
                               >
                                 <Sparkles size={14} />
-                                <span>{forceNewVersion ? 'Gerar Nova Versão' : 'Gerar Procuração'}</span>
+                                <span>{saving ? 'Gerando...' : 'Gerar Procuração'}</span>
                               </button>
                             </div>
 

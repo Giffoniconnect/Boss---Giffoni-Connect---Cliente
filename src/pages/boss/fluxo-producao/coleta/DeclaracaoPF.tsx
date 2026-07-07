@@ -14,6 +14,7 @@ import { buildDeclaracaoPobrezaPfPlaceholders } from '../../../../lib/documents/
 export default function DeclaracaoPF() {
   const { googleAccessToken, loginWithGoogle } = useAuth();
   const [isRenewingGoogle, setIsRenewingGoogle] = React.useState(false);
+  const generationInFlightRef = React.useRef(false);
 
   const handleRenewGoogle = async () => {
     setIsRenewingGoogle(true);
@@ -89,19 +90,29 @@ export default function DeclaracaoPF() {
   const decStatus = localCaseObj?.declaracaoPobrezaStatus || 'Não gerada';
   const decUrl = localCaseObj?.declaracaoPobrezaGoogleDocsUrl || localCaseObj?.declaracaoPobrezaPfUrl || '';
 
-  const handleGenerateDeclaracaoPf = async () => {
-    const jobId = 'job_decl_pf_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-    const jobLogs: any[] = [];
-    const addClientLog = (action: string, message: string) => {
-      jobLogs.push({
-        action,
-        timestamp: new Date().toISOString(),
-        message
-      });
-    };
+  const handleGenerateDeclaracaoPf = async (intent: 'initial' | 'new_version' = 'initial') => {
+    if (generationInFlightRef.current) {
+      console.warn("[DUPLICATE CLICK] Geração de Declaração PF ignorada.");
+      return;
+    }
+    generationInFlightRef.current = true;
 
-    // Step 1: DECL_PF_BUTTON_CLICKED
-    addClientLog("DECL_PF_BUTTON_CLICKED", "O operador clicou em 'Gerar Declaração PF' para iniciar o fluxo de automação.");
+    try {
+      const jobId = 'job_decl_pf_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+      const jobLogs: any[] = [];
+      const addClientLog = (action: string, message: string) => {
+        jobLogs.push({
+          action,
+          timestamp: new Date().toISOString(),
+          message
+        });
+      };
+
+      const actionLog = intent === 'initial' ? 'DOCUMENT_SINGLE_CLICK_GENERATION_STARTED' : 'DOCUMENT_NEW_VERSION_SINGLE_CLICK_STARTED';
+      addClientLog(actionLog, `Geração de Declaração PF iniciada via clique único fático (${intent === 'initial' ? 'geração inicial' : 'nova versão'}).`);
+
+      // Step 1: DECL_PF_BUTTON_CLICKED
+      addClientLog("DECL_PF_BUTTON_CLICKED", "O operador clicou em 'Gerar Declaração PF' para iniciar o fluxo de automação.");
 
     if (!caseId) {
       setError("Erro de validação: ID do caso (caseId) está ausente.");
@@ -447,6 +458,9 @@ export default function DeclaracaoPF() {
       setError(`Falha ao gerar Declaração PF no motor interno: ${errorMessage}`);
     } finally {
       setSaving(false);
+    }
+    } finally {
+      generationInFlightRef.current = false;
     }
   };
 
@@ -1005,7 +1019,7 @@ export default function DeclaracaoPF() {
                       <button
                         type="button"
                         disabled={saving}
-                        onClick={handleGenerateDeclaracaoPf}
+                        onClick={() => handleGenerateDeclaracaoPf(decStatus === 'criada' ? 'new_version' : 'initial')}
                         className="w-full md:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 hover:shadow-sm transition-all cursor-pointer disabled:opacity-50"
                       >
                         {saving ? (
@@ -1016,7 +1030,7 @@ export default function DeclaracaoPF() {
                         ) : (
                           <>
                             <Sparkles size={13} />
-                            <span>Gerar Declaração PF</span>
+                            <span>{decStatus === 'criada' ? 'Gerar Nova Versão' : 'Gerar Declaração PF'}</span>
                           </>
                         )}
                       </button>

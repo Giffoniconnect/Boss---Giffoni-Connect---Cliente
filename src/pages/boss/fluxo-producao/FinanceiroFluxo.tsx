@@ -20,6 +20,8 @@ import {
 } from "../../../lib/documents/placeholderBuilders";
 import FluxoStepLayout from "./components/FluxoStepLayout";
 import EntregaDocumento from "./components/EntregaDocumento";
+import ContratoPreviewCard from "./components/ContratoPreviewCard";
+import LogList from "./components/LogList";
 import {
   ArrowLeft,
   ArrowRight,
@@ -146,10 +148,41 @@ export default function FinanceiroFluxo() {
   const [isRenewingGoogle, setIsRenewingGoogle] = useState(false);
   const [showContratoIntegrationConfig, setShowContratoIntegrationConfig] = useState(false);
   const [copiedText, setCopiedText] = useState(false);
+  const [integrationJobs, setIntegrationJobs] = useState<any[]>([]);
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  const [activeJobTab, setActiveJobTab] = useState<Record<string, 'logs' | 'payload'>>({});
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
+  const [copiedTechText, setCopiedTechText] = useState(false);
   const handleCopyLink = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedText(true);
     setTimeout(() => setCopiedText(false), 2000);
+  };
+
+  const handleCopyTechnicalDetails = () => {
+    const techCode = caseObj?.contratoHonorariosStatus === 'criada'
+      ? (caseObj?.contratoHonorariosLastOutcome || "SUCCESS")
+      : (caseObj?.contratoHonorariosLastErrorCode || "GENERATION_FAILED");
+    const techTimestamp = caseObj?.contratoHonorariosLastOperationAt || caseObj?.contratoHonorariosGeneratedAt || caseObj?.updatedAt || "";
+    const techDocId = caseObj?.contratoHonorariosGoogleDocsId || caseObj?.contratoHonorariosId || "";
+    const techDocVer = caseObj?.contratoHonorariosVersion || 1;
+    const rawLogs = caseObj?.contratoHonorariosTechnicalLog || caseObj?.contratoHonorariosGoogleDocsJobLogs || [];
+    
+    const details = {
+      status_tecnico: caseObj?.contratoHonorariosStatus || "N/A",
+      codigo_status: techCode,
+      executado_em: techTimestamp ? new Date(techTimestamp).toLocaleString() : "N/A",
+      documento_id: techDocId,
+      versao_documento: techDocVer,
+      erro_mensagem: caseObj?.contratoHonorariosLogFalha || null,
+      quantidade_eventos_ultima_tentativa: rawLogs.length,
+      quantidade_tentativas_historico: integrationJobs.length,
+      logs_ultima_tentativa: rawLogs
+    };
+
+    navigator.clipboard.writeText(JSON.stringify(details, null, 2));
+    setCopiedTechText(true);
+    setTimeout(() => setCopiedTechText(false), 2000);
   };
 
   const handleRenewGoogle = async () => {
@@ -159,7 +192,12 @@ export default function FinanceiroFluxo() {
       setSuccess("Autenticação Google renovada com sucesso! Você já pode gerar o contrato de honorários novamente.");
       setRefreshToggle(prev => prev + 1);
     } catch (err: any) {
-      setError(`Falha ao renovar autenticação: ${err.message || err}`);
+      const isIframe = window.self !== window.top;
+      if (isIframe) {
+        setError("Falha ao renovar autenticação: Popups de login do Google são bloqueados pelo navegador dentro de Iframes de visualização. Por favor, clique em 'Abrir em Nova Aba' no menu do AI Studio (topo direito) para renovar seu acesso Google com sucesso!");
+      } else {
+        setError(`Falha ao renovar autenticação: ${err.message || err}`);
+      }
     } finally {
       setIsRenewingGoogle(false);
     }
@@ -1061,7 +1099,7 @@ export default function FinanceiroFluxo() {
     );
   };
 
-  const handleGenerateContratoHonorarios = async () => {
+  const handleGenerateContratoHonorarios = async (intent: 'initial' | 'new_version' = 'initial') => {
     if (checkIfSubStep1IsDirty()) {
       setError("Condições não foram gravadas. Isso pode afetar o gDI e a subetapa 02, grave a operação antes de prosseguir.");
       setShowUnsavedBalloon(true);
@@ -1510,26 +1548,6 @@ export default function FinanceiroFluxo() {
       return;
     }
 
-    const currentGoogleAccessToken =
-      googleAccessToken ||
-      localStorage.getItem("oauth_google_access_token") ||
-      localStorage.getItem("portal_boss_google_accessToken") ||
-      "";
-    const localOverride =
-      localStorage.getItem("portal_boss_gdocs_override") || "";
-
-    if (!currentGoogleAccessToken && !localOverride) {
-      setError(
-        "Faça login novamente com Google para autorizar Google Docs/Drive ou configure a Central de Integrações.",
-      );
-      setSaving(false);
-      await updateDoc(caseDocRef, {
-        contratoHonorariosStatus: "falha",
-        contratoHonorariosLogFalha: "Falta Google Access Token",
-      });
-      return;
-    }
-
     const initialJob = {
       id: jobId,
       contractVersion: "boss.placeholders.v2",
@@ -1559,12 +1577,52 @@ export default function FinanceiroFluxo() {
 
     await setDoc(doc(db, "googleDocsJobs", jobId), initialJob);
 
+    const currentGoogleAccessToken =
+      googleAccessToken ||
+      localStorage.getItem("oauth_google_access_token") ||
+      localStorage.getItem("portal_boss_google_accessToken") ||
+      "";
+    const localOverride =
+      localStorage.getItem("portal_boss_gdocs_override") || "";
+
+    if (!currentGoogleAccessToken && !localOverride) {
+      const isIframe = window.self !== window.top;
+      const errMsg = isIframe
+        ? "Popups de login do Google são bloqueados pelo navegador dentro de Iframes de visualização. Por favor, clique em 'Abrir em Nova Aba' no menu do AI Studio (topo direito) para renovar seu acesso Google com sucesso!"
+        : "Faça login novamente com Google para autorizar Google Docs/Drive ou configure a Central de Integrações.";
+
+      setError(errMsg);
+      setSaving(false);
+
+      addClientLog(
+        "CONTRATO_TOKEN_CHECK_FAILED",
+        `Geração abortada: Falta Google Access Token no navegador. Motivo: ${isIframe ? "Ambiente em Iframe impediu popup de consentimento." : "Sessão expirada."}`
+      );
+
+      await updateDoc(caseDocRef, {
+        contratoHonorariosStatus: "falha",
+        contratoHonorariosLogFalha: isIframe ? "Iframe bloqueou Popup Google" : "Falta Google Access Token",
+      });
+
+      await updateDoc(doc(db, "googleDocsJobs", jobId), {
+        status: "failed",
+        updatedAt: new Date().toISOString(),
+        errorCode: "MISSING_GOOGLE_TOKEN",
+        errorMessage: errMsg,
+        logs: jobLogs,
+      });
+
+      setRefreshToggle((prev) => prev + 1);
+      return;
+    }
+
     try {
       const response = await fetch("/api/google-docs/generate-document", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: "stateless",
+          intent,
           googleAccessToken: currentGoogleAccessToken,
           documentType: isPf
             ? "contrato_honorarios_pf"
@@ -1626,6 +1684,9 @@ export default function FinanceiroFluxo() {
 
       const generatedAtISO = new Date().toISOString();
 
+      const docVer = responseData.documentVersion || 1;
+      const serverTechLogs = responseData.technicalLog || [];
+
       await updateDoc(caseDocRef, {
         contratoHonorariosStatus: "criada",
         contratoHonorariosPfId: googleDocsId,
@@ -1637,6 +1698,12 @@ export default function FinanceiroFluxo() {
         contratoHonorariosDestinationFolderUrl: clientDriveFolderUrl,
         contratoHonorariosGoogleDocsJobId: jobId,
         contratoHonorariosGoogleDocsJobLogs: jobLogs,
+        contratoHonorariosTechnicalLog: serverTechLogs,
+        contratoHonorariosVersion: docVer,
+        contratoHonorariosLastOutcome: "created",
+        contratoHonorariosLastOperationAt: generatedAtISO,
+        contratoHonorariosLastErrorCode: null,
+        contratoHonorariosLastErrorMessage: null,
         contratoHonorariosLogFalha: "",
       });
 
@@ -2470,6 +2537,31 @@ export default function FinanceiroFluxo() {
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         );
         setFinancials(financialList);
+
+        // 4. Fetch Google Docs integration jobs for this case (both PF and PJ contrato)
+        try {
+          const jobsQuery = query(
+            collection(db, "googleDocsJobs"),
+            where("caseId", "==", caseId),
+            where("documentType", "in", ["contrato_honorarios_pf", "contrato_honorarios_pj"])
+          );
+          const jobsSnap = await getDocs(jobsQuery);
+          const jobsList: any[] = [];
+          jobsSnap.forEach((docSnap) => {
+            jobsList.push({
+              id: docSnap.id,
+              ...docSnap.data(),
+            });
+          });
+          // Sort newest first
+          jobsList.sort(
+            (a, b) =>
+              new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+          );
+          setIntegrationJobs(jobsList);
+        } catch (jobErr) {
+          console.error("Erro ao buscar logs de integração:", jobErr);
+        }
       } catch (err: any) {
         console.error(err);
         setError(
@@ -3112,8 +3204,39 @@ export default function FinanceiroFluxo() {
         {!fetching && caseObj && activeSubStep === 1 && (
           <div className="space-y-6 animate-fadeIn">
             <div className="max-w-4xl mx-auto space-y-6">
+              {/* INDICADOR CENTRAL DE CONEXÃO GOOGLE */}
+              <div className="bg-white border border-gray-150 rounded-2xl p-4 flex items-center justify-between gap-4 shadow-3xs">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-2.5 h-2.5 rounded-full ${googleAccessToken ? "bg-emerald-500 animate-pulse" : "bg-amber-500 animate-pulse"}`} />
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">
+                      {googleAccessToken ? "Google Conectado" : "A conexão Google ainda não está disponível"}
+                    </p>
+                    <p className="text-[10px] text-slate-500 font-semibold leading-relaxed">
+                      {googleAccessToken 
+                        ? "Seu ambiente Google está pronto e integrado. Todas as automações herdarão esta sessão de forma centralizada."
+                        : "Sua sessão Google ainda não está ativa. Por favor, conecte para que as automações herdem suas credenciais."}
+                    </p>
+                  </div>
+                </div>
+                {!googleAccessToken ? (
+                  <button
+                    type="button"
+                    onClick={() => loginWithGoogle("boss_admin")}
+                    className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all shadow-3xs cursor-pointer font-bold shrink-0"
+                  >
+                    Conectar Google
+                  </button>
+                ) : (
+                  <span className="text-[9px] font-black uppercase text-emerald-600 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-150 font-mono tracking-wider font-extrabold shrink-0">
+                    Sessão Ativa
+                  </span>
+                )}
+              </div>
+
               {/* CARD 1: CONDIÇÕES OPERACIONAIS DO CONTRATO */}
               <form
+                id="financeiro-operacional-form"
                 onSubmit={handleSaveFinanceiroCondicoes}
                 className="bg-white border border-gray-150 rounded-2xl p-6 space-y-4 shadow-3xs"
               >
@@ -4206,6 +4329,35 @@ export default function FinanceiroFluxo() {
                 </div>
               </form>
 
+              <ContratoPreviewCard
+                client={client}
+                caseObj={caseObj}
+                clientName={clientName}
+                isPf={client?.type !== "PJ"}
+                modeloHonorariosForm={modeloHonorariosForm}
+                tipoHonorarioForm={tipoHonorarioForm}
+                honorarioExitoPercentualForm={honorarioExitoPercentualForm}
+                honorarioFixoValorForm={honorarioFixoValorForm}
+                formaPagamentoForm={formaPagamentoForm}
+                tipoRecebimentoForm={tipoRecebimentoForm}
+                pixBancoForm={pixBancoForm}
+                pixChaveForm={pixChaveForm}
+                quantidadeParcelasForm={quantidadeParcelasForm}
+                valorParcelaForm={valorParcelaForm}
+                diaVencimentoForm={diaVencimentoForm}
+                valorEntradaForm={valorEntradaForm}
+                dataPrimeiroVencimentoForm={dataPrimeiroVencimentoForm}
+                clausulasForm={caseObj?.clausulas || ""}
+                percentualExitoForm={percentualExitoForm}
+                percentualExitoSobreRetroativoForm={percentualExitoSobreRetroativoForm}
+                quantidadeParcelasExitoPrevidenciarioForm={quantidadeParcelasExitoPrevidenciarioForm}
+                financeiroApuracaoTrabalhistaState={financeiroApuracaoTrabalhistaState}
+                financeiroApuracaoPrevidenciariaState={financeiroApuracaoPrevidenciariaState}
+                onEditConditions={() => {
+                  document.getElementById("financeiro-operacional-form")?.scrollIntoView({ behavior: "smooth" });
+                }}
+              />
+
               {(() => {
                 const clientDriveFolderId = (
                   client?.googleDriveClientFolderId ||
@@ -4498,7 +4650,7 @@ export default function FinanceiroFluxo() {
                             <button
                               type="button"
                               disabled={saving}
-                              onClick={handleGenerateContratoHonorarios}
+                              onClick={() => handleGenerateContratoHonorarios('new_version')}
                               className="inline-flex items-center gap-1.5 px-4.5 py-2 bg-white border border-blue-200 text-blue-700 hover:bg-blue-50 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-3xs font-bold"
                             >
                               {saving ? (
@@ -4517,7 +4669,7 @@ export default function FinanceiroFluxo() {
                         <button
                           type="button"
                           disabled={saving}
-                          onClick={handleGenerateContratoHonorarios}
+                          onClick={() => handleGenerateContratoHonorarios('initial')}
                           className="w-full md:w-auto px-6 py-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm hover:shadow transition-all cursor-pointer font-bold"
                         >
                           {saving ? (
@@ -4533,6 +4685,168 @@ export default function FinanceiroFluxo() {
                           )}
                         </button>
                       )}
+
+                      {/* DETALHES TÉCNICOS COMPLEMENTARES E LOGS DA INTEGRAÇÃO */}
+                      {(() => {
+                        const rawLogs = caseObj?.contratoHonorariosTechnicalLog || caseObj?.contratoHonorariosGoogleDocsJobLogs || [];
+                        const normalizedLogs = rawLogs.map((log: any) => ({
+                          level: log.level || (log.action && (log.action.includes("FAILED") || log.action.includes("ERROR")) ? "error" : "info"),
+                          code: log.code || log.action || "EVENT",
+                          timestamp: log.timestamp,
+                          message: log.message
+                        }));
+
+                        const techCode = caseObj?.contratoHonorariosStatus === 'criada'
+                          ? (caseObj?.contratoHonorariosLastOutcome || "SUCCESS")
+                          : (caseObj?.contratoHonorariosLastErrorCode || "GENERATION_FAILED");
+                        const techTimestamp = caseObj?.contratoHonorariosLastOperationAt || caseObj?.contratoHonorariosGeneratedAt || caseObj?.updatedAt || "";
+                        const techDocId = caseObj?.contratoHonorariosGoogleDocsId || caseObj?.contratoHonorariosId || "";
+                        const techDocVer = caseObj?.contratoHonorariosVersion || 1;
+
+                        const hasAnyTechnicalInfo = !!caseObj?.contratoHonorariosStatus || normalizedLogs.length > 0 || integrationJobs.length > 0;
+                        if (!hasAnyTechnicalInfo) return null;
+
+                        return (
+                          <div className="mt-4 pt-4 border-t border-slate-100">
+                            {/* Botão de abrir/fechar detalhes técnicos */}
+                            <button
+                              type="button"
+                              onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}
+                              className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-2xl text-xs font-bold transition-all cursor-pointer"
+                            >
+                              <span className="flex items-center gap-2">
+                                <Settings size={13} className="text-slate-500 animate-spin" style={{ animationDuration: '8s' }} />
+                                <span>Ver detalhes técnicos</span>
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="bg-slate-200 text-slate-600 px-2 py-0.5 rounded-lg text-[9px] font-mono">
+                                  Última tentativa: {normalizedLogs.length} logs | Histórico: {integrationJobs.length} tentativas
+                                </span>
+                                <ChevronRight size={14} className={`text-slate-400 transition-transform ${showTechnicalDetails ? 'rotate-90 text-slate-600' : ''}`} />
+                              </div>
+                            </button>
+
+                            {/* Área expansível de Detalhes Técnicos */}
+                            {showTechnicalDetails && (
+                              <div className="mt-3 p-5 bg-slate-50 border border-slate-200 rounded-2xl space-y-5 animate-in fade-in duration-200 text-left">
+                                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                                  <div>
+                                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono">
+                                      Informações Técnicas de Integração
+                                    </span>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={handleCopyTechnicalDetails}
+                                      className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-150 text-indigo-700 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                                    >
+                                      {copiedTechText ? "Copiado!" : "Copiar detalhes técnicos"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowTechnicalDetails(false)}
+                                      className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 border border-slate-300 text-slate-700 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                                    >
+                                      Fechar detalhes técnicos
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Grid de metadados técnicos */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[11px] font-mono text-slate-600 bg-white p-3.5 rounded-xl border border-slate-150">
+                                  <div>
+                                    <span className="text-[9px] font-bold uppercase text-slate-400 font-sans block mb-0.5">Status Técnico</span>
+                                    <span className="font-extrabold text-slate-800 uppercase">{caseObj?.contratoHonorariosStatus || "N/A"}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-[9px] font-bold uppercase text-slate-400 font-sans block mb-0.5">Última Operação</span>
+                                    <span className="font-bold text-slate-800">{techTimestamp ? new Date(techTimestamp).toLocaleString("pt-BR") : "N/A"}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-[9px] font-bold uppercase text-slate-400 font-sans block mb-0.5">Versão / ID</span>
+                                    <span className="font-bold text-slate-800 select-all">
+                                      v{techDocVer} {techDocId ? `(${techDocId.slice(0, 8)}...)` : ""}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Código e Mensagem de Erro, se houver falha */}
+                                {caseObj?.contratoHonorariosLogFalha && (
+                                  <div className="p-3.5 bg-rose-50 border border-rose-150 rounded-xl space-y-1.5">
+                                    <div className="flex items-center gap-1.5 text-xs font-bold text-rose-800 font-sans">
+                                      <AlertTriangle size={14} className="text-rose-500" />
+                                      <span>Mensagem de Erro Técnica</span>
+                                    </div>
+                                    <p className="text-[11px] text-rose-700 font-medium">
+                                      Código do erro: <code className="font-mono bg-white px-1 py-0.5 rounded border border-rose-150 font-bold">{techCode || "GENERATION_FAILED"}</code>
+                                    </p>
+                                    <p className="text-xs text-rose-600 font-mono bg-white p-2.5 rounded-lg border border-rose-100 max-h-24 overflow-y-auto select-all leading-normal whitespace-pre-wrap">
+                                      {caseObj.contratoHonorariosLogFalha}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {/* Logs da Última Tentativa */}
+                                {normalizedLogs.length > 0 && (
+                                  <div className="space-y-2">
+                                    <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block font-sans">
+                                      Logs da Última Tentativa ({normalizedLogs.length} eventos)
+                                    </span>
+                                    <div className="p-4 bg-slate-950 text-slate-100 rounded-xl font-mono text-[11px] leading-relaxed max-h-48 overflow-y-auto space-y-3 shadow-inner">
+                                      <div className="space-y-3 relative before:absolute before:inset-y-0 before:left-3 before:w-0.5 before:bg-slate-800">
+                                        {normalizedLogs.map((log: any, idx: number) => {
+                                          let dotColor = "bg-blue-500";
+                                          let textColor = "text-blue-300";
+                                          let levelLabel = "INFO";
+                                          if (log.level === "success") {
+                                            dotColor = "bg-emerald-500";
+                                            textColor = "text-emerald-300";
+                                            levelLabel = "SUCESSO";
+                                          } else if (log.level === "warning") {
+                                            dotColor = "bg-amber-500";
+                                            textColor = "text-amber-300";
+                                            levelLabel = "ALERTA";
+                                          } else if (log.level === "error") {
+                                            dotColor = "bg-rose-500";
+                                            textColor = "text-rose-300";
+                                            levelLabel = "ERRO";
+                                          }
+
+                                          const dateFormatted = log.timestamp
+                                            ? new Date(log.timestamp).toLocaleTimeString()
+                                            : new Date().toLocaleTimeString();
+
+                                          return (
+                                            <div key={idx} className="flex gap-3.5 items-start relative pl-1">
+                                              <span className={`w-2 h-2 rounded-full ${dotColor} mt-1 ring-4 ring-slate-950 z-10 shrink-0`} />
+                                              <div className="space-y-0.5 min-w-0 flex-1 text-left">
+                                                <div className="flex flex-wrap items-center gap-x-2 text-[9px] text-slate-500 font-sans font-bold">
+                                                  <span>[{dateFormatted}]</span>
+                                                  <span className={textColor}>[{levelLabel}]</span>
+                                                  <span className="text-slate-400 font-mono text-[8px] bg-slate-800 px-1 py-0.5 rounded uppercase tracking-wider">{log.code || "EVENT"}</span>
+                                                </div>
+                                                <p className="text-slate-300 text-xs font-sans leading-normal font-medium">
+                                                  {log.message}
+                                                </p>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Histórico Completo de Integrações e Logs (via custom cached LogList component) */}
+                                <div className="pt-3 border-t border-slate-200">
+                                  <LogList integrationJobs={integrationJobs} caseId={caseId} />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                     </div>
                   </div>

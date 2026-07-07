@@ -30,7 +30,7 @@ import {
 import { flowRoutes } from './utils/flowRoutes';
 import { useUnsavedChangesGuard } from './hooks/useUnsavedChangesGuard';
 import { useAuth } from '../../../contexts/AuthContext';
-import { buildPrimeiroAtendimentoPlaceholders } from '../../../lib/documents/placeholderBuilders';
+import { buildPrimeiroAtendimentoPlaceholders, buildPrimeiroAtendimentoPjPlaceholders } from '../../../lib/documents/placeholderBuilders';
 
 interface MiniRichEditorProps {
   id: string;
@@ -251,6 +251,7 @@ export default function DadosCaso() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
   const { googleAccessToken } = useAuth();
+  const generationInFlightRef = useRef(false);
 
   // Screen states
   const [fetching, setFetching] = useState(true);
@@ -765,6 +766,11 @@ export default function DadosCaso() {
   };
 
   const handleGeneratePrimeiroAtendimento = async (intent: 'initial' | 'new_version' = 'initial') => {
+    if (generationInFlightRef.current) {
+      console.warn("[DUPLICATE CLICK] Geração de Primeiro Atendimento ignorada.");
+      return;
+    }
+    generationInFlightRef.current = true;
     setError(null);
     setSuccess(null);
     setGeneratingDoc(true);
@@ -793,34 +799,48 @@ export default function DadosCaso() {
         throw new Error("Dados do cliente não foram carregados do banco de dados.");
       }
 
-      // 5. client.type === "PF"
+      // 5. clientType detection
       const clientType = client?.type || client?.clientType || caseObj?.clientType || "PF";
-      if (clientType !== "PF") {
-        throw new Error("Esta automação é de uso exclusivo para primeiro atendimento de pessoa física (PF).");
-      }
+      const isPj = clientType === "PJ";
+      const prefix = isPj ? "ATENDIMENTO_PJ_" : "ATENDIMENTO_PF_";
 
-      // 6. nome completo existe de forma robusta
-      const nomeCompleto = (
-        client?.pfData?.pf_nomeCompleto ||
-        client?.pfDadosPessoais?.pf_nomeCompleto ||
-        client?.portalMirror?.pfDadosPessoais?.nomeCompleto ||
-        client?.nomeCompleto ||
-        client?.nome ||
-        client?.name ||
-        ""
-      ).trim();
+      let nomeCompleto = "";
+      let razaoSocial = "";
 
-      if (!nomeCompleto) {
-        console.error("PF_FULL_NAME_NOT_FOUND: Nome completo do cliente não localizado.", {
-          hasPfData: !!client?.pfData,
-          hasPfDadosPessoais: !!client?.pfDadosPessoais,
-          pfDataNome: !!client?.pfData?.pf_nomeCompleto,
-          pfDadosNome: !!client?.pfDadosPessoais?.pf_nomeCompleto,
-          clientType: client?.type || client?.clientType || "PF",
-          clientId: targetClientId,
-          caseId: targetCaseId
-        });
-        throw new Error("Nome completo do cliente não localizado no cadastro PF. Verifique o campo pf_nomeCompleto na Etapa 1 — Cadastro do Cliente.");
+      if (!isPj) {
+        nomeCompleto = (
+          client?.pfData?.pf_nomeCompleto ||
+          client?.pfDadosPessoais?.pf_nomeCompleto ||
+          client?.portalMirror?.pfDadosPessoais?.nomeCompleto ||
+          client?.nomeCompleto ||
+          client?.nome ||
+          client?.name ||
+          ""
+        ).trim();
+
+        if (!nomeCompleto) {
+          console.error("PF_FULL_NAME_NOT_FOUND: Nome completo do cliente não localizado.", {
+            clientId: targetClientId,
+            caseId: targetCaseId
+          });
+          throw new Error("Nome completo do cliente não localizado no cadastro PF. Verifique o campo pf_nomeCompleto na Etapa 1 — Cadastro do Cliente.");
+        }
+      } else {
+        razaoSocial = (
+          client?.pjData?.pj_razaoSocial ||
+          client?.pjDadosEmpresa?.pj_razaoSocial ||
+          client?.razaoSocial ||
+          client?.nomeEmpresa ||
+          ""
+        ).trim();
+
+        if (!razaoSocial) {
+          console.error("PJ_RAZAO_SOCIAL_NOT_FOUND: Razão social do cliente não localizada.", {
+            clientId: targetClientId,
+            caseId: targetCaseId
+          });
+          throw new Error("Razão social da empresa não localizada no cadastro PJ. Verifique o campo pj_razaoSocial na Etapa 1 — Cadastro do Cliente.");
+        }
       }
 
       // 7. googleDriveClientFolderId existe
@@ -845,14 +865,42 @@ export default function DadosCaso() {
       if (!googleDriveClientFolderId || !googleDriveClientFolderUrl || isMockFolderId(googleDriveClientFolderId)) {
         setError("Não há pasta real do Google Drive vinculada ao cliente. Acesse a Etapa 1 — Cadastro do Cliente e execute primeiro a Automação Google Drive — Pasta do Cliente.");
         setGeneratingDoc(false);
+        generationInFlightRef.current = false;
         return;
       }
 
       // 10. templateId oficial está definido
-      const officialTemplateId = "1ODrPbz7qtyeiTYnjzSdv9YQ3NqdafYoub6-KpkmTQTo";
+      let officialTemplateId = "1ODrPbz7qtyeiTYnjzSdv9YQ3NqdafYoub6-KpkmTQTo";
+      let destinationFolderId = googleDriveClientFolderId;
+      let destinationFolderUrl = googleDriveClientFolderUrl;
+
+      const templateKey = isPj ? "primeiro_atendimento_pj" : "primeiro_atendimento";
+
+      try {
+        const docRef = doc(db, 'settings', 'connectors');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const raw = docSnap.data();
+          const googleDocs = raw.googleDocs || {};
+          if (googleDocs.templates?.[templateKey]) {
+            officialTemplateId = googleDocs.templates[templateKey];
+          }
+          if (googleDocs.destinationFolderIds?.[templateKey]) {
+            destinationFolderId = googleDocs.destinationFolderIds[templateKey];
+          }
+          if (googleDocs.destinationFolderUrls?.[templateKey]) {
+            destinationFolderUrl = googleDocs.destinationFolderUrls[templateKey];
+          }
+        }
+      } catch (e) {
+        console.warn("Não foi possível obter as configurações dinâmicas dos conectores, usando fallback.", e);
+      }
 
       // 11. placeholders foram montados e não estão vazios
-      const placeholders = buildPrimeiroAtendimentoPlaceholders(client, caseObj);
+      const placeholders = isPj 
+        ? buildPrimeiroAtendimentoPjPlaceholders(client, caseObj)
+        : buildPrimeiroAtendimentoPlaceholders(client, caseObj);
+
       if (!placeholders || Object.keys(placeholders).length === 0) {
         throw new Error("Os placeholders do Primeiro Atendimento estão vazios ou não puderam ser gerados.");
       }
@@ -864,28 +912,42 @@ export default function DadosCaso() {
       if (!currentGoogleAccessToken && !localOverride) {
         setError("Faça login novamente com Google para autorizar Google Docs/Drive ou configure a Service Account na Central de Integrações.");
         setGeneratingDoc(false);
+        generationInFlightRef.current = false;
         return;
       }
 
       const targetEndpoint = "/api/google-docs/generate-document";
+      const nextVersion = (primeiroAtendimentoVersion || caseObj?.primeiroAtendimentoVersion || 1) + (primeiroAtendimentoGoogleDocsUrl ? 1 : 0);
+      
+      const clickLog = {
+        action: primeiroAtendimentoGoogleDocsUrl
+          ? `${prefix}NEW_VERSION_SINGLE_CLICK_STARTED`
+          : `${prefix}SINGLE_CLICK_GENERATION_STARTED`,
+        timestamp: new Date().toISOString(),
+        message: primeiroAtendimentoGoogleDocsUrl
+          ? `Nova versão ${nextVersion} iniciada diretamente pelo botão único, sem confirmação intermediária.`
+          : "Geração iniciada diretamente pelo botão único de documento."
+      };
+
       const internalPayload = {
         mode: "stateless",
         googleAccessToken: currentGoogleAccessToken,
-        documentType: "primeiro_atendimento",
+        documentType: templateKey,
         caseId: targetCaseId,
         clientId: targetClientId,
-        clientType: "PF",
+        clientType: clientType,
         templateId: officialTemplateId,
-        templateKey: "primeiro_atendimento",
+        templateKey: templateKey,
         destinationFolderId: googleDriveClientFolderId,
         destinationFolderUrl: googleDriveClientFolderUrl,
-        documentName: `1º Atendimento PF - ${nomeCompleto}`,
+        documentName: isPj ? `1º Atendimento PJ - ${razaoSocial}` : `1º Atendimento PF - ${nomeCompleto}`,
         placeholders,
         metadata: {
-          source: "Portal BOSS - 1º Atendimento PF",
+          source: `Portal BOSS - 1º Atendimento ${clientType}`,
           folderSource: "Automação Google Drive — Pasta do Cliente",
           caseId: targetCaseId,
-          clientId: targetClientId
+          clientId: targetClientId,
+          singleClickStarted: clickLog
         },
         credentialOverride: localOverride,
         generationIntent: intent,
@@ -911,7 +973,7 @@ export default function DadosCaso() {
       }
 
       // Update immediate state and persist in Firestore
-      const newLogs = responseData.technicalLog || [
+      let newLogs = responseData.technicalLog || [
         {
           timestamp: new Date().toISOString(),
           level: response.ok && responseData.success ? "success" : "error",
@@ -919,6 +981,8 @@ export default function DadosCaso() {
           message: responseData.errorMessage || responseData.error || responseText || "Ocorreu uma falha no fluxo."
         }
       ];
+
+      newLogs = [clickLog, ...newLogs];
       setPrimeiroAtendimentoTechnicalLog(newLogs);
 
       const caseDocRef = doc(db, 'cases', targetCaseId);
@@ -999,9 +1063,9 @@ export default function DadosCaso() {
       // Save to cases/{caseId}/generatedDocuments/primeiro_atendimento
       const subdocRef = doc(db, 'cases', targetCaseId, 'generatedDocuments', 'primeiro_atendimento');
       await setDoc(subdocRef, {
-        documentType: "primeiro_atendimento",
-        displayName: `1º Atendimento PF - ${nomeCompleto} - v${docVer}`,
-        templateKey: "primeiro_atendimento",
+        documentType: templateKey,
+        displayName: isPj ? `1º Atendimento PJ - ${razaoSocial} - v${docVer}` : `1º Atendimento PF - ${nomeCompleto} - v${docVer}`,
+        templateKey: templateKey,
         templateId: officialTemplateId,
         googleDocsId,
         googleDocsUrl,
@@ -1053,6 +1117,7 @@ export default function DadosCaso() {
       }
     } finally {
       setGeneratingDoc(false);
+      generationInFlightRef.current = false;
     }
   };
 
@@ -1386,10 +1451,10 @@ export default function DadosCaso() {
                     <Sparkles size={16} className="text-indigo-600 animate-pulse" />
                   </div>
                   <h3 className="text-sm font-black text-slate-900">
-                    Automação Google Docs — 1º Atendimento - Pessoa física
+                    Automação Google Docs — 1º Atendimento - {client?.type === 'PJ' ? 'Pessoa jurídica' : 'Pessoa física'}
                   </h3>
                   <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
-                    Esta ferramenta envia os dados consolidados do cadastro de pessoa física diretamente ao build receptor do Google Docs para preenchimento de placeholders, indexação e arquivamento automatizado na pasta em tempo real.
+                    Esta ferramenta envia os dados consolidados do cadastro de {client?.type === 'PJ' ? 'pessoa jurídica' : 'pessoa física'} diretamente ao build receptor do Google Docs para preenchimento de placeholders, indexação e arquivamento automatizado na pasta em tempo real.
                   </p>
                 </div>
               </div>
@@ -1568,7 +1633,7 @@ export default function DadosCaso() {
                           1º Atendimento Gerado - v{primeiroAtendimentoVersion}
                         </h3>
                         <p className="text-xs text-slate-500 leading-relaxed font-semibold">
-                          O documento de Primeiro Atendimento PF real foi localizado, preenchido e confirmado na pasta real do Google Drive.
+                          O documento de Primeiro Atendimento {client?.type === 'PJ' ? 'PJ' : 'PF'} real foi localizado, preenchido e confirmado na pasta real do Google Drive.
                         </p>
                       </div>
                     </div>

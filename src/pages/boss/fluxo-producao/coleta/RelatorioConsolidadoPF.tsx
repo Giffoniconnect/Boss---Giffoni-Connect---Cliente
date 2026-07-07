@@ -90,6 +90,7 @@ export default function RelatorioConsolidadoPF() {
   const receivedPercentage = Math.round((totalAllReceived / (totalAllRequested || 1)) * 100);
 
   const [generatingRelatorio, setGeneratingRelatorio] = useState(false);
+  const generationInFlightRef = React.useRef(false);
   const [copiedRelatorio, setCopiedRelatorio] = useState(false);
   const [isGdiSettingsOpen, setIsGdiSettingsOpen] = useState(false);
   const [relatorioLogs, setRelatorioLogs] = useState<any[]>([]);
@@ -206,9 +207,16 @@ export default function RelatorioConsolidadoPF() {
   };
 
   const handleGenerateRelatorioDocs = async () => {
-    setGeneratingRelatorio(true);
-    setError(null);
-    setSuccess(null);
+    if (generationInFlightRef.current) {
+      console.warn("[DUPLICATE CLICK] Geração de Relatório PF ignorada.");
+      return;
+    }
+    generationInFlightRef.current = true;
+
+    try {
+      setGeneratingRelatorio(true);
+      setError(null);
+      setSuccess(null);
     const trackingLogs: any[] = [];
     const addTrackLog = (step: string, details?: any) => {
       trackingLogs.push({ step, timestamp: new Date().toISOString(), details });
@@ -313,6 +321,9 @@ export default function RelatorioConsolidadoPF() {
       setError(`Erro na geração integrado via Google Docs: ${err.message}`);
     } finally {
       setGeneratingRelatorio(false);
+    }
+    } finally {
+      generationInFlightRef.current = false;
     }
   };
 

@@ -1417,8 +1417,11 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
     destinationFolderUrl,
     documentName,
     placeholders,
-    metadata
+    metadata,
+    intent
   } = req.body || {};
+
+  const isForceNew = intent === "new_version" || req.body?.forceNewVersion || req.body?.forceNew;
 
   const isStateless = mode === "stateless";
 
@@ -1804,7 +1807,7 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
   const nextVersion = Math.max(maxFoundVersion + 1, payloadVersion + 1);
 
   // 4. Caso o documento esteja realmente na pasta do cliente: retornar already_exists_in_destination
-  if (verifiedDocInFolder) {
+  if (verifiedDocInFolder && !isForceNew) {
     const existingId = verifiedDocInFolder.id;
     const existingUrl = verifiedDocInFolder.webViewLink || `https://docs.google.com/document/d/${existingId}/edit`;
     const docVer = parseInt(verifiedDocInFolder.appProperties?.documentVersion, 10) || payloadVersion || maxFoundVersion || 1;
@@ -1844,8 +1847,10 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
     });
   }
 
-  // 5. Quando o documento estiver ausente: Criar nova versão real
-  if (existingDocsIdFromPayload || payloadVersion > 0 || maxFoundVersion > 0) {
+  // 5. Quando o documento estiver ausente ou nova versão for solicitada
+  if (isForceNew) {
+    addLog("info", "FORCE_NEW_VERSION_REQUESTED", `Nova versão solicitada. Gerando um novo documento fisicamente no Drive como v${nextVersion}.`);
+  } else if (existingDocsIdFromPayload || payloadVersion > 0 || maxFoundVersion > 0) {
     addLog("warning", "DOCUMENT_MISSING_OR_OUTSIDE_DESTINATION", "O registro anterior não foi localizado dentro da pasta do cliente. Uma nova versão real será criada.");
   } else {
     addLog("info", "REAL_DOCUMENT_CREATION_STARTED", "Iniciada a criação de uma nova versão no Google Drive.");
@@ -1860,7 +1865,9 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
   ).trim();
   
   // Support custom names, falling back to dynamic name
-  const finalDocName = documentName || req.body?.customName || req.body?.documentName || `${typeLabel} - ${clientNameForName} - v${nextVersion}`;
+  const finalDocName = (isForceNew && documentName)
+    ? `${documentName} - v${nextVersion}`
+    : (documentName || req.body?.customName || req.body?.documentName || `${typeLabel} - ${clientNameForName} - v${nextVersion}`);
 
   // Copy template
   let googleDocsId = "";

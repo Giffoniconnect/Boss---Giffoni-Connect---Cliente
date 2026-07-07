@@ -16,14 +16,11 @@ service cloud.firestore {
     
     function isAdmin() {
       // Primary admin email always has access if signed in.
-      // We also check for administrative and staff roles in the users collection.
+      // We check for case-insensitive email matching and staff roles.
       return isSignedIn() && (
-        request.auth.token.email == 'direito.rgr@gmail.com' ||
+        ('email' in request.auth.token && request.auth.token.email.matches('(?i)^direito\\.rgr@gmail\\.com$')) ||
         !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'boss_admin' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'partner' ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'outsourced'
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') in ['boss_admin', 'admin', 'partner', 'outsourced']
       );
     }
 
@@ -91,9 +88,10 @@ service cloud.firestore {
       function belongsToUser() {
         return isSignedIn() && (
           isAdmin() || 
-          !exists(/databases/$(database)/documents/users/$(request.auth.uid)) || (
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'client' &&
-            resource.data.clientId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.clientId
+          !exists(/databases/$(database)/documents/users/$(request.auth.uid)) || 
+          resource == null || (
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'client' &&
+            resource.data.get('clientId', '') == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('clientId', '')
           )
         );
       }
@@ -101,7 +99,7 @@ service cloud.firestore {
       allow read: if isAdmin() || belongsToUser();
       allow create: if isAdmin() && isValidCase(request.resource.data);
       allow update: if isAdmin() || 
-                     (belongsToUser() && request.resource.data.clientId == resource.data.clientId);
+                     (belongsToUser() && request.resource.data.get('clientId', '') == resource.data.get('clientId', ''));
       allow delete: if isAdmin();
     }
 

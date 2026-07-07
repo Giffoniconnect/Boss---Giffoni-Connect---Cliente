@@ -14,6 +14,7 @@ import { buildDeclaracaoPobrezaPjPlaceholders } from '../../../../lib/documents/
 export default function DeclaracaoPJ() {
   const { googleAccessToken, loginWithGoogle } = useAuth();
   const [isRenewingGoogle, setIsRenewingGoogle] = React.useState(false);
+  const generationInFlightRef = React.useRef(false);
 
   const handleRenewGoogle = async () => {
     setIsRenewingGoogle(true);
@@ -88,19 +89,29 @@ export default function DeclaracaoPJ() {
   const decStatus = localCaseObj?.declaracaoPobrezaStatus || 'Não gerada';
   const decUrl = localCaseObj?.declaracaoPobrezaGoogleDocsUrl || localCaseObj?.declaracaoPobrezaPjUrl || '';
 
-  const handleGenerateDeclaracaoPj = async () => {
-    const jobId = 'job_decl_pj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-    const jobLogs: any[] = [];
-    const addClientLog = (action: string, message: string) => {
-      jobLogs.push({
-        action,
-        timestamp: new Date().toISOString(),
-        message
-      });
-    };
+  const handleGenerateDeclaracaoPj = async (intent: 'initial' | 'new_version' = 'initial') => {
+    if (generationInFlightRef.current) {
+      console.warn("[DUPLICATE CLICK] Geração de Declaração PJ ignorada.");
+      return;
+    }
+    generationInFlightRef.current = true;
 
-    // Step 1: DECL_PJ_BUTTON_CLICKED
-    addClientLog("DECL_PJ_BUTTON_CLICKED", "O operador clicou em 'Gerar Declaração PJ' para iniciar o fluxo de automação.");
+    try {
+      const jobId = 'job_decl_pj_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+      const jobLogs: any[] = [];
+      const addClientLog = (action: string, message: string) => {
+        jobLogs.push({
+          action,
+          timestamp: new Date().toISOString(),
+          message
+        });
+      };
+
+      const actionLog = intent === 'initial' ? 'DOCUMENT_SINGLE_CLICK_GENERATION_STARTED' : 'DOCUMENT_NEW_VERSION_SINGLE_CLICK_STARTED';
+      addClientLog(actionLog, `Geração de Declaração PJ iniciada via clique único fático (${intent === 'initial' ? 'geração inicial' : 'nova versão'}).`);
+
+      // Step 1: DECL_PJ_BUTTON_CLICKED
+      addClientLog("DECL_PJ_BUTTON_CLICKED", "O operador clicou em 'Gerar Declaração PJ' para iniciar o fluxo de automação.");
 
     if (!caseId) {
       setError("Erro de validação: ID do caso (caseId) está ausente.");
@@ -434,6 +445,9 @@ export default function DeclaracaoPJ() {
     } finally {
       setSaving(false);
     }
+    } finally {
+      generationInFlightRef.current = false;
+    }
   };
 
   const renderStatusBadge = () => {
@@ -668,7 +682,7 @@ export default function DeclaracaoPJ() {
                         <button
                           type="button"
                           disabled={saving}
-                          onClick={handleGenerateDeclaracaoPj}
+                          onClick={() => handleGenerateDeclaracaoPj('new_version')}
                           className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-3 py-1.5 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 cursor-pointer shadow-3xs transition-all disabled:opacity-50"
                         >
                           <RefreshCw size={10} className={saving ? "animate-spin mr-1" : "mr-1"} />
@@ -678,7 +692,7 @@ export default function DeclaracaoPJ() {
                         <button
                           type="button"
                           disabled={saving}
-                          onClick={handleGenerateDeclaracaoPj}
+                          onClick={() => handleGenerateDeclaracaoPj('initial')}
                           className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-lg text-[9.5px] font-black uppercase flex items-center gap-1.5 cursor-pointer shadow-3xs transition-all disabled:opacity-50"
                         >
                           {saving ? (

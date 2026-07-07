@@ -4,7 +4,7 @@ import { flowSteps } from '../utils/flowSteps';
 import { flowRoutes } from '../utils/flowRoutes';
 import { Lock, ArrowLeft, Check, X, FolderKanban, ExternalLink } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../../../../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../../../../lib/firebase';
 
 interface FluxoSidebarProps {
   caseId?: string;
@@ -47,6 +47,7 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
         }
       } catch (err) {
         console.error("Error reading case in sidebar:", err);
+        handleFirestoreError(err, OperationType.GET, `cases/${caseId}`);
       }
     };
 

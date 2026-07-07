@@ -16,6 +16,7 @@ import { buildContratoHonorariosPfPlaceholders } from '../../../../lib/documents
 export default function ContratoHonorariosPF() {
   const { googleAccessToken, loginWithGoogle } = useAuth();
   const [isRenewingGoogle, setIsRenewingGoogle] = React.useState(false);
+  const generationInFlightRef = React.useRef(false);
 
   const handleRenewGoogle = async () => {
     setIsRenewingGoogle(true);
@@ -300,18 +301,28 @@ export default function ContratoHonorariosPF() {
     setTimeout(() => setSuccess(null), 2500);
   };
 
-  const handleGenerateContratoGDocs = async () => {
-    const jobId = 'job_contr_pf_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-    const jobLogs: any[] = [];
-    const addClientLog = (action: string, message: string) => {
-      jobLogs.push({
-        action,
-        timestamp: new Date().toISOString(),
-        message
-      });
-    };
+  const handleGenerateContratoGDocs = async (intent: 'initial' | 'new_version' = 'initial') => {
+    if (generationInFlightRef.current) {
+      console.warn("[DUPLICATE CLICK] Geração de Contrato PF ignorada.");
+      return;
+    }
+    generationInFlightRef.current = true;
 
-    addClientLog("CONTR_PF_BUTTON_CLICKED", "O operador solicitou a geração fática do Contrato de Honorários PF.");
+    try {
+      const jobId = 'job_contr_pf_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+      const jobLogs: any[] = [];
+      const addClientLog = (action: string, message: string) => {
+        jobLogs.push({
+          action,
+          timestamp: new Date().toISOString(),
+          message
+        });
+      };
+
+      const actionLog = intent === 'initial' ? 'DOCUMENT_SINGLE_CLICK_GENERATION_STARTED' : 'DOCUMENT_NEW_VERSION_SINGLE_CLICK_STARTED';
+      addClientLog(actionLog, `Geração de Contrato PF iniciada via clique único fático (${intent === 'initial' ? 'geração inicial' : 'nova versão'}).`);
+
+      addClientLog("CONTR_PF_BUTTON_CLICKED", "O operador solicitou a geração fática do Contrato de Honorários PF.");
 
     if (!caseId) {
       setError("Erro de validação: ID do caso (caseId) está ausente.");
@@ -678,6 +689,9 @@ export default function ContratoHonorariosPF() {
       setError(`Falha ao gerar Contrato PF no motor interno: ${errorMessage}`);
     } finally {
       setSaving(false);
+    }
+    } finally {
+      generationInFlightRef.current = false;
     }
   };
 
@@ -1288,7 +1302,7 @@ export default function ContratoHonorariosPF() {
                       </button>
                       <button
                         type="button"
-                        onClick={handleGenerateContratoGDocs}
+                        onClick={() => handleGenerateContratoGDocs('new_version')}
                         className="px-4 py-2 bg-gray-50 border border-gray-200 text-gray-600 hover:text-gray-800 text-[10.5px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
                       >
                         <RefreshCw size={12} /> Gerar Nova Versão
@@ -1312,7 +1326,7 @@ export default function ContratoHonorariosPF() {
                     <div className="flex flex-wrap gap-2 pt-1 border-t border-rose-100 pt-3">
                       <button
                         type="button"
-                        onClick={handleGenerateContratoGDocs}
+                        onClick={() => handleGenerateContratoGDocs('new_version')}
                         className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-[10.5px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
                       >
                         <RefreshCw size={12} /> Tentar Gerar Novamente
@@ -1339,7 +1353,7 @@ export default function ContratoHonorariosPF() {
                     <div className="pt-1 flex gap-2">
                       <button
                         type="button"
-                        onClick={handleGenerateContratoGDocs}
+                        onClick={() => handleGenerateContratoGDocs('initial')}
                         className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
                       >
                         <Sparkles size={13} className="animate-pulse" /> Gerar Contrato no Google Docs
