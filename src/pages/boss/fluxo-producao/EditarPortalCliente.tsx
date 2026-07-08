@@ -2564,6 +2564,8 @@ export default function EditarPortalCliente() {
                   handleUpdateEventStatus={handleUpdateEventStatus}
                   handleToggleEventVisibility={handleToggleEventVisibility}
                   handleDeleteEvent={handleDeleteEvent}
+                  setAllClientEvents={setAllClientEvents}
+                  selectedClient={selectedClient}
                 />
               )}
 
