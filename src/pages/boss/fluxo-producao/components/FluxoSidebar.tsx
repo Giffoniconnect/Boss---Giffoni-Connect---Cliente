@@ -96,7 +96,6 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
           else if (s.id === 'relatorio-integridade') shortLabel = 'Relatório de Integridade e Auditoria';
           else if (s.id === 'controladoria') shortLabel = 'Controladoria';
           else if (s.id === 'arquivamento') shortLabel = 'Arquivamento';
-          else if (s.id === 'recadastramento') shortLabel = 'Recadastramento';
 
           return { ...s, label: shortLabel };
         });
@@ -286,11 +285,6 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
     if (stepId === 'arquivamento') {
       if (!caseObj) return 'uninitiated';
       return (caseObj.statusInterno === 'Arquivado' || caseObj.archived) ? 'complete' : 'uninitiated';
-    }
-
-    if (stepId === 'recadastramento') {
-      if (!caseObj) return 'uninitiated';
-      return caseObj.recadastramentoCompleted ? 'complete' : 'uninitiated';
     }
 
     return 'uninitiated';

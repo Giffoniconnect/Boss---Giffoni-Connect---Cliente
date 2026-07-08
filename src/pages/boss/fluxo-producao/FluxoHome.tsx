@@ -162,7 +162,6 @@ export default function FluxoHome() {
       case 'novo-caso': return ShieldCheck;
       case 'controladoria': return Cpu;
       case 'relatorio-integridade': return HeartPulse;
-      case 'recadastramento': return Cloud;
       default: return Sparkles;
     }
   };
@@ -185,7 +184,6 @@ export default function FluxoHome() {
       case 'novo-caso': return 'bg-indigo-50 text-indigo-600';
       case 'controladoria': return 'bg-violet-50 text-violet-600';
       case 'relatorio-integridade': return 'bg-pink-50 text-pink-600';
-      case 'recadastramento': return 'bg-sky-50 text-sky-600';
       default: return 'bg-gray-50 text-gray-600';
     }
   };
@@ -258,9 +256,6 @@ export default function FluxoHome() {
         break;
       case 'arquivamento':
         navigate(flowRoutes.arquivamento(caseIdParam));
-        break;
-      case 'recadastramento':
-        navigate(flowRoutes.recadastramento());
         break;
       default:
         break;

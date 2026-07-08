@@ -29,5 +29,4 @@ export const flowSteps: FlowStep[] = [
   { id: 'agendar-pericia', label: '18. Perícias', routeKey: 'agendarPericia', requiresCaseId: true, order: 18 },
   { id: 'relatorio-integridade', label: '19. Relatório de Integridade e Auditoria', routeKey: 'relatorioIntegridade', requiresCaseId: true, order: 19 },
   { id: 'arquivamento', label: '20. Arquivamento', routeKey: 'arquivamento', requiresCaseId: true, order: 20 },
-  { id: 'recadastramento', label: '21. Recadastramento', routeKey: 'recadastramento', requiresCaseId: false, order: 21 },
 ];
