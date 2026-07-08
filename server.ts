@@ -393,6 +393,64 @@ Mantenha um tom pericial, assertivo, formal e de alto rigor técnico-jurídico b
   }
 });
 
+// Format structured case details using Gemini AI for Revision Audit
+app.post("/api/gemini-revisao", async (req, res) => {
+  try {
+    const { caseDetails } = req.body;
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      return res.status(400).json({ 
+        error: "GEMINI_API_KEY_MISSING",
+        message: "Integração real com Gemini IA ainda não configurada." 
+      });
+    }
+
+    const { GoogleGenAI } = await import("@google/genai");
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+
+    const prompt = `Você é o Gemini Auditor Sênior de Revisão Jurídica do escritório Giffoni.
+Sua tarefa é analisar os detalhes de um caso jurídico sob revisão e fornecer uma análise preliminar detalhada dividida em:
+1. Acertos identificados (pontos corretos, consistentes ou adequados encontrados no caso/estruturação)
+2. Erros identificados (inconsistências, falhas, lacunas, contradições, ausência de documentos, ausência de dados ou problemas relevantes)
+3. Sugestões de melhoria (recomendações práticas para melhorar o caso, ajustar documentos, complementar dados, corrigir fluxo ou após a revisão)
+
+DETALHES DO CASO SOB ANÁLISE:
+${JSON.stringify(caseDetails, null, 2)}
+
+Responda estritamente em formato JSON com as chaves "acertos" (lista de strings), "erros" (lista de strings) e "sugestoes" (lista de strings).`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json"
+      }
+    });
+
+    const responseText = response.text;
+    if (!responseText) {
+      throw new Error("Retorno vazio do Gemini");
+    }
+
+    const result = JSON.parse(responseText);
+    return res.json(result);
+  } catch (err: any) {
+    console.error("[GeminiRevisao] Error:", err);
+    return res.status(500).json({ 
+      error: "TECHNICAL_ERROR", 
+      message: err.message || "Erro técnico ao processar pré-revisão com Gemini IA." 
+    });
+  }
+});
+
 // --- GOOGLE CALENDAR AUTOMATION ENDPOINTS ---
 
 app.post("/api/calendar/check-conflicts", async (req, res) => {

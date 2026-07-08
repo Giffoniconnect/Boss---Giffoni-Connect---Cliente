@@ -25,7 +25,8 @@ import {
   FolderOpen,
   Clock,
   Calendar,
-  Activity
+  Activity,
+  Plane
 } from 'lucide-react';
 import { flowSteps } from './utils/flowSteps';
 import { flowRoutes } from './utils/flowRoutes';
@@ -147,6 +148,7 @@ export default function FluxoHome() {
   const getStepIcon = (id: string) => {
     switch(id) {
       case 'cadastro': return ClipboardList;
+      case 'onboarding': return Plane;
       case 'tipo-producao': return Layers;
       case 'dados-caso': return FileText;
       case 'solicitacoes-informacoes': return FileQuestion;
@@ -169,6 +171,7 @@ export default function FluxoHome() {
   const getStepColorBg = (id: string) => {
     switch(id) {
       case 'cadastro': return 'bg-blue-50 text-blue-600';
+      case 'onboarding': return 'bg-indigo-55 text-indigo-600 border border-indigo-100';
       case 'tipo-producao': return 'bg-purple-50 text-purple-600';
       case 'dados-caso': return 'bg-amber-50 text-amber-600';
       case 'solicitacoes-informacoes': return 'bg-teal-50 text-teal-600';
@@ -205,6 +208,9 @@ export default function FluxoHome() {
     switch (stepId) {
       case 'cadastro':
         navigate(flowRoutes.editarCadastroCliente(caseIdParam));
+        break;
+      case 'onboarding':
+        navigate(flowRoutes.onboarding(caseIdParam));
         break;
       case 'dados-caso':
         navigate(flowRoutes.dadosCaso(caseIdParam));

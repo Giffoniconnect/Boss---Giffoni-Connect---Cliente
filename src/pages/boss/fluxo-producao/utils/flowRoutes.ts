@@ -31,6 +31,13 @@ export const flowRoutes = {
   controladoria: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/controladoria`,
   relatorioIntegridade: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/relatorio-integridade`,
   arquivamento: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/arquivamento`,
+  onboarding: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/onboarding`,
+  onboardingAddTelefone: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/add.telefone.do.cliente`,
+  onboardingAddInstagram: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/add.cliente.no.instagram`,
+  onboardingAddFacebook: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/add.cliente.no.facebook`,
+  onboardingAddTikTok: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/add.cliente.no.tiktok`,
+  onboardingEnviarEmail: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/enviar.email.cliente`,
+  onboardingAuditoria: (caseId: string) => `/boss-giffoni-clientes/fluxo-producao/${caseId}/auditoria.onboarding.cliente`,
   recadastramento: () => '/boss-giffoni-clientes/fluxo-producao/recadastramento'
 };
 

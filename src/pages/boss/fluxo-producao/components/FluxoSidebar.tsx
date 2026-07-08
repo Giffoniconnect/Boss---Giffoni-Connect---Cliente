@@ -77,6 +77,7 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
       : flowSteps.map(s => {
           let shortLabel = s.label;
           if (s.id === 'cadastro') shortLabel = cadastroLabel;
+          else if (s.id === 'onboarding') shortLabel = 'Onboarding ✈️';
           else if (s.id === 'dados-caso') shortLabel = 'Entrevista (5W2H)';
           else if (s.id === 'tipo-producao') shortLabel = 'Tipo de Serviço';
           else if (s.id === 'solicitacoes-provas') shortLabel = 'Coleta de Provas';
@@ -129,6 +130,26 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
       const missing = clientObj.missingFields || [];
       const isIncomplete = clientObj.cadastroIncompleto === true || (missing.length > 0);
       return isIncomplete ? 'incomplete' : 'complete';
+    }
+
+    if (stepId === 'onboarding') {
+      if (!caseObj) return 'uninitiated';
+      const onb = caseObj.onboarding || {};
+      const aud = onb.auditoria || {};
+      if (aud.statusFinal === 'Onboarding completo ✅') {
+        return 'complete';
+      }
+      if (aud.statusFinal === 'Onboarding bloqueado ❌' || aud.statusFinal === 'Onboarding pendente ⚠️') {
+        return 'incomplete';
+      }
+      const hasSomeData = !!(
+        onb.telefone?.telefoneClienteAdicionadoCelular ||
+        onb.instagram?.clienteAdicionadoInstagram ||
+        onb.facebook?.clienteAdicionadoFacebook ||
+        onb.tiktok?.clienteAdicionadoTikTok ||
+        onb.email?.emailBoasVindasEnviadoCliente
+      );
+      return hasSomeData ? 'incomplete' : 'uninitiated';
     }
 
     if (stepId === 'dados-caso') {

@@ -141,6 +141,9 @@ const FinanceiroFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/Fin
 const EDRPFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/EDRPFluxo'));
 const DelegacaoFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/DelegacaoFluxo'));
 const RevisaoFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/RevisaoFluxo'));
+const AgendamentoRevisao = React.lazy(() => import('./pages/boss/fluxo-producao/AgendamentoRevisao'));
+const PreRevisaoIA = React.lazy(() => import('./pages/boss/fluxo-producao/PreRevisaoIA'));
+const DecisaoRevisao = React.lazy(() => import('./pages/boss/fluxo-producao/DecisaoRevisao'));
 const ProtocoloFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/ProtocoloFluxo'));
 const PrazosFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/PrazosFluxo'));
 const AudienciasFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/AudienciasFluxo'));
@@ -151,10 +154,25 @@ const PrePeticionamentoIaFluxo = React.lazy(() => import('./pages/boss/fluxo-pro
 const ControladoriaFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/ControladoriaFluxo'));
 const RelatorioIntegridadeFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/RelatorioIntegridadeFluxo'));
 const ArquivamentoFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/ArquivamentoFluxo'));
+const ArquivamentoFinanceiro = React.lazy(() => import('./pages/boss/fluxo-producao/ArquivamentoFinanceiro'));
+const ArquivamentoTodoist = React.lazy(() => import('./pages/boss/fluxo-producao/ArquivamentoTodoist'));
+const ArquivamentoGmail = React.lazy(() => import('./pages/boss/fluxo-producao/ArquivamentoGmail'));
+const ArquivamentoCRMCliente = React.lazy(() => import('./pages/boss/fluxo-producao/ArquivamentoCRMCliente'));
+const ArquivamentoGoogleSheets = React.lazy(() => import('./pages/boss/fluxo-producao/ArquivamentoGoogleSheets'));
+const ArquivamentoAuditoria = React.lazy(() => import('./pages/boss/fluxo-producao/ArquivamentoAuditoria'));
 const Recadastramento = React.lazy(() => import('./pages/boss/fluxo-producao/Recadastramento'));
 const PortalClienteFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/PortalClienteFluxo'));
 const EditarPortalCliente = React.lazy(() => import('./pages/boss/fluxo-producao/EditarPortalCliente'));
 const DigitalizacaoUpload = React.lazy(() => import('./pages/boss/fluxo-producao/DigitalizacaoUpload'));
+
+// Onboarding ✈️ Steps (Fase de Acolhimento)
+const OnboardingFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/OnboardingFluxo'));
+const OnboardingAddTelefone = React.lazy(() => import('./pages/boss/fluxo-producao/OnboardingAddTelefone'));
+const OnboardingAddInstagram = React.lazy(() => import('./pages/boss/fluxo-producao/OnboardingAddInstagram'));
+const OnboardingAddFacebook = React.lazy(() => import('./pages/boss/fluxo-producao/OnboardingAddFacebook'));
+const OnboardingAddTikTok = React.lazy(() => import('./pages/boss/fluxo-producao/OnboardingAddTikTok'));
+const OnboardingEnviarEmail = React.lazy(() => import('./pages/boss/fluxo-producao/OnboardingEnviarEmail'));
+const OnboardingAuditoria = React.lazy(() => import('./pages/boss/fluxo-producao/OnboardingAuditoria'));
 
 // Coleta / Documents step views (FASE 3 - Lazy Imports)
 const CardIniciarColeta = React.lazy(() => import('./pages/boss/fluxo-producao/coleta/CardIniciarColeta'));
@@ -296,6 +314,13 @@ const bossRouter = createBrowserRouter(
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/requerimento-administrativo" element={<SafeRoute children={<TipoServico />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/tipo-producao/outro-servico-administrativo" element={<SafeRoute children={<TipoServico />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/dados-caso" element={<SafeRoute children={<DadosCaso />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/onboarding" element={<SafeRoute children={<OnboardingFluxo />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/add.telefone.do.cliente" element={<SafeRoute children={<OnboardingAddTelefone />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/add.cliente.no.instagram" element={<SafeRoute children={<OnboardingAddInstagram />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/add.cliente.no.facebook" element={<SafeRoute children={<OnboardingAddFacebook />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/add.cliente.no.tiktok" element={<SafeRoute children={<OnboardingAddTikTok />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/enviar.email.cliente" element={<SafeRoute children={<OnboardingEnviarEmail />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/auditoria.onboarding.cliente" element={<SafeRoute children={<OnboardingAuditoria />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacoes-informacoes" element={<SafeRoute children={<SolicitacoesInformacoes />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacoes-provas" element={<SafeRoute children={<SolicitacoesProvas />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/digitalizacao-upload" element={<SafeRoute children={<DigitalizacaoUpload />} />} />
@@ -310,6 +335,9 @@ const bossRouter = createBrowserRouter(
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/edrp" element={<SafeRoute children={<EDRPFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/delegacao" element={<SafeRoute children={<DelegacaoFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/revisao" element={<SafeRoute children={<RevisaoFluxo />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/agendamento.de.revisao" element={<SafeRoute children={<AgendamentoRevisao />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/pre.revisao.com.IA" element={<SafeRoute children={<PreRevisaoIA />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/decisao.sobre.revisao" element={<SafeRoute children={<DecisaoRevisao />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/protocolo" element={<SafeRoute children={<ProtocoloFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/compliance" element={<SafeRoute children={<ComplianceFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/prazos" element={<SafeRoute children={<PrazosFluxo />} />} />
@@ -320,6 +348,12 @@ const bossRouter = createBrowserRouter(
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/controladoria" element={<SafeRoute children={<ControladoriaFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/relatorio-integridade" element={<SafeRoute children={<RelatorioIntegridadeFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/arquivamento" element={<SafeRoute children={<ArquivamentoFluxo />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/arquivamento.financeiro" element={<SafeRoute children={<ArquivamentoFinanceiro />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/arquivamento.todoist" element={<SafeRoute children={<ArquivamentoTodoist />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/arquivamento.Gmail" element={<SafeRoute children={<ArquivamentoGmail />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/arquivamento.CRM.Cliente" element={<SafeRoute children={<ArquivamentoCRMCliente />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/arquivamento.Google.Sheets" element={<SafeRoute children={<ArquivamentoGoogleSheets />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/arquivamento.auditoria" element={<SafeRoute children={<ArquivamentoAuditoria />} />} />
 
       {/* ========================================================
           GRUPO 6 — COLETA / DOCUMENTOS / GDI (FASE 3):
