@@ -507,6 +507,52 @@ export default function EditarPortalCliente() {
   const [bdayCopied, setBdayCopied] = useState(false);
   const [profCopied, setProfCopied] = useState(false);
 
+  // CRM protocol delay and distribution state
+  const [justificationChannel, setJustificationChannel] = useState<'email' | 'whatsapp' | 'todoist'>('whatsapp');
+  const [justificationMessage, setJustificationMessage] = useState('');
+  const [justificationCopied, setJustificationCopied] = useState(false);
+  const [automaticAlert3Days, setAutomaticAlert3Days] = useState(true);
+  const [automaticAlert1Day, setAutomaticAlert1Day] = useState(true);
+  const [automaticAlertOnDay, setAutomaticAlertOnDay] = useState(true);
+  const [automaticAlertDelay, setAutomaticAlertDelay] = useState(true);
+  const [showJustificationModal, setShowJustificationModal] = useState(false);
+  const [distributionCaseId, setDistributionCaseId] = useState('');
+  const [distributionMessage, setDistributionMessage] = useState('');
+  const [distributionChannel, setDistributionChannel] = useState<'email' | 'whatsapp'>('whatsapp');
+  const [distributionCopied, setDistributionCopied] = useState(false);
+
+  const handleSaveExpectedProtocolDate = async (dateStr: string) => {
+    if (!selectedCase) return;
+    try {
+      const updatedProtocol = {
+        ...(selectedCase.protocol || {}),
+        expectedProtocolDate: dateStr,
+        updatedAt: new Date().toISOString()
+      };
+      await updateDoc(doc(db, 'cases', selectedCase.id), {
+        protocol: updatedProtocol,
+        expectedProtocolDate: dateStr,
+        updatedAt: new Date().toISOString()
+      });
+      setSelectedCase((prev: any) => ({
+        ...prev,
+        protocol: updatedProtocol,
+        expectedProtocolDate: dateStr
+      }));
+      setClientCases((prev) => 
+        prev.map((c) => c.id === selectedCase.id ? { 
+          ...c, 
+          protocol: updatedProtocol, 
+          expectedProtocolDate: dateStr 
+        } : c)
+      );
+      showToastSuccess('Data prevista de protocolo atualizada!');
+    } catch (err: any) {
+      console.error(err);
+      setError('Erro ao salvar data prevista de protocolo: ' + err.message);
+    }
+  };
+
   useEffect(() => {
     if (selectedClient) {
       const clientName = getClientName(selectedClient);
@@ -517,6 +563,20 @@ export default function EditarPortalCliente() {
       setProfMessage(`Olá, ${clientName}! Hoje, celebramos e parabenizamos você pela sua excelente dedicação em ${job === 'sua profissão' ? 'sua carreira' : job}. Nós da Giffoni Advogados Associados temos orgulho de contar com sua parceria fática e dedicação profissional. Sucesso e conquistas sempre em sua jornada! 💼⚖️`);
     }
   }, [selectedClient]);
+
+  useEffect(() => {
+    if (selectedClient && selectedCase) {
+      const clientName = getClientName(selectedClient) || 'Cliente';
+      const caseType = selectedCase.registrationType || 'Caso Jurídico';
+      const caseIdStr = selectedCase.id;
+      const procNum = selectedCase.processNumber || selectedCase.protocol?.processNumber || 'Em andamento';
+      const receiptUrl = selectedCase.protocol?.protocolReceiptUrl || '';
+
+      setJustificationMessage(`Olá, ${clientName}! Gostaríamos de solicitar uma justificativa referente ao atraso na data prevista de protocolo do seu caso "${caseType}" (Ref ID: ${caseIdStr}). Por gentileza, nos informe o motivo para que possamos atualizar nossos registros internos e alinhar os próximos passos fáticos. Atenciosamente, Giffoni Advogados Associados.`);
+      setDistributionMessage(`Olá, ${clientName}! Temos a satisfação de informar que o seu processo correspondente ao caso "${caseType}" (Número do Processo: ${procNum}) foi oficialmente distribuído e protocolado em juízo! Segue o comprovante oficial correspondente para o seu acompanhamento: ${receiptUrl ? receiptUrl : 'Link disponível no seu Portal do Cliente'}. Atenciosamente, Giffoni Advogados Associados.`);
+      setDistributionCaseId(selectedCase.id);
+    }
+  }, [selectedClient, selectedCase]);
 
   // Fetch client by slug or fallback to ID
   const fetchClientData = async () => {
@@ -2299,6 +2359,170 @@ export default function EditarPortalCliente() {
                       </div>
                     </div>
 
+                    {/* CARD 3: AVISO DE DISTRIBUIÇÃO DO PROCESSO */}
+                    <div className="bg-white border-2 border-slate-100 rounded-[2rem] p-6 shadow-sm flex flex-col justify-between space-y-5 hover:border-indigo-100 transition-colors">
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-3">
+                          <span className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                            <FileCheck size={20} />
+                          </span>
+                          <div>
+                            <h3 className="text-xs font-extrabold text-gray-900 uppercase tracking-wide font-sans">Aviso de Distribuição do Processo ⚖️</h3>
+                            <span className="text-[9px] uppercase font-mono tracking-wider text-slate-400 font-extrabold">Informa o cliente sobre o protocolo e comprovante</span>
+                          </div>
+                        </div>
+
+                        {/* Case selector for distribution aviso */}
+                        <div className="space-y-2">
+                          <label className="block text-xxs font-black text-gray-500 uppercase tracking-widest">
+                            Selecione o Caso a Notificar
+                          </label>
+                          <select
+                            value={distributionCaseId}
+                            onChange={(e) => {
+                              const caseIdVal = e.target.value;
+                              setDistributionCaseId(caseIdVal);
+                              const caseObj = clientCases.find(c => c.id === caseIdVal);
+                              if (caseObj) {
+                                const clientName = getClientName(selectedClient) || 'Cliente';
+                                const caseType = caseObj.registrationType || 'Caso Jurídico';
+                                const procNum = caseObj.processNumber || caseObj.protocol?.processNumber || 'Em andamento';
+                                const receiptUrl = caseObj.protocol?.protocolReceiptUrl || '';
+
+                                setDistributionMessage(`Olá, ${clientName}! Temos a satisfação de informar que o seu processo correspondente ao caso "${caseType}" (Número do Processo: ${procNum}) foi oficialmente distribuído e protocolado em juízo! Segue o comprovante oficial correspondente para o seu acompanhamento: ${receiptUrl ? receiptUrl : 'Link disponível no seu Portal do Cliente'}. Atenciosamente, Giffoni Advogados Associados.`);
+                              }
+                            }}
+                            className="w-full text-xs font-semibold text-gray-755 bg-white border border-gray-250 p-2.5 rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          >
+                            <option value="">Selecione um caso...</option>
+                            {clientCases.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.registrationType || 'Caso Geral'} (ID: {c.id.substring(0, 8)})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Display chosen Case details & protocol receipt */}
+                        {(() => {
+                          const caseObj = clientCases.find(c => c.id === distributionCaseId);
+                          if (!caseObj) return null;
+
+                          const procNum = caseObj.processNumber || caseObj.protocol?.processNumber || '';
+                          const receiptName = caseObj.protocol?.protocolReceiptName || '';
+                          const receiptUrl = caseObj.protocol?.protocolReceiptUrl || '';
+
+                          return (
+                            <div className="p-4 bg-slate-50 border border-gray-100 rounded-2xl space-y-2.5 text-xs text-left">
+                              <div>
+                                <span className="text-[9px] font-mono font-black text-gray-400 uppercase block">Número do Processo</span>
+                                <span className="font-extrabold text-gray-800">{procNum || 'Aguardando distribuição/registro'}</span>
+                              </div>
+
+                              {receiptUrl ? (
+                                <div className="p-3 border border-emerald-150 bg-emerald-50/20 rounded-xl flex items-center justify-between gap-3 animate-in fade-in duration-200">
+                                  <div className="min-w-0 text-left">
+                                    <span className="text-[8px] font-black uppercase text-emerald-600 tracking-wider block font-mono">
+                                      Comprovante Vinculado no Google Drive
+                                    </span>
+                                    <span className="block font-bold text-gray-900 break-all leading-normal mt-0.5 truncate font-sans">
+                                      {receiptName || 'Comprovante_de_Protocolo.pdf'}
+                                    </span>
+                                  </div>
+                                  <a
+                                    href={receiptUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[10px] transition-all cursor-pointer whitespace-nowrap"
+                                  >
+                                    Ver no Drive
+                                  </a>
+                                </div>
+                              ) : (
+                                <div className="p-3 bg-amber-50 border border-amber-150 rounded-xl text-amber-900 text-[10.5px] font-semibold text-left">
+                                  ⚠️ Nenhum comprovante de distribuição anexado neste caso. Você pode anexar enviando na Subetapa 3 da aba de Protocolos.
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+
+                        {/* Message field */}
+                        <div className="space-y-2">
+                          <label className="block text-xxs font-black text-slate-400 uppercase tracking-widest text-left font-sans">Visualizar / Editar Comunicado ao Cliente</label>
+                          <textarea
+                            rows={4}
+                            value={distributionMessage}
+                            onChange={(e) => setDistributionMessage(e.target.value)}
+                            className="w-full text-xs font-semibold text-gray-700 bg-slate-50 border border-gray-150 p-3.5 rounded-2xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 transition leading-relaxed text-left font-sans"
+                            placeholder="Selecione um caso para gerar o comunicado automático..."
+                          />
+                        </div>
+                      </div>
+
+                      <div className="pt-2 flex flex-wrap sm:flex-nowrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(distributionMessage);
+                            setDistributionCopied(true);
+                            setTimeout(() => setDistributionCopied(false), 2000);
+                          }}
+                          className="flex items-center justify-center gap-1.5 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-gray-700 text-[10px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer font-sans"
+                        >
+                          <Copy size={13} />
+                          <span>{distributionCopied ? 'Copiado!' : 'Copiar'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const rawPhone = 
+                              selectedClient?.pfContato?.pf_telefoneCelular || 
+                              selectedClient?.pfContato?.pf_telefone || 
+                              selectedClient?.pfContato?.telefone || 
+                              selectedClient?.portalMirror?.pfContato?.telefone || 
+                              '';
+                            const contactEmail = 
+                              selectedClient?.pfContato?.pf_email || 
+                              selectedClient?.pfContato?.email || 
+                              selectedClient?.portalMirror?.pfContato?.email || 
+                              '';
+                            const cleanedPhone = rawPhone.replace(/\D/g, '');
+
+                            if (distributionChannel === 'whatsapp') {
+                              const link = cleanedPhone
+                                ? `https://wa.me/${cleanedPhone}?text=${encodeURIComponent(distributionMessage)}`
+                                : `https://wa.me/?text=${encodeURIComponent(distributionMessage)}`;
+                              window.open(link, '_blank', 'noopener,noreferrer');
+                            } else {
+                              const emailLink = `mailto:${contactEmail}?subject=${encodeURIComponent('Aviso de Distribuição e Protocolo do Processo')}&body=${encodeURIComponent(distributionMessage)}`;
+                              window.location.href = emailLink;
+                            }
+                          }}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer shadow-3xs font-sans"
+                        >
+                          <Send size={13} />
+                          <span>Enviar Comunicado de Distribuição</span>
+                        </button>
+                        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+                          {(['whatsapp', 'email'] as const).map((ch) => (
+                            <button
+                              key={ch}
+                              type="button"
+                              onClick={() => setDistributionChannel(ch)}
+                              className={`px-2.5 py-1 rounded-lg text-[9px] font-extrabold uppercase transition-all font-sans cursor-pointer ${
+                                distributionChannel === ch
+                                  ? 'bg-white text-gray-900 shadow-3xs'
+                                  : 'text-gray-450 hover:text-gray-900'
+                              }`}
+                            >
+                              {ch === 'whatsapp' ? 'WA' : 'Mail'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Integrated messaging notice with custom formatting instructions */}
                     <div className="bg-indigo-50/50 border border-indigo-100 p-4 rounded-2xl text-xs text-indigo-950 flex flex-col gap-2">
                       <p className="font-bold flex items-center gap-1.5">
@@ -2830,6 +3054,266 @@ export default function EditarPortalCliente() {
                   <span className="text-[10px] text-gray-400 font-mono">
                     Última alteração: <strong>{selectedCase.updatedAt ? new Date(selectedCase.updatedAt).toLocaleDateString() : 'Não informada'}</strong>
                   </span>
+                </div>
+
+                {/* CARD: DATA PREVISTA DE PROTOCOLO & CRM PRAZOS */}
+                <div className="bg-slate-50 border border-slate-150 rounded-2xl p-5 md:p-6 space-y-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0">
+                        <Calendar size={17} />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-gray-900 uppercase tracking-wider">
+                          Data Prevista de Protocolo & CRM de Prazos
+                        </h4>
+                        <p className="text-[10px] text-gray-400">
+                          Acompanhamento comercial do prazo de distribuição e alertas ao cliente.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Status Badge */}
+                    {(() => {
+                      const hasReceipt = !!(selectedCase.protocol?.protocolReceiptUrl || selectedCase.protocolReceiptUrl);
+                      const isProtocolado = selectedCase.protocol?.protocolStatus === 'protocolado' || hasReceipt;
+                      const dateStr = selectedCase.protocol?.expectedProtocolDate || selectedCase.expectedProtocolDate || '';
+
+                      if (isProtocolado) {
+                        return (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100 border border-emerald-200 text-emerald-800 text-[9.5px] font-extrabold uppercase rounded-lg font-sans">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                            Protocolado
+                          </span>
+                        );
+                      }
+
+                      if (!dateStr) {
+                        return (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 border border-gray-200 text-gray-650 text-[9.5px] font-extrabold uppercase rounded-lg font-sans">
+                            Prazo não definido
+                          </span>
+                        );
+                      }
+
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const [year, month, day] = dateStr.split('-').map(Number);
+                      const targetDate = new Date(year, month - 1, day);
+                      targetDate.setHours(0, 0, 0, 0);
+
+                      const diffTime = targetDate.getTime() - today.getTime();
+                      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                      if (diffDays < 0) {
+                        return (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-100 border border-rose-200 text-rose-800 text-[9.5px] font-extrabold uppercase rounded-lg font-sans">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse" />
+                            Em atraso ({Math.abs(diffDays)} {Math.abs(diffDays) === 1 ? 'dia' : 'dias'})
+                          </span>
+                        );
+                      } else if (diffDays === 0) {
+                        return (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-100 border border-amber-200 text-amber-850 text-[9.5px] font-extrabold uppercase rounded-lg font-sans">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-600 animate-pulse" />
+                            Vence hoje ⚠️
+                          </span>
+                        );
+                      } else {
+                        return (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 border border-blue-200 text-blue-800 text-[9.5px] font-extrabold uppercase rounded-lg font-sans">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
+                            Em dia (Faltam {diffDays} {diffDays === 1 ? 'dia' : 'dias'})
+                          </span>
+                        );
+                      }
+                    })()}
+                  </div>
+
+                  {/* Form to edit Expected Date & Trigger Simulation alerts */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="space-y-2">
+                      <label className="block text-[10px] font-black uppercase tracking-wider text-gray-550">
+                        Alterar Data Prevista do Protocolo
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="date"
+                          value={selectedCase.protocol?.expectedProtocolDate || selectedCase.expectedProtocolDate || ''}
+                          onChange={(e) => handleSaveExpectedProtocolDate(e.target.value)}
+                          className="flex-1 bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl p-2.5 text-xs text-gray-800 font-semibold"
+                        />
+                      </div>
+                      <span className="block text-[9px] text-gray-400 font-medium leading-relaxed">
+                        Atualiza instantaneamente os cronogramas de prazos em todo o ecossistema.
+                      </span>
+                    </div>
+
+                    {/* Disparos Automáticos rules */}
+                    <div className="bg-white border border-gray-150 rounded-2xl p-4 space-y-2.5">
+                      <span className="block text-[9.5px] font-black text-gray-500 uppercase tracking-wider">
+                        Regras de Alertas e Disparos Automáticos
+                      </span>
+                      <div className="grid grid-cols-2 gap-2 text-[10.5px]">
+                        <label className="flex items-center gap-2 font-semibold text-gray-750 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={automaticAlert3Days}
+                            onChange={(e) => setAutomaticAlert3Days(e.target.checked)}
+                            className="rounded text-purple-600 border-gray-300 focus:ring-purple-500 w-3.5 h-3.5"
+                          />
+                          <span>3 dias antes</span>
+                        </label>
+                        <label className="flex items-center gap-2 font-semibold text-gray-750 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={automaticAlert1Day}
+                            onChange={(e) => setAutomaticAlert1Day(e.target.checked)}
+                            className="rounded text-purple-600 border-gray-300 focus:ring-purple-500 w-3.5 h-3.5"
+                          />
+                          <span>1 dia antes</span>
+                        </label>
+                        <label className="flex items-center gap-2 font-semibold text-gray-750 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={automaticAlertOnDay}
+                            onChange={(e) => setAutomaticAlertOnDay(e.target.checked)}
+                            className="rounded text-purple-600 border-gray-300 focus:ring-purple-500 w-3.5 h-3.5"
+                          />
+                          <span>No dia do prazo</span>
+                        </label>
+                        <label className="flex items-center gap-2 font-semibold text-gray-750 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={automaticAlertDelay}
+                            onChange={(e) => setAutomaticAlertDelay(e.target.checked)}
+                            className="rounded text-purple-600 border-gray-300 focus:ring-purple-500 w-3.5 h-3.5"
+                          />
+                          <span>Diário de atraso</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SOLICITAR JUSTIFICATIVA ACTION PANEL */}
+                  {(() => {
+                    const hasReceipt = !!(selectedCase.protocol?.protocolReceiptUrl || selectedCase.protocolReceiptUrl);
+                    const isProtocolado = selectedCase.protocol?.protocolStatus === 'protocolado' || hasReceipt;
+                    const dateStr = selectedCase.protocol?.expectedProtocolDate || selectedCase.expectedProtocolDate || '';
+
+                    if (isProtocolado) return null;
+
+                    // Compute delay status to check if it's delayed or close
+                    let isDelayed = false;
+                    if (dateStr) {
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const [year, month, day] = dateStr.split('-').map(Number);
+                      const targetDate = new Date(year, month - 1, day);
+                      targetDate.setHours(0, 0, 0, 0);
+                      isDelayed = targetDate.getTime() < today.getTime();
+                    }
+
+                    return (
+                      <div className="border-t border-gray-100 pt-4 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-gray-550 block">
+                            Solicitação de Justificativa de Atraso
+                          </span>
+                          <span className="text-[9px] font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded font-mono">
+                            {isDelayed ? '⚠️ Recomenda-se envio urgente' : 'Preventivo'}
+                          </span>
+                        </div>
+
+                        <div className="space-y-3 bg-white border border-gray-150 p-4 rounded-2xl">
+                          <p className="text-[11px] text-gray-500 font-medium">
+                            Selecione o canal comercial desejado para notificar o advogado ou o cliente solicitando justificativa formal:
+                          </p>
+
+                          <div className="flex flex-wrap gap-1.5 pb-1">
+                            {(['whatsapp', 'email', 'todoist'] as const).map((ch) => (
+                              <button
+                                key={ch}
+                                type="button"
+                                onClick={() => setJustificationChannel(ch)}
+                                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all cursor-pointer ${
+                                  justificationChannel === ch
+                                    ? 'bg-purple-600 border-purple-600 text-white shadow-3xs'
+                                    : 'bg-white border-gray-250 text-gray-650 hover:bg-slate-50'
+                                }`}
+                              >
+                                {ch === 'whatsapp' && 'WhatsApp'}
+                                {ch === 'email' && 'E-mail'}
+                                {ch === 'todoist' && 'Todoist Task'}
+                              </button>
+                            ))}
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <textarea
+                              rows={3}
+                              value={justificationMessage}
+                              onChange={(e) => setJustificationMessage(e.target.value)}
+                              className="w-full text-xs font-semibold text-gray-700 bg-slate-50 border border-gray-150 p-3 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-purple-500 transition leading-relaxed"
+                              placeholder="Carregando mensagem da justificativa..."
+                            />
+                          </div>
+
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(justificationMessage);
+                                setJustificationCopied(true);
+                                setTimeout(() => setJustificationCopied(false), 2000);
+                              }}
+                              className="inline-flex items-center justify-center gap-1.5 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-gray-700 text-[10.5px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer"
+                            >
+                              <Copy size={13} />
+                              <span>{justificationCopied ? 'Copiado!' : 'Copiar Texto'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const rawPhone = 
+                                  selectedClient?.pfContato?.pf_telefoneCelular || 
+                                  selectedClient?.pfContato?.pf_telefone || 
+                                  selectedClient?.pfContato?.telefone || 
+                                  selectedClient?.portalMirror?.pfContato?.telefone || 
+                                  '';
+                                const contactEmail = 
+                                  selectedClient?.pfContato?.pf_email || 
+                                  selectedClient?.pfContato?.email || 
+                                  selectedClient?.portalMirror?.pfContato?.email || 
+                                  '';
+                                const cleanedPhone = rawPhone.replace(/\D/g, '');
+
+                                if (justificationChannel === 'whatsapp') {
+                                  const link = cleanedPhone
+                                    ? `https://wa.me/${cleanedPhone}?text=${encodeURIComponent(justificationMessage)}`
+                                    : `https://wa.me/?text=${encodeURIComponent(justificationMessage)}`;
+                                  window.open(link, '_blank', 'noopener,noreferrer');
+                                } else if (justificationChannel === 'email') {
+                                  const emailLink = `mailto:${contactEmail}?subject=${encodeURIComponent('Solicitação de Justificativa de Atraso de Protocolo')}&body=${encodeURIComponent(justificationMessage)}`;
+                                  window.location.href = emailLink;
+                                } else if (justificationChannel === 'todoist') {
+                                  // Call standard create task with modified message for simulation
+                                  setTodoistTaskTitle(`[ATRASO PROTOCOLO] Solicitar justificativa fática: ${getClientName(selectedClient)}`);
+                                  setTodoistTaskComment(justificationMessage);
+                                  setActiveSidebarSection('painel_geral');
+                                  alert("Configuramos o título e o comentário do Todoist no painel. Agora clique em 'Criar Tarefa no Todoist' no rodapé do portal!");
+                                }
+                              }}
+                              className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-4 bg-purple-600 hover:bg-purple-700 text-white text-[10.5px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer shadow-3xs"
+                            >
+                              <Send size={13} />
+                              <span>Disparar Solicitação</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* VINCULADOS INTERACTIVE NAV TABS */}

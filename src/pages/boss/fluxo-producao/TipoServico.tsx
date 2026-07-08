@@ -155,6 +155,10 @@ export default function TipoServico() {
   const [customAllowedFeesInput, setCustomAllowedFeesInput] = useState<string[]>(["fixo", "exito_simples", "misto"]);
   const [customAreaFeesMap, setCustomAreaFeesMap] = useState<Record<string, string[]>>({});
 
+  // Redistribution states
+  const [isRedistributeModalOpen, setIsRedistributeModalOpen] = useState(false);
+  const [redistributeJustification, setRedistributeJustification] = useState('');
+
   // Future Todoist status fields
   const [todoistTaskId, setTodoistTaskId] = useState('');
   const [todoistTaskUrl, setTodoistTaskUrl] = useState('');
@@ -531,6 +535,109 @@ export default function TipoServico() {
       }
     } else {
       setError("Indentificador de caso ou cliente indisponível.");
+    }
+  };
+
+  const handleRedistributeCase = async () => {
+    if (!safeCaseId) return;
+    if (redistributeJustification.trim().length < 20) {
+      setError("A justificativa técnica deve conter pelo menos 20 caracteres.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const now = new Date().toISOString();
+      const caseRef = doc(db, 'cases', safeCaseId);
+      const casoRef = doc(db, 'casos', safeCaseId);
+
+      // Fetch current case to get legacy logs if we want to preserve them
+      let existingLogs: any[] = [];
+      let existingHistory: any[] = [];
+      try {
+        const caseSnap = await getDoc(caseRef);
+        if (caseSnap.exists()) {
+          const caseData = caseSnap.data();
+          existingLogs = Array.isArray(caseData.complianceLogs) ? caseData.complianceLogs : [];
+          existingHistory = Array.isArray(caseData.redistributionHistory) ? caseData.redistributionHistory : [];
+        }
+      } catch (e) {
+        console.error("Error reading case for redistribution logs:", e);
+      }
+
+      const newRedistributionLog = {
+        id: `redist_${Date.now()}`,
+        timestamp: now,
+        justification: redistributeJustification.trim(),
+        user: 'Usuário',
+        phase: 'peticao-inicial'
+      };
+
+      const newActionLog = {
+        id: `log_${Date.now()}`,
+        timestamp: now,
+        action: 'Redistribuição de Processo',
+        details: `Processo redistribuído com justificativa: ${redistributeJustification.trim()}`,
+        status: 'sucesso'
+      };
+
+      const updatedHistory = [newRedistributionLog, ...existingHistory];
+      const updatedActionLogs = [newActionLog, ...existingLogs].slice(0, 50);
+
+      // Prepare clear payload
+      const resetPayload: any = {
+        serviceMacroType: "", // subetapa 1 & 2 reset
+        registrationTypeKey: "",
+        registrationType: "",
+        serviceSubtype: "",
+        todoistTaskId: "", // subetapa 3 reset
+        todoistTaskUrl: "",
+        todoistAutomationStatus: "aguardando",
+        todoistTaskLogFalha: "",
+        todoistDescription: "",
+        todoistSubtasks: [],
+        todoistComments: [],
+        todoistReminders: "",
+        todoistLocation: "",
+        todoistInitialCommentStatus: "",
+        todoistFormula: "",
+        todoistLogs: [],
+        redistributionHistory: updatedHistory,
+        complianceLogs: updatedActionLogs,
+        updatedAt: now
+      };
+
+      // Save to both collections
+      await updateDoc(caseRef, resetPayload);
+      await updateDoc(casoRef, resetPayload);
+
+      // Reset local states to default values
+      setMacroTypeSelection(null);
+      setServiceSubtype("");
+      setTodoistTaskId("");
+      setTodoistTaskUrl("");
+      setTodoistAutomationStatus("aguardando");
+      setTodoistTaskLogFalha("");
+      setTodoistDescription("");
+      setTodoistSubtasks([]);
+      setTodoistComments([]);
+      setTodoistReminders("");
+      setTodoistLocation("");
+      setTodoistInitialCommentStatus("");
+      setTodoistLogs([]);
+      
+      // Close modal
+      setIsRedistributeModalOpen(false);
+      setRedistributeJustification("");
+
+      // Navigate back to nature selection (Subetapa 01 - Segmento da Demanda base path)
+      navigate(`/boss-giffoni-clientes/fluxo-producao/${safeCaseId}/tipo-producao`);
+    } catch (e: any) {
+      console.error("Error redistributing process:", e);
+      setError("Erro ao realizar redistribuição: " + (e.message || e));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1216,6 +1323,20 @@ export default function TipoServico() {
               </div>
             ) : null}
           </div>
+
+          {/* Redistribuir processo button, visible only if subTypeRoute === 'peticao-inicial' */}
+          {subTypeRoute === 'peticao-inicial' && (
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsRedistributeModalOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-rose-50 border border-red-200 hover:border-red-400 text-red-600 hover:bg-red-50 font-extrabold rounded-2xl text-xs transition-all cursor-pointer shadow-3xs"
+              >
+                <RefreshCw size={13} className="text-red-500 animate-spin-slow" />
+                <span>Redistribuir processo</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* CLICKABLE AND FUNCTIONAL SUBSTAGE CARDS */}
@@ -1600,10 +1721,10 @@ export default function TipoServico() {
             </div>
 
             {/* TWO COLUMN GRID FOR FORM AND WORKFLOW PREVIEWS */}
-            <div className={subTypeRoute === 'peticao-inicial' ? "flex flex-col gap-6" : "grid grid-cols-1 lg:grid-cols-3 gap-8"}>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               
               {/* LEFT FORM FIELD CONTAINER */}
-              <div className={subTypeRoute === 'peticao-inicial' ? "space-y-6 w-full" : "lg:col-span-2 space-y-6"}>
+              <div className="lg:col-span-2 space-y-6">
                 
                 <div className="p-6 bg-white border border-gray-150 rounded-3xl space-y-5">
                   <div className="border-b border-gray-100 pb-3 flex items-center gap-2">
@@ -2802,6 +2923,101 @@ export default function TipoServico() {
 
           </div>
         </div>
+
+        {/* REDISTRIBUTION WARNING AND JUSTIFICATION MODAL */}
+        {isRedistributeModalOpen && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
+            <div className="bg-white border border-gray-150 rounded-[2rem] max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh] animate-scaleUp">
+              
+              {/* Header with Danger Warning */}
+              <div className="bg-red-50 border-b border-red-100 px-6 py-5 flex items-start gap-3.5 shrink-0">
+                <div className="w-10 h-10 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                  <AlertCircle size={20} className="stroke-[2.5]" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black uppercase text-red-900 tracking-wider font-sans leading-tight">
+                    Alerta de Risco: Litispendência Crítica
+                  </h4>
+                  <p className="text-[11px] text-red-700 font-semibold mt-0.5">
+                    Atenção jurídica mandatória ao redistribuir ou reiniciar o fluxo deste caso.
+                  </p>
+                </div>
+              </div>
+
+              {/* Scrollable Warn Content */}
+              <div className="p-6 overflow-y-auto space-y-5 text-gray-700 leading-relaxed">
+                
+                {/* Concept definition card */}
+                <div className="p-4 bg-stone-50 border border-stone-200 rounded-2xl text-xs space-y-2">
+                  <span className="font-mono font-black uppercase tracking-wider text-[10px] text-stone-500">
+                    O que é Litispendência? (CPC, Art. 337, §1º, §2º e §3º)
+                  </span>
+                  <p className="font-medium text-stone-700 font-sans leading-relaxed">
+                    Ocorre litispendência quando se reproduz uma ação que já está em curso. Uma ação é idêntica à outra quando possui as <strong>mesmes partes</strong>, a <strong>mesma causa de pedir</strong> e o <strong>mesmo pedido</strong>.
+                  </p>
+                </div>
+
+                {/* Practical consequences check */}
+                <div className="p-4 bg-red-50/50 border border-red-100 rounded-2xl text-xs space-y-2">
+                  <span className="font-mono font-black uppercase tracking-wider text-[10px] text-red-700">
+                    Consequências de uma Redistribuição Acidental / Duplicidade
+                  </span>
+                  <ul className="list-disc pl-4 space-y-1.5 font-medium text-red-950 font-sans">
+                    <li>Extinção imediata do novo processo sem resolução de mérito (CPC, Art. 485, V).</li>
+                    <li>Risco elevado de condenação em multa por Litigância de Má-Fé.</li>
+                    <li>Geração de custos processuais e honorários de sucumbência adicionais indevidos.</li>
+                    <li>Sérias punições disciplinares perante a OAB por duplicidade de litígio.</li>
+                  </ul>
+                </div>
+
+                {/* Mandatary Justification input */}
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase text-gray-500 tracking-wider block font-mono">
+                    Justificativa Técnica de Redistribuição (Mínimo de 20 caracteres) *
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={redistributeJustification}
+                    onChange={(e) => setRedistributeJustification(e.target.value)}
+                    placeholder="Descreva a fundamentação técnica e o motivo de força maior para redistribuir este processo..."
+                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 focus:border-red-500 focus:bg-white focus:ring-1 focus:ring-red-500 rounded-2xl text-xs font-semibold text-gray-800 transition-all outline-none resize-none placeholder-gray-400 shadow-3xs"
+                  />
+                  <div className="flex items-center justify-between text-[10px] font-mono">
+                    <span className="text-gray-400 font-semibold">Min. 20 caracteres necessários</span>
+                    <span className={`font-black uppercase tracking-wide ${redistributeJustification.trim().length >= 20 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      Contador: {redistributeJustification.trim().length} / 20
+                    </span>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Footer CTA Buttons */}
+              <div className="bg-stone-50 border-t border-gray-100 px-6 py-4 flex flex-col sm:flex-row justify-end items-center gap-3 shrink-0 font-sans">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRedistributeModalOpen(false);
+                    setRedistributeJustification("");
+                  }}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-200 hover:bg-gray-100 text-gray-600 px-5 py-2.5 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white"
+                >
+                  Cancelar e Manter
+                </button>
+                <button
+                  type="button"
+                  disabled={loading || redistributeJustification.trim().length < 20}
+                  onClick={handleRedistributeCase}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-extrabold px-6 py-2.5 rounded-xl transition-all text-xs cursor-pointer shadow-md disabled:opacity-50"
+                >
+                  {loading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={12} />}
+                  <span>Confirmar e Reiniciar Fluxo 🔄</span>
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
 
       </div>
     </FluxoStepLayout>
