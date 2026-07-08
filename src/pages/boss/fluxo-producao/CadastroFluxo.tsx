@@ -31,7 +31,10 @@ import {
   Folder,
   FolderPlus,
   ExternalLink,
-  HardDrive
+  HardDrive,
+  Lock,
+  Terminal,
+  Check
 } from 'lucide-react';
 
 import { normalizeCpfCnpj, isValidCpf, isValidCnpj } from './utils/documentUtils';
@@ -158,8 +161,16 @@ export default function CadastroFluxo() {
       setSelectedPath('novo-cliente');
       if (pathParamCurrent === 'novo-cliente-pessoa-fisica') {
         setClientType('PF');
+        setQuemVeioAoEscritorio('proprio_cliente');
+        setTipoClienteReal('pessoa_fisica');
+        setSubEtapa(2);
       } else if (pathParamCurrent === 'novo-cliente-pessoa-juridica') {
         setClientType('PJ');
+        setQuemVeioAoEscritorio('proprio_cliente');
+        setTipoClienteReal('pessoa_juridica');
+        setSubEtapa(2);
+      } else {
+        setSubEtapa(1);
       }
     } else if (pathParamCurrent === 'novo-caso' || pathParamCurrent === 'continuar') {
       setSelectedPath(pathParamCurrent as CadastroPath);
@@ -217,6 +228,223 @@ export default function CadastroFluxo() {
 
   // Client Type
   const [clientType, setClientType] = useState<'PF' | 'PJ'>('PF');
+
+  // Subetapa e Triagem states
+  const [subEtapa, setSubEtapa] = useState<1 | 2>(1);
+  const [quemVeioAoEscritorio, setQuemVeioAoEscritorio] = useState<string>('');
+  const [tipoClienteReal, setTipoClienteReal] = useState<'pessoa_fisica' | 'pessoa_juridica' | ''>('');
+
+  const [procuradorData, setProcuradorData] = useState({
+    nomeCompleto: '',
+    cpf: '',
+    rg: '',
+    nacionalidade: 'Brasileira',
+    estadoCivil: '',
+    profissao: '',
+    dataNascimento: '',
+    telefone: '',
+    whatsapp: '',
+    email: '',
+    endereco: {
+      cep: '',
+      rua: '',
+      numero: '',
+      complemento: '',
+      bairro: '',
+      cidade: '',
+      estado: ''
+    },
+    redesSociais: '',
+    observacoes: '',
+    nomeRepresentadoPeloProcurador: ''
+  });
+
+  const [ponteContatoData, setPonteContatoData] = useState({
+    nomeCompleto: '',
+    telefone: '',
+    whatsapp: '',
+    email: '',
+    redesSociais: '',
+    observacoes: ''
+  });
+
+  interface TechLog {
+    id: string;
+    timestamp: string;
+    action: string;
+    details: string;
+    status: 'sucesso' | 'info' | 'erro' | 'alerta';
+    user: string;
+  }
+
+  const [techLogs, setTechLogs] = useState<TechLog[]>([]);
+
+  const addLog = (action: string, details: string, status: 'sucesso' | 'info' | 'erro' | 'alerta') => {
+    const newLog: TechLog = {
+      id: `log_cad_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: new Date().toISOString(),
+      action,
+      details,
+      status,
+      user: 'direito.rgr@gmail.com'
+    };
+    setTechLogs(prev => [newLog, ...prev]);
+    try {
+      const existing = localStorage.getItem('tech_logs_cadastro');
+      const parsed = existing ? JSON.parse(existing) : [];
+      localStorage.setItem('tech_logs_cadastro', JSON.stringify([newLog, ...parsed].slice(0, 100)));
+    } catch (e) {
+      console.error('Error saving log to localStorage:', e);
+    }
+  };
+
+  useEffect(() => {
+    try {
+      const existing = localStorage.getItem('tech_logs_cadastro');
+      if (existing) {
+        setTechLogs(JSON.parse(existing));
+      } else {
+        const initialLog: TechLog = {
+          id: `log_cad_${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          action: 'Inicialização',
+          details: 'Módulo de Triagem e Cadastro de Clientes iniciado.',
+          status: 'info',
+          user: 'direito.rgr@gmail.com'
+        };
+        setTechLogs([initialLog]);
+        localStorage.setItem('tech_logs_cadastro', JSON.stringify([initialLog]));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  const handleProcuradorCepBlur = async () => {
+    const cleanCep = procuradorData.endereco.cep.replace(/\D/g, '');
+    if (cleanCep.length === 8) {
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+        const data = await res.json();
+        if (!data.erro) {
+          setProcuradorData(prev => ({
+            ...prev,
+            endereco: {
+              ...prev.endereco,
+              rua: data.logradouro || '',
+              bairro: data.bairro || '',
+              cidade: data.localidade || '',
+              estado: data.uf || ''
+            }
+          }));
+        }
+      } catch (err) {
+        console.error("Erro ao buscar CEP do procurador:", err);
+      }
+    }
+  };
+
+  const isSubEtapa01Valid = () => {
+    if (!quemVeioAoEscritorio) return false;
+    if (quemVeioAoEscritorio === 'proprio_cliente') return true;
+    if (quemVeioAoEscritorio === 'procurador_cliente') {
+      const cleanCpf = normalizeCpfCnpj(procuradorData.cpf);
+      return (
+        procuradorData.nomeCompleto.trim() !== '' &&
+        cleanCpf !== '' &&
+        procuradorData.nomeRepresentadoPeloProcurador.trim() !== '' &&
+        (procuradorData.telefone.trim() !== '' || procuradorData.whatsapp.trim() !== '')
+      );
+    }
+    if (quemVeioAoEscritorio === 'ponte_contato') {
+      return (
+        ponteContatoData.nomeCompleto.trim() !== '' &&
+        (ponteContatoData.telefone.trim() !== '' || ponteContatoData.whatsapp.trim() !== '')
+      );
+    }
+    return false;
+  };
+
+  const canAdvanceToSubEtapa02 = isSubEtapa01Valid;
+
+  const handleProcuradorChange = (field: string, value: any) => {
+    setProcuradorData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleProcuradorAddressChange = (field: string, value: any) => {
+    setProcuradorData(prev => ({
+      ...prev,
+      endereco: {
+        ...prev.endereco,
+        [field]: value
+      }
+    }));
+  };
+
+  const handlePonteChange = (field: string, value: any) => {
+    setPonteContatoData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleTipoClienteRealChange = (val: 'pessoa_fisica' | 'pessoa_juridica' | '') => {
+    setTipoClienteReal(val);
+    if (val === 'pessoa_fisica') {
+      setClientType('PF');
+    } else if (val === 'pessoa_juridica') {
+      setClientType('PJ');
+    }
+  };
+
+  const triggerEtapa01Logs = (isDraft: boolean) => {
+    let logDetails = `Módulo: Cadastro - ${isDraft ? 'Rascunho Interno' : 'Portal Criado'}\n\n`;
+    
+    const comparecenteLabel = 
+      quemVeioAoEscritorio === 'proprio_cliente' ? 'Próprio Cliente' :
+      quemVeioAoEscritorio === 'procurador_cliente' ? 'Procurador do Cliente' :
+      quemVeioAoEscritorio === 'ponte_contato' ? 'Ponte de Contato' : 'Indefinido';
+      
+    const clienteRealLabel = 
+      clientType === 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica';
+
+    logDetails += `Quem veio ao escritório: ${comparecenteLabel}\n`;
+    logDetails += `Cliente real: ${clienteRealLabel}\n`;
+
+    if (quemVeioAoEscritorio === 'procurador_cliente') {
+      logDetails += `\nProcurador cadastrado: ${procuradorData.nomeCompleto}\n`;
+      logDetails += `Representado: ${procuradorData.nomeRepresentadoPeloProcurador}\n`;
+    } else if (quemVeioAoEscritorio === 'ponte_contato') {
+      logDetails += `\nPonte de contato cadastrada: ${ponteContatoData.nomeCompleto}\n`;
+    }
+    
+    addLog('Etapa 01 - Triagem e Fluxo', logDetails, 'sucesso');
+  };
+
+  const formatCPF = (value: string) => {
+    const raw = value.replace(/\D/g, '');
+    if (raw.length <= 11) {
+      return raw
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+    }
+    return value;
+  };
+
+  const formatPhone = (value: string) => {
+    const raw = value.replace(/\D/g, '');
+    if (raw.length <= 11) {
+      if (raw.length > 10) {
+        return raw.replace(/^(\d{2})(\d{5})(\d{4})$/, '($1) $2-$3');
+      }
+      return raw.replace(/^(\d{2})(\d{4})(\d{4})$/, '($1) $2-$3');
+    }
+    return value;
+  };
 
   // Single Unified Form State
   const [formData, setFormData] = useState<any>({
@@ -747,6 +975,17 @@ export default function CadastroFluxo() {
 
       const { pfBlock, pjBlock, socioBlock, acessoBlock, bancarioBlock } = getCategorizedBlocks();
 
+      const etapa01Payload: any = {
+        quemVeioAoEscritorio: quemVeioAoEscritorio || 'proprio_cliente',
+        tipoClienteReal: tipoClienteReal || (clientType === 'PF' ? 'pessoa_fisica' : 'pessoa_juridica'),
+      };
+
+      if (quemVeioAoEscritorio === 'procurador_cliente') {
+        etapa01Payload.procurador = procuradorData;
+      } else if (quemVeioAoEscritorio === 'ponte_contato') {
+        etapa01Payload.ponteDeContato = ponteContatoData;
+      }
+
       const payload: any = {
         clientId: targetId,
         type: clientType,
@@ -757,6 +996,7 @@ export default function CadastroFluxo() {
         isLead: isLeadQuery || false,
         createdAt: rightNow,
         updatedAt: rightNow,
+        etapa01: etapa01Payload,
         pfData: pfBlock,
         pfDadosPessoais: pfBlock,
         pjData: pjBlock,
@@ -787,6 +1027,7 @@ export default function CadastroFluxo() {
       await setDoc(doc(db, 'clients', targetId), payload);
 
       setSuccess('Salvo como Rascunho Interno Incompleto com sucesso!');
+      triggerEtapa01Logs(true);
       setInitialFormData({ ...formData });
       setTimeout(() => {
         createDraftCaseAndNavigate(targetId, payload.slug || '');
@@ -841,6 +1082,17 @@ export default function CadastroFluxo() {
 
       const { pfBlock, pjBlock, socioBlock, acessoBlock, bancarioBlock } = getCategorizedBlocks();
 
+      const etapa01Payload: any = {
+        quemVeioAoEscritorio: quemVeioAoEscritorio || 'proprio_cliente',
+        tipoClienteReal: tipoClienteReal || (clientType === 'PF' ? 'pessoa_fisica' : 'pessoa_juridica'),
+      };
+
+      if (quemVeioAoEscritorio === 'procurador_cliente') {
+        etapa01Payload.procurador = procuradorData;
+      } else if (quemVeioAoEscritorio === 'ponte_contato') {
+        etapa01Payload.ponteDeContato = ponteContatoData;
+      }
+
       const payload: any = {
         clientId: targetId,
         type: clientType,
@@ -855,6 +1107,7 @@ export default function CadastroFluxo() {
         isLead: isLeadQuery || false,
         createdAt: rightNow,
         updatedAt: rightNow,
+        etapa01: etapa01Payload,
         pfData: pfBlock,
         pfDadosPessoais: pfBlock,
         pjData: pjBlock,
@@ -999,6 +1252,7 @@ export default function CadastroFluxo() {
       });
 
       setSuccess(`Portal do cliente [/${slug}] criado e liberado com sucesso em modo preview!`);
+      triggerEtapa01Logs(false);
       setInitialFormData({ ...formData });
       setTimeout(() => {
         createDraftCaseAndNavigate(targetId, slug);
@@ -1024,6 +1278,31 @@ export default function CadastroFluxo() {
     const banking = client.bancarioData || client.bancarioDadosBancarios || {};
 
     setClientType(client.type as 'PF' | 'PJ');
+
+    // Load Etapa 01 data if exists
+    if (client.etapa01) {
+      setQuemVeioAoEscritorio(client.etapa01.quemVeioAoEscritorio || 'proprio_cliente');
+      setTipoClienteReal(client.etapa01.tipoClienteReal || (client.type === 'PF' ? 'pessoa_fisica' : 'pessoa_juridica'));
+      if (client.etapa01.procurador) {
+        setProcuradorData({
+          ...procuradorData,
+          ...client.etapa01.procurador
+        });
+      }
+      if (client.etapa01.ponteDeContato) {
+        setPonteContatoData({
+          ...ponteContatoData,
+          ...client.etapa01.ponteDeContato
+        });
+      }
+    } else {
+      // Defaults
+      setQuemVeioAoEscritorio('proprio_cliente');
+      setTipoClienteReal(client.type === 'PF' ? 'pessoa_fisica' : 'pessoa_juridica');
+    }
+
+    setSubEtapa(2); // Go directly to editing forms
+
     const loadedState = {
       ...pfData,
       ...pjData,
@@ -1144,14 +1423,14 @@ export default function CadastroFluxo() {
           </div>
         )}
 
-        {isExplicitNovoCliente ? (
+        {selectedPath === 'novo-cliente' ? (
           <div>
-            <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">Tipo de Cadastro</h3>
+            <h3 className="text-xl font-extrabold text-gray-900 tracking-tight uppercase font-sans">Triagem e Cadastro de Clientes</h3>
             <p className="text-xs text-gray-500 mt-1">
-              Selecione se o novo cliente é Pessoa Física ou Pessoa Jurídica para preencher a ficha de identificação cadastral.
+              Identifique o comparecente e determine o enquadramento cadastral correto do cliente real.
             </p>
           </div>
-        ) : !isNovoClientePF && !isNovoClientePJ ? (
+        ) : !selectedPath ? (
           <div>
             <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">Qual é o caminho desejado?</h3>
             <p className="text-xs text-gray-500 mt-1">
@@ -1160,53 +1439,7 @@ export default function CadastroFluxo() {
           </div>
         ) : null}
 
-        {isExplicitNovoCliente ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <button
-              type="button"
-              id="card-pessoa-fisica"
-              onClick={() => {
-                setClientType('PF');
-                setFoundDuplicateClient(null);
-                setDocValidationError(null);
-                navigate(`/boss-giffoni-clientes/fluxo-producao/cadastro?path=novo-cliente-pessoa-fisica${isLeadQuery ? '&isLead=true' : ''}`);
-              }}
-              className="flex flex-col gap-3 p-5 rounded-2xl border text-left transition-all cursor-pointer bg-white text-gray-700 border-gray-150 hover:border-gray-350 hover:shadow-xs"
-            >
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-blue-550/10 text-blue-600">
-                <User size={18} />
-              </div>
-              <div>
-                <h4 className="font-bold text-[18px] tracking-tight uppercase font-sans">Pessoa Física</h4>
-                <p className="text-[10px] leading-relaxed mt-1 text-gray-400">
-                  Cadastro completo ou rascunho de Pessoa Física (Pessoa Natural com CPF).
-                </p>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              id="card-pessoa-juridica"
-              onClick={() => {
-                setClientType('PJ');
-                setFoundDuplicateClient(null);
-                setDocValidationError(null);
-                navigate(`/boss-giffoni-clientes/fluxo-producao/cadastro?path=novo-cliente-pessoa-juridica${isLeadQuery ? '&isLead=true' : ''}`);
-              }}
-              className="flex flex-col gap-3 p-5 rounded-2xl border text-left transition-all cursor-pointer bg-white text-gray-700 border-gray-150 hover:border-gray-350 hover:shadow-xs"
-            >
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-blue-550/10 text-blue-600">
-                <Building2 size={18} />
-              </div>
-              <div>
-                <h4 className="font-bold text-[18px] tracking-tight uppercase font-sans">Pessoa Jurídica</h4>
-                <p className="text-[10px] leading-relaxed mt-1 text-gray-400">
-                  Cadastro completo ou rascunho de Pessoa Jurídica (Empresa/Entidade com CNPJ).
-                </p>
-              </div>
-            </button>
-          </div>
-        ) : !isNovoClientePF && !isNovoClientePJ ? (
+        {!selectedPath ? (
           /* Path Picker Grid */
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {paths.map((p) => {
@@ -1263,210 +1496,772 @@ export default function CadastroFluxo() {
         )}
 
         {/* PATH 1 — NOVO CLIENTE */}
-        {selectedPath === 'novo-cliente' && !isExplicitNovoCliente && (
+        {selectedPath === 'novo-cliente' && (
           <div className="space-y-8">
-            <div className="space-y-6">
-              <div className="flex justify-between items-center border-b border-gray-100 pb-4">
+            {/* Step Indicator Header */}
+            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-150 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gray-900 text-white flex items-center justify-center font-bold text-sm">
+                  01
+                </div>
                 <div>
-                  <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono">Ficha de Identificação Cadastral Completa</h4>
+                  <h4 className="text-xs font-black uppercase text-gray-900 tracking-wider font-sans">Etapa 01 — Triagem e Cadastro</h4>
+                  <p className="text-[10px] text-gray-500">Mapeamento inicial de comparecimento e enquadramento cadastral</p>
+                </div>
+              </div>
+
+              {/* Progress Steps */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => subEtapa === 2 && setSubEtapa(1)}
+                  className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all flex items-center gap-2 border ${
+                    subEtapa === 1
+                      ? 'bg-gray-900 text-white border-transparent'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${subEtapa === 1 ? 'bg-emerald-400 animate-pulse' : 'bg-gray-400'}`} />
+                  <span>1. Comparecente</span>
+                </button>
+
+                <div className="w-4 h-px bg-gray-300" />
+
+                <button
+                  type="button"
+                  disabled={!canAdvanceToSubEtapa02()}
+                  onClick={() => canAdvanceToSubEtapa02() && setSubEtapa(2)}
+                  className={`px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all flex items-center gap-2 border disabled:opacity-40 disabled:cursor-not-allowed ${
+                    subEtapa === 2
+                      ? 'bg-gray-900 text-white border-transparent'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${subEtapa === 2 ? 'bg-emerald-400 animate-pulse' : 'bg-gray-400'}`} />
+                  <span>2. Cadastro Real</span>
+                </button>
+              </div>
+            </div>
+
+            {/* SUBETAPA 01: QUEM VEIO AO ESCRITÓRIO? */}
+            {subEtapa === 1 && (
+              <div className="space-y-6 animate-in fade-in duration-300">
+                <div className="border-b border-gray-100 pb-3">
+                  <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono">Subetapa 01 — Quem veio ao escritório?</h4>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Determine quem está operando o atendimento inicial presencial ou digitalmente.</p>
+                </div>
+
+                {/* Option Cards Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuemVeioAoEscritorio('proprio_cliente');
+                      addLog('Triagem Comparecente', 'Definido comparecente: O próprio cliente real.', 'info');
+                    }}
+                    className={`flex flex-col gap-3 p-5 rounded-2xl border text-left transition-all cursor-pointer ${
+                      quemVeioAoEscritorio === 'proprio_cliente'
+                        ? 'bg-gray-950 text-white border-transparent shadow-md'
+                        : 'bg-white text-gray-700 border-gray-150 hover:border-gray-200 hover:shadow-2xs'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                      quemVeioAoEscritorio === 'proprio_cliente' ? 'bg-blue-500/20 text-blue-300' : 'bg-gray-100 text-gray-400'
+                    }`}>
+                      <User size={18} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-[14px] uppercase font-sans tracking-tight">O próprio cliente</h4>
+                      <p className={`text-[10px] leading-relaxed mt-1 ${quemVeioAoEscritorio === 'proprio_cliente' ? 'text-gray-300' : 'text-gray-400'}`}>
+                        Compareceu a própria parte interessada direta no caso jurídico.
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuemVeioAoEscritorio('procurador_cliente');
+                      addLog('Triagem Comparecente', 'Definido comparecente: Procurador do cliente. Solicitando dados da procuração.', 'info');
+                    }}
+                    className={`flex flex-col gap-3 p-5 rounded-2xl border text-left transition-all cursor-pointer ${
+                      quemVeioAoEscritorio === 'procurador_cliente'
+                        ? 'bg-gray-950 text-white border-transparent shadow-md'
+                        : 'bg-white text-gray-700 border-gray-150 hover:border-gray-200 hover:shadow-2xs'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                      quemVeioAoEscritorio === 'procurador_cliente' ? 'bg-purple-500/20 text-purple-300' : 'bg-gray-100 text-gray-400'
+                    }`}>
+                      <Lock size={18} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-[14px] uppercase font-sans tracking-tight">Um procurador do cliente</h4>
+                      <p className={`text-[10px] leading-relaxed mt-1 ${quemVeioAoEscritorio === 'procurador_cliente' ? 'text-gray-300' : 'text-gray-400'}`}>
+                        Representante com instrumento de procuração, curatela ou tutela.
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuemVeioAoEscritorio('ponte_contato');
+                      addLog('Triagem Comparecente', 'Definido comparecente: Ponte de contato/Interposta pessoa.', 'info');
+                    }}
+                    className={`flex flex-col gap-3 p-5 rounded-2xl border text-left transition-all cursor-pointer ${
+                      quemVeioAoEscritorio === 'ponte_contato'
+                        ? 'bg-gray-950 text-white border-transparent shadow-md'
+                        : 'bg-white text-gray-700 border-gray-150 hover:border-gray-200 hover:shadow-2xs'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                      quemVeioAoEscritorio === 'ponte_contato' ? 'bg-amber-500/20 text-amber-300' : 'bg-gray-100 text-gray-400'
+                    }`}>
+                      <Building2 size={18} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-[14px] uppercase font-sans tracking-tight">Ponte de Contato</h4>
+                      <p className={`text-[10px] leading-relaxed mt-1 ${quemVeioAoEscritorio === 'ponte_contato' ? 'text-gray-300' : 'text-gray-400'}`}>
+                        Interposta pessoa que não é parte jurídica e nem possui poderes formais de procurador.
+                      </p>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Conditional Form: Procurador */}
+                {quemVeioAoEscritorio === 'procurador_cliente' && (
+                  <div className="bg-purple-50/25 border border-purple-100 rounded-3xl p-6 space-y-6 animate-in slide-in-from-top-2 duration-300">
+                    <div className="border-b border-purple-100 pb-2">
+                      <h5 className="text-[11px] font-black uppercase text-purple-900 tracking-wider">Cadastro Técnico do Procurador Legal</h5>
+                      <p className="text-[10px] text-purple-650">Os dados informados aqui ficarão atrelados ao histórico da ficha técnica deste cliente.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-1.5 col-span-1 md:col-span-2">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">Nome Completo do Procurador <span className="text-red-500">*</span></label>
+                        <input
+                          type="text"
+                          value={procuradorData.nomeCompleto}
+                          onChange={(e) => handleProcuradorChange('nomeCompleto', e.target.value)}
+                          placeholder="Ex: João da Silva Santos"
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">CPF do Procurador <span className="text-red-500">*</span></label>
+                        <input
+                          type="text"
+                          value={procuradorData.cpf}
+                          onChange={(e) => handleProcuradorChange('cpf', formatCPF(e.target.value))}
+                          placeholder="000.000.000-00"
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">RG do Procurador</label>
+                        <input
+                          type="text"
+                          value={procuradorData.rg}
+                          onChange={(e) => handleProcuradorChange('rg', e.target.value)}
+                          placeholder="Ex: 12.345.678-9"
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">Nacionalidade</label>
+                        <input
+                          type="text"
+                          value={procuradorData.nacionalidade}
+                          onChange={(e) => handleProcuradorChange('nacionalidade', e.target.value)}
+                          placeholder="Brasileira"
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">Estado Civil</label>
+                        <select
+                          value={procuradorData.estadoCivil}
+                          onChange={(e) => handleProcuradorChange('estadoCivil', e.target.value)}
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                        >
+                          <option value="">Selecione...</option>
+                          <option value="Solteiro(a)">Solteiro(a)</option>
+                          <option value="Casado(a)">Casado(a)</option>
+                          <option value="Divorciado(a)">Divorciado(a)</option>
+                          <option value="Viúvo(a)">Viúvo(a)</option>
+                          <option value="União Estável">União Estável</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">Profissão</label>
+                        <input
+                          type="text"
+                          value={procuradorData.profissao}
+                          onChange={(e) => handleProcuradorChange('profissao', e.target.value)}
+                          placeholder="Ex: Administrador"
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">Data de Nascimento</label>
+                        <input
+                          type="date"
+                          value={procuradorData.dataNascimento}
+                          onChange={(e) => handleProcuradorChange('dataNascimento', e.target.value)}
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">Telefone <span className="text-red-550">*</span></label>
+                        <input
+                          type="text"
+                          value={procuradorData.telefone}
+                          onChange={(e) => handleProcuradorChange('telefone', formatPhone(e.target.value))}
+                          placeholder="(00) 0000-0000"
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">WhatsApp <span className="text-red-550">*</span></label>
+                        <input
+                          type="text"
+                          value={procuradorData.whatsapp}
+                          onChange={(e) => handleProcuradorChange('whatsapp', formatPhone(e.target.value))}
+                          placeholder="(00) 00000-0000"
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">E-mail</label>
+                        <input
+                          type="email"
+                          value={procuradorData.email}
+                          onChange={(e) => handleProcuradorChange('email', e.target.value)}
+                          placeholder="procurador@exemplo.com"
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5 col-span-1 md:col-span-2">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">Nome do Representado <span className="text-red-550">*</span></label>
+                        <input
+                          type="text"
+                          value={procuradorData.nomeRepresentadoPeloProcurador}
+                          onChange={(e) => handleProcuradorChange('nomeRepresentadoPeloProcurador', e.target.value)}
+                          placeholder="Quem é o cliente que este procurador está representando?"
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Address block inside procurador */}
+                    <div className="border-t border-purple-100 pt-4 space-y-4">
+                      <h6 className="text-[10px] font-bold text-purple-900 uppercase tracking-wider">Endereço do Procurador</h6>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] font-bold text-gray-600 uppercase tracking-wider block">CEP</label>
+                          <input
+                            type="text"
+                            value={procuradorData.endereco.cep}
+                            onChange={(e) => handleProcuradorAddressChange('cep', e.target.value)}
+                            onBlur={handleProcuradorCepBlur}
+                            placeholder="00000-00"
+                            className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5 md:col-span-2">
+                          <label className="text-[9px] font-bold text-gray-600 uppercase tracking-wider block">Logradouro / Rua</label>
+                          <input
+                            type="text"
+                            value={procuradorData.endereco.rua}
+                            onChange={(e) => handleProcuradorAddressChange('rua', e.target.value)}
+                            placeholder="Rua, Avenida..."
+                            className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] font-bold text-gray-600 uppercase tracking-wider block">Número</label>
+                          <input
+                            type="text"
+                            value={procuradorData.endereco.numero}
+                            onChange={(e) => handleProcuradorAddressChange('numero', e.target.value)}
+                            placeholder="Nº"
+                            className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] font-bold text-gray-600 uppercase tracking-wider block">Complemento</label>
+                          <input
+                            type="text"
+                            value={procuradorData.endereco.complemento}
+                            onChange={(e) => handleProcuradorAddressChange('complemento', e.target.value)}
+                            placeholder="Apt, Bloco..."
+                            className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] font-bold text-gray-600 uppercase tracking-wider block">Bairro</label>
+                          <input
+                            type="text"
+                            value={procuradorData.endereco.bairro}
+                            onChange={(e) => handleProcuradorAddressChange('bairro', e.target.value)}
+                            placeholder="Bairro"
+                            className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] font-bold text-gray-600 uppercase tracking-wider block">Cidade</label>
+                          <input
+                            type="text"
+                            value={procuradorData.endereco.cidade}
+                            onChange={(e) => handleProcuradorAddressChange('cidade', e.target.value)}
+                            placeholder="Cidade"
+                            className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] font-bold text-gray-600 uppercase tracking-wider block">Estado (UF)</label>
+                          <input
+                            type="text"
+                            value={procuradorData.endereco.estado}
+                            onChange={(e) => handleProcuradorAddressChange('estado', e.target.value)}
+                            placeholder="UF"
+                            maxLength={2}
+                            className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-purple-100 pt-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">Redes Sociais</label>
+                        <input
+                          type="text"
+                          value={procuradorData.redesSociais}
+                          onChange={(e) => handleProcuradorChange('redesSociais', e.target.value)}
+                          placeholder="Instagram, LinkedIn..."
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">Observações do Atendimento</label>
+                        <textarea
+                          value={procuradorData.observacoes}
+                          onChange={(e) => handleProcuradorChange('observacoes', e.target.value)}
+                          placeholder="Registrar anotações sobre procuração ou atendimento..."
+                          rows={2}
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none resize-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Conditional Form: Ponte de Contato */}
+                {quemVeioAoEscritorio === 'ponte_contato' && (
+                  <div className="bg-amber-50/25 border border-amber-100 rounded-3xl p-6 space-y-6 animate-in slide-in-from-top-2 duration-300">
+                    <div className="border-b border-amber-100 pb-2">
+                      <h5 className="text-[11px] font-black uppercase text-amber-900 tracking-wider">Identificação de Interposta Pessoa (Ponte de Contato)</h5>
+                      <p className="text-[10px] text-amber-650">Use este módulo se a pessoa veio apenas para fazer contato inicial e não é nem cliente, nem procurador legal.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-1.5 col-span-1 md:col-span-2">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">Nome Completo da Ponte de Contato <span className="text-red-500">*</span></label>
+                        <input
+                          type="text"
+                          value={ponteContatoData.nomeCompleto}
+                          onChange={(e) => handlePonteChange('nomeCompleto', e.target.value)}
+                          placeholder="Ex: Maria de Lourdes"
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">Telefone <span className="text-red-550">*</span></label>
+                        <input
+                          type="text"
+                          value={ponteContatoData.telefone}
+                          onChange={(e) => handlePonteChange('telefone', formatPhone(e.target.value))}
+                          placeholder="(00) 0000-0000"
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">WhatsApp <span className="text-red-550">*</span></label>
+                        <input
+                          type="text"
+                          value={ponteContatoData.whatsapp}
+                          onChange={(e) => handlePonteChange('whatsapp', formatPhone(e.target.value))}
+                          placeholder="(00) 00000-0000"
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">E-mail</label>
+                        <input
+                          type="email"
+                          value={ponteContatoData.email}
+                          onChange={(e) => handlePonteChange('email', e.target.value)}
+                          placeholder="ponte@exemplo.com"
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">Redes Sociais</label>
+                        <input
+                          type="text"
+                          value={ponteContatoData.redesSociais}
+                          onChange={(e) => handlePonteChange('redesSociais', e.target.value)}
+                          placeholder="Instagram, Facebook..."
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5 col-span-1 md:col-span-3">
+                        <label className="text-[10px] font-bold text-gray-600 uppercase tracking-wider block">Observações do Vínculo</label>
+                        <textarea
+                          value={ponteContatoData.observacoes}
+                          onChange={(e) => handlePonteChange('observacoes', e.target.value)}
+                          placeholder="Por que veio essa pessoa? Qual o vínculo dela com o caso principal?"
+                          rows={2}
+                          className="w-full px-4 py-3 bg-white border border-gray-250 rounded-xl text-xs text-gray-800 outline-none resize-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Subetapa 01 Action Button */}
+                <div className="flex justify-end pt-4 border-t border-gray-100">
+                  <button
+                    type="button"
+                    disabled={!canAdvanceToSubEtapa02()}
+                    onClick={() => {
+                      addLog('Progresso', 'Subetapa 01 validada com sucesso. Avançando para Subetapa 02.', 'sucesso');
+                      setSubEtapa(2);
+                    }}
+                    className="inline-flex items-center gap-1.5 bg-gray-950 hover:bg-black text-white font-bold text-xs px-6 py-3 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md cursor-pointer"
+                  >
+                    <span>Prosseguir para Etapa do Cadastro do Cliente Real</span>
+                    <ArrowRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* SUBETAPA 02: ENQUADRAMENTO CADASTRAL DO CLIENTE REAL */}
+            {subEtapa === 2 && (
+              <div className="space-y-6 animate-in fade-in duration-300">
+                <div className="border-b border-gray-100 pb-3 flex justify-between items-center">
+                  <div>
+                    <h4 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono">Subetapa 02 — Cliente é Pessoa Física ou Jurídica?</h4>
+                    <p className="text-[11px] text-gray-400 mt-0.5">Defina a qualificação jurídica principal do verdadeiro polo ativo/passivo.</p>
+                  </div>
+
                   {editingClientId && (
-                    <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-100 rounded mt-1">
+                    <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-100 rounded">
                       <Edit2 size={10} /> Editando Cliente (ID: {editingClientId})
                     </span>
                   )}
                 </div>
-                {!isExplicitNovoCliente && !isNovoClientePF && !isNovoClientePJ && (
-                  <div className="flex bg-gray-100 p-0.5 rounded-lg shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setClientType('PF');
-                        setFoundDuplicateClient(null);
-                        setDocValidationError(null);
-                      }}
-                      className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${
-                        clientType === 'PF' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
-                      }`}
-                    >
-                      Pessoa Física (PF)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setClientType('PJ');
-                        setFoundDuplicateClient(null);
-                        setDocValidationError(null);
-                      }}
-                      className={`px-3 py-1.5 text-[10px] font-bold rounded-md transition-all ${
-                        clientType === 'PJ' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
-                      }`}
-                    >
-                      Pessoa Jurídica (PJ)
-                    </button>
+
+                {/* Conditional Selector PF vs PJ */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleTipoClienteRealChange('pessoa_fisica');
+                      addLog('Qualificação Cliente Real', 'Modificado tipo do cliente real para Pessoa Física.', 'info');
+                    }}
+                    className={`flex items-center gap-4 p-5 rounded-2xl border text-left transition-all cursor-pointer ${
+                      tipoClienteReal === 'pessoa_fisica'
+                        ? 'bg-gray-950 text-white border-transparent shadow-md'
+                        : 'bg-white text-gray-700 border-gray-150 hover:border-gray-200'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                      tipoClienteReal === 'pessoa_fisica' ? 'bg-blue-500/20 text-blue-300' : 'bg-gray-100 text-gray-400'
+                    }`}>
+                      <User size={18} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-[14px] uppercase font-sans tracking-tight">Pessoa Física</h4>
+                      <p className={`text-[9px] leading-relaxed mt-0.5 ${tipoClienteReal === 'pessoa_fisica' ? 'text-gray-300' : 'text-gray-400'}`}>
+                        Cliente Real é Pessoa Natural com CPF.
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleTipoClienteRealChange('pessoa_juridica');
+                      addLog('Qualificação Cliente Real', 'Modificado tipo do cliente real para Pessoa Jurídica.', 'info');
+                    }}
+                    className={`flex items-center gap-4 p-5 rounded-2xl border text-left transition-all cursor-pointer ${
+                      tipoClienteReal === 'pessoa_juridica'
+                        ? 'bg-gray-950 text-white border-transparent shadow-md'
+                        : 'bg-white text-gray-700 border-gray-150 hover:border-gray-200'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                      tipoClienteReal === 'pessoa_juridica' ? 'bg-purple-500/20 text-purple-300' : 'bg-gray-100 text-gray-400'
+                    }`}>
+                      <Building2 size={18} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-[14px] uppercase font-sans tracking-tight">Pessoa Jurídica</h4>
+                      <p className={`text-[9px] leading-relaxed mt-0.5 ${tipoClienteReal === 'pessoa_juridica' ? 'text-gray-300' : 'text-gray-400'}`}>
+                        Cliente Real é Pessoa Jurídica com CNPJ.
+                      </p>
+                    </div>
+                  </button>
+                </div>
+
+                {tipoClienteReal && (
+                  <div className="boss-form-breathable space-y-8 animate-in fade-in duration-300">
+                    <style>{`
+                      .boss-form-breathable input, 
+                      .boss-form-breathable select {
+                        height: 3.25rem !important;
+                        padding-left: 1.25rem !important;
+                        padding-right: 1.25rem !important;
+                        background-color: rgb(249 250 251 / 0.5) !important;
+                        border: 1px solid rgb(229 231 235) !important;
+                        font-size: 0.875rem !important;
+                        border-radius: 0.875rem !important;
+                      }
+                      .boss-form-breathable input:focus, 
+                      .boss-form-breathable select:focus {
+                        border-color: rgb(17 24 39) !important;
+                        background-color: #ffffff !important;
+                      }
+                      .boss-form-breathable .bg-white.p-6.rounded-2xl.border {
+                        background-color: transparent !important;
+                        border: none !important;
+                        padding: 0 !important;
+                        box-shadow: none !important;
+                        border-radius: 0 !important;
+                        margin-bottom: 2.25rem !important;
+                      }
+                      .boss-form-breathable h3,
+                      .boss-form-breathable h4 {
+                        color: rgb(17 24 39) !important;
+                        font-size: 0.8125rem !important;
+                        font-weight: 800 !important;
+                        letter-spacing: 0.05em !important;
+                        border-bottom: 1.5px solid rgb(243 244 246);
+                        padding-bottom: 0.625rem;
+                        margin-bottom: 1.5rem !important;
+                        text-transform: uppercase;
+                      }
+                      .boss-form-breathable .border-t {
+                        border-top: none !important;
+                        padding-top: 0.5rem !important;
+                      }
+                    `}</style>
+                    {clientType === 'PF' ? (
+                      <PFForm data={formData} onChange={(d) => setFormData(d)} />
+                    ) : (
+                      <div className="space-y-8">
+                        <PJForm data={formData} onChange={(d) => setFormData(d)} />
+                        
+                        <div className="border-t border-gray-150 pt-6">
+                          <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider mb-4 font-mono">Quadro de Sócios / Representante do CNPJ</h3>
+                          <SocioForm data={formData} onChange={(d) => setFormData(d)} />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="border-t border-gray-150 pt-6">
+                      <AccessForm data={formData} onChange={(d) => setFormData(d)} />
+                    </div>
+
+                    <div className="border-t border-gray-150 pt-6">
+                      <BankingForm 
+                        data={formData} 
+                        onChange={(d) => setFormData(d)} 
+                        clientName={clientType === 'PF' ? (formData.pf_nomeCompleto || '') : (formData.pj_razaoSocial || '')}
+                      />
+                    </div>
                   </div>
                 )}
+
+                {/* DUPLICITY MATCH WARNING ALERT */}
+                {foundDuplicateClient && (
+                  <div className="bg-amber-50 border border-amber-250 rounded-2xl p-5 space-y-4 text-amber-950 animate-fadeIn">
+                    <div className="flex gap-3 items-start">
+                      <ShieldAlert size={18} className="text-amber-600 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <h5 className="text-xs font-black uppercase tracking-wider font-sans text-amber-900">Cliente já cadastrado</h5>
+                        <p className="text-xs leading-relaxed font-semibold">
+                          Este CPF/CNPJ já existe na base. Você pode criar um novo caso para este cliente ou editar o cadastro existente.
+                        </p>
+                        <div className="pt-3 font-mono text-[10.5px] space-y-1 text-amber-900">
+                          <div><span className="font-bold text-amber-950">Cliente:</span> {
+                            foundDuplicateClient.type === 'PF' 
+                              ? (foundDuplicateClient.pfDadosPessoais?.pf_nomeCompleto || foundDuplicateClient.pfData?.pf_nomeCompleto)
+                              : (foundDuplicateClient.pjDadosEmpresa?.pj_razaoSocial || foundDuplicateClient.pjData?.pj_razaoSocial)
+                          }</div>
+                          <div><span className="font-bold text-amber-950">E-mail:</span> {
+                            foundDuplicateClient.type === 'PF'
+                              ? (foundDuplicateClient.pfDadosPessoais?.pf_email || foundDuplicateClient.pfData?.pf_email)
+                              : (foundDuplicateClient.pjDadosEmpresa?.pj_emailEmpresa || foundDuplicateClient.pjData?.pj_emailEmpresa)
+                          }</div>
+                          <div><span className="font-bold text-amber-950">Endereço de Acesso:</span> /{foundDuplicateClient.slug}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex flex-wrap gap-2 justify-end">
+                      <button
+                        type="button"
+                        onClick={() => handleLoadClientForEditing(foundDuplicateClient)}
+                        className="inline-flex items-center gap-1.5 bg-white border border-amber-250 text-amber-900 hover:bg-amber-100/50 font-bold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer"
+                      >
+                        <Edit2 size={13} />
+                        <span>Editar cadastro existente</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => createDraftCaseAndNavigate(foundDuplicateClient.clientId, foundDuplicateClient.slug || '')}
+                        className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer"
+                      >
+                        <span>Criar novo caso</span>
+                        <ArrowRight size={13} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Subetapa 02 Actions */}
+                <div className="flex flex-col sm:flex-row sm:justify-between items-center gap-3 border-t border-gray-150 pt-6">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      addLog('Navegação', 'Retornando à Subetapa 01 do cadastro.', 'info');
+                      setSubEtapa(1);
+                    }}
+                    className="inline-flex items-center justify-center gap-2 bg-white border border-gray-250 hover:bg-gray-50 text-gray-800 px-6 py-3.5 rounded-xl font-bold transition-all text-xs cursor-pointer w-full sm:w-auto"
+                  >
+                    <ArrowLeft size={13} />
+                    <span>Voltar ao Comparecente</span>
+                  </button>
+
+                  <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => handleSaveInternalDraft(false)}
+                      className="inline-flex items-center justify-center gap-2 bg-white border border-gray-250 hover:bg-gray-50 text-gray-800 px-6 py-3.5 rounded-xl font-bold transition-all disabled:opacity-50 text-xs shadow-3xs cursor-pointer w-full sm:w-auto"
+                    >
+                      {loading ? <Loader2 size={13} className="animate-spin" /> : null}
+                      <span>Salvar como Rascunho Interno (Incompleto)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={loading || foundDuplicateClient !== null || !checkPortalSetupReady() || !tipoClienteReal}
+                      onClick={handleCreateCustomerPortal}
+                      className="inline-flex items-center justify-center gap-2 bg-gray-950 hover:bg-black text-white px-8 py-3.5 rounded-xl font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-md text-xs cursor-pointer w-full sm:w-auto"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          <span>Processando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck size={14} />
+                          <span>Criar Portal do Cliente e Prosseguir</span>
+                          <ArrowRight size={14} />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* INHERENT PORTAL REQUIREMENT HELPER */}
+                {!checkPortalSetupReady() && (
+                  <p className="text-[10px] text-gray-400 font-medium text-right mt-1 leading-normal italic">
+                    * Para liberar a criação do Portal do Cliente, preencha: CPF/CNPJ válido, Login, Senha idênticos de 6 dígitos e Status de acesso.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* TECHNICAL AUDIT TERMINAL LOGS (Terminal de Auditoria) */}
+            <div className="bg-gray-950 text-gray-300 rounded-3xl p-6 border border-gray-850 shadow-2xl mt-8 space-y-4">
+              <div className="flex items-center justify-between border-b border-gray-850 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <div className="flex items-center gap-2 font-mono text-[11px] font-black uppercase text-gray-100 tracking-wider">
+                    <Terminal size={14} className="text-emerald-400" />
+                    <span>Terminal de Auditoria Técnica bOSS v2.1</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 text-[9px] font-mono text-gray-500">
+                  <span className="px-1.5 py-0.5 bg-gray-900 border border-gray-800 rounded text-gray-400">SSL CONNECTED</span>
+                  <span className="px-1.5 py-0.5 bg-gray-900 border border-gray-800 rounded text-gray-400">PORT: 3000</span>
+                </div>
               </div>
 
-              {/* Dynamic Sub-form inclusion */}
-              <div className="boss-form-breathable space-y-8 animate-in fade-in duration-300">
-                <style>{`
-                  .boss-form-breathable input, 
-                  .boss-form-breathable select {
-                    height: 3.25rem !important;
-                    padding-left: 1.25rem !important;
-                    padding-right: 1.25rem !important;
-                    background-color: rgb(249 250 251 / 0.5) !important;
-                    border: 1px solid rgb(229 231 235) !important;
-                    font-size: 0.875rem !important;
-                    border-radius: 0.875rem !important;
-                  }
-                  .boss-form-breathable input:focus, 
-                  .boss-form-breathable select:focus {
-                    border-color: rgb(17 24 39) !important;
-                    background-color: #ffffff !important;
-                  }
-                  .boss-form-breathable .bg-white.p-6.rounded-2xl.border {
-                    background-color: transparent !important;
-                    border: none !important;
-                    padding: 0 !important;
-                    box-shadow: none !important;
-                    border-radius: 0 !important;
-                    margin-bottom: 2.25rem !important;
-                  }
-                  .boss-form-breathable h3,
-                  .boss-form-breathable h4 {
-                    color: rgb(17 24 39) !important;
-                    font-size: 0.8125rem !important;
-                    font-weight: 800 !important;
-                    letter-spacing: 0.05em !important;
-                    border-bottom: 1.5px solid rgb(243 244 246);
-                    padding-bottom: 0.625rem;
-                    margin-bottom: 1.5rem !important;
-                    text-transform: uppercase;
-                  }
-                  .boss-form-breathable .border-t {
-                    border-top: none !important;
-                    padding-top: 0.5rem !important;
-                  }
-                `}</style>
-                {clientType === 'PF' ? (
-                  <PFForm data={formData} onChange={(d) => setFormData(d)} />
+              <div className="font-mono text-[11px] leading-relaxed space-y-2 max-h-[140px] overflow-y-auto select-none pr-2 custom-scrollbar">
+                {techLogs.length === 0 ? (
+                  <div className="text-gray-500 italic">Nenhum evento registrado no fluxo atual.</div>
                 ) : (
-                  <div className="space-y-8">
-                    <PJForm data={formData} onChange={(d) => setFormData(d)} />
-                    
-                    <div className="border-t border-gray-100 pt-6">
-                      <h3 className="text-xs font-black uppercase text-gray-400 tracking-wider mb-4 font-mono">Quadro de Sócios / Representante do CNPJ</h3>
-                      <SocioForm data={formData} onChange={(d) => setFormData(d)} />
-                    </div>
-                  </div>
+                  techLogs.map((log) => {
+                    const statusColor = 
+                      log.status === 'sucesso' ? 'text-emerald-400' :
+                      log.status === 'erro' ? 'text-rose-450' :
+                      log.status === 'alerta' ? 'text-amber-400' : 'text-blue-400';
+                    const bulletColor = 
+                      log.status === 'sucesso' ? 'bg-emerald-500' :
+                      log.status === 'erro' ? 'bg-rose-500' :
+                      log.status === 'alerta' ? 'bg-amber-500' : 'bg-blue-500';
+
+                    return (
+                      <div key={log.id} className="border-b border-gray-900/50 pb-1.5 last:border-0">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-start gap-2">
+                            <span className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${bulletColor}`} />
+                            <div>
+                              <span className="text-gray-500">[{new Date(log.timestamp).toLocaleTimeString()}]</span>{' '}
+                              <span className={`font-black uppercase tracking-wide text-[10px] ${statusColor}`}>{log.action}</span>
+                              <span className="text-gray-400"> - {log.details}</span>
+                            </div>
+                          </div>
+                          <span className="text-[9px] text-gray-650 tracking-wider font-mono shrink-0 uppercase">{log.user}</span>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
-
-                <div className="border-t border-gray-100 pt-6">
-                  <AccessForm data={formData} onChange={(d) => setFormData(d)} />
-                </div>
-
-                <div className="border-t border-gray-100 pt-6">
-                  <BankingForm 
-                    data={formData} 
-                    onChange={(d) => setFormData(d)} 
-                    clientName={clientType === 'PF' ? (formData.pf_nomeCompleto || '') : (formData.pj_razaoSocial || '')}
-                  />
-                </div>
               </div>
             </div>
-
-            {/* DUPLICITY MATCH WARNING ALERT */}
-            {foundDuplicateClient && (
-              <div className="bg-amber-50 border border-amber-250 rounded-2xl p-5 space-y-4 text-amber-950 animate-fadeIn">
-                <div className="flex gap-3 items-start">
-                  <ShieldAlert size={18} className="text-amber-600 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <h5 className="text-xs font-black uppercase tracking-wider font-sans text-amber-900">Cliente já cadastrado</h5>
-                    <p className="text-xs leading-relaxed font-semibold">
-                      Este CPF/CNPJ já existe na base. Você pode criar um novo caso para este cliente ou editar o cadastro existente.
-                    </p>
-                    <div className="pt-3 font-mono text-[10.5px] space-y-1 text-amber-900">
-                      <div><span className="font-bold text-amber-950">Cliente:</span> {
-                        foundDuplicateClient.type === 'PF' 
-                          ? (foundDuplicateClient.pfDadosPessoais?.pf_nomeCompleto || foundDuplicateClient.pfData?.pf_nomeCompleto)
-                          : (foundDuplicateClient.pjDadosEmpresa?.pj_razaoSocial || foundDuplicateClient.pjData?.pj_razaoSocial)
-                      }</div>
-                      <div><span className="font-bold text-amber-950">E-mail:</span> {
-                        foundDuplicateClient.type === 'PF'
-                          ? (foundDuplicateClient.pfDadosPessoais?.pf_email || foundDuplicateClient.pfData?.pf_email)
-                          : (foundDuplicateClient.pjDadosEmpresa?.pj_emailEmpresa || foundDuplicateClient.pjData?.pj_emailEmpresa)
-                      }</div>
-                      <div><span className="font-bold text-amber-950">Endereço de Acesso:</span> /{foundDuplicateClient.slug}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-2 flex flex-wrap gap-2 justify-end">
-                  <button
-                    type="button"
-                    onClick={() => handleLoadClientForEditing(foundDuplicateClient)}
-                    className="inline-flex items-center gap-1.5 bg-white border border-amber-250 text-amber-900 hover:bg-amber-100/50 font-bold text-xs px-4 py-2.5 rounded-xl transition-all cursor-pointer"
-                  >
-                    <Edit2 size={13} />
-                    <span>Editar cadastro existente</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => createDraftCaseAndNavigate(foundDuplicateClient.clientId, foundDuplicateClient.slug || '')}
-                    className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer"
-                  >
-                    <span>Criar novo caso</span>
-                    <ArrowRight size={13} />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ACTION DUAL FOOTER BUTTONS */}
-            <div className="flex flex-col sm:flex-row sm:justify-between items-center gap-3 border-t border-gray-150 pt-6">
-              <div />
-
-              <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() => handleSaveInternalDraft(false)}
-                  className="inline-flex items-center justify-center gap-2 bg-white border border-gray-250 hover:bg-gray-50 text-gray-800 px-6 py-3.5 rounded-xl font-bold transition-all disabled:opacity-50 text-xs shadow-3xs cursor-pointer w-full sm:w-auto"
-                >
-                  {loading ? <Loader2 size={13} className="animate-spin" /> : null}
-                  <span>Salvar como Rascunho Interno (Incompleto)</span>
-                </button>
-
-                <button
-                  type="button"
-                  disabled={loading || foundDuplicateClient !== null || !checkPortalSetupReady()}
-                  onClick={handleCreateCustomerPortal}
-                  className="inline-flex items-center justify-center gap-2 bg-gray-950 hover:bg-black text-white px-8 py-3.5 rounded-xl font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-md text-xs cursor-pointer w-full sm:w-auto"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 size={14} className="animate-spin" />
-                      <span>Processando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <ShieldCheck size={14} />
-                      <span>Criar Portal do Cliente e Prosseguir</span>
-                      <ArrowRight size={14} />
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-            
-            {/* INHERENT PORTAL REQUIREMENT HELPER */}
-            {!checkPortalSetupReady() && (
-              <p className="text-[10px] text-gray-400 font-medium text-right mt-1 leading-normal italic">
-                * Para liberar a criação do Portal do Cliente, preencha: CPF/CNPJ válido, Login, Senha idênticos de 6 dígitos e Status de acesso.
-              </p>
-            )}
           </div>
         )}
 
