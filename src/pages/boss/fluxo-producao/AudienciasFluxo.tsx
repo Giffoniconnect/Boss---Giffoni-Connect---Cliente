@@ -26,6 +26,158 @@ export default function AudienciasFluxo() {
   const [audienciaLink, setAudienciaLink] = useState('');
   const [audienciaClienteAvisado, setAudienciaClienteAvisado] = useState(false);
 
+  // Google Calendar Integration States
+  const [checkingCalendar, setCheckingCalendar] = useState(false);
+  const [calendarConfigStatus, setCalendarConfigStatus] = useState<string>('carregando');
+  const [calendarLogs, setCalendarLogs] = useState<string[]>([]);
+  const [googleEvent, setGoogleEvent] = useState<any>(null);
+  const [conflicts, setConflicts] = useState<any[]>([]);
+  const [sameEventFound, setSameEventFound] = useState(false);
+  const [sameEvent, setSameEvent] = useState<any>(null);
+  const [logOpen, setLogOpen] = useState(false);
+
+  const addLog = (msg: string) => {
+    setCalendarLogs(prev => [...prev, `[${new Date().toLocaleTimeString('pt-BR')}] ${msg}`]);
+  };
+
+  useEffect(() => {
+    if (caseObj?.protocol?.audienciaGoogleCalendar) {
+      setGoogleEvent(caseObj.protocol.audienciaGoogleCalendar);
+    }
+  }, [caseObj]);
+
+  const handleGoogleCalendarSync = async () => {
+    if (!audienciaDate || !audienciaTime) {
+      setError('Por favor, defina a data e o horário da audiência antes de agendar no Google Calendar.');
+      return;
+    }
+
+    setCheckingCalendar(true);
+    setConflicts([]);
+    setSameEventFound(false);
+    setSameEvent(null);
+    setCalendarLogs([]);
+
+    addLog('Iniciando fluxo de automação do Google Calendar no setor de audiências.');
+
+    const token = localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken') || '';
+    if (!token) {
+      addLog('Falha: Token do Google não encontrado. Operador não autenticado.');
+      setError('Você precisa fazer login com sua conta Google para agendar compromissos. Acesse Configurações > Integrações.');
+      setCheckingCalendar(false);
+      return;
+    }
+
+    addLog('Token de acesso Google localizado com sucesso.');
+
+    try {
+      addLog('Verificando status de configuração da integração na Firestore...');
+      const conflictRes = await fetch('/api/calendar/check-conflicts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          caseId,
+          googleAccessToken: token,
+          date: audienciaDate,
+          time: audienciaTime,
+          type: 'audiencia',
+          local: audienciaLocal,
+          link: audienciaLink
+        })
+      });
+
+      if (!conflictRes.ok) {
+        const errData = await conflictRes.json();
+        addLog(`Erro técnico na validação de conflitos: ${errData.error}`);
+        setError(errData.error || 'Erro ao consultar conflitos.');
+        setCheckingCalendar(false);
+        return;
+      }
+
+      const conflictData = await conflictRes.json();
+      setCalendarConfigStatus('ativo');
+      addLog('Integração com Google Calendar ativa na base de dados Firestore.');
+      addLog(`Calendário utilizado: ${conflictData.calendarId}`);
+
+      if (conflictData.sameEventFound) {
+        setSameEventFound(true);
+        setSameEvent(conflictData.sameEvent);
+        addLog(`Atenção: Evento idêntico/repetido detectado para este caso! Título: "${conflictData.sameEvent.summary}"`);
+        addLog('O sistema identificou as mesmas partes, data e horário para evitar duplicidade de evento.');
+        setCheckingCalendar(false);
+        return;
+      }
+
+      if (conflictData.conflicts && conflictData.conflicts.length > 0) {
+        setConflicts(conflictData.conflicts);
+        addLog(`Atenção: Encontrados ${conflictData.conflicts.length} conflitos reais de agenda no mesmo intervalo!`);
+        for (const conf of conflictData.conflicts) {
+          addLog(`Conflito: "${conf.title}" no local "${conf.location}"`);
+        }
+        setCheckingCalendar(false);
+        return;
+      }
+
+      addLog('Nenhum conflito ou duplicidade detectada na agenda. Prosseguindo para criação do evento...');
+      await executeEventCreation(token);
+
+    } catch (err: any) {
+      addLog(`Erro crítico durante a automação: ${err.message}`);
+      setError(`Falha ao sincronizar com Google Calendar: ${err.message}`);
+      setCheckingCalendar(false);
+    }
+  };
+
+  const executeEventCreation = async (tokenOverride?: string) => {
+    const token = tokenOverride || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken') || '';
+    setCheckingCalendar(true);
+    try {
+      addLog('Formatando título, fatiamento e dados sugeridos conforme padrão Giffoni...');
+      const createRes = await fetch('/api/calendar/create-event', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          caseId,
+          googleAccessToken: token,
+          date: audienciaDate,
+          time: audienciaTime,
+          type: 'audiencia',
+          local: audienciaLocal,
+          link: audienciaLink,
+          juizo: audienciaJuizo,
+          audienciaType,
+          observacoes: 'Gerado via automação do setor de audiências.'
+        })
+      });
+
+      if (!createRes.ok) {
+        const errData = await createRes.json();
+        addLog(`Erro técnico ao registrar evento no Google Calendar: ${errData.error}`);
+        setError(errData.error || 'Erro ao criar evento.');
+        setCheckingCalendar(false);
+        return;
+      }
+
+      const eventData = await createRes.json();
+      setGoogleEvent(eventData);
+      addLog(`Sucesso! Evento criado com ID ${eventData.eventId}`);
+      addLog(`Link gerado: ${eventData.htmlLink}`);
+      addLog('Metadata salvo permanentemente no Firestore sob o protocolo do caso.');
+      setSuccess('Audiência agendada no Google Calendar com sucesso!');
+    } catch (err: any) {
+      addLog(`Erro de comunicação com API ao registrar evento: ${err.message}`);
+      setError(`Erro ao criar evento no Google Calendar: ${err.message}`);
+    } finally {
+      setCheckingCalendar(false);
+    }
+  };
+
   useEffect(() => {
     if (!caseId) return;
 
@@ -231,6 +383,141 @@ export default function AudienciasFluxo() {
                   <label htmlFor="audienciaClienteAvisado" className="text-xs text-emerald-950 font-bold select-none cursor-pointer">
                     O cliente foi devidamente avisado faticamente de todos os detalhes desta audiência?
                   </label>
+                </div>
+              </div>
+
+              {/* Google Calendar Integration Sector */}
+              <div className="mt-6 border-t border-gray-150 pt-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
+                      <Calendar size={14} className="text-indigo-600" /> Integração Google Calendar
+                    </h4>
+                    <p className="text-[10px] text-gray-400 mt-0.5">Sincronize esta audiência diretamente com a agenda do escritório.</p>
+                  </div>
+                  {googleEvent && (
+                    <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-150 rounded-lg px-2.5 py-1 font-bold flex items-center gap-1 animate-in fade-in">
+                      <CheckCircle2 size={12} className="text-emerald-600" /> Agendado no Google
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  {!googleEvent ? (
+                    <button
+                      type="button"
+                      disabled={checkingCalendar || !audienciaDate || !audienciaTime}
+                      onClick={handleGoogleCalendarSync}
+                      className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-sm disabled:opacity-50"
+                    >
+                      <Calendar size={14} />
+                      {checkingCalendar ? 'Consultando Agenda...' : 'Agendar automaticamente a audiência'}
+                    </button>
+                  ) : (
+                    <a
+                      href={googleEvent.htmlLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-sm"
+                    >
+                      <Calendar size={14} />
+                      Ver audiência agendada
+                    </a>
+                  )}
+
+                  {conflicts.length > 0 && (
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex items-center gap-2 bg-gray-100 text-gray-400 border border-gray-200 px-4 py-2.5 rounded-xl font-bold text-xs cursor-not-allowed"
+                    >
+                      Resolver conflito de audiência (Futuro)
+                    </button>
+                  )}
+                </div>
+
+                {/* Same Event detected warning */}
+                {sameEventFound && sameEvent && (
+                  <div className="p-4 bg-blue-50 border border-blue-150 rounded-2xl space-y-2 text-xs animate-in slide-in-from-top-2">
+                    <div className="flex gap-2.5 items-center text-blue-900 font-bold">
+                      <AlertCircle size={16} className="text-blue-600" />
+                      <span>Audiência Repetida Detectada</span>
+                    </div>
+                    <p className="text-blue-800 text-[11px]">
+                      Identificamos que já existe um evento para este caso com o título <strong>"{sameEvent.summary}"</strong> na mesma data e horário.
+                    </p>
+                    <div className="flex gap-2 pt-1">
+                      <a
+                        href={sameEvent.htmlLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg font-bold text-[10px] inline-flex items-center gap-1"
+                      >
+                        Ver compromisso existente
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => executeEventCreation()}
+                        className="bg-transparent hover:bg-blue-100 text-blue-700 border border-blue-250 px-3 py-1.5 rounded-lg font-bold text-[10px]"
+                      >
+                        Forçar novo agendamento
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Real Conflict detected warning */}
+                {conflicts.length > 0 && (
+                  <div className="p-4 bg-orange-50 border border-orange-150 rounded-2xl space-y-2 text-xs animate-in slide-in-from-top-2">
+                    <div className="flex gap-2.5 items-center text-orange-950 font-bold">
+                      <AlertCircle size={16} className="text-orange-600" />
+                      <span>Conflito Real de Horário</span>
+                    </div>
+                    <p className="text-orange-900 text-[11px]">
+                      Atenção: Existem outros compromissos agendados no mesmo horário na agenda do escritório:
+                    </p>
+                    <ul className="space-y-1.5 pl-4 text-orange-900 text-[11px] list-disc">
+                      {conflicts.map((c, i) => (
+                        <li key={i}>
+                          <strong>{c.title}</strong> - Local: {c.location || 'Não especificado'}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => executeEventCreation()}
+                        className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1.5 rounded-lg font-bold text-[10px]"
+                      >
+                        Forçar agendamento (Ignorar conflitos)
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Automation Console log section */}
+                <div className="border border-gray-150 rounded-2xl overflow-hidden bg-gray-50">
+                  <button
+                    type="button"
+                    onClick={() => setLogOpen(!logOpen)}
+                    className="w-full flex items-center justify-between p-3.5 bg-gray-100 hover:bg-gray-150 transition-all border-none outline-none text-left cursor-pointer"
+                  >
+                    <span className="text-[10px] font-black uppercase text-gray-600 tracking-wider">
+                      Log Técnico da Automação de Audiências — Google Calendar
+                    </span>
+                    <span className="text-xs font-bold text-gray-500">{logOpen ? 'Ocultar' : 'Exibir'}</span>
+                  </button>
+                  {logOpen && (
+                    <div className="p-4 font-mono text-[9px] text-gray-600 space-y-1 max-h-48 overflow-y-auto bg-gray-900 text-emerald-400">
+                      {calendarLogs.length === 0 ? (
+                        <span className="text-gray-500 italic">Nenhum log gerado para esta sessão.</span>
+                      ) : (
+                        calendarLogs.map((log, i) => (
+                          <div key={i}>{log}</div>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

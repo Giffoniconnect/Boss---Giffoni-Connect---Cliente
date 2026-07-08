@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import FluxoStepLayout from './components/FluxoStepLayout';
 import {
@@ -104,6 +104,10 @@ interface ExtendedProtocolData {
   controladoriaMigrado: boolean;
   controladoriaData: string;
   controladoriaResponsavel: string;
+
+  // Auditoria fields
+  auditoriaJustifications?: Record<string, string>;
+  auditoriaLogs?: string[];
 }
 
 const DEFAULT_PROTOCOL: ExtendedProtocolData = {
@@ -202,6 +206,170 @@ function formatCNJ(value: string) {
   return formatted;
 }
 
+function computeAuditedItems(
+  caseObj: any,
+  client: any,
+  evidenceRequests: any[],
+  infoRequests: any[],
+  justifications: Record<string, string>
+) {
+  const list: any[] = [];
+  if (!caseObj) return list;
+
+  const wiz = caseObj.solicitacoesProvasWizardState || {};
+  const isPf = client?.type === 'PF';
+  const isPj = client?.type === 'PJ';
+
+  // 1. Procuração (Setor 05)
+  const isProcSigned = (wiz.procuracaoFiles || caseObj.procuracaoFiles || []).length > 0 || wiz.q1_3 === 'sim';
+  const hasProcUrl = !!caseObj.procuracaoGoogleDocsUrl;
+  list.push({
+    id: 'core_procuracao',
+    name: 'Procuração Oficial',
+    sector: '05 — Coleta de Provas',
+    status: isProcSigned ? 'Juntado' : (hasProcUrl ? 'Recebido' : 'Pendente'),
+    obs: 'Instrumento de procuração para representação de defesa.',
+    responsible: 'Cliente',
+    requestedAt: caseObj.createdAt || '',
+    receivedAt: isProcSigned ? (caseObj.updatedAt || '') : '',
+    isPendente: !isProcSigned
+  });
+
+  // 2. Declaração de Pobreza / Custas (Setor 05)
+  const exigeCustas = wiz.q3_1 === 'sim';
+  if (exigeCustas) {
+    const hasGuiaDoc = (wiz.contratoFiles || []).length > 0 || caseObj.guiaCustasUrl || caseObj.guiaPaga === true;
+    list.push({
+      id: 'core_custas',
+      name: 'Guia de Custas e Taxas Processuais',
+      sector: '05 — Coleta de Provas',
+      status: hasGuiaDoc ? 'Juntado' : 'Pendente',
+      obs: 'Guia de recolhimento tributário e custas judiciais.',
+      responsible: 'Cliente',
+      requestedAt: caseObj.createdAt || '',
+      receivedAt: hasGuiaDoc ? (caseObj.updatedAt || '') : '',
+      isPendente: !hasGuiaDoc
+    });
+  } else {
+    const isPobrezaSigned = (wiz.declaracaoFiles || caseObj.declaracaoFiles || []).length > 0 || wiz.q2_4 === 'sim';
+    list.push({
+      id: 'core_pobreza',
+      name: 'Declaração de Pobreza (Gratuidade)',
+      sector: '05 — Coleta de Provas',
+      status: isPobrezaSigned ? 'Juntado' : 'Pendente',
+      obs: 'Termo de declaração de pobreza para isenção de taxas.',
+      responsible: 'Cliente',
+      requestedAt: caseObj.createdAt || '',
+      receivedAt: isPobrezaSigned ? (caseObj.updatedAt || '') : '',
+      isPendente: !isPobrezaSigned
+    });
+  }
+
+  // 3. RG (Setor 05 - PF only)
+  if (isPf) {
+    const hasRgFile = (wiz.rgFiles || []).length > 0 || wiz.q4_rg === 'sim';
+    list.push({
+      id: 'core_rg',
+      name: 'Documento RG / Identidade Oficial',
+      sector: '05 — Coleta de Provas',
+      status: hasRgFile ? 'Juntado' : 'Pendente',
+      obs: 'Documento civil de identificação do cliente.',
+      responsible: 'Cliente',
+      requestedAt: caseObj.createdAt || '',
+      receivedAt: hasRgFile ? (caseObj.updatedAt || '') : '',
+      isPendente: !hasRgFile
+    });
+
+    // 4. CPF (Setor 05 - PF only)
+    const hasCpfFile = (wiz.cpfFiles || []).length > 0 || wiz.q4_cpf === 'sim';
+    list.push({
+      id: 'core_cpf',
+      name: 'Comprovante de CPF',
+      sector: '05 — Coleta de Provas',
+      status: hasCpfFile ? 'Juntado' : 'Pendente',
+      obs: 'Cadastro de Pessoa Física federal.',
+      responsible: 'Cliente',
+      requestedAt: caseObj.createdAt || '',
+      receivedAt: hasCpfFile ? (caseObj.updatedAt || '') : '',
+      isPendente: !hasCpfFile
+    });
+  }
+
+  // 5. Contrato Social (Setor 05 - PJ only)
+  if (isPj) {
+    const hasContratoSoc = (wiz.contratoSocialFiles || []).length > 0 || wiz.q4_contrato_social === 'sim';
+    list.push({
+      id: 'core_contrato_social',
+      name: 'Contrato Social Constitutivo',
+      sector: '05 — Coleta de Provas',
+      status: hasContratoSoc ? 'Juntado' : 'Pendente',
+      obs: 'Estatuto constitutivo para comprovar poderes de representação societária.',
+      responsible: 'Cliente',
+      requestedAt: caseObj.createdAt || '',
+      receivedAt: hasContratoSoc ? (caseObj.updatedAt || '') : '',
+      isPendente: !hasContratoSoc
+    });
+  }
+
+  // 6. Custom Evidence Requests (Setor 05 or Setor 12)
+  evidenceRequests.forEach((req) => {
+    const sectorLabel = req.evidenceType === 'adicional' || req.periciaType || req.isAdditional === true
+      ? '12 — Solicitar + Provas'
+      : '05 — Coleta de Provas';
+
+    const isJuntado = req.status === 'aprovado' || req.status === 'arquivado';
+    const isRecebido = req.status === 'enviado' || req.status === 'em_analise';
+    const isDispensado = req.status === 'dispensado' || req.status === 'nao_se_aplica';
+
+    list.push({
+      id: req.id,
+      name: req.title || 'Item de Prova',
+      sector: sectorLabel,
+      status: isJuntado ? 'Juntado' : (isRecebido ? 'Recebido' : (isDispensado ? 'Dispensado' : 'Pendente')),
+      obs: req.description || 'Prova geral para fundamentação de mérito.',
+      responsible: 'Cliente',
+      requestedAt: req.createdAt || '',
+      receivedAt: isJuntado || isRecebido ? (req.updatedAt || '') : '',
+      isPendente: !isJuntado && !isDispensado
+    });
+  });
+
+  // 7. Custom Information Requests (Setor 06)
+  infoRequests.forEach((req) => {
+    const isJuntado = req.status === 'conferido' || req.status === 'concluido' || req.status === 'aprovado' || !!req.clientAnswer || !!req.answer;
+    const isRecebido = req.status === 'respondido' || req.status === 'em_analise';
+    const isDispensado = req.status === 'arquivado' || req.status === 'dispensado';
+
+    list.push({
+      id: req.id,
+      name: req.title || 'Solicitação de Informação',
+      sector: '06 — Solicitar + Informações',
+      status: isJuntado ? 'Juntado' : (isRecebido ? 'Recebido' : (isDispensado ? 'Dispensado' : 'Pendente')),
+      obs: req.description || req.clientAnswer || 'Questão complementar de elucidação fática.',
+      responsible: 'Cliente',
+      requestedAt: req.createdAt || '',
+      receivedAt: isJuntado || isRecebido ? (req.updatedAt || '') : '',
+      isPendente: !isJuntado && !isDispensado
+    });
+  });
+
+  return list.map(item => {
+    const just = justifications[item.id];
+    if (just && just.trim() && item.isPendente) {
+      return {
+        ...item,
+        status: 'Dispensado',
+        isPendente: false,
+        justification: just
+      };
+    }
+    return {
+      ...item,
+      justification: just || ''
+    };
+  });
+}
+
 export default function ProtocoloFluxo() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
@@ -215,6 +383,12 @@ export default function ProtocoloFluxo() {
   const [client, setClient] = useState<any>(null);
   const [protocol, setProtocol] = useState<ExtendedProtocolData>(DEFAULT_PROTOCOL);
 
+  const [evidenceRequests, setEvidenceRequests] = useState<any[]>([]);
+  const [infoRequests, setInfoRequests] = useState<any[]>([]);
+  const [auditoriaJustifications, setAuditoriaJustifications] = useState<Record<string, string>>({});
+  const [auditoriaLogs, setAuditoriaLogs] = useState<string[]>([]);
+  const [showLogsConsole, setShowLogsConsole] = useState(false);
+
   const [activeSubetapa, setActiveSubetapa] = useState(1);
 
   // Additional Inline State for Client & Ex-Adverso lists
@@ -225,6 +399,41 @@ export default function ProtocoloFluxo() {
   // Validation
   const isCNJValid = (value: string) => {
     return value.replace(/\D/g, '').length === 20;
+  };
+
+  const auditedItems = React.useMemo(() => {
+    return computeAuditedItems(caseObj, client, evidenceRequests, infoRequests, auditoriaJustifications);
+  }, [caseObj, client, evidenceRequests, infoRequests, auditoriaJustifications]);
+
+  const logToAuditoria = async (message: string, currentJustifications = auditoriaJustifications) => {
+    const timestamp = new Date().toLocaleString('pt-BR');
+    const logEntry = `[${timestamp}] ${message}`;
+    const nextLogs = [logEntry, ...auditoriaLogs];
+    setAuditoriaLogs(nextLogs);
+
+    try {
+      await updateDoc(doc(db, 'cases', caseId!), {
+        'protocol.auditoriaLogs': nextLogs,
+        'protocol.auditoriaJustifications': currentJustifications
+      });
+    } catch (err) {
+      console.error("Erro ao gravar log da auditoria:", err);
+    }
+  };
+
+  const handleUpdateJustification = (itemId: string, val: string) => {
+    const updated = {
+      ...auditoriaJustifications,
+      [itemId]: val
+    };
+    setAuditoriaJustifications(updated);
+
+    const item = auditedItems.find(i => i.id === itemId);
+    const itemName = item ? item.name : itemId;
+    const msg = val.trim() 
+      ? `Justificativa registrada para o item "${itemName}": "${val.trim()}"`
+      : `Justificativa removida para o item "${itemName}"`;
+    logToAuditoria(msg, updated);
   };
 
   useEffect(() => {
@@ -248,10 +457,11 @@ export default function ProtocoloFluxo() {
         setCaseObj(cData);
 
         let resolvedPrimaryClient = 'Cliente';
+        let cliData: any = null;
         if (cData.clientId) {
           const clientSnap = await getDoc(doc(db, 'clients', cData.clientId));
           if (clientSnap.exists()) {
-            const cliData = clientSnap.data();
+            cliData = clientSnap.data();
             setClient(cliData);
             resolvedPrimaryClient = cliData.type === 'PF'
               ? (cliData.pfDadosPessoais?.pf_nomeCompleto || cliData.pfData?.pf_nomeCompleto || 'Cliente')
@@ -366,6 +576,41 @@ export default function ProtocoloFluxo() {
         };
 
         setProtocol(merged);
+
+        // 1. Fetch caseEvidenceRequests
+        const qEv = query(collection(db, 'caseEvidenceRequests'), where('caseId', '==', caseId!));
+        const evSnap = await getDocs(qEv);
+        const evList: any[] = [];
+        evSnap.forEach((docSnap) => {
+          evList.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        setEvidenceRequests(evList);
+
+        // 2. Fetch caseInformationRequests
+        const qInfo = query(collection(db, 'caseInformationRequests'), where('caseId', '==', caseId!));
+        const infoSnap = await getDocs(qInfo);
+        const infoList: any[] = [];
+        infoSnap.forEach((docSnap) => {
+          infoList.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        setInfoRequests(infoList);
+
+        // 3. Load justifications and logs
+        const loadedJustifications = rawProtocol.auditoriaJustifications || {};
+        setAuditoriaJustifications(loadedJustifications);
+
+        const initialLogs = rawProtocol.auditoriaLogs || [];
+        if (initialLogs.length === 0) {
+          const tempAudited = computeAuditedItems(cData, cliData, evList, infoList, loadedJustifications);
+          const countAll = tempAudited.length;
+          const countPending = tempAudited.filter((i: any) => i.isPendente).length;
+          const countResolved = countAll - countPending;
+          const timestamp = new Date().toLocaleString('pt-BR');
+          const initialLog = `[${timestamp}] Auditoria inicializada na rota /protocolo. Total de itens monitorados: ${countAll}. Resolvidos: ${countResolved}. Pendentes: ${countPending}.`;
+          setAuditoriaLogs([initialLog]);
+        } else {
+          setAuditoriaLogs(initialLogs);
+        }
       } catch (err: any) {
         console.error(err);
         setError(`Erro ao buscar dados do protocolo: ${err.message || err}`);
@@ -494,11 +739,40 @@ export default function ProtocoloFluxo() {
       return false;
     }
 
+    const currentAudited = computeAuditedItems(caseObj, client, evidenceRequests, infoRequests, auditoriaJustifications);
+    const pendingItems = currentAudited.filter((i) => i.isPendente);
+
+    if ((action === 'advance' || protocol.protocolStatus === 'protocolado') && pendingItems.length > 0) {
+      const timestamp = new Date().toLocaleString('pt-BR');
+      const logMsg = `[${timestamp}] BLOQUEIO DE SALVAMENTO: Tentativa de finalizar ou avançar com ${pendingItems.length} pendências ativas.`;
+      const nextLogs = [logMsg, ...auditoriaLogs];
+      setAuditoriaLogs(nextLogs);
+      
+      try {
+        await updateDoc(doc(db, 'cases', caseId!), {
+          'protocol.auditoriaLogs': nextLogs
+        });
+      } catch (err) {
+        console.error("Erro ao salvar log de bloqueio:", err);
+      }
+
+      setError(`🚨 Ação bloqueada pela Auditoria: Existem ${pendingItems.length} pendências ativas nos setores 05, 06 ou 12. Você precisa de conferência fática real ou deve justificar formalmente cada item para prosseguir.`);
+      setSaving(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return false;
+    }
+
     try {
       const now = new Date().toISOString();
+      const timestamp = new Date().toLocaleString('pt-BR');
+      const logMsg = `[${timestamp}] SUCESSO: Protocolo salvo. Todas as pendências de auditoria foram devidamente saneadas ou justificadas.`;
+      const nextLogs = [logMsg, ...auditoriaLogs];
+      setAuditoriaLogs(nextLogs);
 
       const updatedProtocol: ExtendedProtocolData = {
         ...protocol,
+        auditoriaJustifications,
+        auditoriaLogs: nextLogs,
         completedAt: protocol.protocolStatus === 'protocolado' ? (protocol.completedAt || now) : '',
         updatedAt: now
       };
@@ -678,6 +952,168 @@ export default function ProtocoloFluxo() {
                 {protocol.processNumber || <span className="text-slate-500 italic">Preenchimento obrigatório</span>}
               </p>
             </div>
+          </div>
+        </div>
+
+        {/* AUDITORIA DE JUNTADA DE PROVAS E INFORMAÇÕES */}
+        <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-rose-50 border border-rose-100 text-rose-600 rounded-2xl">
+                <ShieldCheck size={20} />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-gray-900 uppercase tracking-widest">
+                  Auditoria de Juntada de Provas e Informações
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Análise automática de pendências nos setores 05, 06 e 12 antes da conclusão do protocolo.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                const countAll = auditedItems.length;
+                const countPending = auditedItems.filter((i: any) => i.isPendente).length;
+                const countResolved = countAll - countPending;
+                await logToAuditoria(`Re-execução manual da auditoria. Total de itens monitorados: ${countAll}. Resolvidos: ${countResolved}. Pendentes: ${countPending}.`);
+                setSuccess('Auditoria atualizada com sucesso!');
+                setTimeout(() => setSuccess(null), 3000);
+              }}
+              className="px-3.5 py-1.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-xs font-bold transition-all flex items-center gap-1.5 text-gray-700 cursor-pointer"
+            >
+              <RefreshCw size={12} />
+              Forçar Re-auditoria
+            </button>
+          </div>
+
+          {auditedItems.filter(i => i.isPendente).length > 0 ? (
+            <div className="p-4 bg-red-50 border border-red-150 rounded-2xl text-red-955 text-xs space-y-1.5 animate-pulse">
+              <div className="flex items-center gap-2 font-black uppercase text-red-800">
+                <AlertCircle size={15} />
+                <span>Bloqueio de Auditoria Ativo</span>
+              </div>
+              <p className="font-semibold leading-relaxed">
+                Existem {auditedItems.filter(i => i.isPendente).length} pendência(s) ativa(s). O salvamento final/avanço está bloqueado. Junte o arquivo correspondente nas etapas anteriores ou forneça uma justificativa formal abaixo.
+              </p>
+            </div>
+          ) : (
+            <div className="p-4 bg-emerald-50 border border-emerald-150 rounded-2xl text-emerald-950 text-xs space-y-1">
+              <div className="flex items-center gap-2 font-black uppercase text-emerald-800">
+                <CheckCircle2 size={15} />
+                <span>Auditoria Aprovada</span>
+              </div>
+              <p className="font-semibold">
+                Nenhuma pendência relevante nos setores 05, 06 ou 12. O protocolo está liberado para encerramento.
+              </p>
+            </div>
+          )}
+
+          {/* ITEM LIST */}
+          <div className="overflow-hidden border border-gray-150 rounded-2xl">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-gray-50 text-gray-500 uppercase tracking-wider font-black text-[10px] border-b border-gray-150">
+                  <th className="p-3.5 pl-4 w-1/3">Item Monitorado</th>
+                  <th className="p-3.5">Setor de Origem</th>
+                  <th className="p-3.5">Status</th>
+                  <th className="p-3.5">Responsável / Datas</th>
+                  <th className="p-3.5 pr-4 w-1/4">Justificativa de Dispensa</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {auditedItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-gray-400 font-semibold italic">
+                      Nenhum item monitorado encontrado para este caso.
+                    </td>
+                  </tr>
+                ) : (
+                  auditedItems.map((item) => {
+                    const statusColors: Record<string, string> = {
+                      'Juntado': 'bg-emerald-600 text-white',
+                      'Recebido': 'bg-blue-600 text-white',
+                      'Dispensado': 'bg-slate-500 text-white',
+                      'Pendente': 'bg-red-500 text-white',
+                      'Não se aplica': 'bg-gray-400 text-white'
+                    };
+
+                    return (
+                      <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="p-4 pl-4 space-y-1">
+                          <span className="font-extrabold text-gray-900 block">{item.name}</span>
+                          <span className="text-[10.5px] text-gray-400 block font-medium leading-relaxed">
+                            {item.obs}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span className="text-[10px] font-black uppercase text-indigo-750 font-mono tracking-wide bg-indigo-50/60 px-2 py-0.5 rounded">
+                            {item.sector}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span className={`inline-flex px-2 py-0.5 rounded-lg text-[9.5px] font-black uppercase tracking-wider ${statusColors[item.status] || 'bg-gray-500'}`}>
+                            {item.status}
+                          </span>
+                        </td>
+                        <td className="p-4 space-y-1 font-medium text-gray-500 text-[11px]">
+                          <div>Resp: <strong className="text-gray-800">{item.responsible}</strong></div>
+                          {item.requestedAt && (
+                            <div>Solicitado: <span className="font-mono">{new Date(item.requestedAt).toLocaleDateString('pt-BR')}</span></div>
+                          )}
+                          {item.receivedAt && (
+                            <div>Recebido: <span className="font-mono">{new Date(item.receivedAt).toLocaleDateString('pt-BR')}</span></div>
+                          )}
+                        </td>
+                        <td className="p-4 pr-4">
+                          {item.isPendente || item.status === 'Dispensado' ? (
+                            <textarea
+                              value={item.justification || ''}
+                              onChange={(e) => handleUpdateJustification(item.id, e.target.value)}
+                              placeholder="Justifique formalmente o prosseguimento sem este item..."
+                              className="w-full bg-white border border-gray-200 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 rounded-lg p-2 text-[11px] font-medium placeholder-gray-300 min-h-[60px] resize-none"
+                            />
+                          ) : (
+                            <span className="text-[10.5px] text-emerald-600 font-bold block bg-emerald-50 border border-emerald-100 p-2 rounded-lg text-center">
+                              ✓ Item sanado nos autos
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* LOG TÉCNICO CONSOLE */}
+          <div className="border border-gray-150 rounded-2xl overflow-hidden bg-slate-50">
+            <button
+              type="button"
+              onClick={() => setShowLogsConsole(!showLogsConsole)}
+              className="w-full flex items-center justify-between p-4 bg-gray-100/70 hover:bg-gray-100 transition-all font-bold text-xs text-gray-700 cursor-pointer"
+            >
+              <span className="flex items-center gap-2">
+                <FileText size={14} className="text-gray-500" />
+                Log Técnico da Auditoria ({auditoriaLogs.length} registros)
+              </span>
+              <span className="text-[10px] uppercase font-black text-gray-400">
+                {showLogsConsole ? 'Ocultar Terminal ▲' : 'Expandir Terminal ▼'}
+              </span>
+            </button>
+
+            {showLogsConsole && (
+              <div className="p-4 bg-slate-900 border-t border-gray-200 font-mono text-[10px] text-slate-300 space-y-1.5 max-h-[180px] overflow-y-auto leading-relaxed scrollbar-thin">
+                {auditoriaLogs.map((log, index) => (
+                  <div key={index} className="flex gap-2.5">
+                    <span className="text-indigo-400 shrink-0 font-bold">›</span>
+                    <span className="whitespace-pre-wrap">{log}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

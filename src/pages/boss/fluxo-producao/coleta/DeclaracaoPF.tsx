@@ -4,17 +4,41 @@ import FluxoStepLayout from '../components/FluxoStepLayout';
 import EntregaDocumento from '../components/EntregaDocumento';
 import { 
   ArrowRight, FileText, UploadCloud, Trash2, ArrowLeft, 
-  Check, AlertCircle, Sparkles, RefreshCw, ExternalLink, FileCode
+  Check, AlertCircle, Sparkles, RefreshCw, ExternalLink, FileCode,
+  Settings, X, CheckCircle2, Copy
 } from 'lucide-react';
 import { doc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../../lib/firebase';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { buildDeclaracaoPobrezaPfPlaceholders } from '../../../../lib/documents/placeholderBuilders';
 
+const GoogleDriveIcon = ({ size = 16, className = "" }: { size?: number; className?: string }) => (
+  <svg
+    viewBox="0 0 87.3 78"
+    width={size}
+    height={size}
+    className={className}
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path fill="#00a354" d="M18.9 50l-14 24.2 0 3.8h4.2l53.9-1.2-11.4-26.8z" />
+    <path fill="#3b7cf6" d="M14 0l-14 24.2L11.1 50h41.7l14.4-25.8z" />
+    <path fill="#fbb000" d="M72.6 50L53.7 78H83l4.3-11.2L72.6 50z" />
+  </svg>
+);
+
 export default function DeclaracaoPF() {
   const { googleAccessToken, loginWithGoogle } = useAuth();
   const [isRenewingGoogle, setIsRenewingGoogle] = React.useState(false);
   const generationInFlightRef = React.useRef(false);
+  const [showIntegrationConfig, setShowIntegrationConfig] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+
+  const handleCopyLink = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const handleRenewGoogle = async () => {
     setIsRenewingGoogle(true);
@@ -89,6 +113,26 @@ export default function DeclaracaoPF() {
 
   const decStatus = localCaseObj?.declaracaoPobrezaStatus || 'Não gerada';
   const decUrl = localCaseObj?.declaracaoPobrezaGoogleDocsUrl || localCaseObj?.declaracaoPobrezaPfUrl || '';
+
+  const isSimulatedDoc = !!(
+    (decUrl && decUrl.includes('simulated=true')) ||
+    (localCaseObj?.declaracaoPobrezaGoogleDocsId && localCaseObj?.declaracaoPobrezaGoogleDocsId.startsWith('simulated-'))
+  );
+
+  const hasRealSuccess = !!(
+    decStatus === 'criada' &&
+    decUrl &&
+    decUrl.startsWith("https://docs.google.com/document/d/") &&
+    clientDriveFolderId &&
+    !isSimulatedDoc
+  );
+
+  const techCode = decStatus === 'criada' 
+    ? (localCaseObj?.declaracaoPobrezaLastOutcome || "SUCCESS") 
+    : (localCaseObj?.declaracaoPobrezaLastErrorCode || "GENERATION_FAILED");
+  const techTimestamp = localCaseObj?.declaracaoPobrezaLastOperationAt || localCaseObj?.declaracaoPobrezaGeneratedAt || localCaseObj?.updatedAt || "";
+  const techDocId = localCaseObj?.declaracaoPobrezaGoogleDocsId || localCaseObj?.declaracaoPobrezaPfId || "";
+  const techDocVer = localCaseObj?.declaracaoPobrezaVersion || 1;
 
   const handleGenerateDeclaracaoPf = async (intent: 'initial' | 'new_version' = 'initial') => {
     if (generationInFlightRef.current) {
@@ -923,117 +967,327 @@ export default function DeclaracaoPF() {
                 <div className="space-y-5 border-l-2 border-indigo-200 pl-4 animate-in fade-in duration-200">
                   
                   {/* REAL AUTOMAÇÃO GOOGLE DOCS CARD */}
-                  <div className="bg-slate-50 border border-slate-150 rounded-2xl p-5 space-y-4 shadow-3xs">
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-600">
-                        <FileCode size={20} />
-                      </div>
+                  <div className="bg-gradient-to-br from-indigo-50/60 to-blue-50/20 border border-indigo-150 rounded-3xl p-6 shadow-3xs space-y-5 animate-in fade-in">
+                    <div className="flex items-start justify-between gap-4">
                       <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="p-1 px-2.5 bg-indigo-100 text-indigo-800 rounded-full font-black text-[9px] uppercase tracking-wider font-mono">
+                            Automação Ativa
+                          </span>
+                          <Sparkles size={16} className="text-indigo-600 animate-pulse" />
+                        </div>
                         <h3 className="text-sm font-black text-slate-900">
                           Automação Google Docs — Declaração de Hipossuficiência PF
                         </h3>
                         <p className="text-xs text-slate-500 leading-relaxed max-w-xl">
-                          Gera a Declaração de Hipossuficiência da Pessoa Física a partir do template oficial, usando os dados consolidados da Etapa 1 e salvando o documento na pasta real do cliente no Google Drive.
+                          Esta ferramenta envia os dados consolidados do cadastro de pessoa física diretamente ao build receptor do Google Docs para preenchimento de placeholders, indexação e arquivamento automatizado na pasta em tempo real.
                         </p>
                       </div>
                     </div>
 
-                    <div className="border-t border-slate-200/60 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                      {/* Left Side */}
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between bg-white border border-slate-150 rounded-xl p-2.5">
-                          <span className="font-bold text-slate-500 text-[11px] uppercase tracking-wider">Status da Automação</span>
-                          {renderStatusBadge()}
-                        </div>
+                    <div className="space-y-4">
+                      {/* Botoes de acao de integracao empilhados verticalmente à esquerda */}
+                      <div className="flex flex-col items-start gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setShowIntegrationConfig(!showIntegrationConfig)}
+                          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shadow-3xs border ${
+                            showIntegrationConfig
+                              ? 'bg-indigo-600 border-indigo-700 text-white hover:bg-indigo-700'
+                              : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 border-indigo-150 hover:border-indigo-300'
+                          }`}
+                        >
+                          <Settings size={13} className={showIntegrationConfig ? "text-white" : "text-indigo-500"} />
+                          Ver Configurações de integração
+                        </button>
 
-                        <div className="bg-white border border-slate-150 rounded-xl p-3 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-slate-500 text-[11px] uppercase tracking-wider">Template Oficial</span>
-                            <span className="text-[10px] bg-slate-50 text-slate-500 font-mono px-1.5 py-0.5 rounded font-bold">declaracao_pobreza_pf</span>
-                          </div>
-                          <p className="text-[11px] font-mono select-all bg-slate-50 border border-slate-100 rounded px-2 py-1 truncate text-slate-600">
-                            1e2JbDiPY-2TywfdK_7s75qcY6YkvRrBVQ_0TFDnHYi4
-                          </p>
-                          <a 
-                            href="https://docs.google.com/document/d/1e2JbDiPY-2TywfdK_7s75qcY6YkvRrBVQ_0TFDnHYi4/edit"
+                        {folderIsReal && clientDriveFolderUrl ? (
+                          <a
+                            href={clientDriveFolderUrl}
                             target="_blank"
+                            referrerPolicy="no-referrer"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 font-bold uppercase tracking-wider text-[10px] text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-3 py-1 rounded-lg transition-all"
+                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-250 text-emerald-800 font-extrabold rounded-xl text-xs transition-colors cursor-pointer shadow-3xs"
                           >
-                            Abrir Template <ExternalLink size={10} />
+                            <GoogleDriveIcon size={14} className="text-emerald-600" />
+                            <span>Abrir pasta no Google Drive</span>
                           </a>
-                        </div>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-100 border border-gray-250 text-gray-400 font-extrabold rounded-xl text-xs cursor-not-allowed opacity-60"
+                          >
+                            <GoogleDriveIcon size={14} className="grayscale opacity-50" />
+                            <span>Pasta do Google Drive ainda não disponível</span>
+                          </button>
+                        )}
                       </div>
 
-                      {/* Right Side */}
-                      <div className="space-y-3 font-bold text-slate-700">
-                        <div className="bg-white border border-slate-150 rounded-xl p-3 space-y-2">
-                          <div className="space-y-1">
-                            <span className="font-bold text-slate-500 text-[11px] uppercase tracking-wider block">Destino da Pasta do Cliente</span>
-                            <span className="text-[10.5px] text-indigo-700 font-extrabold uppercase tracking-wide block">Fonte: Automação Google Drive — Pasta do Cliente</span>
+                      {showIntegrationConfig && (
+                        <div className="p-5 bg-white border border-gray-150 rounded-2xl space-y-4 shadow-lg animate-in slide-in-from-top-1 duration-250 max-w-xl text-left">
+                          <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                            <div className="flex items-center gap-2">
+                              <Settings size={15} className="text-indigo-600" />
+                              <h4 className="text-xs font-black text-gray-800 uppercase tracking-wider font-mono">
+                                Informações Técnicas & Configurações GDI
+                              </h4>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setShowIntegrationConfig(false)}
+                              className="p-1 hover:bg-gray-100 rounded text-gray-405 hover:text-gray-700 transition"
+                              title="Fechar"
+                            >
+                              <X size={14} />
+                            </button>
                           </div>
-                          {folderIsReal ? (
-                            <>
-                              <p className="text-[11px] font-mono select-all bg-slate-50 border border-slate-100 rounded px-2 py-1 truncate text-slate-700 font-semibold">
-                                ID: {clientDriveFolderId}
-                              </p>
-                              <div className="flex flex-wrap items-center gap-2 pt-1 font-bold">
-                                <a 
-                                  href={clientDriveFolderUrl}
+
+                          <div className="space-y-4 text-xs">
+                            {/* DESTINO DA PASTA DO CLIENTE */}
+                            <div className="space-y-2.5 p-3.5 bg-slate-50 border border-slate-150 rounded-xl">
+                              <h5 className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider font-mono">
+                                DESTINO DA PASTA DO CLIENTE
+                              </h5>
+                              <div className="space-y-1.5 text-[11px] leading-relaxed text-slate-700">
+                                <p className="font-bold text-slate-850">
+                                  Pasta do Google Drive de {clientName || 'Cliente'}
+                                </p>
+                                <p className="text-slate-500 font-semibold">
+                                  Fonte: Automação Google Drive — Pasta do Cliente
+                                </p>
+                                <div className="pt-1.5 space-y-1.5 border-t border-slate-200/50">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-semibold text-slate-600 truncate">Pasta ID: {clientDriveFolderId || 'Não definida'}</span>
+                                    {clientDriveFolderId && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCopyLink(clientDriveFolderId)}
+                                        className="text-[9px] font-black uppercase text-indigo-650 hover:text-indigo-850 cursor-pointer shrink-0"
+                                      >
+                                        {copied ? "Copiado!" : "Copiar ID"}
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-semibold text-slate-600 truncate flex-1">URL: {clientDriveFolderUrl || 'Não definida'}</span>
+                                    {clientDriveFolderUrl && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCopyLink(clientDriveFolderUrl)}
+                                        className="text-[9px] font-black uppercase text-indigo-650 hover:text-indigo-850 cursor-pointer shrink-0"
+                                      >
+                                        {copied ? "Copiado!" : "Copiar URL"}
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Template de Referência (Documento Base) */}
+                            <div className="space-y-2 pb-1">
+                              <label className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block font-mono">
+                                Template de Referência (Documento Base)
+                              </label>
+                              <div className="space-y-2">
+                                <p className="text-[11px] text-gray-500 font-medium">
+                                  Modelo padrão utilizado para preenchimento de metadados fáticos (Declaração de Hipossuficiência PF):
+                                </p>
+                                <a
+                                  href="https://docs.google.com/document/d/1e2JbDiPY-2TywfdK_7s75qcY6YkvRrBVQ_0TFDnHYi4/edit"
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1.5 text-[10px] text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-3 py-1 rounded-lg transition-all"
+                                  className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-50/70 hover:bg-indigo-100 border border-indigo-150 text-indigo-750 hover:text-indigo-900 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer shadow-3xs"
                                 >
-                                  Abrir Pasta GDrive <ExternalLink size={10} />
+                                  <FileText size={13} className="text-indigo-500" />
+                                  <span>Abrir Template de Referência Google Docs</span>
+                                  <ExternalLink size={10} className="opacity-70" />
                                 </a>
-                                <span className="text-[10px] text-emerald-700 font-extrabold flex items-center gap-1 leading-tight">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse shrink-0" />
-                                  Pasta real vinculada. A Declaração será salva nesta pasta.
-                                </span>
+                                <div className="p-2 bg-gray-50 border border-gray-150 rounded-xl text-[9px] font-mono select-all text-gray-500 flex items-center justify-between gap-2">
+                                  <span className="truncate">ID: 1e2JbDiPY-2TywfdK_7s75qcY6YkvRrBVQ_0TFDnHYi4</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyLink("1e2JbDiPY-2TywfdK_7s75qcY6YkvRrBVQ_0TFDnHYi4")}
+                                    className="text-indigo-650 hover:text-indigo-850 font-black uppercase tracking-wider cursor-pointer"
+                                  >
+                                    Copiar ID do Template
+                                  </button>
+                                </div>
                               </div>
-                            </>
-                          ) : (
-                            <p className="text-[11px] text-rose-600 font-bold bg-rose-50/50 p-2 rounded-lg border border-rose-100">
-                              Pasta do cliente ainda não criada. Execute primeiro a Automação Google Drive — Pasta do Cliente.
-                            </p>
-                          )}
-                        </div>
+                            </div>
 
-                        {decUrl && (
-                          <div className="bg-emerald-50/40 border border-emerald-150 rounded-xl p-3 space-y-2 animate-in fade-in">
-                            <span className="font-bold text-emerald-800 text-[11px] uppercase tracking-wider block">Resultado da Automação</span>
-                            <a 
+                            {/* Botao fechar */}
+                            <div className="flex justify-end pt-1">
+                              <button
+                                type="button"
+                                onClick={() => setShowIntegrationConfig(false)}
+                                className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[10px] font-black uppercase rounded-lg transition-all cursor-pointer"
+                              >
+                                Fechar painel
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {saving ? (
+                        <div className="bg-white border border-indigo-150 rounded-2xl p-5 space-y-4 shadow-3xs animate-pulse font-sans">
+                          <div className="flex items-center justify-between gap-3 border-b border-gray-100 pb-3">
+                            <div className="flex items-center gap-2">
+                              <RefreshCw className="text-indigo-600 animate-spin" size={17} />
+                              <span className="text-xs font-black uppercase text-indigo-700 tracking-wider">
+                                Gerando Declaração de Hipossuficiência PF segura... Por favor, aguarde alguns instantes.
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                              <div className="bg-indigo-600 h-full rounded-full animate-infinite-loading w-3/4"></div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : decStatus === 'criada' && decUrl ? (
+                        <div className="bg-white border border-slate-150 rounded-2xl p-5 space-y-4 shadow-3xs animate-in slide-in-from-top-1 duration-200">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2.5 bg-indigo-50 border border-indigo-150 rounded-xl text-indigo-600">
+                              <FileText size={20} />
+                            </div>
+                            <div className="space-y-1">
+                              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
+                                Declaração de Hipossuficiência PF Gerada - v{techDocVer}
+                              </h3>
+                              <p className="text-xs text-slate-500 leading-relaxed font-semibold">
+                                O documento de Declaração de Hipossuficiência PF real foi localizado, preenchido e confirmado na pasta real do Google Drive.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2.5 pt-1.5">
+                            <a
                               href={decUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center justify-center gap-2 w-full font-black text-xs uppercase tracking-wider text-emerald-990 bg-emerald-100 hover:bg-emerald-250/80 p-2.5 rounded-xl border border-emerald-200 transition-all font-bold"
+                              className="inline-flex items-center gap-2 px-4.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase rounded-xl transition-all shadow-3xs cursor-pointer font-bold"
                             >
-                              Abrir Declaração <FileText size={13} />
+                              <ExternalLink size={13} />
+                              Abrir Declaração
                             </a>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyLink(decUrl)}
+                              className={`inline-flex items-center gap-1.5 px-4.5 py-2 rounded-xl text-xs font-black uppercase transition-all border shadow-3xs cursor-pointer font-bold ${
+                                copied 
+                                  ? 'bg-emerald-50 border-emerald-300 text-emerald-800' 
+                                  : 'bg-white border-gray-250 hover:bg-gray-50 text-gray-700'
+                              }`}
+                            >
+                              {copied ? <Check size={13} /> : <Copy size={13} />}
+                              <span>{copied ? "Copiado!" : "Copiar Link"}</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={saving}
+                              onClick={() => handleGenerateDeclaracaoPf('new_version')}
+                              className="px-4.5 py-2 bg-white hover:bg-gray-50 border border-gray-250 text-slate-800 text-xs font-black uppercase rounded-xl transition-all shadow-3xs cursor-pointer font-bold disabled:opacity-50"
+                            >
+                              {saving ? "Gerando..." : "Gerar nova versão"}
+                            </button>
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {/* Motor Integrado info display */}
+                          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs animate-fadeIn">
+                            <p className="font-extrabold text-slate-700 uppercase tracking-widest text-[9px] font-mono flex items-center gap-1.5 align-middle">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+                              <span>Motor documental preparado para validar e executar geração real.</span>
+                            </p>
+                            <p className="text-slate-500 leading-normal text-[11px]">
+                              A geração documental da declaração de hipossuficiência está configurada e pronta para execução real, aguardando validação de pastas e arquivos fáticos.
+                            </p>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-3 pt-1">
+                            <button
+                              type="button"
+                              disabled={saving}
+                              onClick={() => handleGenerateDeclaracaoPf('initial')}
+                              className="w-full md:w-auto px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm hover:shadow transition-all cursor-pointer font-bold"
+                            >
+                              <Sparkles size={14} />
+                              <span>Gerar Declaração PF</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    <div className="pt-2 flex flex-col md:flex-row items-center gap-3">
-                      <button
-                        type="button"
-                        disabled={saving}
-                        onClick={() => handleGenerateDeclaracaoPf(decStatus === 'criada' ? 'new_version' : 'initial')}
-                        className="w-full md:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 hover:shadow-sm transition-all cursor-pointer disabled:opacity-50"
-                      >
-                        {saving ? (
-                          <>
-                            <RefreshCw size={13} className="animate-spin" />
-                            <span>Processando Geração...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles size={13} />
-                            <span>{decStatus === 'criada' ? 'Gerar Nova Versão' : 'Gerar Declaração PF'}</span>
-                          </>
-                        )}
-                      </button>
+                    {/* Log Técnico da Automação */}
+                    <div className="space-y-3">
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                        Log Técnico da Automação (Motor de Geração de Google Docs)
+                      </span>
+
+                      {hasRealSuccess ? (
+                        /* SUCESSO REAL */
+                        <div className="p-5 bg-emerald-50 border border-emerald-150 rounded-2xl space-y-4 animate-in fade-in duration-200">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2 bg-emerald-100 rounded-xl text-emerald-800 shrink-0">
+                              <CheckCircle2 size={18} />
+                            </div>
+                            <div className="space-y-1">
+                              <h4 className="text-sm font-black text-emerald-950 leading-relaxed">
+                                ✅ Declaração de Hipossuficiência PF criada com sucesso na pasta de destino: {clientName || 'Cliente'}.
+                              </h4>
+                              <p className="text-xs text-emerald-800 font-semibold">
+                                Documento salvo no Google Drive e vinculado ao caso em {techTimestamp ? new Date(techTimestamp).toLocaleString() : new Date().toLocaleString()}.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : decStatus === 'falha' ? (
+                        /* FALHA REAL */
+                        <div className="p-5 bg-red-50 border border-red-150 rounded-2xl space-y-4 animate-in fade-in duration-200">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2 bg-red-100 rounded-xl text-red-800 shrink-0">
+                              <X size={18} />
+                            </div>
+                            <div className="space-y-1">
+                              <h4 className="text-sm font-black text-red-950 leading-relaxed">
+                                ❌ Não foi possível criar a Declaração de Hipossuficiência PF na pasta de destino: {clientName || 'Cliente'}.
+                              </h4>
+                              <p className="text-xs font-extrabold text-red-900 mt-2">
+                                Motivo: {localCaseObj?.declaracaoPobrezaLogFalha || "Falha na geração integrada de documento."}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        /* SEM OPERAÇÃO RECENTE OU EM ESPERA */
+                        <div className="p-4 bg-gray-50 text-gray-400 rounded-xl border border-gray-150 font-mono text-xs italic text-center">
+                          Área técnica reservada para saída de logs. Atualmente limpa e pronta para receber o espelhamento do build.
+                        </div>
+                      )}
+
+                      {/* DETALHES TÉCNICOS COMPLEMENTARES - EXIBIR SOMENTE QUANDO EXISTIR */}
+                      {(techCode || techTimestamp || techDocId) && (decStatus === 'criada' || decStatus === 'falha') && (
+                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-600 text-xs font-mono space-y-1.5 font-bold">
+                          <div className="flex justify-between border-b border-slate-200 pb-1">
+                            <span>Status Code:</span>
+                            <span className="font-bold text-slate-850">{techCode}</span>
+                          </div>
+                          <div className="flex justify-between border-b border-slate-200 pb-1">
+                            <span>Timestamp:</span>
+                            <span>{techTimestamp ? new Date(techTimestamp).toLocaleString() : ""}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Document ID:</span>
+                            <span className="truncate max-w-[200px]" title={techDocId}>{techDocId}</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 

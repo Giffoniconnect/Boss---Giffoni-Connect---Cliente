@@ -863,28 +863,6 @@ export default function ContratoHonorariosPF() {
     <FluxoStepLayout stepName="Coleta de Documentos" caseId={caseId}>
       <div className="max-w-3xl mx-auto space-y-6 animate-fade-in py-4">
         
-        {/* HEADER PANEL */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-5">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
-                Etapa 3 — Pessoa Física (PF)
-              </span>
-              <span className="text-xs text-gray-400">Cliente: <strong>{clientName}</strong></span>
-            </div>
-            <h1 className="text-lg font-black text-gray-900 tracking-tight leading-none pt-1">
-              Contrato de Honorários Advocatícios
-            </h1>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/solicitacao-declaracao-PF`)}
-            className="p-2 bg-gray-50 border border-gray-150 rounded-xl text-gray-500 hover:text-gray-950 hover:bg-gray-100 transition-all flex items-center justify-center cursor-pointer font-bold text-xs"
-          >
-            <ArrowLeft size={13} className="mr-1" /> Voltar à Declaração
-          </button>
-        </div>
-
         {fetching || financialLoading ? (
           <div className="p-12 text-center text-gray-400 flex flex-col items-center justify-center gap-3">
             <div className="w-8 h-8 border-4 border-gray-100 border-t-indigo-600 rounded-full animate-spin"></div>

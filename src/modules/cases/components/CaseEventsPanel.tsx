@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, addDoc, getDoc, serverTimestamp, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../../lib/firebase';
-import { Calendar, Clock, MapPin, Plus, Trash2, Eye, EyeOff, CheckCircle2, AlertCircle, XCircle } from 'lucide-react';
+import { Calendar, Clock, MapPin, Plus, Trash2, Eye, EyeOff, CheckCircle2, AlertCircle, XCircle, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useAuth } from '../../../contexts/AuthContext';
 
 interface CaseEvent {
   id: string;
@@ -16,6 +17,7 @@ interface CaseEvent {
   location: string;
   status: 'agendado' | 'realizado' | 'cancelado' | 'remarcado';
   visibleToClient: boolean;
+  googleEventId?: string;
   createdAt: any;
   updatedAt: any;
 }
@@ -27,11 +29,28 @@ interface Props {
   filterType?: string[];
 }
 
+function incrementHour(timeStr: string): string {
+  if (!timeStr) return '10:00';
+  const parts = timeStr.split(':');
+  if (parts.length < 2) return '10:00';
+  let hours = parseInt(parts[0], 10);
+  let minutes = parseInt(parts[1], 10);
+  hours = (hours + 1) % 24;
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+}
+
 export default function CaseEventsPanel({ caseId, clientId, isAdmin = false, filterType }: Props) {
+  const { googleAccessToken } = useAuth();
   const [events, setEvents] = useState<CaseEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Google Calendar Integration State
+  const [calendarId, setCalendarId] = useState<string>('primary');
+  const [googleConnected, setGoogleConnected] = useState<boolean>(false);
+  const [syncWithGoogle, setSyncWithGoogle] = useState<boolean>(true);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     type: 'audiencia',
@@ -43,6 +62,24 @@ export default function CaseEventsPanel({ caseId, clientId, isAdmin = false, fil
     status: 'agendado',
     visibleToClient: true
   });
+
+  useEffect(() => {
+    async function loadCalendarConfig() {
+      try {
+        const docSnap = await getDoc(doc(db, 'settings', 'connectors'));
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.googleCalendar) {
+            setCalendarId(data.googleCalendar.calendarIdPlaceholder || 'primary');
+            setGoogleConnected(data.googleCalendar.status === 'ativo');
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao ler configuração do Google Calendar:', err);
+      }
+    }
+    loadCalendarConfig();
+  }, []);
 
   useEffect(() => {
     if (!caseId) return;
@@ -71,12 +108,65 @@ export default function CaseEventsPanel({ caseId, clientId, isAdmin = false, fil
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
+    setSyncStatus(null);
+
+    let createdGoogleEventId: string | undefined = undefined;
+    const token = googleAccessToken || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken') || '';
+
+    if (googleConnected && syncWithGoogle && token) {
+      try {
+        setSyncStatus('Sincronizando com Google Agenda...');
+        const eventTitle = `[BOSS Giffoni] ${formData.title}`;
+        const eventDescription = `${formData.description || ''}\n\nCaso ID: ${caseId}\nCliente ID: ${clientId}\nAgendado pelo barramento automatizado BOSS Giffoni.`;
+        
+        // Define Start and End ISO strings in Brazil timezone
+        const startDateTime = `${formData.date}T${formData.time || '09:00'}:00`;
+        const endHour = formData.time ? incrementHour(formData.time) : '10:00';
+        const endDateTime = `${formData.date}T${endHour}:00`;
+
+        const googlePayload = {
+          summary: eventTitle,
+          description: eventDescription,
+          location: formData.location || '',
+          start: {
+            dateTime: new Date(startDateTime).toISOString(),
+            timeZone: 'America/Sao_Paulo'
+          },
+          end: {
+            dateTime: new Date(endDateTime).toISOString(),
+            timeZone: 'America/Sao_Paulo'
+          }
+        };
+
+        const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(googlePayload)
+        });
+
+        if (res.ok) {
+          const resData = await res.json();
+          createdGoogleEventId = resData.id;
+          setSyncStatus('Sincronizado com sucesso!');
+        } else {
+          console.warn('Erro ao criar evento no Google Calendar:', res.statusText);
+          setSyncStatus('Falha ao sincronizar com Google');
+        }
+      } catch (err) {
+        console.error('Erro na sincronização Google Agenda:', err);
+        setSyncStatus('Erro ao sincronizar');
+      }
+    }
 
     try {
       await addDoc(collection(db, 'caseEvents'), {
         ...formData,
         caseId,
         clientId,
+        googleEventId: createdGoogleEventId || null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
@@ -91,6 +181,7 @@ export default function CaseEventsPanel({ caseId, clientId, isAdmin = false, fil
         status: 'agendado',
         visibleToClient: true
       });
+      setTimeout(() => setSyncStatus(null), 3000);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'caseEvents');
     } finally {
@@ -109,12 +200,27 @@ export default function CaseEventsPanel({ caseId, clientId, isAdmin = false, fil
     }
   };
 
-  const deleteEvent = async (id: string) => {
+  const deleteEvent = async (event: CaseEvent) => {
     if (!window.confirm('Excluir este evento?')) return;
+    
+    const token = googleAccessToken || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken') || '';
+    if (event.googleEventId && token && googleConnected) {
+      try {
+        await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${event.googleEventId}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+      } catch (calErr) {
+        console.error('Falha ao deletar evento do Google Agenda:', calErr);
+      }
+    }
+
     try {
-      await deleteDoc(doc(db, 'caseEvents', id));
+      await deleteDoc(doc(db, 'caseEvents', event.id));
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `caseEvents/${id}`);
+      handleFirestoreError(error, OperationType.DELETE, `caseEvents/${event.id}`);
     }
   };
 
@@ -139,7 +245,7 @@ export default function CaseEventsPanel({ caseId, clientId, isAdmin = false, fil
         {isAdmin && (
           <button 
             onClick={() => setShowForm(!showForm)}
-            className="flex items-center gap-1.5 text-blue-600 font-bold text-xs hover:underline"
+            className="flex items-center gap-1.5 text-blue-600 font-bold text-xs hover:underline bg-transparent border-none outline-none cursor-pointer"
           >
             {showForm ? 'Fechar' : 'Agendar Novo'}
             <Plus size={16} />
@@ -231,10 +337,33 @@ export default function CaseEventsPanel({ caseId, clientId, isAdmin = false, fil
                 </label>
               </div>
 
+              {googleConnected && (
+                <div className="flex items-center gap-4 bg-blue-50/50 p-3 rounded-xl border border-blue-100">
+                  <label className="flex items-center gap-2 cursor-pointer w-full">
+                    <input 
+                      type="checkbox"
+                      className="w-4 h-4 rounded text-blue-600"
+                      checked={syncWithGoogle}
+                      onChange={e => setSyncWithGoogle(e.target.checked)}
+                    />
+                    <div className="flex-1 text-left">
+                      <span className="text-xs font-bold text-gray-700">Sincronizar com Google Agenda</span>
+                      <p className="text-[9px] text-gray-500">Este evento será agendado automaticamente na sua agenda conectada: {calendarId}</p>
+                    </div>
+                  </label>
+                </div>
+              )}
+
+              {syncStatus && (
+                <div className="text-[10px] text-blue-600 font-bold bg-blue-50 p-2 rounded-lg text-center">
+                  {syncStatus}
+                </div>
+              )}
+
               <button 
                 type="submit"
                 disabled={isSaving}
-                className="w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-black transition-all active:scale-95 disabled:opacity-50"
+                className="w-full bg-gray-900 text-white font-bold py-3 rounded-xl hover:bg-black transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
               >
                 {isSaving ? 'Salvando...' : 'Salvar Compromisso'}
               </button>
@@ -252,20 +381,27 @@ export default function CaseEventsPanel({ caseId, clientId, isAdmin = false, fil
               {getTypeIcon(event.type)}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2 mb-1">
-                  <h4 className="font-bold text-gray-900 truncate text-sm">{event.title}</h4>
+                  <div className="flex items-center gap-2 truncate">
+                    <h4 className="font-bold text-gray-900 truncate text-sm">{event.title}</h4>
+                    {event.googleEventId && (
+                      <span className="text-[8px] bg-emerald-50 text-emerald-700 border border-emerald-150 rounded px-1.5 py-0.5 font-bold uppercase tracking-wider flex items-center gap-1 shrink-0" title="Evento sincronizado com o Google Agenda">
+                        <Check size={8} /> Google Agenda
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-1">
                     {isAdmin && (
                       <>
                         <button 
                           onClick={() => toggleVisibility(event)}
-                          className={`p-1.5 rounded-lg transition-all ${event.visibleToClient ? 'text-blue-600 hover:bg-blue-100' : 'text-gray-400 hover:bg-gray-200'}`}
+                          className={`p-1.5 rounded-lg transition-all border-none bg-transparent ${event.visibleToClient ? 'text-blue-600 hover:bg-blue-100' : 'text-gray-400 hover:bg-gray-200'}`}
                           title={event.visibleToClient ? 'Visível para o cliente' : 'Oculto para o cliente'}
                         >
                           {event.visibleToClient ? <Eye size={14} /> : <EyeOff size={14} />}
                         </button>
                         <button 
-                          onClick={() => deleteEvent(event.id)}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                          onClick={() => deleteEvent(event)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all border-none bg-transparent cursor-pointer"
                         >
                           <Trash2 size={14} />
                         </button>

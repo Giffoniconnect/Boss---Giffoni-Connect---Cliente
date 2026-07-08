@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { BossLayout } from '../../../components/Layout';
+import { useAuth } from '../../../contexts/AuthContext';
 import { 
   CalendarDays, 
   ArrowLeft, 
@@ -24,6 +25,7 @@ interface GoogleCalendarConfig {
 
 export default function GoogleCalendarIntegration() {
   const navigate = useNavigate();
+  const { googleAccessToken, loginWithGoogle } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -32,14 +34,40 @@ export default function GoogleCalendarIntegration() {
   const [config, setConfig] = useState<GoogleCalendarConfig>({
     status: 'não_configurado',
     calendarStrategy: 'shared',
-    calendarIdPlaceholder: '',
+    calendarIdPlaceholder: 'primary',
     notes: ''
   });
 
-  // Simulated logs
+  // Real calendars and logs
+  const [googleCalendars, setGoogleCalendars] = useState<any[]>([]);
+  const [fetchingCalendars, setFetchingCalendars] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [showLogs, setShowLogs] = useState(false);
   const [testing, setTesting] = useState(false);
+
+  const token = googleAccessToken || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken') || '';
+
+  const loadRealCalendars = async (accessToken: string) => {
+    if (!accessToken) return;
+    setFetchingCalendars(true);
+    try {
+      const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.items) {
+          setGoogleCalendars(data.items);
+        }
+      } else {
+        console.warn('Falha ao buscar agendas do Google:', res.status, res.statusText);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar agendas do Google:', err);
+    } finally {
+      setFetchingCalendars(false);
+    }
+  };
 
   useEffect(() => {
     async function loadConfig() {
@@ -52,7 +80,7 @@ export default function GoogleCalendarIntegration() {
             setConfig({
               status: data.googleCalendar.status || 'não_configurado',
               calendarStrategy: data.googleCalendar.calendarStrategy || 'shared',
-              calendarIdPlaceholder: data.googleCalendar.calendarIdPlaceholder || '',
+              calendarIdPlaceholder: data.googleCalendar.calendarIdPlaceholder || 'primary',
               notes: data.googleCalendar.notes || ''
             });
           }
@@ -65,6 +93,12 @@ export default function GoogleCalendarIntegration() {
     }
     loadConfig();
   }, []);
+
+  useEffect(() => {
+    if (token) {
+      loadRealCalendars(token);
+    }
+  }, [token]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,24 +131,119 @@ export default function GoogleCalendarIntegration() {
     }
   };
 
-  const handleTestConnection = () => {
+  const handleTestConnection = async () => {
     setTesting(true);
-    const timestamp = new Date().toLocaleTimeString();
-    
-    const newLogs = [
-      `[${timestamp}] Inicializando aperto de mão lógico com Google Calendar API v3...`,
-      `[${timestamp}] Validando Escopos OAuth do projeto do barramento...`,
-      `[${timestamp}] Conectando ao ID de agenda: [${config.calendarIdPlaceholder || 'primary'}]...`,
-      `[${timestamp}] Testando inserção de compromisso de teste fático...`,
-      `[${timestamp}] Aviso: Teste real será ativado em build futuro com backend seguro.`,
-      `[${timestamp}] Canal retornado com status isolado: Simulador de Sucesso.`
-    ];
+    setLogs([]);
+    setShowLogs(true);
+    const timestamp = () => new Date().toLocaleTimeString();
 
-    setTimeout(() => {
-      setLogs(prev => [...prev, ...newLogs]);
+    const addLog = (msg: string) => {
+      setLogs(prev => [...prev, `[${timestamp()}] ${msg}`]);
+    };
+
+    addLog("Inicializando aperto de mão lógico com Google Calendar API v3...");
+
+    if (!token) {
+      addLog("ERRO: Conta Google não conectada. Por favor, conecte sua conta Google primeiro.");
       setTesting(false);
-      setShowLogs(true);
-    }, 1000);
+      return;
+    }
+
+    addLog("Conta Google detectada. Validando Escopos OAuth do projeto do barramento...");
+    
+    try {
+      addLog("Solicitando lista de agendas (Calendar List)...");
+      const resList = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!resList.ok) {
+        throw new Error(`Erro ao obter lista de agendas: ${resList.statusText} (${resList.status})`);
+      }
+
+      const listData = await resList.json();
+      const calendars = listData.items || [];
+      setGoogleCalendars(calendars);
+      addLog(`SUCESSO: ${calendars.length} agendas fáticas encontradas na conta Google.`);
+
+      const targetCalendarId = config.calendarIdPlaceholder.trim() || 'primary';
+      addLog(`Conectando ao ID de agenda: [${targetCalendarId}]...`);
+
+      // 1. List latest 5 events
+      addLog(`Buscando últimos 5 compromissos da agenda [${targetCalendarId}]...`);
+      const resEvents = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(targetCalendarId)}/events?maxResults=5&orderBy=startTime&singleEvents=true`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!resEvents.ok) {
+        throw new Error(`Erro ao listar compromissos: ${resEvents.statusText} (${resEvents.status})`);
+      }
+
+      const eventsData = await resEvents.json();
+      const events = eventsData.items || [];
+      addLog(`SUCESSO: Encontrados ${events.length} compromissos na agenda.`);
+      events.forEach((ev: any) => {
+        const evDate = ev.start?.dateTime || ev.start?.date || 'Data Indefinida';
+        addLog(`  -> Compromisso: "${ev.summary || 'Sem Título'}" em ${new Date(evDate).toLocaleString()}`);
+      });
+
+      // 2. Insert test event
+      addLog("Testando inserção de compromisso de teste fático...");
+      const testEventPayload = {
+        summary: 'BOSS Giffoni - Conexão Fática de Teste',
+        description: 'Compromisso de teste fático gerado automaticamente pelo barramento BOSS Giffoni para validar a integridade da conexão de escrita.',
+        start: {
+          dateTime: new Date(Date.now() + 3600 * 1000).toISOString(), // 1 hora no futuro
+          timeZone: 'America/Sao_Paulo'
+        },
+        end: {
+          dateTime: new Date(Date.now() + 7200 * 1000).toISOString(), // 2 horas no futuro
+          timeZone: 'America/Sao_Paulo'
+        }
+      };
+
+      const resCreate = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(targetCalendarId)}/events`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(testEventPayload)
+      });
+
+      if (!resCreate.ok) {
+        throw new Error(`Erro ao criar compromisso de teste: ${resCreate.statusText} (${resCreate.status})`);
+      }
+
+      const createdEvent = await resCreate.json();
+      addLog(`SUCESSO: Compromisso de teste criado com ID: ${createdEvent.id}`);
+      addLog(`Link do compromisso no Google Agenda: ${createdEvent.htmlLink}`);
+
+      // Update Firestore state to 'ativo'
+      const updatedConfig = { ...config, status: 'ativo' as const };
+      setConfig(updatedConfig);
+      await setDoc(doc(db, 'settings', 'connectors'), {
+        googleCalendar: updatedConfig,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+
+      addLog("Integração ativada e gravada no banco com SUCESSO ABSOLUTO!");
+      setFeedback({ type: 'success', message: 'Conexão fática testada, validada e ativa com sucesso no Google!' });
+
+    } catch (err: any) {
+      console.error(err);
+      addLog(`ERRO CRÍTICO na integração: ${err.message || err}`);
+      setFeedback({ type: 'error', message: `Erro no teste de integração: ${err.message || err}` });
+      
+      const updatedConfig = { ...config, status: 'erro' as const };
+      setConfig(updatedConfig);
+      await setDoc(doc(db, 'settings', 'connectors'), {
+        googleCalendar: updatedConfig,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    } finally {
+      setTesting(false);
+    }
   };
 
   const handleDisable = async () => {
@@ -132,6 +261,7 @@ export default function GoogleCalendarIntegration() {
         ...prev,
         `[${timestamp}] Provedor desativado voluntariamente pelo operador.`
       ]);
+      setFeedback({ type: 'success', message: 'Integração desativada.' });
     } catch (err) {
       console.error(err);
     }
@@ -158,7 +288,7 @@ export default function GoogleCalendarIntegration() {
           <div className="space-y-1">
             <button 
               onClick={() => navigate('/boss-giffoni-clientes/configuracoes')}
-              className="flex items-center gap-2 text-xs font-bold text-gray-500 hover:text-gray-900 transition cursor-pointer"
+              className="flex items-center gap-2 text-xs font-bold text-gray-500 hover:text-gray-900 transition cursor-pointer border-none bg-transparent outline-none"
             >
               <ArrowLeft size={14} />
               Voltar para Configurações
@@ -180,7 +310,7 @@ export default function GoogleCalendarIntegration() {
               config.status === 'preparado' ? 'bg-blue-50 text-blue-800 border-blue-200' :
               config.status === 'em_teste' ? 'bg-amber-50 text-amber-700 border-amber-200' :
               config.status === 'erro' ? 'bg-rose-50 text-rose-800 border-rose-200' :
-              'bg-gray-100 text-gray-500 border-gray-205'
+              'bg-gray-100 text-gray-500 border-gray-200'
             }`}>
               {config.status.replace('_', ' ')}
             </span>
@@ -198,12 +328,44 @@ export default function GoogleCalendarIntegration() {
           </div>
         </div>
 
-        {/* Warn card */}
-        <div className="bg-amber-50 border border-amber-150 p-4 rounded-2xl flex gap-2.5 text-amber-950">
-          <AlertCircle size={18} className="text-amber-600 shrink-0 mt-0.5" />
-          <p className="text-[11px] leading-relaxed font-semibold">
-            <strong className="uppercase">Segurança Técnica:</strong> Esta chave secreta não deve ser armazenada diretamente no frontend legado. Em ambiente de produção, certifique-se de mover para variáveis de ambiente seguras no backend (Cloud Run / Functions).
-          </p>
+        {/* AUTHENTICATION CONTROL CARD */}
+        <div className="bg-white border border-gray-150 rounded-3xl p-6 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${token ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+              <Check size={20} />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-gray-900 uppercase tracking-tight">Status de Autenticação Google</h3>
+              <p className="text-xs text-gray-500 font-semibold">
+                {token ? 'Conectado com sucesso!' : 'Nenhuma conta Google conectada para este navegador.'}
+              </p>
+            </div>
+          </div>
+          <div>
+            {!token ? (
+              <button
+                type="button"
+                onClick={() => loginWithGoogle('boss_admin')}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer shadow-sm hover:shadow active:scale-95"
+              >
+                <Play size={12} />
+                Conectar Conta Google
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-1 border border-emerald-150 rounded-md font-bold font-mono">
+                  CONEXÃO ATIVA
+                </span>
+                <button
+                  type="button"
+                  onClick={() => loginWithGoogle('boss_admin')}
+                  className="px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-lg text-[10px] font-bold uppercase transition"
+                >
+                  Alternar Conta
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* MAIN CONFIGURATION FORM */}
@@ -211,10 +373,36 @@ export default function GoogleCalendarIntegration() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             
             <div className="space-y-1 md:col-span-2">
-              <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Calendar ID (primary ou e-mail de agenda compartilhada) *</label>
+              <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Selecione uma Agenda Real do Google</label>
+              {fetchingCalendars ? (
+                <div className="text-xs text-gray-400 animate-pulse py-2 flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin"></div>
+                  Carregando agendas da sua conta Google...
+                </div>
+              ) : googleCalendars.length > 0 ? (
+                <select
+                  value={config.calendarIdPlaceholder || 'primary'}
+                  onChange={(e) => setConfig({ ...config, calendarIdPlaceholder: e.target.value })}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 outline-none focus:ring-2 focus:ring-indigo-100 cursor-pointer"
+                >
+                  <option value="primary">Agenda Principal (primary)</option>
+                  {googleCalendars.map((cal) => (
+                    <option key={cal.id} value={cal.id}>
+                      {cal.summary} {cal.primary ? '⭐️ (Principal)' : ''} ({cal.id})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="text-xs text-amber-600 bg-amber-50 p-2.5 rounded-xl border border-amber-100">
+                  Nenhuma agenda listada. Conecte sua Conta Google e clique em "Testar Conexão" para listar.
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1 md:col-span-2">
+              <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Calendar ID Secundário (Opcional - Customizado)</label>
               <input
                 type="text"
-                required
                 value={config.calendarIdPlaceholder}
                 onChange={(e) => setConfig({ ...config, calendarIdPlaceholder: e.target.value })}
                 placeholder="ex: primary ou c_xxxx@group.calendar.google.com"
@@ -285,7 +473,7 @@ export default function GoogleCalendarIntegration() {
                 className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 disabled:opacity-50 text-xs font-bold uppercase rounded-xl transition flex items-center gap-2 cursor-pointer"
               >
                 <Play size={12} />
-                <span>{testing ? 'Testando...' : 'Testar Conexão'}</span>
+                <span>{testing ? 'Testando...' : 'Testar Conexão Real'}</span>
               </button>
 
               <button
@@ -327,7 +515,7 @@ export default function GoogleCalendarIntegration() {
             <div className="flex justify-between items-center border-b border-slate-800 pb-2">
               <span className="text-[10px] text-slate-400 font-black uppercase tracking-wider flex items-center gap-2">
                 <Terminal size={14} className="text-indigo-400" />
-                <span>Terminal Simulator Logs — Google Agenda</span>
+                <span>Terminal Real-Time Logs — Google Agenda</span>
               </span>
               <button
                 type="button"
@@ -338,9 +526,9 @@ export default function GoogleCalendarIntegration() {
               </button>
             </div>
 
-            <div className="max-h-[180px] overflow-y-auto space-y-1.5 bg-slate-950 p-4 rounded-2xl shadow-inner scrollbar-thin">
+            <div className="max-h-[220px] overflow-y-auto space-y-1.5 bg-slate-950 p-4 rounded-2xl shadow-inner scrollbar-thin">
               {logs.length === 0 ? (
-                <div className="text-slate-500 italic">Nenhum log gravado neste ciclo de visualização. Clique em "Testar Conexão" para obter dados fáticos.</div>
+                <div className="text-slate-500 italic">Nenhum log gravado neste ciclo de visualização. Clique em "Testar Conexão Real" para obter dados fáticos.</div>
               ) : (
                 logs.map((log, i) => (
                   <div key={i} className="leading-relaxed hover:bg-slate-900/60 p-0.5 rounded transition">

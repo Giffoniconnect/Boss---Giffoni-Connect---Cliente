@@ -393,6 +393,265 @@ Mantenha um tom pericial, assertivo, formal e de alto rigor técnico-jurídico b
   }
 });
 
+// --- GOOGLE CALENDAR AUTOMATION ENDPOINTS ---
+
+app.post("/api/calendar/check-conflicts", async (req, res) => {
+  try {
+    const { caseId, googleAccessToken, date, time, type, local, link } = req.body;
+
+    if (!caseId || !date || !time) {
+      return res.status(400).json({ error: "Parâmetros obrigatórios ausentes: caseId, date, time." });
+    }
+
+    const token = googleAccessToken || req.headers["authorization"]?.split(" ")[1] || "";
+    if (!token) {
+      return res.status(401).json({ error: "Token do Google não fornecido ou inválido." });
+    }
+
+    if (!dbAdmin) {
+      return res.status(500).json({ error: "Firebase Admin não inicializado ou banco indisponível." });
+    }
+
+    // Load integration configuration
+    const connectorsSnap = await dbAdmin.collection("settings").doc("connectors").get();
+    const connectorsData = connectorsSnap.exists ? connectorsSnap.data() : null;
+    const googleCalendarConfig = connectorsData?.googleCalendar;
+
+    if (!googleCalendarConfig || googleCalendarConfig.status !== 'ativo') {
+      return res.status(400).json({ error: "A integração com Google Calendar não está configurada ou ativa." });
+    }
+
+    const calendarId = googleCalendarConfig.calendarIdPlaceholder || 'primary';
+
+    // Load case and client data
+    const caseSnap = await dbAdmin.collection("cases").doc(caseId).get();
+    if (!caseSnap.exists) {
+      return res.status(404).json({ error: "Caso não encontrado" });
+    }
+    const caseData = caseSnap.data();
+    const clientSnap = caseData.clientId ? await dbAdmin.collection("clients").doc(caseData.clientId).get() : null;
+    const clientData = clientSnap && clientSnap.exists ? clientSnap.data() : null;
+
+    const clientName = clientData ? (clientData.pessoaFisica?.nomeCompleto || clientData.pessoaJuridica?.razaoSocial || clientData.name || clientData.fullName || "Cliente") : "Cliente";
+    const adverseParty = caseData.adverseParty || "";
+    const processNumber = caseData.processNumber || caseData.protocol?.numeroProcesso || caseData.numeroProcesso || "";
+
+    // Formulate start and end times in Sao Paulo timezone
+    const startIso = `${date}T${time}:00-03:00`;
+    const [hours, minutes] = time.split(":").map(Number);
+    const endHours = (hours + 1) % 24;
+    const endIso = `${date}T${String(endHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00-03:00`;
+
+    // Fetch calendar events
+    const gCalUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?timeMin=${encodeURIComponent(startIso)}&timeMax=${encodeURIComponent(endIso)}&singleEvents=true`;
+    const gCalRes = await fetch(gCalUrl, {
+      headers: { "Authorization": `Bearer ${token}` }
+    });
+
+    if (!gCalRes.ok) {
+      const errText = await gCalRes.text();
+      return res.status(gCalRes.status).json({ error: `Erro na API do Google Calendar: ${errText}` });
+    }
+
+    const gCalData = await gCalRes.json();
+    const events = gCalData.items || [];
+
+    let sameEventFound = false;
+    let sameEvent: any = null;
+    const conflicts: any[] = [];
+
+    for (const event of events) {
+      const summary = (event.summary || "").toLowerCase();
+      const description = (event.description || "").toLowerCase();
+      const location = (event.location || "").toLowerCase();
+
+      // soft matching criteria
+      const matchesClient = clientName && (summary.includes(clientName.toLowerCase()) || description.includes(clientName.toLowerCase()));
+      const matchesAdverse = adverseParty && (summary.includes(adverseParty.toLowerCase()) || description.includes(adverseParty.toLowerCase()));
+      const matchesProcess = processNumber && (summary.includes(processNumber.toLowerCase()) || description.includes(processNumber.toLowerCase()));
+      const matchesLocation = (local && location.includes(local.toLowerCase())) || (link && description.includes(link.toLowerCase()));
+
+      const isSameEvent = (matchesClient && matchesAdverse) || 
+                          (processNumber && matchesProcess) || 
+                          (matchesClient && matchesLocation);
+
+      if (isSameEvent) {
+        sameEventFound = true;
+        sameEvent = {
+          id: event.id,
+          htmlLink: event.htmlLink,
+          summary: event.summary,
+        };
+      } else {
+        conflicts.push({
+          title: event.summary || "Compromisso Sem Título",
+          start: event.start?.dateTime || event.start?.date,
+          end: event.end?.dateTime || event.end?.date,
+          location: event.location || "Sem Local",
+          calendarId: calendarId,
+        });
+      }
+    }
+
+    return res.json({
+      success: true,
+      calendarId,
+      conflicts,
+      sameEventFound,
+      sameEvent,
+    });
+  } catch (err: any) {
+    console.error("[CheckConflicts] Exception:", err);
+    return res.status(500).json({ error: `Erro no backend ao consultar conflitos: ${err.message || err}` });
+  }
+});
+
+app.post("/api/calendar/create-event", async (req, res) => {
+  try {
+    const { caseId, googleAccessToken, date, time, type, local, link, juizo, perito, assistenteTecnico, observacoes } = req.body;
+
+    if (!caseId || !date || !time || !type) {
+      return res.status(400).json({ error: "Parâmetros obrigatórios ausentes: caseId, date, time, type." });
+    }
+
+    const token = googleAccessToken || req.headers["authorization"]?.split(" ")[1] || "";
+    if (!token) {
+      return res.status(401).json({ error: "Token do Google não fornecido ou inválido." });
+    }
+
+    if (!dbAdmin) {
+      return res.status(500).json({ error: "Firebase Admin não inicializado ou banco indisponível." });
+    }
+
+    // Load integration configuration
+    const connectorsSnap = await dbAdmin.collection("settings").doc("connectors").get();
+    const connectorsData = connectorsSnap.exists ? connectorsSnap.data() : null;
+    const googleCalendarConfig = connectorsData?.googleCalendar;
+
+    if (!googleCalendarConfig || googleCalendarConfig.status !== 'ativo') {
+      return res.status(400).json({ error: "A integração com Google Calendar não está configurada ou ativa." });
+    }
+
+    const calendarId = googleCalendarConfig.calendarIdPlaceholder || 'primary';
+
+    // Load case and client data
+    const caseSnap = await dbAdmin.collection("cases").doc(caseId).get();
+    if (!caseSnap.exists) {
+      return res.status(404).json({ error: "Caso não encontrado" });
+    }
+    const caseData = caseSnap.data();
+    const clientSnap = caseData.clientId ? await dbAdmin.collection("clients").doc(caseData.clientId).get() : null;
+    const clientData = clientSnap && clientSnap.exists ? clientSnap.data() : null;
+
+    const clientName = clientData ? (clientData.pessoaFisica?.nomeCompleto || clientData.pessoaJuridica?.razaoSocial || clientData.name || clientData.fullName || "Cliente") : "Cliente";
+    const adverseParty = caseData.adverseParty || "";
+    const processNumber = caseData.processNumber || caseData.protocol?.numeroProcesso || caseData.numeroProcesso || "";
+
+    // 1. Título sugerido
+    const prefix = type === "audiencia" ? "Audiência" : "Perícia";
+    const eventTitle = `${prefix} — ${clientName} x ${adverseParty || "Sem Parte Adversa"}${processNumber ? ` — ${processNumber}` : ""}`;
+
+    // 2. Descrição sugerida
+    let eventDescription = "";
+    if (type === "audiencia") {
+      eventDescription = `Cliente: ${clientName}
+Parte adversa: ${adverseParty || "Não informada"}
+Processo: ${processNumber || "Não informado"}
+Tipo de audiência: ${juizo || "Não especificado"}
+Modalidade: ${req.body.audienciaType || "presencial"}
+Local/link: ${local || link || "Não informado"}
+Observações: ${observacoes || "Nenhuma"}
+Origem: Giffoni Connect — Setor de Audiências`;
+    } else {
+      eventDescription = `Cliente: ${clientName}
+Parte adversa: ${adverseParty || "Não informada"}
+Processo: ${processNumber || "Não informado"}
+Tipo de perícia: ${req.body.periciaType || "Não especificado"}
+Modalidade: ${req.body.periciaTypeMode || "presencial"}
+Perito: ${perito || "Não informado"}
+Assistente técnico: ${assistenteTecnico || "Não informado"}
+Local/link: ${local || "Não informado"}
+Observações: ${observacoes || "Nenhuma"}
+Origem: Giffoni Connect — Setor de Perícias`;
+    }
+
+    // Formulate start and end times in Sao Paulo timezone
+    const startIso = `${date}T${time}:00-03:00`;
+    const [hours, minutes] = time.split(":").map(Number);
+    const endHours = (hours + 1) % 24;
+    const endIso = `${date}T${String(endHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00-03:00`;
+
+    const eventResource = {
+      summary: eventTitle,
+      description: eventDescription,
+      location: local || link || "",
+      start: {
+        dateTime: startIso,
+        timeZone: "America/Sao_Paulo",
+      },
+      end: {
+        dateTime: endIso,
+        timeZone: "America/Sao_Paulo",
+      },
+    };
+
+    // Insert Google Calendar event
+    const createUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
+    const createRes = await fetch(createUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(eventResource),
+    });
+
+    if (!createRes.ok) {
+      const errText = await createRes.text();
+      return res.status(createRes.status).json({ error: `Erro ao criar evento: ${errText}` });
+    }
+
+    const createdEvent = await createRes.json();
+
+    // Update case document in Firestore
+    const updatePayload: any = {};
+    if (type === "audiencia") {
+      updatePayload["protocol.audienciaGoogleCalendar"] = {
+        eventId: createdEvent.id,
+        htmlLink: createdEvent.htmlLink,
+        date,
+        time,
+        status: "criado",
+        timestamp: new Date().toISOString()
+      };
+    } else {
+      updatePayload["protocol.periciaGoogleCalendar"] = {
+        eventId: createdEvent.id,
+        htmlLink: createdEvent.htmlLink,
+        date,
+        time,
+        status: "criado",
+        timestamp: new Date().toISOString()
+      };
+    }
+
+    await dbAdmin.collection("cases").doc(caseId).set(updatePayload, { merge: true });
+
+    return res.json({
+      success: true,
+      eventId: createdEvent.id,
+      htmlLink: createdEvent.htmlLink,
+      date,
+      time,
+      status: "criado",
+      timestamp: new Date().toISOString()
+    });
+  } catch (err: any) {
+    console.error("[CreateEvent] Exception:", err);
+    return res.status(500).json({ error: `Erro no backend ao criar compromisso: ${err.message || err}` });
+  }
+});
+
 function generateHighFidelityMockViabilidade(lead: any, docStatus: string, docList: string[]) {
   const nome = lead?.pessoaFisica?.nomeCompleto || lead?.pessoaJuridica?.razaoSocial || lead?.name || "Cliente em Potencial";
   const area = lead?.areaJuridica || "Geral";
