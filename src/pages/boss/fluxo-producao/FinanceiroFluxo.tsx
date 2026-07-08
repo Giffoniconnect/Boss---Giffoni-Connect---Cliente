@@ -137,7 +137,9 @@ export default function FinanceiroFluxo() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { googleAccessToken, loginWithGoogle } = useAuth();
+  const { googleAccessToken, loginWithGoogle, profile, user } = useAuth();
+
+  const [showApprovalConfirmation, setShowApprovalConfirmation] = useState(false);
 
   // Screen-level loading/saving state
   const [fetching, setFetching] = useState(true);
@@ -199,6 +201,81 @@ export default function FinanceiroFluxo() {
       }
     } finally {
       setIsRenewingGoogle(false);
+    }
+  };
+
+  const handleApproveContrato = async () => {
+    if (!caseId) return;
+    try {
+      setSaving(true);
+      const nowISO = new Date().toISOString();
+      const operatorName = profile?.name || user?.displayName || user?.email || "Operador";
+      const currentHistory = caseObj?.contratoHonorariosHistory || [];
+      const currentVer = caseObj?.contratoHonorariosVersion || 1;
+      
+      const newRecord = {
+        type: "approve",
+        timestamp: nowISO,
+        user: operatorName,
+        version: currentVer,
+        description: "Contrato homologado e aprovado como definitivo"
+      };
+
+      const updatedHistory = [...currentHistory, newRecord];
+
+      await updateDoc(doc(db, "cases", caseId), {
+        contratoHonorariosAprovadoStatus: "approved",
+        contratoHonorariosAprovadoBy: operatorName,
+        contratoHonorariosAprovadoAt: nowISO,
+        contratoHonorariosHistory: updatedHistory,
+        updatedAt: nowISO
+      });
+
+      setShowApprovalConfirmation(false);
+      setSuccess("Contrato aprovado e homologado como definitivo!");
+      setRefreshToggle((p) => p + 1);
+    } catch (err: any) {
+      console.error(err);
+      setError(`Erro ao aprovar contrato: ${err.message || err}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRevertApproveContrato = async () => {
+    if (!caseId) return;
+    try {
+      setSaving(true);
+      const nowISO = new Date().toISOString();
+      const operatorName = profile?.name || user?.displayName || user?.email || "Operador";
+      const currentHistory = caseObj?.contratoHonorariosHistory || [];
+      const currentVer = caseObj?.contratoHonorariosVersion || 1;
+      
+      const newRecord = {
+        type: "revert",
+        timestamp: nowISO,
+        user: operatorName,
+        version: currentVer,
+        description: "Homologação cancelada, contrato retornado para rascunho"
+      };
+
+      const updatedHistory = [...currentHistory, newRecord];
+
+      await updateDoc(doc(db, "cases", caseId), {
+        contratoHonorariosAprovadoStatus: "draft",
+        contratoHonorariosAprovadoBy: "",
+        contratoHonorariosAprovadoAt: "",
+        contratoHonorariosHistory: updatedHistory,
+        updatedAt: nowISO
+      });
+
+      setSuccess("Contrato retornado para rascunho com sucesso.");
+      setRefreshToggle((p) => p + 1);
+    } catch (err: any) {
+      console.error(err);
+      setError(`Erro ao reverter aprovação do contrato: ${err.message || err}`);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -1686,6 +1763,17 @@ export default function FinanceiroFluxo() {
       const docVer = responseData.documentVersion || 1;
       const serverTechLogs = responseData.technicalLog || [];
 
+      const currentHistory = caseObj?.contratoHonorariosHistory || [];
+      const operatorName = profile?.name || user?.displayName || user?.email || "Operador";
+      const newHistoryRecord = {
+        type: "generate",
+        timestamp: generatedAtISO,
+        user: operatorName,
+        version: docVer,
+        description: intent === "initial" ? "Geração inicial do Contrato de Honorários" : `Geração de nova versão do Contrato (v${docVer})`
+      };
+      const updatedHistory = [...currentHistory, newHistoryRecord];
+
       await updateDoc(caseDocRef, {
         contratoHonorariosStatus: "criada",
         contratoHonorariosPfId: googleDocsId,
@@ -1704,6 +1792,8 @@ export default function FinanceiroFluxo() {
         contratoHonorariosLastErrorCode: null,
         contratoHonorariosLastErrorMessage: null,
         contratoHonorariosLogFalha: "",
+        contratoHonorariosAprovadoStatus: "draft",
+        contratoHonorariosHistory: updatedHistory,
       });
 
       try {
@@ -2617,6 +2707,10 @@ export default function FinanceiroFluxo() {
           updatedAt: nowISO,
         });
       }
+
+      // Auto-trigger real-time GDocs Contract Generation using current operational conditions!
+      const isInitial = !caseObj?.contratoHonorariosGoogleDocsUrl;
+      await handleGenerateContratoHonorarios(isInitial ? "initial" : "new_version");
 
       resetForm();
       setRefreshToggle((prev) => prev + 1);
@@ -4284,6 +4378,188 @@ export default function FinanceiroFluxo() {
                 </div>
               </form>
 
+              {/* Área estrutural reservada para o preview futuro do contrato */}
+              <div id="futuro-preview-contrato-container" className="w-full space-y-5">
+                {!caseObj?.contratoHonorariosGoogleDocsUrl ? (
+                  <div className="w-full border border-dashed border-gray-200 bg-gray-50/10 rounded-3xl min-h-[100px] flex flex-col items-center justify-center p-8 text-center">
+                    <p className="text-xs font-black uppercase text-slate-400 tracking-wider font-mono">
+                      Contêiner Estrutural do Contrato
+                    </p>
+                    <p className="text-[11px] text-slate-400 max-w-sm mt-1 font-medium">
+                      O preview em tempo real do Google Docs será exibido aqui automaticamente assim que você gravar as condições operacionais fáticas do faturamento.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-5">
+                    {/* Real Document Preview Frame */}
+                    <div className="border border-gray-200 rounded-3xl overflow-hidden shadow-2xs bg-white">
+                      <div className="p-4 bg-slate-50 border-b border-gray-150 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <FileText size={16} className="text-indigo-600" />
+                          <span className="text-xs font-black uppercase text-slate-700 tracking-wider font-mono">
+                            Contrato de Honorários Oficiais (Google Docs)
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {caseObj?.contratoHonorariosAprovadoStatus === "approved" ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-250 rounded-full text-[10px] font-black uppercase font-mono">
+                              <CheckCircle2 size={11} className="text-emerald-600" /> Definitivo
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-250 rounded-full text-[10px] font-black uppercase font-mono">
+                              <Clock size={11} className="text-amber-600" /> Rascunho
+                            </span>
+                          )}
+                          <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded font-mono text-slate-600 font-bold">
+                            v{caseObj?.contratoHonorariosVersion || 1}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="relative w-full aspect-[4/5] sm:aspect-[3/4] md:h-[650px] bg-gray-50">
+                        <iframe
+                          src={`https://docs.google.com/document/d/${caseObj.contratoHonorariosGoogleDocsId}/preview`}
+                          title="Visualização do Contrato no Google Docs"
+                          className="w-full h-full border-0"
+                          allow="autoplay"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Approval Workflow Controls */}
+                    <div className="p-5 border border-gray-200 rounded-3xl space-y-4 bg-white shadow-3xs">
+                      {caseObj?.contratoHonorariosAprovadoStatus === "approved" ? (
+                        <div className="space-y-3">
+                          <div className="p-4 bg-emerald-50 border border-emerald-150 rounded-2xl flex items-start gap-3">
+                            <div className="p-2 bg-emerald-100 text-emerald-800 rounded-xl shrink-0">
+                              <CheckCircle2 size={20} />
+                            </div>
+                            <div className="space-y-1">
+                              <h4 className="text-xs font-black uppercase tracking-wider text-emerald-900 font-sans">
+                                Contrato Homologado e Definitivo
+                              </h4>
+                              <p className="text-[11px] text-emerald-700 leading-relaxed font-semibold">
+                                Este documento foi aprovado e congelado por <strong className="text-emerald-950 font-black">{caseObj?.contratoHonorariosAprovadoBy || "Operador"}</strong> em <strong>{caseObj?.contratoHonorariosAprovadoAt ? new Date(caseObj.contratoHonorariosAprovadoAt).toLocaleString("pt-BR") : "N/A"}</strong>.
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Warning for post-approval modifications */}
+                          {checkIfSubStep1IsDirty() && (
+                            <div className="p-4 bg-rose-50 border border-rose-150 rounded-2xl flex items-start gap-3 animate-pulse">
+                              <AlertTriangle size={20} className="text-rose-600 shrink-0 mt-0.5" />
+                              <div className="space-y-1">
+                                <h4 className="text-xs font-black uppercase tracking-wider text-rose-900 font-sans">
+                                  Aviso: Condições Fáticas Alteradas!
+                                </h4>
+                                <p className="text-[11px] text-rose-700 leading-relaxed font-bold">
+                                  Você alterou as condições operacionais fáticas acima após a homologação deste contrato. Isso torna a versão atual obsoleta. Para manter a conformidade jurídica, grave as alterações (gerando um novo contrato consistente) ou clique em <strong>Gerar Novamente</strong> na automação abaixo.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={handleRevertApproveContrato}
+                              disabled={saving}
+                              className="px-4 py-2 bg-white hover:bg-gray-50 border border-gray-250 text-gray-700 hover:text-gray-950 text-xs font-bold uppercase rounded-xl transition-all shadow-3xs cursor-pointer disabled:opacity-50 font-semibold"
+                            >
+                              Reverter para Rascunho
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="p-4 bg-amber-50/40 border border-amber-150 rounded-2xl flex items-start gap-3">
+                            <div className="p-2 bg-amber-100 text-amber-800 rounded-xl shrink-0">
+                              <Clock size={20} className="text-amber-600" />
+                            </div>
+                            <div className="space-y-1">
+                              <h4 className="text-xs font-black uppercase tracking-wider text-amber-900 font-sans">
+                                Contrato em Fase de Rascunho
+                              </h4>
+                              <p className="text-[11px] text-amber-700 leading-relaxed font-semibold">
+                                O documento está aberto para edições e regenerações. Após validar o texto real e certificar-se de que os valores, as datas e os dados estão perfeitos, homologue o contrato como definitivo.
+                              </p>
+                            </div>
+                          </div>
+
+                          {!showApprovalConfirmation ? (
+                            <button
+                              type="button"
+                              onClick={() => setShowApprovalConfirmation(true)}
+                              className="px-4.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center gap-1.5 transition-all shadow-3xs cursor-pointer"
+                            >
+                              <Check size={14} />
+                              Aprovar e Tornar Definitivo
+                            </button>
+                          ) : (
+                            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 animate-in fade-in duration-200">
+                              <h5 className="text-[11px] font-extrabold uppercase text-slate-700 tracking-wider font-mono">
+                                Confirmar Homologação de Contrato
+                              </h5>
+                              <p className="text-[11px] text-slate-500 font-medium">
+                                Ao aprovar, o documento será marcado como definitivo e pronto para coleta de assinatura do cliente. Esta ação é registrada no histórico.
+                              </p>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={handleApproveContrato}
+                                  disabled={saving}
+                                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase rounded-xl transition-all shadow-3xs cursor-pointer disabled:opacity-50"
+                                >
+                                  Sim, Aprovar como Definitivo
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowApprovalConfirmation(false)}
+                                  className="px-3.5 py-2 bg-white hover:bg-gray-150 border border-gray-250 text-gray-700 text-xs font-bold uppercase rounded-xl transition-all cursor-pointer"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* History log tracking timeline */}
+                      {caseObj?.contratoHonorariosHistory && caseObj.contratoHonorariosHistory.length > 0 && (
+                        <div className="pt-4 border-t border-gray-150">
+                          <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-3 font-mono flex items-center gap-1.5">
+                            <Clock size={12} className="text-slate-400" /> Histórico Operacional de Homologações
+                          </h4>
+                          <div className="relative border-l border-gray-200 ml-2.5 pl-4.5 space-y-3 pb-1">
+                            {caseObj.contratoHonorariosHistory.map((item: any, idx: number) => {
+                              const getIcon = () => {
+                                if (item.type === "approve") return "❇️";
+                                if (item.type === "revert") return "↩️";
+                                return "📄";
+                              };
+                              return (
+                                <div key={idx} className="relative text-[11px] leading-relaxed">
+                                  <div className="absolute -left-[27px] top-0.5 w-3.5 h-3.5 rounded-full bg-white border-2 border-slate-300 flex items-center justify-center text-[8px] font-bold">
+                                    {getIcon()}
+                                  </div>
+                                  <div className="text-slate-600 font-semibold">
+                                    <span className="font-extrabold text-slate-800">{item.description}</span>
+                                    <span className="text-slate-400 font-normal"> • por {item.user}</span>
+                                  </div>
+                                  <div className="text-[9.5px] text-slate-400 font-mono font-bold">
+                                    {item.timestamp ? new Date(item.timestamp).toLocaleString("pt-BR") : "Sem data"}
+                                    {item.version && <span className="ml-2 bg-slate-100 px-1 py-0.2 rounded">v{item.version}</span>}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {(() => {
                 const clientDriveFolderId = (
