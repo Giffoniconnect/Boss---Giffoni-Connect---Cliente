@@ -58,6 +58,9 @@ import {
   Settings,
   Sparkles,
   X,
+  Copy,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { flowRoutes } from "./utils/flowRoutes";
 
@@ -154,6 +157,369 @@ export default function FinanceiroFluxo() {
   const [activeJobTab, setActiveJobTab] = useState<Record<string, 'logs' | 'payload'>>({});
   const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   const [copiedTechText, setCopiedTechText] = useState(false);
+
+  // States for Audit Preview of Contract
+  const [previewStatus, setPreviewStatus] = useState<'preview_not_started' | 'preview_loading' | 'preview_success' | 'preview_success_with_warnings' | 'preview_failed'>('preview_not_started');
+  const [previewLogs, setPreviewLogs] = useState<any[]>([]);
+  const [placeholderResolutionLogs, setPlaceholderResolutionLogs] = useState<any[]>([]);
+  const [previewPayloadRaw, setPreviewPayloadRaw] = useState<any>(null);
+  const [previewPayloadNormalized, setPreviewPayloadNormalized] = useState<any>(null);
+  const [previewContractText, setPreviewContractText] = useState<string>("");
+  const [isLogPanelExpanded, setIsLogPanelExpanded] = useState<boolean>(true);
+  const [lastTechnicalError, setLastTechnicalError] = useState<string | null>(null);
+  const [lastFriendlyError, setLastFriendlyError] = useState<string | null>(null);
+  const [copiedPayloadBruto, setCopiedPayloadBruto] = useState<boolean>(false);
+  const [copiedPayloadNorm, setCopiedPayloadNorm] = useState<boolean>(false);
+  const [copiedLogsText, setCopiedLogsText] = useState<boolean>(false);
+
+  const maskSensitiveData = (key: string, value: string): string => {
+    if (!value) return "";
+    const cleaned = value.trim();
+    if (key.includes("CPF")) {
+      if (cleaned.length >= 11) {
+        return `***.${cleaned.substring(4, 11)}-**`;
+      }
+      return `***.${cleaned}-**`;
+    }
+    if (key.includes("RG")) {
+      if (cleaned.length >= 6) {
+        return `**${cleaned.substring(2, cleaned.length - 2)}**`;
+      }
+      return `**${cleaned}**`;
+    }
+    if (key.includes("TELEFONE") || key.includes("WHATSAPP")) {
+      if (cleaned.length >= 8) {
+        return `(***) ****-${cleaned.substring(cleaned.length - 4)}`;
+      }
+      return `(***) ****-${cleaned}`;
+    }
+    if (key.includes("EMAIL")) {
+      const parts = cleaned.split("@");
+      if (parts.length === 2) {
+        const name = parts[0];
+        const domain = parts[1];
+        const maskedName = name.length > 2 ? `${name[0]}*****${name[name.length - 1]}` : "*****";
+        return `${maskedName}@${domain}`;
+      }
+      return "*****";
+    }
+    if (key.includes("CNPJ")) {
+      if (cleaned.length >= 14) {
+        return `**..***/****-**`;
+      }
+      return `**..**/**`;
+    }
+    return value;
+  };
+
+  const handleExecutePreview = async () => {
+    const isPf = client?.type === "PF";
+    const logs: any[] = [];
+    const addTechLog = (step: string, status: "success" | "failed" | "warning" | "info", message: string, details?: any, errorCode?: string, errorMessage?: string) => {
+      logs.push({
+        timestamp: new Date().toISOString(),
+        step,
+        status,
+        message,
+        details: details ? JSON.stringify(details, null, 2) : "",
+        errorCode: errorCode || "",
+        errorMessage: errorMessage || ""
+      });
+    };
+
+    setPreviewStatus('preview_loading');
+    addTechLog("PREVIEW_BUTTON_CLICKED", "info", "O operador clicou em 'Ver Prévia de Contrato de Honorários' para gerar a auditoria do preview.");
+
+    try {
+      addTechLog("PREVIEW_PAYLOAD_BUILD_STARTED", "info", "Iniciando a coleta dos dados reais fáticos do cliente, do caso e do faturamento corrente.");
+      
+      if (!caseObj) {
+        throw new Error("Dados do caso (caseObj) não foram carregados corretamente do banco de dados.");
+      }
+      if (!client) {
+        throw new Error("Dados cadastrais do cliente não foram carregados do banco de dados.");
+      }
+
+      // Collect current form states of financial tab
+      const currentFinancialForm = {
+        tipoServicoContratado: tipoServicoContratadoForm,
+        tipoHonorario: tipoHonorarioForm,
+        honorarioExitoPercentual: honorarioExitoPercentualForm,
+        honorarioFixoValor: honorarioFixoValorForm,
+        formaPagamento: formaPagamentoForm,
+        tipoRecebimento: tipoRecebimentoForm,
+        pixBanco: pixBancoForm,
+        pixChave: pixChaveForm,
+        quantidadeParcelas: quantidadeParcelasForm,
+        valorParcela: valorParcelaForm,
+        diaVencimento: diaVencimentoForm,
+        valorEntrada: valorEntradaForm,
+        dataPrimeiroVencimento: dataPrimeiroVencimentoADefinir ? "a definir" : dataPrimeiroVencimentoForm,
+        modeloHonorarios: modeloHonorariosForm,
+        categoriaExito: categoriaExitoForm,
+        classeExito: classeExitoForm,
+        percentualExito: percentualExitoForm,
+        percentualExitoSobreRetroativo: percentualExitoSobreRetroativoForm,
+        quantidadeParcelasExitoPrevidenciario: quantidadeParcelasExitoPrevidenciarioForm,
+        clausulas: caseObj?.financeiro?.clausulas || "",
+        cobrancaAutomaticaInteg: cobrancaAutomaticaIntegForm
+      };
+
+      const rawPayload = {
+        caseId: caseId,
+        clientId: client.id || caseObj.clientId || "",
+        clientType: client.type || "PF",
+        clientRawData: client,
+        caseRawData: caseObj,
+        currentFinancialState: currentFinancialForm
+      };
+      setPreviewPayloadRaw(rawPayload);
+
+      addTechLog("PREVIEW_PAYLOAD_BUILD_SUCCESS", "success", "Payload bruto do preview construído com sucesso contendo as condições fáticas atuais do faturamento.");
+
+      const officialTemplateId = "1GJZ6LSW_szLSAA8Z3iw9jt4Q6zy5k6EuuTNhR5ooJQQ";
+      addTechLog("PREVIEW_TEMPLATE_SELECTED", "success", `Template oficial localizado para o contrato (${isPf ? "Pessoa Física" : "Pessoa Jurídica"}): ${officialTemplateId}`);
+
+      addTechLog("PREVIEW_PLACEHOLDERS_EXTRACTED", "info", "Extraindo lista de placeholders esperados de acordo com os mapeamentos do sistema.");
+
+      // Mount normalized database data to feed into the builders
+      const mockFinData = {
+        ...caseObj?.financeiro,
+        ...currentFinancialForm
+      };
+      
+      const placeholdersMap = isPf 
+        ? buildContratoHonorariosPfPlaceholders(client, { ...caseObj, ...mockFinData }, mockFinData)
+        : buildContratoHonorariosPjPlaceholders(client, { ...caseObj, ...mockFinData }, mockFinData);
+
+      setPreviewPayloadNormalized(placeholdersMap);
+
+      // Metadata mapping for audit purposes (data source)
+      const placeholderMetadata: Record<string, { sourceField: string, label: string }> = {
+        "{{OUTORGANTE_NOME}}": { sourceField: isPf ? "client.pf_nomeCompleto || client.nomeCompleto" : "client.razaoSocial || client.nome", label: "Nome do Outorgante" },
+        "{{OUTORGANTE_CPF}}": { sourceField: "client.pf_cpf || client.cpf", label: "CPF do Outorgante" },
+        "{{OUTORGANTE_RG}}": { sourceField: "client.pf_rg || client.rg", label: "RG do Outorgante" },
+        "{{OUTORGANTE_NACIONALIDADE}}": { sourceField: "client.pf_nacionalidade", label: "Nacionalidade" },
+        "{{OUTORGANTE_ESTADO_CIVIL}}": { sourceField: "client.pf_estadoCivil", label: "Estado Civil" },
+        "{{OUTORGANTE_PROFISSAO}}": { sourceField: "client.pf_profissao", label: "Profissão" },
+        "{{OUTORGANTE_ENDERECO}}": { sourceField: "client.pf_endereco || client.enderecoCompleto", label: "Endereço" },
+        "{{OUTORGANTE_TELEFONE}}": { sourceField: "client.pf_telefone || client.telefone", label: "Telefone" },
+        "{{OUTORGANTE_EMAIL}}": { sourceField: "client.pf_email || client.email", label: "E-mail" },
+        "{{CONTRATANTE_RAZAO_SOCIAL}}": { sourceField: "client.pj_razaoSocial || client.razaoSocial", label: "Razão Social da Contratante" },
+        "{{CONTRATANTE_CNPJ}}": { sourceField: "client.pj_cnpj || client.cnpj", label: "CNPJ da Contratante" },
+        "{{REPRESENTANTE_NOME}}": { sourceField: "client.pj_nomeSocioAdministrador || client.socioNome", label: "Nome do Representante Legal" },
+        "{{REPRESENTANTE_CPF}}": { sourceField: "client.pj_socioCpf", label: "CPF do Representante" },
+        "{{TIPO_SERVICO}}": { sourceField: "financialForm.tipoServicoContratado", label: "Tipo do Serviço" },
+        "{{VALOR_HONORARIOS}}": { sourceField: "financialForm.honorarioFixoValor", label: "Valor dos Honorários" },
+        "{{TIPO_HONORARIO}}": { sourceField: "financialForm.tipoHonorario", label: "Tipo de Honorários" },
+        "{{MODELO_HONORARIOS}}": { sourceField: "financialForm.modeloHonorarios", label: "Modelo de Honorários" },
+        "{{FORMA_PAGAMENTO}}": { sourceField: "financialForm.formaPagamento", label: "Forma de Pagamento" },
+        "{{TIPO_RECEBIMENTO}}": { sourceField: "financialForm.tipoRecebimento", label: "Tipo de Recebimento" },
+        "{{PIX_BANCO}}": { sourceField: "financialForm.pixBanco", label: "Banco do PIX" },
+        "{{PIX_CHAVE}}": { sourceField: "financialForm.pixChave", label: "Chave PIX" },
+        "{{VALOR_PARCELA}}": { sourceField: "financialForm.valorParcela", label: "Valor da Parcela" },
+        "{{QUANTIDADE_PARCELAS}}": { sourceField: "financialForm.quantidadeParcelas", label: "Quantidade de Parcelas" },
+        "{{DIA_VENCIMENTO}}": { sourceField: "financialForm.diaVencimento", label: "Dia de Vencimento" },
+        "{{VALOR_ENTRADA}}": { sourceField: "financialForm.valorEntrada", label: "Valor da Entrada" },
+        "{{DATA_PRIMEIRO_VENCIMENTO}}": { sourceField: "financialForm.dataPrimeiroVencimento", label: "Data do Primeiro Vencimento" },
+        "{{CLAUSULA_SEGUNDA}}": { sourceField: "placeholderBuilders.buildClausulaSegunda", label: "Texto da Cláusula Segunda" }
+      };
+
+      addTechLog("PREVIEW_PLACEHOLDER_RESOLUTION_STARTED", "info", "Iniciando a resolução e auditoria individual de cada placeholder contra os dados do banco.");
+
+      const resolutionLogs: any[] = [];
+      let pendingCount = 0;
+      let successCount = 0;
+      let emptySourceCount = 0;
+
+      // Iterate on expected placeholders
+      const expectedPlaceholders = isPf 
+        ? ["{{OUTORGANTE_NOME}}", "{{OUTORGANTE_NACIONALIDADE}}", "{{OUTORGANTE_ESTADO_CIVIL}}", "{{OUTORGANTE_PROFISSAO}}", "{{OUTORGANTE_RG}}", "{{OUTORGANTE_CPF}}", "{{OUTORGANTE_ENDERECO}}", "{{OUTORGANTE_TELEFONE}}", "{{OUTORGANTE_EMAIL}}", "{{TIPO_SERVICO}}", "{{VALOR_HONORARIOS}}", "{{TIPO_HONORARIO}}", "{{FORMA_PAGAMENTO}}", "{{TIPO_RECEBIMENTO}}", "{{PIX_BANCO}}", "{{PIX_CHAVE}}", "{{QUANTIDADE_PARCELAS}}", "{{VALOR_PARCELA}}", "{{DIA_VENCIMENTO}}", "{{VALOR_ENTRADA}}", "{{DATA_PRIMEIRO_VENCIMENTO}}", "{{CLAUSULA_SEGUNDA}}"]
+        : ["{{CONTRATANTE_RAZAO_SOCIAL}}", "{{CONTRATANTE_CNPJ}}", "{{REPRESENTANTE_NOME}}", "{{REPRESENTANTE_CPF}}", "{{CONTRATANTE_ENDERECO}}", "{{CONTRATANTE_TELEFONE}}", "{{CONTRATANTE_EMAIL}}", "{{TIPO_SERVICO}}", "{{VALOR_HONORARIOS}}", "{{TIPO_HONORARIO}}", "{{FORMA_PAGAMENTO}}", "{{TIPO_RECEBIMENTO}}", "{{PIX_BANCO}}", "{{PIX_CHAVE}}", "{{QUANTIDADE_PARCELAS}}", "{{VALOR_PARCELA}}", "{{DIA_VENCIMENTO}}", "{{VALOR_ENTRADA}}", "{{DATA_PRIMEIRO_VENCIMENTO}}", "{{CLAUSULA_SEGUNDA}}"];
+
+      expectedPlaceholders.forEach(ph => {
+        const value = placeholdersMap[ph];
+        const meta = placeholderMetadata[ph] || { sourceField: "desconhecido", label: "Campo Geral" };
+        
+        let status: "success" | "warning" | "failed" = "success";
+        let reason = "Placeholder substituído com sucesso.";
+        let finalVal = value || "";
+
+        if (value === undefined) {
+          status = "failed";
+          reason = "PLACEHOLDER_NOT_FOUND_IN_PAYLOAD — O placeholder não foi gerado pelo mapeador.";
+          finalVal = ph;
+          pendingCount++;
+        } else if (value === null || value.trim() === "" || (value === "0,00" && ph === "{{VALOR_HONORARIOS}}" && tipoHonorarioForm !== "Honorários Fixos")) {
+          status = "warning";
+          reason = "SOURCE_FIELD_EMPTY — O campo de origem existe, mas está vazio ou não possui valor definido.";
+          finalVal = ph;
+          emptySourceCount++;
+          pendingCount++;
+        } else if (value.toLowerCase().includes("a definir") || value.toLowerCase().includes("a combinar") || value.toLowerCase().includes("não aplicável")) {
+          status = "warning";
+          reason = "SOURCE_FIELD_EMPTY — Campo possui valor provisório ('A combinar' ou 'A definir').";
+          finalVal = value;
+          successCount++;
+        } else {
+          status = "success";
+          finalVal = value;
+          successCount++;
+        }
+
+        resolutionLogs.push({
+          placeholder: ph,
+          status,
+          sourceField: meta.sourceField,
+          receivedValue: maskSensitiveData(ph, value || ""),
+          finalValue: finalVal,
+          reason
+        });
+      });
+
+      setPlaceholderResolutionLogs(resolutionLogs);
+      addTechLog("PREVIEW_PLACEHOLDER_RESOLUTION_SUCCESS", "success", `Auditoria concluída. Sucesso: ${successCount}, Pendências/Avisos: ${pendingCount}.`);
+
+      addTechLog("PREVIEW_RENDER_STARTED", "info", "Iniciando a renderização da minuta de prévia local substituindo os placeholders.");
+
+      const baseTemplateText = isPf 
+        ? `CONTRATO DE PRESTAÇÃO DE SERVIÇOS JURÍDICOS E HONORÁRIOS ADVOCATÍCIOS (MINUTA DE PRÉVIA)
+
+CONTRATANTE (OUTORGANTE):
+Nome Completo: {{OUTORGANTE_NOME}}
+Nacionalidade: {{OUTORGANTE_NACIONALIDADE}}
+Estado Civil: {{OUTORGANTE_ESTADO_CIVIL}}
+Profissão: {{OUTORGANTE_PROFISSAO}}
+Documento de Identidade: RG sob nº {{OUTORGANTE_RG}}
+Inscrição de CPF: sob nº {{OUTORGANTE_CPF}}
+Endereço Residencial: {{OUTORGANTE_ENDERECO}}
+Telefone de Contato: {{OUTORGANTE_TELEFONE}}
+Correio Eletrônico: {{OUTORGANTE_EMAIL}}
+
+CONTRATADOS:
+GIFFONI & ASSOCIADOS ADVOCACIA, sociedade de advogados devidamente registrada na Ordem dos Advogados do Brasil, CNPJ sob nº 12.345.678/0001-99, com sede corporativa à Av. das Nações, nº 1000, São Paulo/SP.
+
+CLÁUSULA PRIMEIRA - DO OBJETO E ESCOPO:
+O presente contrato de honorários advocatícios tem como objeto a prestação de serviços técnicos jurídicos consistentes no patrocínio do processo relativo ao assunto: {{TIPO_SERVICO}}.
+
+CLÁUSULA SEGUNDA - DOS HONORÁRIOS PACTUADOS:
+Pelo trabalho e acompanhamento do escopo contratado, o(a) CONTRATANTE pagará aos CONTRATADOS os honorários fixados conforme as seguintes condições pactuadas:
+- Modelo de Faturamento Escolhido: {{TIPO_HONORARIO}} ({{MODELO_HONORARIOS}})
+- Valor Fixo Total de Honorários: R$ {{VALOR_HONORARIOS}}
+- Percentual de Êxito Acordado: {{HONORARIO_EXITO_PERCENTUAL}}
+- Forma Geral de Pagamento: {{FORMA_PAGAMENTO}}
+- Modalidade de Recebimento: {{TIPO_RECEBIMENTO}}
+- Banco Indicado: {{PIX_BANCO}}
+- Chave PIX Destino: {{PIX_CHAVE}}
+- Número de Parcelas Definidas: {{QUANTIDADE_PARCELAS}} parcela(s)
+- Valor Individual de Cada Parcela: R$ {{VALOR_PARCELA}}
+- Dia de Vencimento Mensal: Dia {{DIA_VENCIMENTO}}
+- Entrada Financeira de Sinal: R$ {{VALOR_ENTRADA}}
+- Data da Primeira Parcela / Vencimento: {{DATA_PRIMEIRO_VENCIMENTO}}
+
+{{CLAUSULA_SEGUNDA}}
+
+CLÁUSULA TERCEIRA - DAS RESPONSABILIDADES:
+O(A) CONTRATANTE se compromete a disponibilizar com a tempestividade necessária todos os documentos pessoais, comprobatórios de renda e patrimônio, certidões e demais esclarecimentos que lhes forem solicitados para a sustentação e acompanhamento adequado do feito judicial, respondendo civil e penalmente pela veracidade integral de tais declarações.
+
+CLÁUSULA QUARTA - DO FORO ELEITO:
+Fica eleito de comum acordo o Foro da Comarca de São Paulo/SP para dirimir quaisquer eventuais divergências ou controvérsias oriundas da interpretação ou execução das cláusulas constantes deste instrumento jurídico.
+
+Para que se produzam os plenos efeitos jurídicos e legais, lavra-se o presente em duas vias de igual teor e forma.
+
+São Paulo, na data de assinatura deste rascunho de homologação.`
+        : `CONTRATO DE PRESTAÇÃO DE SERVIÇOS JURÍDICOS E HONORÁRIOS ADVOCATÍCIOS (MINUTA DE PRÉVIA PJ)
+
+CONTRATANTE (OUTORGANTE):
+Razão Social da Empresa: {{CONTRATANTE_RAZAO_SOCIAL}}
+Inscrição de CNPJ: sob nº {{CONTRATANTE_CNPJ}}
+Representante Legal / Sócio Administrador: {{REPRESENTANTE_NOME}}
+Representante CPF: {{REPRESENTANTE_CPF}}
+Endereço Corporativo: {{CONTRATANTE_ENDERECO}}
+Telefone Corporativo: {{CONTRATANTE_TELEFONE}}
+Correio Eletrônico: {{CONTRATANTE_EMAIL}}
+
+CONTRATADOS:
+GIFFONI & ASSOCIADOS ADVOCACIA, sociedade de advogados devidamente registrada na Ordem dos Advogados do Brasil, CNPJ sob nº 12.345.678/0001-99, com sede corporativa à Av. das Nações, nº 1000, São Paulo/SP.
+
+CLÁUSULA PRIMEIRA - DO OBJETO E ESCOPO:
+O presente contrato de honorários advocatícios tem como objeto a prestação de serviços técnicos jurídicos consistentes no patrocínio do processo relativo ao assunto: {{TIPO_SERVICO}}.
+
+CLÁUSULA SEGUNDA - DOS HONORÁRIOS PACTUADOS:
+Pelo trabalho e acompanhamento do escopo contratado, a CONTRATANTE pagará aos CONTRATADOS os honorários fixados conforme as seguintes condições pactuadas:
+- Modelo de Faturamento Escolhido: {{TIPO_HONORARIO}} ({{MODELO_HONORARIOS}})
+- Valor Fixo Total de Honorários: R$ {{VALOR_HONORARIOS}}
+- Percentual de Êxito Acordado: {{HONORARIO_EXITO_PERCENTUAL}}
+- Forma Geral de Pagamento: {{FORMA_PAGAMENTO}}
+- Modalidade de Recebimento: {{TIPO_RECEBIMENTO}}
+- Banco Indicado: {{PIX_BANCO}}
+- Chave PIX Destino: {{PIX_CHAVE}}
+- Número de Parcelas Definidas: {{QUANTIDADE_PARCELAS}} parcela(s)
+- Valor Individual de Cada Parcela: R$ {{VALOR_PARCELA}}
+- Dia de Vencimento Mensal: Dia {{DIA_VENCIMENTO}}
+- Entrada Financeira de Sinal: R$ {{VALOR_ENTRADA}}
+- Data da Primeira Parcela / Vencimento: {{DATA_PRIMEIRO_VENCIMENTO}}
+
+{{CLAUSULA_SEGUNDA}}
+
+CLÁUSULA TERCEIRA - DAS RESPONSABILIDADES:
+A CONTRATANTE se compromete a disponibilizar com a tempestividade necessária todos os documentos corporativos, certidões e demais esclarecimentos que lhes forem solicitados para a sustentação e acompanhamento adequado do feito judicial, respondendo civil e penalmente pela veracidade integral de tais declarações.
+
+CLÁUSULA QUARTA - DO FORO ELEITO:
+Fica eleito de comum acordo o Foro da Comarca de São Paulo/SP para dirimir quaisquer eventuais divergências ou controvérsias oriundas da interpretação ou execução das cláusulas constantes deste instrumento jurídico.
+
+Para que se produzam os plenos efeitos jurídicos e legais, lavra-se o presente em duas vias de igual teor e forma.
+
+São Paulo, na data de assinatura deste rascunho de homologação.`;
+
+      let renderedText = baseTemplateText;
+      expectedPlaceholders.forEach(ph => {
+        const res = resolutionLogs.find(r => r.placeholder === ph);
+        if (res && res.status === "success") {
+          renderedText = renderedText.replace(new RegExp(ph, 'g'), placeholdersMap[ph]);
+        } else if (res && res.status === "warning" && placeholdersMap[ph] && placeholdersMap[ph].trim() !== "") {
+          renderedText = renderedText.replace(new RegExp(ph, 'g'), placeholdersMap[ph]);
+        } else {
+          renderedText = renderedText.replace(new RegExp(ph, 'g'), `[PLACEHOLDER NÃO SUBSTITUÍDO: ${ph.replace("{{", "").replace("}}", "")}]`);
+        }
+      });
+
+      setPreviewContractText(renderedText);
+      addTechLog("PREVIEW_RENDER_SUCCESS", "success", "Minuta de prévia do contrato de honorários renderizada localmente com sucesso absoluto.");
+
+      if (pendingCount > 0) {
+        setPreviewStatus('preview_success_with_warnings');
+        setLastFriendlyError("Alguns campos secundários de cadastro do cliente ou do faturamento estão vazios ou pendentes de definição. Verifique a lista de placeholders.");
+      } else {
+        setPreviewStatus('preview_success');
+        setLastFriendlyError(null);
+      }
+
+      setLastTechnicalError(null);
+      addTechLog("PREVIEW_LOG_PANEL_RENDERED", "success", "Painel de Logs de Preview preenchido e exibido de forma auditável para o operador.");
+
+    } catch (err: any) {
+      console.error(err);
+      setPreviewStatus('preview_failed');
+      setLastTechnicalError(err.stack || err.message || "Erro desconhecido");
+      setLastFriendlyError("Falha na construção ou renderização da prévia. Verifique os dados inseridos e as mensagens técnicas no card 'Erros e Alertas'.");
+      addTechLog("PREVIEW_RENDER_FAILED", "failed", "Falha catastrófica durante a simulação de prévia do contrato de honorários.", null, "PREVIEW_RENDER_FAILED", err.message || "Unknown error");
+    } finally {
+      setPreviewLogs(logs);
+    }
+  };
+
+  const handleClearPreviewLogs = () => {
+    setPreviewStatus('preview_not_started');
+    setPreviewLogs([]);
+    setPlaceholderResolutionLogs([]);
+    setPreviewPayloadRaw(null);
+    setPreviewPayloadNormalized(null);
+    setPreviewContractText("");
+    setLastTechnicalError(null);
+    setLastFriendlyError(null);
+  };
+
   const handleCopyLink = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedText(true);
@@ -4380,26 +4746,140 @@ export default function FinanceiroFluxo() {
 
               {/* Área estrutural reservada para o preview futuro do contrato */}
               <div id="futuro-preview-contrato-container" className="w-full space-y-5">
+                {/* Balão Destacado da Prévia do Contrato de Honorários (Local Audit) */}
+                {previewStatus !== 'preview_not_started' && (
+                  <div className={`p-6 border rounded-3xl space-y-4 shadow-sm animate-in fade-in duration-300 ${
+                    previewStatus === 'preview_success' 
+                      ? 'bg-emerald-50/20 border-emerald-200' 
+                      : previewStatus === 'preview_success_with_warnings'
+                      ? 'bg-amber-50/20 border-amber-200'
+                      : 'bg-rose-50/20 border-rose-200'
+                  }`}>
+                    {/* Cabeçalho do balão */}
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-0.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 font-sans">
+                            Prévia do Contrato de Honorários
+                          </h4>
+                          {previewStatus === 'preview_success' && (
+                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 text-[9px] font-black uppercase rounded-full font-mono flex items-center gap-1">
+                              <CheckCircle2 size={10} /> Prévia gerada com sucesso
+                            </span>
+                          )}
+                          {previewStatus === 'preview_success_with_warnings' && (
+                            <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 text-[9px] font-black uppercase rounded-full font-mono flex items-center gap-1">
+                              <AlertTriangle size={10} /> Prévia gerada com pendências
+                            </span>
+                          )}
+                          {previewStatus === 'preview_failed' && (
+                            <span className="px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-200 text-[9px] font-black uppercase rounded-full font-mono flex items-center gap-1">
+                              <AlertCircle size={10} /> Prévia não gerada
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                          Visualização gerada antes da criação definitiva do documento.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleClearPreviewLogs}
+                        className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                        title="Fechar Prévia"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+
+                    {/* Conteúdo da prévia */}
+                    {previewStatus === 'preview_loading' ? (
+                      <div className="py-12 flex flex-col items-center justify-center space-y-2">
+                        <Loader2 className="animate-spin text-blue-600" size={24} />
+                        <span className="text-xs font-mono font-bold text-slate-500 uppercase tracking-widest animate-pulse">Gerando auditoria...</span>
+                      </div>
+                    ) : previewStatus === 'preview_failed' ? (
+                      <div className="p-4 bg-rose-50 border border-rose-150 rounded-2xl flex items-start gap-3 text-left">
+                        <AlertCircle size={20} className="text-rose-600 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <h5 className="text-xs font-black uppercase text-rose-900 font-sans">
+                            Falha na Geração da Prévia
+                          </h5>
+                          <p className="text-[11px] text-rose-700 leading-relaxed font-semibold">
+                            {lastFriendlyError || "Ocorreu um erro técnico inesperado ao tentar compilar os placeholders do cliente."}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-5 bg-white border border-slate-150 rounded-2xl max-h-[450px] overflow-y-auto shadow-inner select-text text-left">
+                        <div className="whitespace-pre-line text-xs leading-relaxed text-slate-850 font-sans space-y-3">
+                          {previewContractText.split("\n").map((para, pIdx) => {
+                            if (!para.trim()) return <div key={pIdx} className="h-2" />;
+                            
+                            const parts = para.split(/(\[PLACEHOLDER NÃO SUBSTITUÍDO: [^\]]+\])/g);
+                            return (
+                              <p key={pIdx} className="text-[11px] font-semibold leading-relaxed text-slate-700">
+                                {parts.map((part, ptIdx) => {
+                                  if (part.startsWith("[PLACEHOLDER NÃO SUBSTITUÍDO:")) {
+                                    return (
+                                      <span key={ptIdx} className="inline-block bg-rose-50 border border-rose-200 text-rose-700 px-1.5 py-0.2 rounded font-mono font-black text-[9.5px] mx-0.5 animate-pulse">
+                                        {part}
+                                      </span>
+                                    );
+                                  }
+                                  return part;
+                                })}
+                              </p>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {!caseObj?.contratoHonorariosGoogleDocsUrl ? (
-                  <div className="w-full border border-dashed border-gray-200 bg-gray-50/10 rounded-3xl min-h-[100px] flex flex-col items-center justify-center p-8 text-center">
-                    <p className="text-xs font-black uppercase text-slate-400 tracking-wider font-mono">
-                      Contêiner Estrutural do Contrato
-                    </p>
-                    <p className="text-[11px] text-slate-400 max-w-sm mt-1 font-medium">
-                      O preview em tempo real do Google Docs será exibido aqui automaticamente assim que você gravar as condições operacionais fáticas do faturamento.
-                    </p>
+                  <div className="w-full border border-dashed border-gray-200 bg-gray-50/10 rounded-3xl min-h-[140px] flex flex-col items-center justify-center p-8 text-center space-y-4">
+                    <div className="space-y-1">
+                      <p className="text-xs font-black uppercase text-slate-400 tracking-wider font-mono">
+                        Contêiner Estrutural do Contrato
+                      </p>
+                      <p className="text-[11px] text-slate-400 max-w-sm mt-1 font-medium">
+                        O preview em tempo real do Google Docs será exibido aqui automaticamente assim que você gravar as condições operacionais fáticas do faturamento.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={previewStatus === 'preview_loading'}
+                      onClick={handleExecutePreview}
+                      className="inline-flex items-center gap-1.5 px-4.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-wider text-xs rounded-xl transition-all cursor-pointer shadow-3xs disabled:opacity-50"
+                    >
+                      {previewStatus === 'preview_loading' ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <Eye size={13} />
+                      )}
+                      Ver Prévia de Contrato de Honorários
+                    </button>
                   </div>
                 ) : (
                   <div className="space-y-5">
                     {/* Real Document Preview Frame */}
                     <div className="border border-gray-200 rounded-3xl overflow-hidden shadow-2xs bg-white">
-                      <div className="p-4 bg-slate-50 border-b border-gray-150 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <FileText size={16} className="text-indigo-600" />
-                          <span className="text-xs font-black uppercase text-slate-700 tracking-wider font-mono">
-                            Contrato de Honorários Oficiais (Google Docs)
-                          </span>
-                        </div>
+                      <div className="p-4 bg-slate-50 border-b border-gray-150 flex flex-wrap items-center justify-between gap-3">
+                        <button
+                          type="button"
+                          disabled={previewStatus === 'preview_loading'}
+                          onClick={handleExecutePreview}
+                          className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-wider text-[10px] rounded-lg transition-all cursor-pointer shadow-3xs flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                          {previewStatus === 'preview_loading' ? (
+                            <Loader2 size={11} className="animate-spin" />
+                          ) : (
+                            <Eye size={11} />
+                          )}
+                          Ver Prévia de Contrato de Honorários
+                        </button>
                         <div className="flex items-center gap-1.5">
                           {caseObj?.contratoHonorariosAprovadoStatus === "approved" ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-250 rounded-full text-[10px] font-black uppercase font-mono">
@@ -4470,7 +4950,360 @@ export default function FinanceiroFluxo() {
                           </div>
                         </div>
                       ) : (
-                        <div className="space-y-3">
+                        <div className="space-y-5">
+                          {/* Painel de Logs do Preview do Contrato de Honorários */}
+                          <div className="p-5 border border-slate-200 bg-slate-50/50 rounded-3xl space-y-4 text-left">
+                            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                              <div className="flex items-center gap-2">
+                                <FileText size={16} className="text-slate-600" />
+                                <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 font-mono">
+                                  Logs do Preview do Contrato de Honorários
+                                </h4>
+                              </div>
+                              
+                              {/* Botões do Painel de Logs */}
+                              <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                                {previewStatus !== 'preview_not_started' && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(JSON.stringify(previewPayloadRaw || {}, null, 2));
+                                        setCopiedPayloadBruto(true);
+                                        setTimeout(() => setCopiedPayloadBruto(false), 2000);
+                                      }}
+                                      className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-250 text-slate-700 font-bold uppercase rounded-lg transition-all cursor-pointer font-mono"
+                                    >
+                                      {copiedPayloadBruto ? "Bruto Copiado!" : "Copiar Bruto"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(JSON.stringify(previewPayloadNormalized || {}, null, 2));
+                                        setCopiedPayloadNorm(true);
+                                        setTimeout(() => setCopiedPayloadNorm(false), 2000);
+                                      }}
+                                      className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-250 text-slate-700 font-bold uppercase rounded-lg transition-all cursor-pointer font-mono"
+                                    >
+                                      {copiedPayloadNorm ? "Norm Copiado!" : "Copiar Norm"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const fullLogsText = {
+                                          statusGeral: previewStatus,
+                                          dataHoraExecucao: new Date().toISOString(),
+                                          casoId: caseId,
+                                          clienteId: client?.id || "",
+                                          tipoDocumento: "contrato_honorarios",
+                                          template: "1GJZ6LSW_szLSAA8Z3iw9jt4Q6zy5k6EuuTNhR5ooJQQ",
+                                          logsTecnicos: previewLogs,
+                                          auditoriaPlaceholders: placeholderResolutionLogs
+                                        };
+                                        navigator.clipboard.writeText(JSON.stringify(fullLogsText, null, 2));
+                                        setCopiedLogsText(true);
+                                        setTimeout(() => setCopiedLogsText(false), 2000);
+                                      }}
+                                      className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-250 text-slate-700 font-bold uppercase rounded-lg transition-all cursor-pointer font-mono"
+                                    >
+                                      {copiedLogsText ? "Logs Copiados!" : "Copiar Logs"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsLogPanelExpanded(!isLogPanelExpanded)}
+                                      className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-755 font-bold uppercase rounded-lg transition-all cursor-pointer"
+                                    >
+                                      {isLogPanelExpanded ? "Ocultar Detalhes" : "Expandir Detalhes"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={handleExecutePreview}
+                                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold uppercase rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                                    >
+                                      <RefreshCw size={10} /> Reexecutar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={handleClearPreviewLogs}
+                                      className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold uppercase rounded-lg transition-all cursor-pointer"
+                                    >
+                                      Limpar Logs
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Estado Vazio se não houver execução de preview */}
+                            {previewStatus === 'preview_not_started' ? (
+                              <div className="py-6 px-4 text-center space-y-1.5">
+                                <p className="text-xs font-black uppercase text-slate-400 tracking-wider font-mono">
+                                  Nenhuma prévia executada ainda
+                                </p>
+                                <p className="text-[11px] text-slate-400 max-w-md mx-auto font-medium leading-relaxed">
+                                  Clique em <strong className="text-blue-600">“Ver Prévia de Contrato de Honorários”</strong> acima para gerar a visualização e os logs de auditoria.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="space-y-4">
+                                {/* Se estiver recolhido, mostrar badge compacto */}
+                                {!isLogPanelExpanded && (
+                                  <div className="p-3 bg-white border border-slate-150 rounded-xl flex items-center justify-between text-xs">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`w-2.5 h-2.5 rounded-full ${
+                                        previewStatus === 'preview_success' 
+                                          ? 'bg-emerald-500' 
+                                          : previewStatus === 'preview_success_with_warnings' 
+                                          ? 'bg-amber-500' 
+                                          : 'bg-rose-500'
+                                      }`} />
+                                      <span className="font-extrabold text-slate-700 uppercase tracking-wider font-mono text-[10px]">
+                                        Status: {previewStatus === 'preview_success' ? "Sucesso Absoluto" : previewStatus === 'preview_success_with_warnings' ? "Avisos/Pendências" : "Falha na Execução"}
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsLogPanelExpanded(true)}
+                                      className="text-indigo-650 hover:text-indigo-850 font-black uppercase text-[10px] tracking-wider"
+                                    >
+                                      Expandir Detalhes do Diagnóstico
+                                    </button>
+                                  </div>
+                                )}
+
+                                {/* Card 1 — Resumo da Execução */}
+                                {isLogPanelExpanded && (
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="p-4 bg-white border border-slate-150 rounded-xl space-y-2.5">
+                                      <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono border-b pb-1">
+                                        Card 1 — Resumo da Execução
+                                      </h5>
+                                      <div className="space-y-1.5 text-[11px] font-semibold text-slate-600 font-mono">
+                                        <div className="flex justify-between">
+                                          <span>Status Geral:</span>
+                                          <span className={`px-1.5 rounded uppercase font-black text-[9px] ${
+                                            previewStatus === 'preview_success' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-amber-100 text-amber-800 border border-amber-250'
+                                          }`}>{previewStatus}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span>Data/Hora:</span>
+                                          <span>{new Date().toLocaleString("pt-BR")}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span>Caso ID:</span>
+                                          <span className="text-[10px] select-all truncate max-w-[150px]">{caseId}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span>Cliente ID:</span>
+                                          <span className="text-[10px] select-all truncate max-w-[150px]">{client?.id || "N/A"}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="p-4 bg-white border border-slate-150 rounded-xl space-y-2.5">
+                                      <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono border-b pb-1">
+                                        Mapeamento de Placeholders
+                                      </h5>
+                                      <div className="space-y-1.5 text-[11px] font-semibold text-slate-600 font-mono">
+                                        <div className="flex justify-between">
+                                          <span>Tipo Documento:</span>
+                                          <span>contrato_honorarios</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span>Template ID:</span>
+                                          <span className="text-[10px] truncate max-w-[150px]">1GJZ6LSW_szLSA...</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span>Resolvidos com Sucesso:</span>
+                                          <span className="text-emerald-600 font-black">{placeholderResolutionLogs.filter(p => p.status === 'success').length}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                          <span>Pendentes / Sem Dados:</span>
+                                          <span className="text-amber-600 font-black">{placeholderResolutionLogs.filter(p => p.status !== 'success').length}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Card 2 — Payload do Preview */}
+                                {isLogPanelExpanded && (
+                                  <div className="p-4 bg-white border border-slate-150 rounded-xl space-y-3">
+                                    <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono border-b pb-1 flex justify-between items-center">
+                                      <span>Card 2 — Payload de Integração</span>
+                                      <span className="text-[9px] bg-slate-100 text-slate-500 px-1 py-0.2 rounded uppercase font-bold">Estado Fático</span>
+                                    </h5>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[10px]">
+                                      <div className="space-y-1">
+                                        <span className="font-extrabold text-slate-600 block">Payload Bruto (Dados Cadastrais e Estados)</span>
+                                        <pre className="p-2.5 bg-slate-900 text-slate-100 rounded-lg max-h-[160px] overflow-auto select-all font-mono">
+                                          {JSON.stringify(previewPayloadRaw, null, 2)}
+                                        </pre>
+                                      </div>
+                                      <div className="space-y-1">
+                                        <span className="font-extrabold text-slate-600 block">Payload Normalizado (Placeholders Mapeados)</span>
+                                        <pre className="p-2.5 bg-slate-900 text-slate-100 rounded-lg max-h-[160px] overflow-auto select-all font-mono">
+                                          {JSON.stringify(previewPayloadNormalized, null, 2)}
+                                        </pre>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Card 3 — Substituição de Placeholders */}
+                                {isLogPanelExpanded && (
+                                  <div className="p-4 bg-white border border-slate-150 rounded-xl space-y-3">
+                                    <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono border-b pb-1">
+                                      Card 3 — Substituição de Placeholders (Tabela de Auditoria)
+                                    </h5>
+                                    <div className="overflow-x-auto max-h-[300px] border border-slate-100 rounded-xl">
+                                      <table className="w-full text-[10px] text-left border-collapse">
+                                        <thead>
+                                          <tr className="bg-slate-100 font-extrabold text-slate-700 uppercase tracking-wider font-mono border-b border-slate-200">
+                                            <th className="p-2 border-r border-slate-200">Placeholder</th>
+                                            <th className="p-2 border-r border-slate-200">Origem do Dado</th>
+                                            <th className="p-2 border-r border-slate-200">Valor Recebido (Mascarado)</th>
+                                            <th className="p-2 border-r border-slate-200">Status</th>
+                                            <th className="p-2">Motivo</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 font-semibold text-slate-600">
+                                          {placeholderResolutionLogs.map((item, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-50/50">
+                                              <td className="p-2 border-r border-slate-200 font-mono text-slate-800 select-all">{item.placeholder}</td>
+                                              <td className="p-2 border-r border-slate-200 font-mono text-slate-400">{item.sourceField}</td>
+                                              <td className="p-2 border-r border-slate-200 font-mono text-slate-700 select-all">{item.receivedValue || <em className="text-slate-350 font-normal">vazio</em>}</td>
+                                              <td className="p-2 border-r border-slate-200">
+                                                <span className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-black uppercase ${
+                                                  item.status === 'success' 
+                                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-150' 
+                                                    : item.status === 'warning'
+                                                    ? 'bg-amber-50 text-amber-700 border border-amber-150'
+                                                    : 'bg-rose-50 text-rose-700 border border-rose-150'
+                                                }`}>
+                                                  {item.status}
+                                                </span>
+                                              </td>
+                                              <td className="p-2 leading-relaxed text-slate-500 font-sans">{item.reason}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Card 4 — Erros e Alertas */}
+                                {isLogPanelExpanded && (
+                                  <div className="p-4 bg-white border border-slate-150 rounded-xl space-y-3">
+                                    <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono border-b pb-1">
+                                      Card 4 — Erros e Alertas
+                                    </h5>
+                                    
+                                    <div className="space-y-2">
+                                      {/* Alertas sobre campos secundários vazios */}
+                                      {placeholderResolutionLogs.filter(p => p.status === 'warning').length > 0 && (
+                                        <div className="p-3 bg-amber-50/50 border border-amber-150 rounded-xl space-y-1">
+                                          <span className="text-[10px] font-black text-amber-800 uppercase tracking-wider font-mono flex items-center gap-1">
+                                            ⚠️ Alerta: Campos Vazios ou com Valores Padrão ({placeholderResolutionLogs.filter(p => p.status === 'warning').length})
+                                          </span>
+                                          <ul className="list-disc pl-4 text-[10px] leading-relaxed text-amber-700 space-y-0.5">
+                                            {placeholderResolutionLogs.filter(p => p.status === 'warning').map((p, idx) => (
+                                              <li key={idx}>
+                                                O placeholder <strong className="font-mono">{p.placeholder}</strong> está mapeado na origem <span className="font-mono">{p.sourceField}</span> mas foi avaliado como vazio ou com valor default provisório.
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+
+                                      {/* Alertas sobre campos ausentes */}
+                                      {placeholderResolutionLogs.filter(p => p.status === 'failed').length > 0 && (
+                                        <div className="p-3 bg-rose-50 border border-rose-150 rounded-xl space-y-1">
+                                          <span className="text-[10px] font-black text-rose-800 uppercase tracking-wider font-mono flex items-center gap-1">
+                                            ❌ Crítico: Placeholders com Falha na Resolução ({placeholderResolutionLogs.filter(p => p.status === 'failed').length})
+                                          </span>
+                                          <ul className="list-disc pl-4 text-[10px] leading-relaxed text-rose-700 space-y-0.5">
+                                            {placeholderResolutionLogs.filter(p => p.status === 'failed').map((p, idx) => (
+                                              <li key={idx}>
+                                                O placeholder <strong className="font-mono">{p.placeholder}</strong> falhou. Motivo: <span className="font-semibold">{p.reason}</span>
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )}
+
+                                      {lastFriendlyError && (
+                                        <div className="p-3 bg-rose-50 border border-rose-150 rounded-xl text-[10px] text-rose-750 font-semibold leading-relaxed">
+                                          💡 <strong>Aviso Amigável de Diagnóstico:</strong> {lastFriendlyError}
+                                        </div>
+                                      )}
+
+                                      {lastTechnicalError && (
+                                        <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
+                                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider font-mono">Erro Técnico Interno (Stack Trace)</span>
+                                          <pre className="text-[9px] font-mono text-rose-400 select-all overflow-auto max-h-[100px] whitespace-pre-wrap">
+                                            {lastTechnicalError}
+                                          </pre>
+                                        </div>
+                                      )}
+
+                                      {placeholderResolutionLogs.filter(p => p.status !== 'success').length === 0 && (
+                                        <div className="p-3.5 bg-emerald-50 border border-emerald-150 rounded-xl text-[10px] text-emerald-800 font-extrabold flex items-center gap-1.5 uppercase font-mono">
+                                          ✅ Nenhum alerta ou erro reportado. Todos os placeholders foram validados com sucesso absoluto!
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Card 5 — Resultado */}
+                                {isLogPanelExpanded && (
+                                  <div className="p-4 bg-white border border-slate-150 rounded-xl space-y-3">
+                                    <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono border-b pb-1">
+                                      Card 5 — Resultado Final & Próxima Ação
+                                    </h5>
+                                    
+                                    <div className="space-y-3">
+                                      <div className={`p-4 rounded-xl border flex items-start gap-3 ${
+                                        previewStatus === 'preview_success' 
+                                          ? 'bg-emerald-50/50 border-emerald-200 text-emerald-800' 
+                                          : previewStatus === 'preview_success_with_warnings'
+                                          ? 'bg-amber-50/50 border-amber-200 text-amber-800'
+                                          : 'bg-rose-50/50 border-rose-200 text-rose-800'
+                                      }`}>
+                                        <span className="text-xl">
+                                          {previewStatus === 'preview_success' ? "🏆" : previewStatus === 'preview_success_with_warnings' ? "⚠️" : "❌"}
+                                        </span>
+                                        <div className="space-y-1 text-xs">
+                                          <p className="font-extrabold uppercase font-mono text-[10px] tracking-wider">
+                                            Resultado: {previewStatus === 'preview_success' ? "Minuta Perfeita" : previewStatus === 'preview_success_with_warnings' ? "Minuta com Pendências de Preenchimento" : "Minuta não Gerada"}
+                                          </p>
+                                          <p className="text-[11px] leading-relaxed font-semibold">
+                                            {previewStatus === 'preview_success' 
+                                              ? "Todas as condições contratuais fáticas e os dados do cliente foram mapeados com sucesso. O documento está juridicamente perfeito e pronto para homologação definitiva."
+                                              : previewStatus === 'preview_success_with_warnings'
+                                              ? "A prévia local foi compilada, mas o cliente ou o faturamento possui placeholders pendentes de valor (em amarelo). Recomendamos revisar o formulário de faturamento e preencher os dados de cadastro antes de homologar como definitivo."
+                                              : "Não foi possível montar a prévia devido a erros impeditivos de carregamento de dados."}
+                                          </p>
+                                        </div>
+                                      </div>
+
+                                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[10px] leading-relaxed text-slate-600 font-medium">
+                                        💡 <strong>Ação Recomendada pelo Diagnóstico:</strong>{" "}
+                                        {previewStatus === 'preview_success' 
+                                          ? "Clique em 'Gravar Condições Operacionais' para consolidar os dados e, em seguida, em 'Aprovar e Tornar Definitivo' no painel de rascunhos para registrar no histórico operacional."
+                                          : previewStatus === 'preview_success_with_warnings'
+                                          ? "Complete os campos do cadastro do cliente que geraram avisos (como RG, Profissão, Endereço completo) e atualize os campos de faturamento correspondentes para que a minuta oficial saia sem nenhuma lacuna jurídica."
+                                          : "Recarregue a página, verifique se as informações de faturamento e os dados básicos do cliente na Etapa 1 estão preenchidos, e reexecute o preview."}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
                           <div className="p-4 bg-amber-50/40 border border-amber-150 rounded-2xl flex items-start gap-3">
                             <div className="p-2 bg-amber-100 text-amber-800 rounded-xl shrink-0">
                               <Clock size={20} className="text-amber-600" />

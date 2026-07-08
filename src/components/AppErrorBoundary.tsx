@@ -14,6 +14,30 @@ export default class AppErrorBoundary extends React.Component<React.PropsWithChi
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('[APP_ERROR_BOUND_DEBUG]', error, info);
+    
+    // Check if it's a dynamic import / chunk load error
+    const isChunkError = 
+      error.message?.includes('Failed to fetch dynamically imported module') ||
+      error.message?.includes('chunk') ||
+      error.stack?.includes('dynamically imported module') ||
+      error.stack?.includes('chunk');
+      
+    if (isChunkError) {
+      try {
+        const reloadKey = 'boss_app_chunk_reload_count';
+        const reloadCountStr = sessionStorage.getItem(reloadKey);
+        const reloadCount = reloadCountStr ? parseInt(reloadCountStr, 10) : 0;
+        
+        if (reloadCount < 2) {
+          sessionStorage.setItem(reloadKey, String(reloadCount + 1));
+          console.warn('[AppErrorBoundary] Detetada falha de importação dinâmica. Recarregando página automaticamente...');
+          window.location.reload();
+          return;
+        }
+      } catch (err) {
+        console.error('[AppErrorBoundary] Falha ao tentar recarregar automaticamente:', err);
+      }
+    }
   }
 
   render() {
