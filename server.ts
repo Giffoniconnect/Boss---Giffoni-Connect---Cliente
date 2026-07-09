@@ -2927,6 +2927,8 @@ async function resolveWaSpeedConfig() {
   let tokenPlaceholder = "";
   let apiKey = "";
   let apiKeyPlaceholder = "";
+  let waSpeedUrl = "";
+  let waSpeedInstanceId = "";
 
   if (dbAdmin) {
     try {
@@ -2941,6 +2943,8 @@ async function resolveWaSpeedConfig() {
         tokenPlaceholder = data.tokenPlaceholder || "";
         apiKey = data.apiKey || "";
         apiKeyPlaceholder = data.apiKeyPlaceholder || "";
+        waSpeedUrl = data.waSpeedUrl || "";
+        waSpeedInstanceId = data.waSpeedInstanceId || "";
       }
     } catch (errDb) {
       console.warn("[resolveWaSpeedConfig] Failed to read settings doc:", errDb);
@@ -3007,7 +3011,9 @@ async function resolveWaSpeedConfig() {
     tokenMasked,
     firestoreWhatsappConfigPresent,
     checkedFields,
-    warnings
+    warnings,
+    waSpeedUrl,
+    waSpeedInstanceId
   };
 }
 

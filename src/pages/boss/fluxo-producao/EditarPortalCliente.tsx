@@ -2284,7 +2284,7 @@ export default function EditarPortalCliente() {
                             className="flex-1 flex items-center justify-center gap-1.5 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer"
                           >
                             <Send size={13} />
-                            <span>Enviar via {bdayChannel === 'email' ? 'E-mail' : bdayChannel === 'whatsapp' ? 'WhatsApp' : bdayChannel.toUpperCase()}</span>
+                            <span>{bdayChannel === 'whatsapp' ? 'Abrir WhatsApp com mensagem pronta' : `Enviar via ${bdayChannel === 'email' ? 'E-mail' : bdayChannel.toUpperCase()}`}</span>
                           </button>
                         </div>
                       </div>
@@ -2353,7 +2353,7 @@ export default function EditarPortalCliente() {
                             className="flex-1 flex items-center justify-center gap-1.5 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer"
                           >
                             <Send size={13} />
-                            <span>Enviar via {profChannel === 'email' ? 'E-mail' : profChannel === 'whatsapp' ? 'WhatsApp' : profChannel.toUpperCase()}</span>
+                            <span>{profChannel === 'whatsapp' ? 'Abrir WhatsApp com mensagem pronta' : `Enviar via ${profChannel === 'email' ? 'E-mail' : profChannel.toUpperCase()}`}</span>
                           </button>
                         </div>
                       </div>
@@ -2502,7 +2502,7 @@ export default function EditarPortalCliente() {
                           className="flex-1 flex items-center justify-center gap-1.5 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer shadow-3xs font-sans"
                         >
                           <Send size={13} />
-                          <span>Enviar Comunicado de Distribuição</span>
+                          <span>{distributionChannel === 'whatsapp' ? 'Abrir WhatsApp com mensagem pronta' : 'Enviar Comunicado de Distribuição'}</span>
                         </button>
                         <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
                           {(['whatsapp', 'email'] as const).map((ch) => (
@@ -3309,7 +3309,7 @@ export default function EditarPortalCliente() {
                               className="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-4 bg-purple-600 hover:bg-purple-700 text-white text-[10.5px] font-black uppercase tracking-wider rounded-xl transition cursor-pointer shadow-3xs"
                             >
                               <Send size={13} />
-                              <span>Disparar Solicitação</span>
+                              <span>{justificationChannel === 'whatsapp' ? 'Abrir WhatsApp com mensagem pronta' : justificationChannel === 'email' ? 'Enviar por E-mail' : 'Criar Tarefa no Todoist'}</span>
                             </button>
                           </div>
                         </div>

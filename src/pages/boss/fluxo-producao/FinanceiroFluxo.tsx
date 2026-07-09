@@ -6720,7 +6720,7 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
                                               href={`https://web.whatsapp.com/send?phone=${resolvedPhone}&text=${encodeURIComponent(templateMsg)}`}
                                               target="_blank"
                                               rel="noopener noreferrer"
-                                              title="Enviar lembrete pelo WhatsApp Web"
+                                              title="Abrir WhatsApp com lembrete pronto"
                                               className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg border border-transparent hover:border-emerald-200 transition-all cursor-pointer"
                                             >
                                               <svg className="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -7311,10 +7311,10 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
                           </div>
                           <p className="font-sans font-bold text-slate-800 text-xs">WhatsApp</p>
                           <p className="text-[10px] text-zinc-500 leading-tight">
-                            Envie cobrança no WhatsApp do cliente com 1 clique (lembrete automático).
+                            Atalhos e mensagens para WhatsApp. Envio automático real depende da API oficial e backend seguro.
                           </p>
                           <div className="pt-1 text-[8.5px] font-mono font-bold text-emerald-700 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-100 mt-1">
-                            ⚡ FUTURA INTEGRAÇÃO W.A SPEED
+                            Atalhos e Mensagens para WhatsApp
                           </div>
                         </a>
 
