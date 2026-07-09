@@ -127,6 +127,8 @@ const ProcuracaoPFConfig = React.lazy(() => import('./pages/boss/integracoes/Pro
 const WhatsappIntegration = React.lazy(() => import('./pages/boss/integracoes/WhatsappIntegration'));
 const GmailIntegration = React.lazy(() => import('./pages/boss/integracoes/GmailIntegration'));
 const DocTypeConfig = React.lazy(() => import('./pages/boss/integracoes/DocTypeConfig'));
+const GoogleContactsIntegration = React.lazy(() => import('./pages/boss/integracoes/GoogleContactsIntegration'));
+const GoogleMeetIntegration = React.lazy(() => import('./pages/boss/integracoes/GoogleMeetIntegration'));
 
 // Production Steps
 const FluxoHome = React.lazy(() => import('./pages/boss/fluxo-producao/FluxoHome'));
@@ -262,6 +264,8 @@ const bossRouter = createBrowserRouter(
 
       <Route path="/boss-giffoni-clientes/configuracoes/integracoes-whatsapp" element={<SafeRoute children={<WhatsappIntegration />} />} />
       <Route path="/boss-giffoni-clientes/configuracoes/integracoes-gmail" element={<SafeRoute children={<GmailIntegration />} />} />
+      <Route path="/boss-giffoni-clientes/configuracoes/integracoes-google-contacts" element={<SafeRoute children={<GoogleContactsIntegration />} />} />
+      <Route path="/boss-giffoni-clientes/configuracoes/integracoes-google-meet" element={<SafeRoute children={<GoogleMeetIntegration />} />} />
 
       <Route path="/boss-giffoni-clientes/configuracoes/detalhes-tecnicos" element={<SafeRoute children={<DetalhesTecnicos />} />} />
       <Route path="/boss-giffoni-clientes/configuracoes/detalhes-tecnicos/clientes" element={<SafeRoute children={<DetalhesTecnicosClientes />} />} />

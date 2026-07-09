@@ -41,7 +41,9 @@ import {
   ChevronUp,
   ExternalLink,
   Info,
-  Globe
+  Globe,
+  Users,
+  Video
 } from 'lucide-react';
 
 const DEFAULT_PORTAL_LINK = 'https://aistudio.google.com/apps/93c62126-a17f-4c18-8bc7-d327df1ca6b5?showPreview=true&showAssistant=true';
@@ -244,6 +246,14 @@ export default function Configuracoes() {
     gmail: {
       status: 'não_configurado',
       provider: 'smtp_sec',
+      notes: ''
+    },
+    googleContacts: {
+      status: 'não_configurado',
+      notes: ''
+    },
+    googleMeet: {
+      status: 'não_configurado',
       notes: ''
     }
   });
@@ -1520,6 +1530,26 @@ export default function Configuracoes() {
                       icon: Mail,
                       iconBg: 'bg-red-50',
                       iconColor: 'text-red-r60 text-red-650 text-red-600'
+                    },
+                    {
+                      key: 'googleContacts',
+                      name: 'Google Contatos',
+                      category: 'Contatos e CRM',
+                      desc: 'Sincronização bidirecional de clientes e contatos para o ecossistema Google Workspace de forma centralizada.',
+                      route: '/boss-giffoni-clientes/configuracoes/integracoes-google-contacts',
+                      icon: Users,
+                      iconBg: 'bg-amber-50',
+                      iconColor: 'text-amber-600'
+                    },
+                    {
+                      key: 'googleMeet',
+                      name: 'Google Meet',
+                      category: 'Vídeo Conferência',
+                      desc: 'Geração fática automática de salas virtuais para reuniões de alinhamento e agendamentos processuais.',
+                      route: '/boss-giffoni-clientes/configuracoes/integracoes-google-meet',
+                      icon: Video,
+                      iconBg: 'bg-teal-50',
+                      iconColor: 'text-teal-600'
                     }
                   ].map((connector) => {
                     const status = connectors[connector.key as keyof typeof connectors]?.status || 'não_configurado';
