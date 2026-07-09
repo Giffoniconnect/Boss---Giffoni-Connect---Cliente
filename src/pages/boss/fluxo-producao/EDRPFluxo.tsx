@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { doc, getDoc, updateDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import FluxoStepLayout from './components/FluxoStepLayout';
@@ -32,12 +32,82 @@ import {
   Mail,
   Phone,
   Share2,
-  RefreshCw
+  RefreshCw,
+  Sparkles,
+  FileText,
+  CheckCircle2
 } from 'lucide-react';
 import { flowRoutes } from './utils/flowRoutes';
+import { useAuth } from '../../../contexts/AuthContext';
 import { PFForm } from '../../../modules/boss/components/forms/PFForm';
 import { PJForm } from '../../../modules/boss/components/forms/PJForm';
-import { buildProcuracaoPfPlaceholders } from '../../../lib/documents/placeholderBuilders';
+import {
+  buildProcuracaoPfPlaceholders,
+  buildGlobalPlaceholders,
+  buildClientCommonPlaceholders,
+  buildCaseCommonPlaceholders
+} from '../../../lib/documents/placeholderBuilders';
+
+export function extractPfDataFromClient(clientData: any) {
+  if (!clientData || clientData.type === 'PJ' || clientData.tipoCliente === 'PJ') return null;
+  
+  const getVal = (keys: string[]): string => {
+    for (const key of keys) {
+      const val = clientData?.[key] ?? 
+                  clientData?.pfDadosPessoais?.[key] ?? 
+                  clientData?.pfData?.[key] ?? 
+                  clientData?.portalMirror?.[key] ?? 
+                  clientData?.portalMirror?.pfDadosPessoais?.[key] ??
+                  clientData?.portalMirror?.pfContato?.[key] ??
+                  clientData?.portalMirror?.pfEndereco?.[key];
+      if (val !== undefined && val !== null && String(val).trim() !== '') {
+        return String(val).trim();
+      }
+    }
+    return '';
+  };
+
+  return {
+    OUTORGANTE_NOME: getVal(['pf_nomeCompleto', 'nomeCompleto', 'nome', 'name']).toUpperCase(),
+    OUTORGANTE_NACIONALIDADE: getVal(['pf_nacionalidade', 'nacionalidade']) || 'Brasileira',
+    OUTORGANTE_ESTADO_CIVIL: getVal(['pf_estadoCivil', 'estadoCivil']) || 'Solteiro(a)',
+    OUTORGANTE_PROFISSAO: getVal(['pf_profissao', 'profissao']) || '—',
+    OUTORGANTE_RG: getVal(['pf_rg', 'rg']) || '—',
+    OUTORGANTE_CPF: getVal(['pf_cpf', 'cpf']) || '—',
+    OUTORGANTE_ENDERECO: getVal(['pf_endereco', 'endereco', 'rua', 'logradouro']) || '—',
+    OUTORGANTE_NUMERO: getVal(['pf_numero', 'numero']) || '—',
+    OUTORGANTE_COMPLEMENTO: getVal(['pf_complemento', 'complemento']) || '—',
+    OUTORGANTE_BAIRRO: getVal(['pf_bairro', 'bairro']) || '—',
+    OUTORGANTE_CIDADE: getVal(['pf_cidade', 'cidade', 'localidade']) || '—',
+    OUTORGANTE_ESTADO: getVal(['pf_estado', 'estado', 'uf']) || '—',
+    OUTORGANTE_CEP: getVal(['pf_cep', 'cep']) || '—',
+    OUTORGANTE_TELEFONE: getVal(['pf_telefone', 'telefone', 'phone']) || '—',
+    OUTORGANTE_WHATSAPP: getVal(['pf_whatsapp', 'whatsapp']) || '—',
+    OUTORGANTE_EMAIL: getVal(['pf_email', 'email']) || '—'
+  };
+}
+
+export function buildFinalQualificationText(payload: any): string {
+  if (!payload) return '';
+  const nome = payload.OUTORGANTE_NOME || '—';
+  const nacionalidade = payload.OUTORGANTE_NACIONALIDADE || '—';
+  const estadoCivil = payload.OUTORGANTE_ESTADO_CIVIL || '—';
+  const profissao = payload.OUTORGANTE_PROFISSAO || '—';
+  const rg = payload.OUTORGANTE_RG || '—';
+  const cpf = payload.OUTORGANTE_CPF || '—';
+  const endereco = payload.OUTORGANTE_ENDERECO || '—';
+  const numero = payload.OUTORGANTE_NUMERO || '—';
+  const complemento = payload.OUTORGANTE_COMPLEMENTO || '—';
+  const bairro = payload.OUTORGANTE_BAIRRO || '—';
+  const cidade = payload.OUTORGANTE_CIDADE || '—';
+  const estado = payload.OUTORGANTE_ESTADO || '—';
+  const cep = payload.OUTORGANTE_CEP || '—';
+  const telefone = payload.OUTORGANTE_TELEFONE || '—';
+  const whatsapp = payload.OUTORGANTE_WHATSAPP || '—';
+  const email = payload.OUTORGANTE_EMAIL || '—';
+
+  return `${nome}, ${nacionalidade}, ${estadoCivil}, ${profissao}, RG: ${rg}, CPF: ${cpf}, Endereço: ${endereco}, nº ${numero}, complemento ${complemento}, Bairro ${bairro}, ${cidade}/${estado}, CEP: ${cep}, Telefone: ${telefone}, WhatsApp: ${whatsapp}, E-mail: ${email}.`;
+}
 
 export function generateAuthorQualification(clientData: any, caseData?: any): string {
   if (!clientData) return '';
@@ -123,28 +193,9 @@ export function generateAuthorQualification(clientData: any, caseData?: any): st
     return `${razaoSocial}, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº ${cnpj}, com sede na ${endereco}, nº ${numero}${complText}, Bairro ${bairro}, ${cidade}/${estado}, CEP ${cep}, neste ato representada por seu Sócio Administrador ${socio}, telefone ${telefone}, e-mail ${email}.`;
   } else {
     // Pessoa Física
-    const pls = buildProcuracaoPfPlaceholders(clientData, caseData);
-    
-    const nome = (pls["{{OUTORGANTE_NOME}}"] || '—').toUpperCase();
-    const nacionalidade = pls["{{OUTORGANTE_NACIONALIDADE}}"] || 'Brasileira';
-    const estadoCivil = pls["{{OUTORGANTE_ESTADO_CIVIL}}"] || 'Solteiro(a)';
-    const profissao = pls["{{OUTORGANTE_PROFISSAO}}"] || '—';
-    const rg = pls["{{OUTORGANTE_RG}}"] || '—';
-    const cpf = pls["{{OUTORGANTE_CPF}}"] || '—';
-    const endereco = pls["{{OUTORGANTE_ENDERECO}}"] || '—';
-    const numero = pls["{{OUTORGANTE_NUMERO}}"] || '—';
-    const complemento = pls["{{OUTORGANTE_COMPLEMENTO}}"] || '';
-    const bairro = pls["{{OUTORGANTE_BAIRRO}}"] || '—';
-    const cidade = pls["{{OUTORGANTE_CIDADE}}"] || '—';
-    const estado = pls["{{OUTORGANTE_ESTADO}}"] || '—';
-    const cep = pls["{{OUTORGANTE_CEP}}"] || '—';
-    const telefone = pls["{{OUTORGANTE_TELEFONE}}"] || '—';
-    const whatsapp = pls["{{OUTORGANTE_WHATSAPP}}"] || '—';
-    const email = pls["{{OUTORGANTE_EMAIL}}"] || '—';
-
-    const complText = complemento ? `, ${complemento}` : '';
-
-    return `${nome}, ${nacionalidade}, ${estadoCivil}, ${profissao}, portador(a) do RG nº ${rg}, inscrito(a) no CPF sob o nº ${cpf}, residente e domiciliado(a) na ${endereco}, nº ${numero}${complText}, Bairro ${bairro}, ${cidade}/${estado}, CEP ${cep}, telefone ${telefone}, WhatsApp ${whatsapp}, e-mail ${email}.`;
+    const extracted = extractPfDataFromClient(clientData);
+    if (!extracted) return '';
+    return buildFinalQualificationText(extracted);
   }
 }
 
@@ -278,6 +329,26 @@ interface EDRPData {
     notes: string;
     completed: boolean;
     completedAt: string;
+    authorQualificationPayload?: {
+      OUTORGANTE_NOME: string;
+      OUTORGANTE_NACIONALIDADE: string;
+      OUTORGANTE_ESTADO_CIVIL: string;
+      OUTORGANTE_PROFISSAO: string;
+      OUTORGANTE_RG: string;
+      OUTORGANTE_CPF: string;
+      OUTORGANTE_ENDERECO: string;
+      OUTORGANTE_NUMERO: string;
+      OUTORGANTE_COMPLEMENTO: string;
+      OUTORGANTE_BAIRRO: string;
+      OUTORGANTE_CIDADE: string;
+      OUTORGANTE_ESTADO: string;
+      OUTORGANTE_CEP: string;
+      OUTORGANTE_TELEFONE: string;
+      OUTORGANTE_WHATSAPP: string;
+      OUTORGANTE_EMAIL: string;
+    };
+    authorQualificationManualEdited?: boolean;
+    authorQualificationOrigin?: string;
   };
   delegation: {
     responsiblePerson: string;
@@ -329,6 +400,21 @@ interface EDRPData {
   };
   edrpStatus: string;
   updatedAt: string;
+  subEtapa01?: {
+    card6?: {
+      fundamentosLegoSelecionados?: any[];
+    };
+    card7?: {
+      pedidosLegoVinculados?: any[];
+      pedidosPadroesAdicionados?: any[];
+    };
+    legoAuditLogs?: any[];
+    modalidadeCitacao?: string;
+    modalidadeCitacaoBornInCard6?: boolean;
+    formaPublicacoes?: string;
+    advogadoPublicacao?: string;
+    formaPublicacoesBornInCard6?: boolean;
+  };
 }
 
 // Initial/default pristine values inside EDRPData definition
@@ -364,7 +450,20 @@ const DEFAULT_EDRP: EDRPData = {
     strategy: '',
     notes: '',
     completed: false,
-    completedAt: ''
+    completedAt: '',
+    authorQualificationPayload: undefined,
+    authorQualificationManualEdited: false,
+    authorQualificationOrigin: ''
+  },
+  subEtapa01: {
+    card6: {
+      fundamentosLegoSelecionados: []
+    },
+    card7: {
+      pedidosLegoVinculados: [],
+      pedidosPadroesAdicionados: []
+    },
+    legoAuditLogs: []
   },
   delegation: {
     responsiblePerson: '',
@@ -430,9 +529,70 @@ const SECTORS = [
   'Marketing'
 ];
 
+interface LegoLibraryItem {
+  id: string;
+  title: string;
+  foundationTemplate: string;
+  claimTemplate: string;
+}
+
+const LEGO_LIBRARY: Record<string, LegoLibraryItem[]> = {
+  "Direito Civil": [
+    {
+      id: "gratuidade_justica",
+      title: "Gratuidade de Justiça",
+      foundationTemplate: "=== FUNDAMENTO LEGO: Gratuidade de Justiça ===\nTese sob amparo do Art. 98 e seguintes do Código de Processo Civil: concessão da gratuidade de justiça ante a insuficiência de recursos para arcar com custas e despesas processuais sem prejuízo do próprio sustento e de sua família.\n=============================================",
+      claimTemplate: "=== PEDIDO LEGO VINCULADO: Gratuidade de Justiça ===\nPedido de gratuidade de justiça: concessão dos benefícios da Justiça Gratuita, nos termos do Art. 98 do CPC.\n============================================="
+    },
+    {
+      id: "modalidade_citacao",
+      title: "Modalidade de citação",
+      foundationTemplate: "=== FUNDAMENTO LEGO: Modalidade de citação ===\nTese pelo Art. 246 do Código de Processo Civil: citação do réu na modalidade {MODALIDADE_SELECIONADA}, por constituir o meio legal e preferencial para a ciência e instauração do contraditório na relação processual.\n=============================================",
+      claimTemplate: "=== PEDIDO LEGO VINCULADO: Modalidade de citação ===\nPedido de citação na modalidade escolhida: citação do réu por {MODALIDADE_SELECIONADA} para, querendo, contestar a presente ação no prazo legal, sob pena de revelia.\n============================================="
+    },
+    {
+      id: "forma_publicacoes",
+      title: "Forma das Publicações",
+      foundationTemplate: "=== FUNDAMENTO LEGO: Forma das Publicações ===\nTese sob o rito do Art. 272, § 2º e § 5º do CPC: publicação dos atos e intimações dirigidas de maneira singular e sob pena de nulidade absoluta ao(s) patrono(s) indicado(s) {ADVOGADOS_SELECIONADOS}.\n=============================================",
+      claimTemplate: "=== PEDIDO LEGO VINCULADO: Forma das Publicações ===\nPedido de publicações na forma escolhida: requer-se que todas as intimações e publicações sejam expedidas exclusivamente sob o nome de {ADVOGADOS_SELECIONADOS}, sob pena de nulidade processual fática.\n============================================="
+    }
+  ]
+};
+
+interface StandardClaimLibraryItem {
+  id: string;
+  title: string;
+  template: string;
+}
+
+const STANDARD_CLAIMS_LIBRARY: StandardClaimLibraryItem[] = [
+  {
+    id: "citacao_padrao",
+    title: "Pedido de citação padrão",
+    template: "=== PEDIDO LEGO PADRÃO: Pedido de citação padrão ===\nPedido de citação: citação do réu para que, querendo, apresente contestação no prazo legal, sob pena de sofrer os efeitos da revelia e confissão ficta quanto à matéria de fato.\n============================================="
+  },
+  {
+    id: "condenacao_custas_honorarios",
+    title: "Pedido de condenação em custas, despesas e sucumbência",
+    template: "=== PEDIDO LEGO PADRÃO: Pedido de condenação em custas, despesas e sucumbência ===\nPedido de condenação: condenação do réu ao pagamento das custas processuais, despesas de atos e honorários advocatícios sucumbenciais, estes fixados no patamar de 20% sobre o valor da condenação, nos termos do Art. 85 do CPC.\n============================================="
+  },
+  {
+    id: "publicacoes_padrao",
+    title: "Pedido de publicações padrão",
+    template: "=== PEDIDO LEGO PADRÃO: Pedido de publicações padrão ===\nPedido de publicações padrão: requer-se que todas as intimações e publicações sejam realizadas exclusivamente em nome dos patronos indicados, sob pena de nulidade fática dos atos processuais subsequentes.\n============================================="
+  },
+  {
+    id: "dispensa_audiencia_conciliacao",
+    title: "Pedido de dispensa de audiência de conciliação",
+    template: "=== PEDIDO LEGO PADRÃO: Pedido de dispensa de audiência de conciliação ===\nPedido de dispensa de audiência de conciliação: manifestação expressa de desinteresse na realização da audiência de conciliação ou mediação, nos termos do Art. 319, VII do CPC, visando à celeridade processual.\n============================================="
+  }
+];
+
 export default function EDRPFluxo() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const { user, profile } = useAuth();
 
   // State managers
   const [fetching, setFetching] = useState(true);
@@ -442,8 +602,18 @@ export default function EDRPFluxo() {
 
   const [caseObj, setCaseObj] = useState<any>(null);
   const [client, setClient] = useState<any>(null);
+  const [clientError, setClientError] = useState<boolean>(false);
   const [edrp, setEdrp] = useState<EDRPData>(DEFAULT_EDRP);
   const [requests, setRequests] = useState<any[]>([]);
+
+  // GDocs report states
+  const [generatingDoc, setGeneratingDoc] = useState(false);
+  const [relatorioStatus, setRelatorioStatus] = useState<'aguardando' | 'criado' | 'falha'>('aguardando');
+  const [relatorioGoogleDocsUrl, setRelatorioGoogleDocsUrl] = useState('');
+  const [relatorioLogFalha, setRelatorioLogFalha] = useState('');
+  const [relatorioTechnicalLog, setRelatorioTechnicalLog] = useState<any[]>([]);
+  const [relatorioVersion, setRelatorioVersion] = useState<number>(1);
+  const [relatorioIsSimulated, setRelatorioIsSimulated] = useState(false);
 
   // Defendant registration and DB lookup state managers
   const [dbClients, setDbClients] = useState<any[]>([]);
@@ -454,6 +624,574 @@ export default function EDRPFluxo() {
   const [currentDefForm, setCurrentDefForm] = useState<any>(null);
   const [currentEditIndex, setCurrentEditIndex] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // LEGO System States
+  const [showLegoModal, setShowLegoModal] = useState(false);
+  const [selectedLegoIds, setSelectedLegoIds] = useState<string[]>([]);
+  const [selectedStandardClaimIds, setSelectedStandardClaimIds] = useState<string[]>([]);
+  const [legoModality, setLegoModality] = useState('Postal (Correios)');
+  const [legoPublicacaoForm, setLegoPublicacaoForm] = useState('Nome exclusivo de advogado específico');
+  const [legoLawyerName, setLegoLawyerName] = useState('RODRIGO GIFFONI RODRIGUES (OAB/MG 157.320)');
+
+  // Duplicate Warning State
+  const [duplicateWarning, setDuplicateWarning] = useState<{
+    id: string;
+    title: string;
+    isStandardClaim: boolean;
+    type: 'foundation' | 'claim';
+  } | null>(null);
+
+  // Removal Pending State
+  const [removalPending, setRemovalPending] = useState<{
+    id: string;
+    title: string;
+    type: 'foundation' | 'standard_claim';
+  } | null>(null);
+
+  // ==========================================
+  // LEGO SYSTEM HELPER FUNCTIONS & HANDLERS
+  // ==========================================
+
+  const addOrUpdateBlockInText = (
+    currentText: string,
+    blockHeader: string,
+    blockText: string,
+    overwrite: boolean
+  ): string => {
+    let text = currentText || '';
+    const regex = new RegExp(`${blockHeader}[\\s\\S]*?=============================================`, 'g');
+    
+    const hasBlock = text.includes(blockHeader);
+    const fullBlockString = `${blockHeader}\n${blockText}\n=============================================`;
+    
+    if (hasBlock) {
+      if (overwrite) {
+        text = text.replace(regex, fullBlockString);
+      }
+    } else {
+      if (text.trim() === '') {
+        text = fullBlockString;
+      } else {
+        text = text.trim() + '\n\n' + fullBlockString;
+      }
+    }
+    return text;
+  };
+
+  const removeBlockFromText = (
+    currentText: string,
+    blockHeader: string
+  ): string => {
+    let text = currentText || '';
+    const regex = new RegExp(`\\n*\\s*${blockHeader}[\\s\\S]*?=============================================\\n*\\s*`, 'g');
+    text = text.replace(regex, '\n\n');
+    text = text.replace(/\n{3,}/g, '\n\n').trim();
+    return text;
+  };
+
+  const logLegoAction = (
+    action: string,
+    blockTitle: string,
+    meta: {
+      alteredCard6: boolean;
+      alteredCard7: boolean;
+      hasLinkedClaim: boolean;
+      removed: boolean;
+      duplicateAttempt: boolean;
+      manualEditDetected?: boolean;
+    }
+  ) => {
+    const newLog = {
+      timestamp: new Date().toISOString(),
+      responsibleUser: profile?.name || user?.email || 'Usuário BOSS',
+      areaDireito: caseObj?.areaDireito || 'Não definida',
+      action,
+      blockTitle,
+      alteredCard6: meta.alteredCard6,
+      alteredCard7: meta.alteredCard7,
+      hasLinkedClaim: meta.hasLinkedClaim,
+      manualEditDetected: meta.manualEditDetected || false,
+      removed: meta.removed,
+      duplicateAttempt: meta.duplicateAttempt,
+      carryOnOrigin: 'Petição Inicial, Subetapa 03 (areaDireito)'
+    };
+    
+    setEdrp((prev: any) => {
+      const currentLogs = prev.subEtapa01?.legoAuditLogs || [];
+      return {
+        ...prev,
+        subEtapa01: {
+          ...prev.subEtapa01,
+          legoAuditLogs: [newLog, ...currentLogs]
+        }
+      };
+    });
+  };
+
+  const handleInsertLego = (selectedIds: string[], selectedClaimIds: string[]) => {
+    let currentGrounds = [...(edrp.subEtapa01?.card6?.fundamentosLegoSelecionados || [])];
+    let currentClaims = [...(edrp.subEtapa01?.card7?.pedidosLegoVinculados || [])];
+    let currentStdClaims = [...(edrp.subEtapa01?.card7?.pedidosPadroesAdicionados || [])];
+
+    let groundsText = edrp.structuring.legalGrounds || '';
+    let claimsText = edrp.structuring.claims || '';
+
+    let altered6 = false;
+    let altered7 = false;
+
+    const area = caseObj?.areaDireito || 'Direito Civil';
+    const availableBlocks = LEGO_LIBRARY[area] || [];
+
+    for (const id of selectedIds) {
+      const block = availableBlocks.find(b => b.id === id);
+      if (!block) continue;
+
+      const alreadyGround = currentGrounds.some(g => g.id === id);
+
+      let fText = block.foundationTemplate;
+      let cText = block.claimTemplate;
+
+      if (id === 'modalidade_citacao') {
+        fText = fText.replace(/{MODALIDADE_SELECIONADA}/g, legoModality);
+        cText = cText.replace(/{MODALIDADE_SELECIONADA}/g, legoModality);
+      } else if (id === 'forma_publicacoes') {
+        const lawyers = legoPublicacaoForm === 'Nome exclusivo de advogado específico' 
+          ? `exclusivamente em nome do advogado ${legoLawyerName}` 
+          : 'por Diário Oficial / DJe geral';
+        fText = fText.replace(/{ADVOGADOS_SELECIONADOS}/g, lawyers);
+        cText = cText.replace(/{ADVOGADOS_SELECIONADOS}/g, lawyers);
+      }
+
+      const fHeader = `=== FUNDAMENTO LEGO: ${block.title} ===`;
+      const cHeader = `=== PEDIDO LEGO VINCULADO: ${block.title} ===`;
+
+      const prevGroundsText = groundsText;
+      groundsText = addOrUpdateBlockInText(groundsText, fHeader, fText.replace(fHeader + '\n', '').replace('\n=============================================', ''), true);
+      if (groundsText !== prevGroundsText) altered6 = true;
+
+      const prevClaimsText = claimsText;
+      claimsText = addOrUpdateBlockInText(claimsText, cHeader, cText.replace(cHeader + '\n', '').replace('\n=============================================', ''), true);
+      if (claimsText !== prevClaimsText) altered7 = true;
+
+      if (!alreadyGround) {
+        currentGrounds.push({
+          id,
+          title: block.title,
+          text: fText,
+          addedAt: new Date().toISOString(),
+          areaDireito: area
+        });
+      } else {
+        currentGrounds = currentGrounds.map(g => g.id === id ? { ...g, text: fText, addedAt: new Date().toISOString() } : g);
+      }
+
+      if (!currentClaims.some(c => c.groundId === id)) {
+        currentClaims.push({
+          id,
+          title: block.title,
+          text: cText,
+          groundId: id,
+          addedAt: new Date().toISOString(),
+          areaDireito: area
+        });
+      } else {
+        currentClaims = currentClaims.map(c => c.groundId === id ? { ...c, text: cText, addedAt: new Date().toISOString() } : c);
+      }
+
+      logLegoAction('add_foundation', block.title, {
+        alteredCard6: true,
+        alteredCard7: true,
+        hasLinkedClaim: true,
+        removed: false,
+        duplicateAttempt: alreadyGround
+      });
+    }
+
+    for (const id of selectedClaimIds) {
+      const block = STANDARD_CLAIMS_LIBRARY.find(b => b.id === id);
+      if (!block) continue;
+
+      const alreadyStd = currentStdClaims.some(c => c.id === id);
+      const cHeader = `=== PEDIDO LEGO PADRÃO: ${block.title} ===`;
+
+      const prevClaimsText = claimsText;
+      claimsText = addOrUpdateBlockInText(claimsText, cHeader, block.template.replace(cHeader + '\n', '').replace('\n=============================================', ''), true);
+      if (claimsText !== prevClaimsText) altered7 = true;
+
+      if (!alreadyStd) {
+        currentStdClaims.push({
+          id,
+          title: block.title,
+          text: block.template,
+          addedAt: new Date().toISOString()
+        });
+      } else {
+        currentStdClaims = currentStdClaims.map(c => c.id === id ? { ...c, text: block.template, addedAt: new Date().toISOString() } : c);
+      }
+
+      logLegoAction('add_standard_claim', block.title, {
+        alteredCard6: false,
+        alteredCard7: true,
+        hasLinkedClaim: false,
+        removed: false,
+        duplicateAttempt: alreadyStd
+      });
+    }
+
+    const existingModalityInCase = caseObj?.modalidadeCitacao || edrp.subEtapa01?.modalidadeCitacao;
+    const existingFormaPublicacoesInCase = caseObj?.formaPublicacoes || edrp.subEtapa01?.formaPublicacoes;
+
+    setEdrp((prev: any) => {
+      const updatedSubEtapa01 = {
+        ...prev.subEtapa01,
+        card6: {
+          ...prev.subEtapa01?.card6,
+          fundamentosLegoSelecionados: currentGrounds
+        },
+        card7: {
+          ...prev.subEtapa01?.card7,
+          pedidosLegoVinculados: currentClaims,
+          pedidosPadroesAdicionados: currentStdClaims
+        },
+        modalidadeCitacao: selectedIds.includes('modalidade_citacao') ? legoModality : (prev.subEtapa01?.modalidadeCitacao || ''),
+        modalidadeCitacaoBornInCard6: prev.subEtapa01?.modalidadeCitacaoBornInCard6 || (selectedIds.includes('modalidade_citacao') && !existingModalityInCase),
+        formaPublicacoes: selectedIds.includes('forma_publicacoes') ? legoPublicacaoForm : (prev.subEtapa01?.formaPublicacoes || ''),
+        advogadoPublicacao: selectedIds.includes('forma_publicacoes') ? legoLawyerName : (prev.subEtapa01?.advogadoPublicacao || ''),
+        formaPublicacoesBornInCard6: prev.subEtapa01?.formaPublicacoesBornInCard6 || (selectedIds.includes('forma_publicacoes') && !existingFormaPublicacoesInCase),
+      };
+
+      return {
+        ...prev,
+        structuring: {
+          ...prev.structuring,
+          legalGrounds: groundsText,
+          claims: claimsText
+        },
+        subEtapa01: updatedSubEtapa01
+      };
+    });
+
+    setShowLegoModal(false);
+    setSelectedLegoIds([]);
+    setSelectedStandardClaimIds([]);
+  };
+
+  const handleCheckAndSubmitLego = () => {
+    const existingGroundIds = (edrp.subEtapa01?.card6?.fundamentosLegoSelecionados || []).map((g: any) => g.id);
+    const existingStdIds = (edrp.subEtapa01?.card7?.pedidosPadroesAdicionados || []).map((c: any) => c.id);
+
+    const dupGround = selectedLegoIds.find(id => existingGroundIds.includes(id));
+    if (dupGround) {
+      const block = (LEGO_LIBRARY[caseObj?.areaDireito || 'Direito Civil'] || []).find(b => b.id === dupGround);
+      setDuplicateWarning({
+        id: dupGround,
+        title: block?.title || dupGround,
+        isStandardClaim: false,
+        type: 'foundation'
+      });
+      return;
+    }
+
+    const dupStd = selectedStandardClaimIds.find(id => existingStdIds.includes(id));
+    if (dupStd) {
+      const block = STANDARD_CLAIMS_LIBRARY.find(b => b.id === dupStd);
+      setDuplicateWarning({
+        id: dupStd,
+        title: block?.title || dupStd,
+        isStandardClaim: true,
+        type: 'claim'
+      });
+      return;
+    }
+
+    handleInsertLego(selectedLegoIds, selectedStandardClaimIds);
+  };
+
+  const handleResolveDuplicate = (decision: 'overwrite' | 'keep' | 'cancel') => {
+    if (decision === 'cancel') {
+      setDuplicateWarning(null);
+      return;
+    }
+
+    if (decision === 'keep') {
+      logLegoAction('duplicate_attempt', duplicateWarning!.title, {
+        alteredCard6: false,
+        alteredCard7: false,
+        hasLinkedClaim: !duplicateWarning!.isStandardClaim,
+        removed: false,
+        duplicateAttempt: true
+      });
+      
+      if (duplicateWarning!.isStandardClaim) {
+        const filteredStd = selectedStandardClaimIds.filter(id => id !== duplicateWarning!.id);
+        handleInsertLego(selectedLegoIds, filteredStd);
+      } else {
+        const filteredLego = selectedLegoIds.filter(id => id !== duplicateWarning!.id);
+        handleInsertLego(filteredLego, selectedStandardClaimIds);
+      }
+      setDuplicateWarning(null);
+      return;
+    }
+
+    if (decision === 'overwrite') {
+      handleInsertLego(selectedLegoIds, selectedStandardClaimIds);
+      setDuplicateWarning(null);
+    }
+  };
+
+  const handleConfirmRemoval = (decision: 'both' | 'ground_only' | 'cancel') => {
+    if (decision === 'cancel') {
+      setRemovalPending(null);
+      return;
+    }
+
+    const { id, title } = removalPending!;
+    let groundsText = edrp.structuring.legalGrounds || '';
+    let claimsText = edrp.structuring.claims || '';
+
+    const fHeader = `=== FUNDAMENTO LEGO: ${title} ===`;
+    const cHeader = `=== PEDIDO LEGO VINCULADO: ${title} ===`;
+
+    groundsText = removeBlockFromText(groundsText, fHeader);
+
+    if (decision === 'both') {
+      claimsText = removeBlockFromText(claimsText, cHeader);
+    }
+
+    const updatedGrounds = (edrp.subEtapa01?.card6?.fundamentosLegoSelecionados || []).filter((g: any) => g.id !== id);
+    const updatedClaims = decision === 'both'
+      ? (edrp.subEtapa01?.card7?.pedidosLegoVinculados || []).filter((c: any) => c.groundId !== id)
+      : (edrp.subEtapa01?.card7?.pedidosLegoVinculados || []).map((c: any) => c.groundId === id ? { ...c, detached: true } : c);
+
+    setEdrp((prev: any) => ({
+      ...prev,
+      structuring: {
+        ...prev.structuring,
+        legalGrounds: groundsText,
+        claims: claimsText
+      },
+      subEtapa01: {
+        ...prev.subEtapa01,
+        card6: {
+          ...prev.subEtapa01?.card6,
+          fundamentosLegoSelecionados: updatedGrounds
+        },
+        card7: {
+          ...prev.subEtapa01?.card7,
+          pedidosLegoVinculados: updatedClaims
+        }
+      }
+    }));
+
+    logLegoAction('remove_foundation', title, {
+      alteredCard6: true,
+      alteredCard7: decision === 'both',
+      hasLinkedClaim: decision === 'both',
+      removed: true,
+      duplicateAttempt: false
+    });
+
+    setRemovalPending(null);
+  };
+
+  const handleRemoveStandardClaim = (id: string, title: string) => {
+    let claimsText = edrp.structuring.claims || '';
+    const cHeader = `=== PEDIDO LEGO PADRÃO: ${title} ===`;
+
+    claimsText = removeBlockFromText(claimsText, cHeader);
+
+    const updatedStdClaims = (edrp.subEtapa01?.card7?.pedidosPadroesAdicionados || []).filter((c: any) => c.id !== id);
+
+    setEdrp((prev: any) => ({
+      ...prev,
+      structuring: {
+        ...prev.structuring,
+        claims: claimsText
+      },
+      subEtapa01: {
+        ...prev.subEtapa01,
+        card7: {
+          ...prev.subEtapa01?.card7,
+          pedidosPadroesAdicionados: updatedStdClaims
+        }
+      }
+    }));
+
+    logLegoAction('remove_standard_claim', title, {
+      alteredCard6: false,
+      alteredCard7: true,
+      hasLinkedClaim: false,
+      removed: true,
+      duplicateAttempt: false
+    });
+  };
+
+  const openLegoSystem = () => {
+    // 1. Check if Gratuidade is pre-selected in previous wizardState
+    const wizardStateObj = caseObj?.solicitacoesProvasWizardState || {};
+    const isGratuidadePreSelected = 
+      wizardStateObj?.q2_1 === 'sim' || 
+      wizardStateObj?.q2_4 === 'sim' || 
+      (wizardStateObj?.declaracaoFiles || []).length > 0 ||
+      caseObj?.modalidadeGratuidade === 'sim' ||
+      caseObj?.justicaGratuita === true;
+
+    const currentLegoIds = (edrp.subEtapa01?.card6?.fundamentosLegoSelecionados || []).map((g: any) => g.id);
+    let newSelectedLegoIds = [...currentLegoIds];
+    
+    if (isGratuidadePreSelected && !newSelectedLegoIds.includes('gratuidade_justica')) {
+      newSelectedLegoIds.push('gratuidade_justica');
+    }
+
+    // 2. Check if modality of citation exists from earlier (Carry-on)
+    const carryOnModality = caseObj?.modalidadeCitacao || edrp.subEtapa01?.modalidadeCitacao || '';
+    if (carryOnModality) {
+      setLegoModality(carryOnModality);
+      if (!newSelectedLegoIds.includes('modalidade_citacao')) {
+        newSelectedLegoIds.push('modalidade_citacao');
+      }
+    } else {
+      // If none existed, we can default or reset to 'Postal (Correios)'
+      setLegoModality('Postal (Correios)');
+    }
+
+    // 3. Check if publication form exists from earlier (Carry-on)
+    const carryOnFormaPublicacoes = caseObj?.formaPublicacoes || edrp.subEtapa01?.formaPublicacoes || '';
+    const carryOnLawyerName = caseObj?.advogadoPublicacao || edrp.subEtapa01?.advogadoPublicacao || '';
+
+    if (carryOnFormaPublicacoes) {
+      setLegoPublicacaoForm(carryOnFormaPublicacoes);
+      if (!newSelectedLegoIds.includes('forma_publicacoes')) {
+        newSelectedLegoIds.push('forma_publicacoes');
+      }
+    } else {
+      setLegoPublicacaoForm('Nome exclusivo de advogado específico');
+    }
+    if (carryOnLawyerName) {
+      setLegoLawyerName(carryOnLawyerName);
+    } else {
+      setLegoLawyerName('RODRIGO GIFFONI RODRIGUES (OAB/MG 157.320)');
+    }
+
+    setSelectedLegoIds(newSelectedLegoIds);
+    setSelectedStandardClaimIds((edrp.subEtapa01?.card7?.pedidosPadroesAdicionados || []).map((c: any) => c.id));
+    setShowLegoModal(true);
+  };
+
+  const qualStatus = (() => {
+    if (clientError) {
+      return {
+        type: 'erro' as const,
+        label: 'Erro Técnico',
+        message: 'Não foi possível carregar automaticamente os dados da Etapa 01 — Cadastro PF.',
+        colorClass: 'bg-red-50 border-red-200 text-red-800',
+        iconColor: 'text-red-500'
+      };
+    }
+    
+    if (!client) {
+      return {
+        type: 'ausentes' as const,
+        label: 'Dados Ausentes',
+        message: 'Dados ausentes na Etapa 01 — Cadastro PF.',
+        colorClass: 'bg-gray-50 border-gray-200 text-gray-500',
+        iconColor: 'text-gray-400'
+      };
+    }
+
+    if (success && success.includes('atualizada com sucesso a partir do cadastro')) {
+      return {
+        type: 'recarregado' as const,
+        label: 'Atualizado',
+        message: 'Qualificação da autora carregada automaticamente a partir da Etapa 01 — Cadastro PF.',
+        colorClass: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+        iconColor: 'text-emerald-500'
+      };
+    }
+
+    if (success && success.includes('EDRP atualizado com sucesso')) {
+      return {
+        type: 'salvo' as const,
+        label: 'Salvo com Sucesso',
+        message: 'Qualificação salva com sucesso.',
+        colorClass: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+        iconColor: 'text-emerald-500'
+      };
+    }
+
+    if (edrp.structuring.authorQualificationManualEdited) {
+      return {
+        type: 'editado' as const,
+        label: 'Editado Manualmente',
+        message: 'Qualificação editada manualmente.',
+        colorClass: 'bg-blue-50 border-blue-200 text-blue-800',
+        iconColor: 'text-blue-500'
+      };
+    }
+
+    const payload = edrp.structuring.authorQualificationPayload || extractPfDataFromClient(client);
+    if (!payload) {
+      return {
+        type: 'ausentes' as const,
+        label: 'Dados Ausentes',
+        message: 'Qualificação incompleta — existem dados pendentes na Etapa 01 — Cadastro PF.',
+        colorClass: 'bg-gray-50 border-gray-200 text-gray-500',
+        iconColor: 'text-gray-400'
+      };
+    }
+
+    const essentialKeys = [
+      'OUTORGANTE_NOME',
+      'OUTORGANTE_NACIONALIDADE',
+      'OUTORGANTE_ESTADO_CIVIL',
+      'OUTORGANTE_PROFISSAO',
+      'OUTORGANTE_RG',
+      'OUTORGANTE_CPF',
+      'OUTORGANTE_ENDERECO',
+      'OUTORGANTE_NUMERO',
+      'OUTORGANTE_BAIRRO',
+      'OUTORGANTE_CIDADE',
+      'OUTORGANTE_ESTADO',
+      'OUTORGANTE_CEP',
+      'OUTORGANTE_TELEFONE',
+      'OUTORGANTE_WHATSAPP',
+      'OUTORGANTE_EMAIL'
+    ];
+
+    const missingFields = essentialKeys.filter(key => {
+      const val = payload[key];
+      return !val || val.trim() === '' || val === '—';
+    });
+    
+    if (missingFields.length === essentialKeys.length) {
+      return {
+        type: 'ausentes' as const,
+        label: 'Dados Ausentes',
+        message: 'Dados ausentes na Etapa 01 — Cadastro PF.',
+        colorClass: 'bg-gray-50 border-gray-200 text-gray-500',
+        iconColor: 'text-gray-400'
+      };
+    }
+
+    if (missingFields.length > 0) {
+      return {
+        type: 'parcial' as const,
+        label: 'Qualificação Incompleta',
+        message: 'Qualificação incompleta — existem dados pendentes na Etapa 01 — Cadastro PF.',
+        colorClass: 'bg-amber-50 border-amber-200 text-amber-850',
+        iconColor: 'text-amber-500',
+        missing: missingFields
+      };
+    }
+
+    return {
+      type: 'carregado' as const,
+      label: 'Carregado',
+      message: 'Qualificação da autora carregada automaticamente a partir da Etapa 01 — Cadastro PF.',
+      colorClass: 'bg-emerald-50 border-emerald-200 text-emerald-850',
+      iconColor: 'text-emerald-500'
+    };
+  })();
 
   const getFieldVal = (keys: string[]): string => {
     if (!client) return '';
@@ -479,8 +1217,23 @@ export default function EDRPFluxo() {
 
   const handleUpdateQualificationFromRegistry = () => {
     if (!client) return;
-    const generatedQual = generateAuthorQualification(client, caseObj);
-    handleFieldChange('structuring', 'parties', generatedQual);
+    const extracted = extractPfDataFromClient(client);
+    if (extracted) {
+      const generatedQual = buildFinalQualificationText(extracted);
+      setEdrp((prev) => ({
+        ...prev,
+        structuring: {
+          ...prev.structuring,
+          parties: generatedQual,
+          authorQualificationPayload: extracted,
+          authorQualificationOrigin: "Etapa 01 - Cadastro PF",
+          authorQualificationManualEdited: false
+        }
+      }));
+    } else {
+      const generatedQual = generateAuthorQualification(client, caseObj);
+      handleFieldChange('structuring', 'parties', generatedQual);
+    }
     setSuccess('Qualificação detalhada atualizada com sucesso a partir do cadastro do cliente.');
   };
 
@@ -534,10 +1287,18 @@ export default function EDRPFluxo() {
         // Fetch client
         let loadedClient: any = null;
         if (caseData.clientId) {
-          const clientSnap = await getDoc(doc(db, 'clients', caseData.clientId));
-          if (clientSnap.exists()) {
-            loadedClient = clientSnap.data();
-            setClient(loadedClient);
+          try {
+            const clientSnap = await getDoc(doc(db, 'clients', caseData.clientId));
+            if (clientSnap.exists()) {
+              loadedClient = clientSnap.data();
+              setClient(loadedClient);
+              setClientError(false);
+            } else {
+              setClientError(true);
+            }
+          } catch (cErr) {
+            console.error("Erro técnico ao carregar Cadastro PF:", cErr);
+            setClientError(true);
           }
         }
 
@@ -574,14 +1335,64 @@ export default function EDRPFluxo() {
           reviewPreparation: { ...DEFAULT_EDRP.reviewPreparation, ...(rawEdrp.reviewPreparation || {}) },
           protocolPreparation: { ...DEFAULT_EDRP.protocolPreparation, ...(rawEdrp.protocolPreparation || {}) },
           edrpStatus: rawEdrp.edrpStatus || DEFAULT_EDRP.edrpStatus,
-          updatedAt: rawEdrp.updatedAt || DEFAULT_EDRP.updatedAt
+          updatedAt: rawEdrp.updatedAt || DEFAULT_EDRP.updatedAt,
+          subEtapa01: {
+            card6: {
+              fundamentosLegoSelecionados: rawEdrp.subEtapa01?.card6?.fundamentosLegoSelecionados || []
+            },
+            card7: {
+              pedidosLegoVinculados: rawEdrp.subEtapa01?.card7?.pedidosLegoVinculados || [],
+              pedidosPadroesAdicionados: rawEdrp.subEtapa01?.card7?.pedidosPadroesAdicionados || []
+            },
+            legoAuditLogs: rawEdrp.subEtapa01?.legoAuditLogs || [],
+            modalidadeCitacao: rawEdrp.subEtapa01?.modalidadeCitacao || caseData.modalidadeCitacao || '',
+            modalidadeCitacaoBornInCard6: rawEdrp.subEtapa01?.modalidadeCitacaoBornInCard6 || false,
+            formaPublicacoes: rawEdrp.subEtapa01?.formaPublicacoes || caseData.formaPublicacoes || '',
+            advogadoPublicacao: rawEdrp.subEtapa01?.advogadoPublicacao || caseData.advogadoPublicacao || '',
+            formaPublicacoesBornInCard6: rawEdrp.subEtapa01?.formaPublicacoesBornInCard6 || false,
+          }
         };
 
-        if (loadedClient && (!merged.structuring.parties || merged.structuring.parties.trim() === '')) {
-          merged.structuring.parties = generateAuthorQualification(loadedClient, caseData);
+        const initialModality = caseData.modalidadeCitacao || rawEdrp.subEtapa01?.modalidadeCitacao || 'Postal (Correios)';
+        const initialPublicacao = caseData.formaPublicacoes || rawEdrp.subEtapa01?.formaPublicacoes || 'Nome exclusivo de advogado específico';
+        const initialLawyer = caseData.advogadoPublicacao || rawEdrp.subEtapa01?.advogadoPublicacao || 'RODRIGO GIFFONI RODRIGUES (OAB/MG 157.320)';
+
+        setLegoModality(initialModality);
+        setLegoPublicacaoForm(initialPublicacao);
+        setLegoLawyerName(initialLawyer);
+
+        if (loadedClient) {
+          const extracted = extractPfDataFromClient(loadedClient);
+          if (extracted) {
+            if (!merged.structuring.authorQualificationPayload) {
+              merged.structuring.authorQualificationPayload = extracted;
+            }
+            if (!merged.structuring.authorQualificationOrigin) {
+              merged.structuring.authorQualificationOrigin = "Etapa 01 - Cadastro PF";
+            }
+            if (merged.structuring.authorQualificationManualEdited === undefined) {
+              merged.structuring.authorQualificationManualEdited = false;
+            }
+            if (!merged.structuring.parties || merged.structuring.parties.trim() === '') {
+              merged.structuring.parties = buildFinalQualificationText(extracted);
+            }
+          } else {
+            if (!merged.structuring.parties || merged.structuring.parties.trim() === '') {
+              merged.structuring.parties = generateAuthorQualification(loadedClient, caseData);
+            }
+          }
         }
 
         setEdrp(merged);
+
+        // Populate GDocs report states
+        setRelatorioStatus(caseData.relatorioEstruturacaoStatus || 'aguardando');
+        setRelatorioGoogleDocsUrl(caseData.relatorioEstruturacaoGoogleDocsUrl || '');
+        setRelatorioLogFalha(caseData.relatorioEstruturacaoLogFalha || '');
+        setRelatorioTechnicalLog(caseData.relatorioEstruturacaoTechnicalLog || []);
+        setRelatorioVersion(caseData.relatorioEstruturacaoVersion || 1);
+        setRelatorioIsSimulated(caseData.relatorioEstruturacaoIsSimulated || false);
+
       } catch (err: any) {
         console.error(err);
         setError(`Falha ao obter os registros de produção do EDRP: ${err.message || err}`);
@@ -618,6 +1429,10 @@ export default function EDRPFluxo() {
         if (isPeticaoInicial) {
           updatedSection.requiresCNJ = (value === 'protocolado');
         }
+      }
+
+      if (section === 'structuring' && field === 'parties') {
+        updatedSection.authorQualificationManualEdited = true;
       }
 
       return {
@@ -959,6 +1774,276 @@ export default function EDRPFluxo() {
     return list;
   };
 
+  // Google Docs report generator function
+  const handleGenerateRelatorio = async (intent: 'initial' | 'overwrite' = 'initial') => {
+    if (generatingDoc) return;
+    setGeneratingDoc(true);
+    setError(null);
+    setSuccess(null);
+
+    const targetCaseId = caseId!;
+    const targetClientId = caseObj?.clientId || "";
+    const clientType = client?.type || "PF";
+    const isPj = clientType === "PJ";
+
+    const nomeCompleto = client?.pfDadosPessoais?.pf_nomeCompleto || client?.pfData?.pf_nomeCompleto || client?.name || "Cliente PF";
+    const razaoSocial = client?.pjDadosEmpresa?.pj_razaoSocial || client?.pjData?.pj_razaoSocial || client?.name || "Cliente PJ";
+
+    const prefix = "relatorioEstruturacao";
+
+    const addLocalLog = (level: "info" | "success" | "warning" | "error", code: string, message: string) => {
+      const timestamp = new Date().toISOString();
+      const item = { timestamp, level, code, message };
+      setRelatorioTechnicalLog(prev => [item, ...prev]);
+    };
+
+    const clickLog = {
+      timestamp: new Date().toISOString(),
+      level: "info" as const,
+      code: relatorioGoogleDocsUrl
+        ? `${prefix.toUpperCase()}_NEW_VERSION_SINGLE_CLICK_STARTED`
+        : `${prefix.toUpperCase()}_SINGLE_CLICK_GENERATION_STARTED`,
+      message: relatorioGoogleDocsUrl
+        ? `Nova versão iniciada diretamente pelo botão de geração.`
+        : "Geração iniciada diretamente pelo botão de geração."
+    };
+
+    setRelatorioTechnicalLog([clickLog]);
+
+    try {
+      // Get google drive folders
+      const googleDriveClientFolderId = (client?.googleDriveClientFolderId || client?.gdriveFolderId || caseObj?.gdriveFolderId || "").trim();
+      const googleDriveClientFolderUrl = (client?.googleDriveClientFolderUrl || client?.gdriveFolderUrl || caseObj?.gdriveFolderUrl || "").trim();
+
+      const isMockFolderId = (id: string) => {
+        if (!id) return true;
+        const lowercaseId = id.toString().trim().toLowerCase();
+        return (
+          lowercaseId.includes('mock') || 
+          lowercaseId.includes('fake') || 
+          lowercaseId.includes('teste') || 
+          lowercaseId.includes('undefined') || 
+          lowercaseId.includes('null') || 
+          lowercaseId.includes('xxxx')
+        );
+      };
+
+      if (!googleDriveClientFolderId || !googleDriveClientFolderUrl || isMockFolderId(googleDriveClientFolderId)) {
+        const errStr = "Não há pasta real do Google Drive vinculada ao cliente. Acesse a Etapa 1 — Cadastro do Cliente e execute primeiro a Automação Google Drive — Pasta do Cliente.";
+        setError(errStr);
+        setRelatorioStatus('falha');
+        setRelatorioLogFalha(errStr);
+        addLocalLog('error', 'DRIVE_FOLDER_MISSING', errStr);
+        setGeneratingDoc(false);
+        return;
+      }
+
+      // Default official template ID for EDRP Report
+      let officialTemplateId = "1ODrPbz7qtyeiTYnjzSdv9YQ3NqdafYoub6-KpkmTQTo"; // fallback template ID
+      let destinationFolderId = googleDriveClientFolderId;
+      let destinationFolderUrl = googleDriveClientFolderUrl;
+
+      const templateKey = "relatorio_estruturacao";
+
+      try {
+        const docRef = doc(db, 'settings', 'connectors');
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const raw = docSnap.data();
+          const googleDocs = raw.googleDocs || {};
+          if (googleDocs.templates?.[templateKey]) {
+            officialTemplateId = googleDocs.templates[templateKey];
+          }
+          if (googleDocs.destinationFolderIds?.[templateKey]) {
+            destinationFolderId = googleDocs.destinationFolderIds[templateKey];
+          }
+          if (googleDocs.destinationFolderUrls?.[templateKey]) {
+            destinationFolderUrl = googleDocs.destinationFolderUrls[templateKey];
+          }
+        }
+      } catch (e) {
+        console.warn("Não foi possível obter as configurações dinâmicas dos conectores, usando fallback.", e);
+      }
+
+      // Build placeholders
+      const placeholders = {
+        ...buildGlobalPlaceholders(),
+        ...buildClientCommonPlaceholders(client),
+        ...buildCaseCommonPlaceholders(caseObj),
+        "{{EDRP_COMPETENCIA}}": edrp.structuring.competence || '',
+        "{{EDRP_COMARCA}}": edrp.structuring.comarca || '',
+        "{{EDRP_PARTES}}": edrp.structuring.parties || '',
+        "{{EDRP_FATOS_RELEVANTES}}": edrp.structuring.relevantFacts || '',
+        "{{EDRP_FUNDAMENTOS}}": edrp.structuring.legalGrounds || '',
+        "{{EDRP_PEDIDOS}}": edrp.structuring.claims || '',
+        "{{EDRP_RESUMO_PROVAS}}": edrp.structuring.evidenceSummary || '',
+        "{{EDRP_ANALISE_RISCOS}}": edrp.structuring.risks || '',
+        "{{EDRP_ESTRATEGIA}}": edrp.structuring.strategy || '',
+        "{{EDRP_OBSERVACOES}}": edrp.structuring.notes || '',
+        // Structured author qualification fields for Google Docs
+        "{{OUTORGANTE_NOME}}": edrp.structuring.authorQualificationPayload?.OUTORGANTE_NOME || '',
+        "{{OUTORGANTE_NACIONALIDADE}}": edrp.structuring.authorQualificationPayload?.OUTORGANTE_NACIONALIDADE || '',
+        "{{OUTORGANTE_ESTADO_CIVIL}}": edrp.structuring.authorQualificationPayload?.OUTORGANTE_ESTADO_CIVIL || '',
+        "{{OUTORGANTE_PROFISSAO}}": edrp.structuring.authorQualificationPayload?.OUTORGANTE_PROFISSAO || '',
+        "{{OUTORGANTE_RG}}": edrp.structuring.authorQualificationPayload?.OUTORGANTE_RG || '',
+        "{{OUTORGANTE_CPF}}": edrp.structuring.authorQualificationPayload?.OUTORGANTE_CPF || '',
+        "{{OUTORGANTE_ENDERECO}}": edrp.structuring.authorQualificationPayload?.OUTORGANTE_ENDERECO || '',
+        "{{OUTORGANTE_NUMERO}}": edrp.structuring.authorQualificationPayload?.OUTORGANTE_NUMERO || '',
+        "{{OUTORGANTE_COMPLEMENTO}}": edrp.structuring.authorQualificationPayload?.OUTORGANTE_COMPLEMENTO || '',
+        "{{OUTORGANTE_BAIRRO}}": edrp.structuring.authorQualificationPayload?.OUTORGANTE_BAIRRO || '',
+        "{{OUTORGANTE_CIDADE}}": edrp.structuring.authorQualificationPayload?.OUTORGANTE_CIDADE || '',
+        "{{OUTORGANTE_ESTADO}}": edrp.structuring.authorQualificationPayload?.OUTORGANTE_ESTADO || '',
+        "{{OUTORGANTE_CEP}}": edrp.structuring.authorQualificationPayload?.OUTORGANTE_CEP || '',
+        "{{OUTORGANTE_TELEFONE}}": edrp.structuring.authorQualificationPayload?.OUTORGANTE_TELEFONE || '',
+        "{{OUTORGANTE_WHATSAPP}}": edrp.structuring.authorQualificationPayload?.OUTORGANTE_WHATSAPP || '',
+        "{{OUTORGANTE_EMAIL}}": edrp.structuring.authorQualificationPayload?.OUTORGANTE_EMAIL || '',
+        "{{EDRP_ORIGEM_DADOS}}": edrp.structuring.authorQualificationOrigin || "Etapa 01 - Cadastro PF",
+        "{{EDRP_EDICAO_MANUAL}}": edrp.structuring.authorQualificationManualEdited ? 'Sim' : 'Não',
+      };
+
+      // Retrieve Google Access Token from localStorage
+      const currentGoogleAccessToken = localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken') || '';
+      const localOverride = localStorage.getItem('portal_boss_gdocs_override') || '';
+
+      if (!currentGoogleAccessToken && !localOverride) {
+        const authErr = "Faça login novamente com Google para autorizar Google Docs/Drive ou configure a Service Account na Central de Integrações.";
+        setError(authErr);
+        setRelatorioStatus('falha');
+        setRelatorioLogFalha(authErr);
+        addLocalLog('error', 'GOOGLE_AUTH_FAILED', authErr);
+        setGeneratingDoc(false);
+        return;
+      }
+
+      const targetEndpoint = "/api/google-docs/generate-document";
+      const nextVersion = (relatorioVersion || 1) + (relatorioGoogleDocsUrl ? 1 : 0);
+
+      const internalPayload = {
+        mode: "stateless",
+        googleAccessToken: currentGoogleAccessToken,
+        documentType: templateKey,
+        caseId: targetCaseId,
+        clientId: targetClientId,
+        clientType: clientType,
+        templateId: officialTemplateId,
+        templateKey: templateKey,
+        destinationFolderId: googleDriveClientFolderId,
+        destinationFolderUrl: googleDriveClientFolderUrl,
+        documentName: `Relatório de Estruturação - ${isPj ? razaoSocial : nomeCompleto}`,
+        placeholders,
+        metadata: {
+          source: `Portal BOSS - Relatório de Estruturação ${clientType}`,
+          folderSource: "Automação Google Drive — Pasta do Cliente",
+          caseId: targetCaseId,
+          clientId: targetClientId,
+          singleClickStarted: clickLog
+        },
+        credentialOverride: localOverride,
+        generationIntent: intent,
+        existingDocument: intent === 'initial' && relatorioStatus === 'criado' ? {
+          googleDocsId: caseObj?.relatorioEstruturacaoGoogleDocsId || '',
+          googleDocsUrl: relatorioGoogleDocsUrl || caseObj?.relatorioEstruturacaoGoogleDocsUrl || '',
+          version: relatorioVersion || 1
+        } : null
+      };
+
+      const response = await fetch(targetEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(internalPayload)
+      });
+
+      const responseText = await response.text();
+      let responseData: any;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = { error: responseText, success: false };
+      }
+
+      let newLogs = responseData.technicalLog || [
+        {
+          timestamp: new Date().toISOString(),
+          level: response.ok && responseData.success ? "success" : "error",
+          code: response.ok && responseData.success ? "FLOW_COMPLETED" : "GENERATION_FAILED",
+          message: responseData.errorMessage || responseData.error || responseText || "Ocorreu uma falha no fluxo."
+        }
+      ];
+
+      newLogs = [clickLog, ...newLogs];
+      setRelatorioTechnicalLog(newLogs);
+
+      const caseDocRef = doc(db, 'cases', targetCaseId);
+
+      if (!response.ok || !responseData.success) {
+        const errorDetail = responseData.errorMessage || responseData.error || "Falha na geração integrada.";
+        setRelatorioStatus('falha');
+        setRelatorioLogFalha(errorDetail);
+        setError(`Falha ao gerar o Relatório de Estruturação no motor interno: ${errorDetail}`);
+
+        await updateDoc(caseDocRef, {
+          relatorioEstruturacaoStatus: "falha",
+          relatorioEstruturacaoLogFalha: errorDetail,
+          relatorioEstruturacaoTechnicalLog: newLogs,
+          relatorioEstruturacaoLastOperationAt: new Date().toISOString(),
+          relatorioEstruturacaoLastOutcome: "error",
+          relatorioEstruturacaoLastErrorCode: responseData.errorCode || "GENERATION_FAILED",
+          relatorioEstruturacaoLastErrorMessage: errorDetail
+        });
+
+        setGeneratingDoc(false);
+        return;
+      }
+
+      const googleDocsId = responseData.googleDocsId;
+      const googleDocsUrl = responseData.googleDocsUrl;
+      const outcome = responseData.outcome;
+      const docVer = responseData.documentVersion || 1;
+
+      if (!googleDocsUrl || !googleDocsUrl.startsWith("https://docs.google.com/document/d/")) {
+        throw new Error("A URL do Google Docs retornada pelo servidor não é válida ou não pertence a um documento real.");
+      }
+
+      setRelatorioStatus('criado');
+      setRelatorioGoogleDocsUrl(googleDocsUrl);
+      setRelatorioIsSimulated(false);
+      setRelatorioLogFalha('');
+      setRelatorioVersion(docVer);
+
+      if (outcome === "already_exists_in_destination") {
+        setSuccess('Relatório de Estruturação já foi criado e confirmado na pasta do Google Drive. Para conferir ou utilizar a versão existente, abra a pasta do cliente.');
+      } else {
+        setSuccess(`Nova versão do Relatório de Estruturação criada e salva na pasta real do Google Drive (Versão v${docVer}).`);
+      }
+
+      // Update case with success states
+      await updateDoc(caseDocRef, {
+        relatorioEstruturacaoStatus: "criado",
+        relatorioEstruturacaoGoogleDocsId: googleDocsId,
+        relatorioEstruturacaoGoogleDocsUrl: googleDocsUrl,
+        relatorioEstruturacaoIsSimulated: false,
+        relatorioEstruturacaoGeneratedAt: new Date().toISOString(),
+        relatorioEstruturacaoDestinationFolderId: googleDriveClientFolderId,
+        relatorioEstruturacaoDestinationFolderUrl: googleDriveClientFolderUrl,
+        relatorioEstruturacaoLogFalha: "",
+        relatorioEstruturacaoTechnicalLog: newLogs,
+        relatorioEstruturacaoVersion: docVer,
+        relatorioEstruturacaoLastOperationAt: new Date().toISOString(),
+        relatorioEstruturacaoLastOutcome: outcome || "success",
+        relatorioEstruturacaoLastErrorCode: null,
+        relatorioEstruturacaoLastErrorMessage: null
+      });
+
+    } catch (err: any) {
+      console.error(err);
+      setError(`Erro crítico: ${err.message || err}`);
+      setRelatorioStatus('falha');
+      setRelatorioLogFalha(err.message || String(err));
+    } finally {
+      setGeneratingDoc(false);
+    }
+  };
+
   // Master Save Handler
   const handleSave = async (showNotification = true, transitionTo: 'home' | 'prePeticionamentoIa' | 'delegacao' | '' = '') => {
     if (!caseId) return;
@@ -979,7 +2064,10 @@ export default function EDRPFluxo() {
       const payload: any = {
         edrp: updatedEdrp,
         statusInterno: recommendedStatus,
-        updatedAt: now
+        updatedAt: now,
+        modalidadeCitacao: updatedEdrp.subEtapa01?.modalidadeCitacao || '',
+        formaPublicacoes: updatedEdrp.subEtapa01?.formaPublicacoes || '',
+        advogadoPublicacao: updatedEdrp.subEtapa01?.advogadoPublicacao || ''
       };
 
       if (transitionTo === 'prePeticionamentoIa') {
@@ -994,7 +2082,10 @@ export default function EDRPFluxo() {
       setCaseObj((prev: any) => ({
         ...prev,
         statusInterno: recommendedStatus,
-        productionStage: transitionTo === 'prePeticionamentoIa' ? 'prePeticionamentoIa' : (transitionTo === 'delegacao' ? 'delegacao' : prev.productionStage)
+        productionStage: transitionTo === 'prePeticionamentoIa' ? 'prePeticionamentoIa' : (transitionTo === 'delegacao' ? 'delegacao' : prev.productionStage),
+        modalidadeCitacao: updatedEdrp.subEtapa01?.modalidadeCitacao || '',
+        formaPublicacoes: updatedEdrp.subEtapa01?.formaPublicacoes || '',
+        advogadoPublicacao: updatedEdrp.subEtapa01?.advogadoPublicacao || ''
       }));
 
       if (showNotification) {
@@ -1041,6 +2132,9 @@ export default function EDRPFluxo() {
   const validationAlerts = getValidationWarnings();
 
   const wizardState = caseObj?.solicitacoesProvasWizardState || {};
+
+  const isSubStep1 = location.pathname.endsWith('/estruturacao.juridica.sub-etapa-1');
+  const isSubStep2 = location.pathname.endsWith('/estruturacao.juridica.sub-etapa-2');
 
   return (
     <FluxoStepLayout stepName="EDRP" caseId={caseId} statusText={caseObj?.statusInterno || 'Em estruturação'}>
@@ -1134,16 +2228,17 @@ export default function EDRPFluxo() {
         </div>
 
         {/* 2. ESTRUTURAÇÃO - Regra 3 */}
-        <div className="border border-gray-200 rounded-[1.5rem] p-6 space-y-6 bg-gray-50/20">
-          <div className="flex items-start gap-3 border-b border-gray-150 pb-4">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-              <Layers size={16} />
+        {isSubStep1 && (
+          <div className="border border-gray-200 rounded-[1.5rem] p-6 space-y-6 bg-gray-50/20">
+            <div className="flex items-start gap-3 border-b border-gray-150 pb-4">
+              <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                <Layers size={16} />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-gray-950 tracking-tight uppercase">Subetapa 01 — Estruturação Jurídica e Fática do Caso</h3>
+                <p className="text-[10.5px] text-gray-400 mt-0.5">Preencha cada um dos cards listados abaixo de forma sequencial ou paralela.</p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-sm font-black text-gray-950 tracking-tight uppercase">Etapa 07: Estruturação Jurídica e Fática do Caso (11 Cards Virtuais)</h3>
-              <p className="text-[10.5px] text-gray-400 mt-0.5">Preencha cada um dos cards listados abaixo de forma sequencial ou paralela.</p>
-            </div>
-          </div>
 
           <div className="space-y-6">
             {/* Card 1 - Competência */}
@@ -1199,14 +2294,26 @@ export default function EDRPFluxo() {
                 </span>
               </div>
 
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1">
-                <div className="flex gap-2 items-center text-amber-900 text-[10px] font-black uppercase tracking-wide">
-                  <AlertTriangle size={13} className="text-amber-600 shrink-0" />
-                  <span>Dados extraídos automaticamente</span>
+              <div className={`p-3 border rounded-xl space-y-1 transition-all ${qualStatus.colorClass}`}>
+                <div className="flex gap-2 items-center text-[10px] font-black uppercase tracking-wide">
+                  <AlertTriangle size={13} className={`${qualStatus.iconColor} shrink-0`} />
+                  <span>{qualStatus.label}</span>
                 </div>
-                <p className="text-[10px] text-amber-800 leading-normal font-semibold">
-                  Estas informações refletem os dados cadastrados na Etapa 01 do fluxo de produção.
+                <p className="text-[10px] leading-normal font-semibold">
+                  {qualStatus.message}
                 </p>
+                {qualStatus.missing && (
+                  <div className="mt-1.5 pt-1.5 border-t border-amber-200/50 text-[10px] text-amber-900 font-bold">
+                    <span className="uppercase tracking-wider mr-1 text-[9px] text-amber-700 block">Campos pendentes na Etapa 01:</span>
+                    <div className="flex flex-wrap gap-1 mt-1 font-mono">
+                      {qualStatus.missing.map(f => (
+                        <span key={f} className="bg-amber-100/70 border border-amber-200/60 px-1.5 py-0.5 rounded text-[9px]">
+                          {f.replace('OUTORGANTE_', '')}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {client ? (
@@ -1910,13 +3017,23 @@ export default function EDRPFluxo() {
 
             {/* Card 6 - Principais fundamentos */}
             <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-4 shadow-3xs hover:border-gray-300 transition-all">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
-                  Card 6
-                </span>
-                <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
-                  Principais fundamentos
-                </span>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                    Card 6
+                  </span>
+                  <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
+                    Principais fundamentos
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={openLegoSystem}
+                  className="sm:ml-auto flex items-center justify-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-1.5 px-3.5 text-[11px] font-bold shadow-3xs transition cursor-pointer"
+                >
+                  <Sparkles size={12} className="text-indigo-200" />
+                  <span>Adicionar Fundamentos + Frequentes</span>
+                </button>
               </div>
 
               {/* Checkbox inteligente para selecionar fundamentos comuns */}
@@ -1957,6 +3074,34 @@ export default function EDRPFluxo() {
                 </div>
               </div>
 
+              {/* Active Lego foundations indicators */}
+              {edrp.subEtapa01?.card6?.fundamentosLegoSelecionados && edrp.subEtapa01.card6.fundamentosLegoSelecionados.length > 0 && (
+                <div className="space-y-1.5 bg-indigo-50/30 border border-indigo-100 p-3 rounded-xl">
+                  <span className="text-[10px] font-black uppercase text-indigo-750 tracking-wider font-mono block">⚖️ Blocos Lego Ativos no Card 6</span>
+                  <div className="flex flex-wrap gap-2">
+                    {edrp.subEtapa01.card6.fundamentosLegoSelecionados.map((g: any) => {
+                      const isEdited = !edrp.structuring.legalGrounds?.includes(g.text.replace(`=== FUNDAMENTO LEGO: ${g.title} ===\n`, '').replace('\n=============================================', '').trim());
+                      return (
+                        <div key={g.id} className="flex items-center gap-1.5 bg-white border border-indigo-150 rounded-lg py-1 px-2.5 text-[11px] font-semibold text-indigo-950 shadow-3xs transition-all">
+                          <span>{g.title}</span>
+                          {isEdited && (
+                            <span className="text-[9px] bg-amber-50 text-amber-700 px-1 py-0.5 rounded border border-amber-100 font-mono font-medium">📝 Editado</span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setRemovalPending({ id: g.id, title: g.title, type: 'foundation' })}
+                            className="text-red-500 hover:text-red-700 font-bold transition cursor-pointer"
+                            title="Remover fundamento"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <textarea
                 value={edrp.structuring.legalGrounds}
                 onChange={(e) => handleFieldChange('structuring', 'legalGrounds', e.target.value)}
@@ -1985,6 +3130,58 @@ export default function EDRPFluxo() {
                 {edrp.structuring.legalGrounds?.includes('Abuso') && <div className="mt-1">✅ Cessação imediata das cobranças sob tutela.</div>}
                 {(!edrp.structuring.legalGrounds) && <div>Nenhum fundamento pré-selecionado. Digite livremente abaixo.</div>}
               </div>
+
+              {/* Active Lego claims and standard claims indicators */}
+              {(((edrp.subEtapa01?.card7?.pedidosLegoVinculados || []).length > 0) || ((edrp.subEtapa01?.card7?.pedidosPadroesAdicionados || []).length > 0)) && (
+                <div className="space-y-1.5 bg-indigo-50/30 border border-indigo-100 p-3 rounded-xl mt-3">
+                  <span className="text-[10px] font-black uppercase text-indigo-750 tracking-wider font-mono block">🔗 Blocos Lego e Pedidos Ativos no Card 7</span>
+                  <div className="flex flex-wrap gap-2">
+                    {/* Linked claims */}
+                    {(edrp.subEtapa01?.card7?.pedidosLegoVinculados || []).map((c: any) => {
+                      const isEdited = !edrp.structuring.claims?.includes(c.text.replace(`=== PEDIDO LEGO VINCULADO: ${c.title} ===\n`, '').replace('\n=============================================', '').trim());
+                      return (
+                        <div key={c.id} className="flex items-center gap-1.5 bg-white border border-indigo-150 rounded-lg py-1 px-2.5 text-[11px] font-semibold text-indigo-950 shadow-3xs transition-all">
+                          <span className="text-indigo-600">🔗</span>
+                          <span>{c.title} <span className="text-[9px] text-indigo-500 font-normal font-mono">(Vínculo)</span></span>
+                          {isEdited && (
+                            <span className="text-[9px] bg-amber-50 text-amber-700 px-1 py-0.5 rounded border border-amber-100 font-mono font-medium">📝 Editado</span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setRemovalPending({ id: c.groundId, title: c.title, type: 'foundation' })}
+                            className="text-red-500 hover:text-red-700 font-bold transition cursor-pointer"
+                            title="Remover pedido vinculado"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      );
+                    })}
+
+                    {/* Standard claims */}
+                    {(edrp.subEtapa01?.card7?.pedidosPadroesAdicionados || []).map((c: any) => {
+                      const isEdited = !edrp.structuring.claims?.includes(c.text.replace(`=== PEDIDO LEGO PADRÃO: ${c.title} ===\n`, '').replace('\n=============================================', '').trim());
+                      return (
+                        <div key={c.id} className="flex items-center gap-1.5 bg-white border border-gray-200 hover:border-gray-350 rounded-lg py-1 px-2.5 text-[11px] font-semibold text-gray-700 shadow-3xs transition-all">
+                          <span className="text-gray-500">⚙️</span>
+                          <span>{c.title} <span className="text-[9px] text-gray-400 font-normal font-mono">(Padrão)</span></span>
+                          {isEdited && (
+                            <span className="text-[9px] bg-amber-50 text-amber-700 px-1 py-0.5 rounded border border-amber-100 font-mono font-medium">📝 Editado</span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveStandardClaim(c.id, c.title)}
+                            className="text-red-500 hover:text-red-700 font-bold transition cursor-pointer"
+                            title="Remover pedido padrão"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <textarea
                 value={edrp.structuring.claims}
@@ -2279,62 +3476,801 @@ export default function EDRPFluxo() {
                 }}
                 className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
               />
-              <span>Marcar Estruturação Técnica (Etapa 07) como Concluída</span>
+              <span>Marcar Estruturação Técnica (Subetapa 01) como Concluída</span>
             </label>
           </div>
         </div>
+        )}
 
+        {/* 3. CENTRAL EDRP LANDING PAGE */}
+        {!isSubStep1 && !isSubStep2 && (
+          <div className="border border-gray-200 rounded-[1.5rem] p-6 space-y-6 bg-gray-50/20">
+            <div className="flex items-start gap-3 border-b border-gray-150 pb-4">
+              <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                <Layers size={16} />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-gray-950 tracking-tight uppercase">Etapa 08 — Estruturação Jurídica e Fática do Caso (EDRP)</h3>
+                <p className="text-[10.5px] text-gray-400 mt-0.5">
+                  A estruturação jurídica e fática do EDRP do cliente foi dividida em duas subetapas dedicadas para maior precisão técnica e integração no Google Docs.
+                </p>
+              </div>
+            </div>
 
+            {/* Subetapas Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* CARD SUBETAPA 1 */}
+              <div className="bg-white border border-gray-150 hover:border-indigo-300 rounded-[1.25rem] p-6 space-y-4 shadow-3xs transition-all flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md font-bold uppercase tracking-wider font-mono">
+                      Subetapa 01
+                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${edrp.structuring.completed ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                      {edrp.structuring.completed ? '✓ Concluído' : '● Em Aberto'}
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-bold text-gray-900 leading-tight">
+                    Estruturação Jurídica e Fática do Caso
+                  </h4>
+                  <p className="text-[11px] text-gray-500 leading-relaxed font-medium">
+                    Preenchimento dos 11 cards técnicos estruturantes de fatos relevantes, fundamentações, pedidos, custódia de provas e análise de riscos.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp/estruturacao.juridica.sub-etapa-1`)}
+                  className="w-full mt-4 inline-flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-250 py-2.5 rounded-xl font-bold transition-all text-xs cursor-pointer font-sans"
+                >
+                  <span>Acessar Subetapa 01</span>
+                  <ArrowRight size={12} />
+                </button>
+              </div>
 
-        {/* 7. BOTÕES FINAIS - Regra 8 */}
-        <div className="flex flex-col xl:flex-row xl:justify-between gap-4 pt-6 mt-8 border-t border-gray-150">
-          <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
+              {/* CARD SUBETAPA 2 */}
+              <div className="bg-white border border-gray-150 hover:border-indigo-300 rounded-[1.25rem] p-6 space-y-4 shadow-3xs transition-all flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md font-bold uppercase tracking-wider font-mono">
+                      Subetapa 02
+                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${relatorioStatus === 'criado' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                      {relatorioStatus === 'criado' ? '✓ Gerado' : '● Pendente'}
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-bold text-gray-900 leading-tight">
+                    Relatório de Estruturação no Google Docs
+                  </h4>
+                  <p className="text-[11px] text-gray-500 leading-relaxed font-medium">
+                    Mapeamento instantâneo de placeholders e geração do relatório oficial em tempo real dentro da pasta real do cliente no Google Drive.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp/estruturacao.juridica.sub-etapa-2`)}
+                  className="w-full mt-4 inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-sm font-sans"
+                >
+                  <span>Acessar Subetapa 02</span>
+                  <Sparkles size={12} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 4. SUBETAPA 02 - GOOGLE DOCS AUTOMATION */}
+        {isSubStep2 && (
+          <div className="border border-gray-200 rounded-[1.5rem] p-6 space-y-6 bg-gray-50/20">
+            <div className="flex items-center justify-between border-b border-gray-150 pb-4">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                  <FileText size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-gray-950 tracking-tight uppercase">Subetapa 02 — Relatório de Estruturação no Google Docs</h3>
+                  <p className="text-[10.5px] text-gray-400 mt-0.5">Sincronização e Geração automática de documentos corporativos.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp`)}
+                className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-bold font-sans"
+              >
+                <ArrowLeft size={13} />
+                Voltar à Central
+              </button>
+            </div>
+
+            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-6 space-y-6">
+              <div className="space-y-2">
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md font-bold uppercase tracking-wider font-mono">
+                  Google Docs Integrador
+                </span>
+                <h4 className="text-base font-black text-gray-900 leading-tight font-sans">
+                  Automação Google Docs — Relatório de Estruturação do EDRP
+                </h4>
+                <p className="text-xs text-gray-500 leading-relaxed font-medium">
+                  Esta automação transfere os dados consolidados da estruturação jurídica (fatos, teses de defesa, pedidos e contingências) diretamente para o template oficial do Google Docs. O arquivo gerado será depositado na pasta oficial do Google Drive do cliente em tempo real.
+                </p>
+              </div>
+
+              {/* ACTION COMPONENT */}
+              <div className="p-5 bg-slate-50 border border-slate-150 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="space-y-1 text-center md:text-left">
+                  <span className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider font-sans">
+                    Status da Integração do Documento
+                  </span>
+                  <div className="flex flex-wrap justify-center md:justify-start items-center gap-2 mt-1">
+                    {relatorioStatus === 'criado' && relatorioGoogleDocsUrl ? (
+                      <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-xs font-bold px-2.5 py-1 rounded-lg">
+                        <Check size={12} />
+                        Documento Sincronizado e Ativo (v{relatorioVersion})
+                      </span>
+                    ) : relatorioStatus === 'falha' ? (
+                      <span className="inline-flex items-center gap-1 bg-rose-50 text-rose-700 text-xs font-bold px-2.5 py-1 rounded-lg">
+                        <X size={12} />
+                        Falha de Sincronização Integrada
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 text-xs font-bold px-2.5 py-1 rounded-lg">
+                        <Loader2 size={12} className="animate-spin" />
+                        Aguardando Primeira Geração do Relatório
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-3 w-full md:w-auto justify-center">
+                  {relatorioStatus === 'criado' && relatorioGoogleDocsUrl && (
+                    <button
+                      type="button"
+                      onClick={() => window.open(relatorioGoogleDocsUrl, '_blank')}
+                      className="w-full md:w-auto px-5 py-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-250 text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer font-bold shadow-3xs font-sans"
+                    >
+                      <ExternalLink size={14} />
+                      <span>Abrir Relatório</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    disabled={generatingDoc}
+                    onClick={() => handleGenerateRelatorio(relatorioStatus === 'criado' ? 'overwrite' : 'initial')}
+                    className="w-full md:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm hover:shadow transition-all cursor-pointer font-bold font-sans"
+                  >
+                    {generatingDoc ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Sparkles size={14} />
+                    )}
+                    <span>{relatorioStatus === 'criado' && relatorioGoogleDocsUrl ? 'Regerar Nova Versão' : 'Gerar Relatório de Estruturação'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Log Técnico da Automação */}
+              <div className="space-y-3">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block font-sans">
+                  Log Técnico da Automação (Motor de Geração de Google Docs)
+                </span>
+
+                {relatorioStatus === 'criado' && relatorioGoogleDocsUrl ? (
+                  <div className="p-5 bg-emerald-50 border border-emerald-150 rounded-2xl space-y-4 animate-in fade-in duration-200">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-emerald-100 rounded-xl text-emerald-800 shrink-0">
+                        <CheckCircle2 size={18} />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="text-sm font-black text-emerald-950 leading-relaxed font-sans">
+                          ✅ Relatório de Estruturação criado com sucesso na pasta de destino.
+                        </h4>
+                        <p className="text-xs text-emerald-800 font-semibold">
+                          Documento saved no Google Drive e vinculado ao caso com sucesso em {new Date().toLocaleString()}.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : relatorioStatus === 'falha' ? (
+                  <div className="p-5 bg-red-50 border border-red-150 rounded-2xl space-y-4 animate-in fade-in duration-200">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-red-100 rounded-xl text-red-800 shrink-0">
+                        <X size={18} />
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="text-sm font-black text-red-950 leading-relaxed font-sans">
+                          ❌ Não foi possível criar o Relatório de Estruturação na pasta de destino.
+                        </h4>
+                        <p className="text-xs font-extrabold text-red-900 mt-2">
+                          Motivo: {relatorioLogFalha}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-gray-50 text-gray-400 rounded-xl border border-gray-150 font-mono text-xs italic text-center">
+                    Área técnica reservada para saída de logs. Atualmente limpa e pronta para receber o espelhamento do build.
+                  </div>
+                )}
+
+                {/* Timeline de logs técnicos */}
+                {relatorioTechnicalLog && relatorioTechnicalLog.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-gray-150/50">
+                    <span className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider block pb-2 font-sans">
+                      Histórico de Eventos do Motor ({relatorioTechnicalLog.length} eventos)
+                    </span>
+                    
+                    <div className="p-5 bg-slate-900 text-slate-100 rounded-2xl border border-slate-800 font-mono text-xs leading-relaxed max-h-52 overflow-y-auto space-y-4 shadow-inner">
+                      <div className="space-y-3 relative before:absolute before:inset-y-0 before:left-3.5 before:w-0.5 before:bg-slate-800">
+                        {relatorioTechnicalLog.map((log: any, idx: number) => {
+                          let dotColor = "bg-blue-500";
+                          let textColor = "text-blue-300";
+                          let levelLabel = "INFO";
+                          if (log.level === "success") {
+                            dotColor = "bg-emerald-500";
+                            textColor = "text-emerald-300";
+                            levelLabel = "SUCESSO";
+                          } else if (log.level === "warning") {
+                            dotColor = "bg-amber-500";
+                            textColor = "text-amber-300";
+                            levelLabel = "ALERTA";
+                          } else if (log.level === "error") {
+                            dotColor = "bg-rose-500";
+                            textColor = "text-rose-300";
+                            levelLabel = "ERRO";
+                          }
+
+                          const dateFormatted = log.timestamp 
+                            ? new Date(log.timestamp).toLocaleTimeString() 
+                            : new Date().toLocaleTimeString();
+
+                          return (
+                            <div key={idx} className="flex gap-4 items-start relative">
+                              <span className={`w-2.5 h-2.5 rounded-full ${dotColor} mt-1 ring-4 ring-slate-900 z-10 shrink-0`} />
+                              <div className="space-y-0.5 min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-x-2 text-[10px] text-slate-500 font-sans font-bold">
+                                  <span>[{dateFormatted}]</span>
+                                  <span className={textColor}>[{levelLabel}]</span>
+                                  <span className="text-slate-400 font-mono text-[9px] bg-slate-800 px-1 py-0.5 rounded uppercase tracking-wider">{log.code || "EVENT"}</span>
+                                </div>
+                                <p className="text-slate-200 text-xs leading-relaxed font-semibold pr-2 select-text">{log.message}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 5. CONDITIONAL BOTTOM BUTTONS */}
+        {/* SUBETAPA 01 FOOTER */}
+        {isSubStep1 && (
+          <div className="flex flex-col xl:flex-row xl:justify-between gap-4 pt-6 mt-8 border-t border-gray-150">
+            <button
+              type="button"
+              onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp`)}
+              className="inline-flex items-center justify-center gap-2 border border-gray-200 hover:border-gray-300 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white"
+            >
+              <ArrowLeft size={14} />
+              Voltar para Central EDRP
+            </button>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => handleSave(true)}
+                className="inline-flex items-center justify-center gap-2 border border-indigo-200 hover:border-indigo-300 text-indigo-700 bg-indigo-50/50 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white"
+              >
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                Salvar EDRP
+              </button>
+
+              <button
+                type="button"
+                disabled={saving}
+                onClick={async () => {
+                  await handleSave(false);
+                  navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp/estruturacao.juridica.sub-etapa-2`);
+                }}
+                className="inline-flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white px-8 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-md font-sans"
+              >
+                <span>Salvar e avançar para Subetapa 02 — Relatório no Google Docs</span>
+                <ArrowRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* SUBETAPA 02 FOOTER */}
+        {isSubStep2 && (
+          <div className="flex flex-col xl:flex-row xl:justify-between gap-4 pt-6 mt-8 border-t border-gray-150">
+            <button
+              type="button"
+              onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp/estruturacao.juridica.sub-etapa-1`)}
+              className="inline-flex items-center justify-center gap-2 border border-gray-200 hover:border-gray-300 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white"
+            >
+              <ArrowLeft size={14} />
+              Voltar para Subetapa 01
+            </button>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => handleSave(true)}
+                className="inline-flex items-center justify-center gap-2 border border-indigo-200 hover:border-indigo-300 text-indigo-700 bg-indigo-50/50 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white"
+              >
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                Salvar EDRP
+              </button>
+
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => handleSave(false, 'home')}
+                className="inline-flex items-center justify-center gap-2 border border-gray-950 text-gray-900 bg-white hover:bg-gray-50 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer"
+              >
+                Salvar e Sair
+              </button>
+
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => handleSave(false, 'prePeticionamentoIa')}
+                className="inline-flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white px-8 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-md"
+              >
+                <span>Finalizar e Avançar para Pré-Peticionamento com IA</span>
+                <ArrowRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* LANDING PAGE FOOTER */}
+        {!isSubStep1 && !isSubStep2 && (
+          <div className="flex flex-col xl:flex-row xl:justify-between gap-4 pt-6 mt-8 border-t border-gray-150">
             <button
               type="button"
               disabled={saving}
               onClick={() => navigate(flowRoutes.financeiro(caseId!))}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-200 hover:border-gray-300 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white"
+              className="inline-flex items-center justify-center gap-2 border border-gray-200 hover:border-gray-300 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white"
             >
               <ArrowLeft size={14} />
               Voltar ao Financeiro
             </button>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => handleSave(true)}
+                className="inline-flex items-center justify-center gap-2 border border-indigo-200 hover:border-indigo-300 text-indigo-700 bg-indigo-50/50 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white"
+              >
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                Salvar EDRP
+              </button>
+
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => handleSave(false, 'home')}
+                className="inline-flex items-center justify-center gap-2 border border-gray-950 text-gray-900 bg-white hover:bg-gray-50 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer"
+              >
+                Salvar e Sair
+              </button>
+
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => handleSave(false, 'prePeticionamentoIa')}
+                className="inline-flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white px-8 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-md"
+              >
+                <span>Salvar e Avançar para Pré-Peticionamento com IA</span>
+                <ArrowRight size={14} />
+              </button>
+            </div>
           </div>
+        )}
 
-          <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => handleSave(true)}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-indigo-200 hover:border-indigo-300 text-indigo-700 bg-indigo-50/50 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer"
-            >
-              {saving ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <Save size={14} />
-              )}
-              Salvar EDRP
-            </button>
+        {/* ========================================== */}
+        {/* LEGO SYSTEM MODAL OVERLAY */}
+        {/* ========================================== */}
+        {showLegoModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto font-sans">
+            <div className="relative w-full max-w-4xl bg-white rounded-3xl shadow-xl border border-gray-150 flex flex-col max-h-[85vh] animate-fade-in">
+              {/* Header */}
+              <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                      Sistema Lego
+                    </span>
+                    <h2 className="text-lg font-black text-gray-900 tracking-tight">Fundamentos e Pedidos Padronizados</h2>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1 font-medium">
+                    Crie sua petição encaixando tese por tese. Cada fundamento selecionado insere o pedido correspondente automaticamente (Cara + Crachá).
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowLegoModal(false);
+                    setSelectedLegoIds([]);
+                    setSelectedStandardClaimIds([]);
+                  }}
+                  className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-slate-50 transition cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
 
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => handleSave(false, 'home')}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-gray-950 text-gray-900 bg-white hover:bg-gray-50 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer"
-            >
-              Salvar e Sair
-            </button>
+              {/* Body */}
+              <div className="p-6 overflow-y-auto space-y-6 flex-1">
+                {/* Carry-On Banner */}
+                <div className="bg-indigo-50/50 border border-indigo-100 p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                  <div className="space-y-0.5 text-indigo-950">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <Database size={13} className="text-indigo-600" />
+                      <span>Origem do Carry-On: Giffoni Connect</span>
+                    </div>
+                    <p className="text-indigo-700 font-medium">
+                      A área do Direito vinculada a este caso é <strong className="font-extrabold uppercase text-indigo-900 bg-indigo-100 px-1.5 py-0.5 rounded font-mono text-[10px]">{caseObj?.areaDireito || 'Direito Civil'}</strong> (importada do Formulário — Petição Inicial, Subetapa 03).
+                    </p>
+                  </div>
+                  <span className="text-[9px] bg-indigo-200 text-indigo-800 px-2 py-1 rounded-md font-extrabold uppercase font-mono tracking-wider whitespace-nowrap self-start md:self-center">
+                    Leitura Automatizada Ativa
+                  </span>
+                </div>
 
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => handleSave(false, 'prePeticionamentoIa')}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white px-8 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-md"
-            >
-              <span>Salvar e Avançar para Pré-Peticionamento com IA</span>
-              <ArrowRight size={14} />
-            </button>
+                {/* LEGO BLOCKS SECTION (Cara + Crachá) */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono">1. Selecione os Fundamentos Jurídicos da Área ({caseObj?.areaDireito || 'Direito Civil'})</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {(() => {
+                      const area = caseObj?.areaDireito || 'Direito Civil';
+                      const blocks = LEGO_LIBRARY[area] || [];
+                      if (blocks.length === 0) {
+                        return (
+                          <div className="col-span-2 p-8 text-center text-xs text-gray-400 font-semibold border border-dashed border-gray-200 rounded-2xl">
+                            Nenhum bloco de fundamento padrão configurado para a área {area}.
+                          </div>
+                        );
+                      }
+
+                      return blocks.map((block) => {
+                        const isSelected = selectedLegoIds.includes(block.id);
+                        
+                        // Origin badges for the requested blocks
+                        let originBadge = null;
+                        if (block.id === 'gratuidade_justica') {
+                          const isFromPrev = wizardState?.q2_1 === 'sim' || wizardState?.q2_4 === 'sim' || (wizardState?.declaracaoFiles || []).length > 0 || caseObj?.modalidadeGratuidade === 'sim' || caseObj?.justicaGratuita === true;
+                          originBadge = isFromPrev ? (
+                            <span className="inline-flex items-center gap-1 text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded font-mono font-bold">Carry-On Ativo</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-150 px-1.5 py-0.5 rounded font-mono font-bold">Origem: Card 6</span>
+                          );
+                        } else if (block.id === 'modalidade_citacao') {
+                          const isFromPrev = !!caseObj?.modalidadeCitacao;
+                          originBadge = isFromPrev ? (
+                            <span className="inline-flex items-center gap-1 text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded font-mono font-bold">Carry-On Ativo</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-150 px-1.5 py-0.5 rounded font-mono font-bold">Origem: Card 6</span>
+                          );
+                        } else if (block.id === 'forma_publicacoes') {
+                          const isFromPrev = !!caseObj?.formaPublicacoes;
+                          originBadge = isFromPrev ? (
+                            <span className="inline-flex items-center gap-1 text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded font-mono font-bold">Carry-On Ativo</span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-150 px-1.5 py-0.5 rounded font-mono font-bold">Origem: Card 6</span>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={block.id}
+                            onClick={() => {
+                              setSelectedLegoIds(prev =>
+                                prev.includes(block.id) ? prev.filter(id => id !== block.id) : [...prev, block.id]
+                              );
+                            }}
+                            className={`p-4 rounded-2xl border text-left transition cursor-pointer select-none space-y-3 ${
+                              isSelected
+                                ? 'bg-indigo-50/40 border-indigo-500 ring-1 ring-indigo-500'
+                                : 'bg-white border-gray-150 hover:bg-slate-50/50'
+                            }`}
+                          >
+                            <div className="flex items-start gap-2">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                readOnly
+                                className="mt-1 rounded border-gray-350 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap mb-1">
+                                  <span className="block text-xs font-black text-gray-800 uppercase">{block.title}</span>
+                                  {originBadge}
+                                </div>
+                                <span className="block text-[10px] text-gray-400 leading-relaxed font-medium">
+                                  Gera fundamento no Card 6 e pedido correlato no Card 7.
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Variables input conditional to selected item */}
+                            {isSelected && (block.id === 'modalidade_citacao' || block.id === 'forma_publicacoes') && (
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                className="bg-white border border-indigo-100 p-3 rounded-xl space-y-2.5 animate-fade-in"
+                              >
+                                {block.id === 'modalidade_citacao' && (
+                                  <div className="space-y-1">
+                                    <label className="block text-[10px] font-black uppercase text-indigo-750 font-mono">Modalidade de Citação:</label>
+                                    <select
+                                      value={legoModality}
+                                      onChange={(e) => setLegoModality(e.target.value)}
+                                      className="w-full bg-slate-50 border border-indigo-150 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg p-1.5 text-[11px] font-bold text-gray-800 outline-none cursor-pointer"
+                                    >
+                                      <option value="Postal (Correios)">Postal (Correios)</option>
+                                      <option value="Oficial de Justiça">Oficial de Justiça</option>
+                                      <option value="Edital">Edital</option>
+                                      <option value="Meio Eletrônico (WhatsApp / E-mail)">Meio Eletrônico (WhatsApp / E-mail)</option>
+                                    </select>
+                                  </div>
+                                )}
+
+                                {block.id === 'forma_publicacoes' && (
+                                  <div className="space-y-2">
+                                    <div className="space-y-1">
+                                      <label className="block text-[10px] font-black uppercase text-indigo-750 font-mono">Formato das Publicações:</label>
+                                      <select
+                                        value={legoPublicacaoForm}
+                                        onChange={(e) => setLegoPublicacaoForm(e.target.value)}
+                                        className="w-full bg-slate-50 border border-indigo-150 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg p-1.5 text-[11px] font-bold text-gray-800 outline-none cursor-pointer"
+                                      >
+                                        <option value="Nome exclusivo de advogado específico">Nome exclusivo de advogado específico</option>
+                                        <option value="Diário Oficial / Geral">Diário Oficial / Geral</option>
+                                      </select>
+                                    </div>
+                                    {legoPublicacaoForm === 'Nome exclusivo de advogado específico' && (
+                                      <div className="space-y-1">
+                                        <label className="block text-[9px] font-black uppercase text-indigo-700 font-mono">Nome e OAB do Advogado:</label>
+                                        <input
+                                          type="text"
+                                          value={legoLawyerName}
+                                          onChange={(e) => setLegoLawyerName(e.target.value)}
+                                          placeholder="Ex: Dr. Rodrigo Giffoni (OAB/MG...)"
+                                          className="w-full bg-slate-50 border border-indigo-150 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-2 py-1.5 text-[11px] font-bold text-gray-800 outline-none"
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+
+                {/* STANDARD CLAIMS SECTION (Card 7 only) */}
+                <div className="space-y-3 pt-4 border-t border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase text-gray-500 tracking-wider font-mono">2. Pedidos Adicionais Padrão (Somente Card 7)</h3>
+                    <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold font-mono">Sem tese vinculada</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {STANDARD_CLAIMS_LIBRARY.map((claim) => {
+                      const isSelected = selectedStandardClaimIds.includes(claim.id);
+                      return (
+                        <div
+                          key={claim.id}
+                          onClick={() => {
+                            setSelectedStandardClaimIds(prev =>
+                              prev.includes(claim.id) ? prev.filter(id => id !== claim.id) : [...prev, claim.id]
+                            );
+                          }}
+                          className={`p-3.5 rounded-xl border text-left transition cursor-pointer select-none flex items-start gap-2.5 ${
+                            isSelected
+                              ? 'bg-slate-50 border-slate-700 ring-1 ring-slate-700'
+                              : 'bg-white border-gray-150 hover:bg-slate-50/50'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            readOnly
+                            className="mt-0.5 rounded border-gray-300 text-slate-800 focus:ring-slate-700 cursor-pointer"
+                          />
+                          <div className="min-w-0">
+                            <span className="block text-xs font-black text-gray-700 uppercase leading-tight">{claim.title}</span>
+                            <span className="block text-[9.5px] text-gray-400 mt-1 leading-relaxed font-medium">
+                              Adiciona uma cláusula direta ao Card 7 sem exigir fundamentação jurídica.
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-6 border-t border-gray-100 bg-slate-50 rounded-b-3xl flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-500">
+                  Selecionados: <span className="text-indigo-600 font-extrabold">{selectedLegoIds.length} fundamentos</span> e <span className="text-gray-700 font-extrabold">{selectedStandardClaimIds.length} pedidos adicionais</span>
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLegoModal(false);
+                      setSelectedLegoIds([]);
+                      setSelectedStandardClaimIds([]);
+                    }}
+                    className="border border-gray-200 hover:bg-white text-gray-600 rounded-xl py-2 px-4 text-xs font-bold transition cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={selectedLegoIds.length === 0 && selectedStandardClaimIds.length === 0}
+                    onClick={handleCheckAndSubmitLego}
+                    className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl py-2 px-5 text-xs font-bold shadow-md transition cursor-pointer"
+                  >
+                    Inserir no Caso
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* ========================================== */}
+        {/* DUPLICATE WARNING MODAL */}
+        {/* ========================================== */}
+        {duplicateWarning && (
+          <div className="fixed inset-0 z-55 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs font-sans">
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-150 p-6 space-y-4 animate-scale-in">
+              <div className="flex items-center gap-2.5 text-amber-600">
+                <AlertTriangle size={18} />
+                <h3 className="text-sm font-black uppercase tracking-wider font-mono">Bloco Duplicado Detectado</h3>
+              </div>
+              <p className="text-xs text-gray-500 leading-relaxed font-medium">
+                Você já possui o bloco <strong className="text-gray-800 font-bold">"{duplicateWarning.title}"</strong> inserido no caso. Sobrescrever o conteúdo irá zerar qualquer modificação manual que você tenha feito nesta seção específica.
+              </p>
+              <div className="p-3 bg-amber-50/50 border border-amber-100 rounded-xl text-[11px] leading-relaxed text-amber-900 font-semibold">
+                Escolha se deseja substituir totalmente pelo modelo limpo, pular a inserção deste e continuar com o restante, ou cancelar tudo.
+              </div>
+              <div className="flex flex-col gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleResolveDuplicate('overwrite')}
+                  className="w-full bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-2 rounded-xl transition cursor-pointer"
+                >
+                  Sobrescrever (Substituir pelo modelo limpo)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleResolveDuplicate('keep')}
+                  className="w-full bg-white border border-gray-200 hover:bg-slate-50 text-gray-700 text-xs font-bold py-2 rounded-xl transition cursor-pointer"
+                >
+                  Manter meu texto editado e ignorar este bloco
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleResolveDuplicate('cancel')}
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-gray-500 text-xs font-semibold py-1.5 rounded-xl transition cursor-pointer"
+                >
+                  Voltar ao seletor Lego
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================== */}
+        {/* REMOVAL PENDING DIALOG */}
+        {/* ========================================== */}
+        {removalPending && (
+          <div className="fixed inset-0 z-55 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs font-sans">
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-150 p-6 space-y-4 animate-scale-in">
+              <div className="flex items-center gap-2.5 text-red-600">
+                <Trash2 size={18} />
+                <h3 className="text-sm font-black uppercase tracking-wider font-mono">Desvincular Par Cara + Crachá</h3>
+              </div>
+              <p className="text-xs text-gray-500 leading-relaxed font-medium">
+                O fundamento <strong className="text-gray-800 font-bold">"{removalPending.title}"</strong> possui um pedido correspondente atrelado no Card 7, respeitando a regra Giffoni de fidelidade processual.
+              </p>
+              <div className="p-3 bg-red-50/50 border border-red-100 rounded-xl text-[11px] leading-relaxed text-red-900 font-semibold">
+                Selecione se deseja remover ambos de uma só vez ou se prefere desvincular o pedido mas mantê-lo livre de edição de texto no Card 7.
+              </div>
+              <div className="flex flex-col gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => handleConfirmRemoval('both')}
+                  className="w-full bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2 rounded-xl transition cursor-pointer"
+                >
+                  Remover Fundamento (Card 6) + Pedido (Card 7)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConfirmRemoval('ground_only')}
+                  className="w-full bg-white border border-gray-200 hover:bg-slate-50 text-gray-700 text-xs font-bold py-2 rounded-xl transition cursor-pointer"
+                >
+                  Remover do Card 6 e manter pedido solto no Card 7
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConfirmRemoval('cancel')}
+                  className="w-full bg-slate-100 hover:bg-slate-200 text-gray-500 text-xs font-semibold py-1.5 rounded-xl transition cursor-pointer"
+                >
+                  Cancelar exclusão
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================== */}
+        {/* HISTÓRICO DE AUDITORIA LEGO */}
+        {/* ========================================== */}
+        {isSubStep1 && edrp.subEtapa01?.legoAuditLogs && edrp.subEtapa01.legoAuditLogs.length > 0 && (
+          <div className="mt-8 bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-4 shadow-3xs hover:border-gray-300 transition-all font-sans">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
+                Log Técnico
+              </span>
+              <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
+                Histórico de Auditoria do Sistema Lego
+              </span>
+            </div>
+            <div className="max-h-52 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-xl bg-slate-50/50 p-1">
+              {edrp.subEtapa01.legoAuditLogs.map((log: any, idx: number) => {
+                let actionBadge = "bg-blue-100 text-blue-800 border-blue-200";
+                let actionLabel = "Inserção";
+                if (log.action === 'remove_foundation' || log.action === 'remove_standard_claim') {
+                  actionBadge = "bg-rose-100 text-rose-800 border-rose-200";
+                  actionLabel = "Remoção";
+                } else if (log.action === 'duplicate_attempt') {
+                  actionBadge = "bg-amber-100 text-amber-800 border-amber-200";
+                  actionLabel = "Duplicidade";
+                }
+
+                return (
+                  <div key={idx} className="p-3 text-[11px] leading-relaxed text-gray-600 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded border font-bold uppercase ${actionBadge}`}>
+                          {actionLabel}
+                        </span>
+                        <strong className="text-gray-800 font-extrabold">{log.blockTitle}</strong>
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-0.5 font-medium">
+                        Executor: <span className="text-gray-500 font-semibold">{log.responsibleUser}</span> • Área: <span className="text-gray-500 font-semibold">{log.areaDireito}</span>
+                      </p>
+                      {log.carryOnOrigin && (
+                        <p className="text-[9px] text-indigo-600 font-semibold font-mono mt-0.5">
+                          🔗 Carry-On: {log.carryOnOrigin}
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-[9.5px] text-gray-400 font-mono self-start sm:self-center">
+                      {new Date(log.timestamp).toLocaleString()}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
       </div>
     </FluxoStepLayout>

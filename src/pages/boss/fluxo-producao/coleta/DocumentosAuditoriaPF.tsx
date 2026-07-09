@@ -810,7 +810,7 @@ export default function DocumentosAuditoriaPF() {
                 onClick={handleSaveAndAdvanceToDigitalizacao}
                 className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md active:scale-[0.99] cursor-pointer mt-2"
               >
-                {saving ? <Loader2 size={14} className="animate-spin" /> : <><span>Salvar e avançar para Etapa 07 - Digitalização e Upload</span><ArrowRight size={14} /></>}
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <><span>Salvar e avançar para Etapa 06 - Digitalização e Upload</span><ArrowRight size={14} /></>}
               </button>
             </div>
 
