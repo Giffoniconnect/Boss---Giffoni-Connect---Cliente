@@ -442,7 +442,7 @@ export default function EstruturacaoStep({ caseId, onNext, onSetLoading, onAlert
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Scale size={24} className="text-blue-400 animate-pulse" />
-            <h2 className="text-lg font-black uppercase tracking-wider">Etapa 07: EDRP — Estruturação do Caso</h2>
+            <h2 className="text-lg font-black uppercase tracking-wider">Etapa 08: EDRP — Estruturação do Caso</h2>
           </div>
           <p className="text-xs text-slate-400 font-medium">
             Modelagem jurídica processual, análise automática de qualificação das partes litigantes e polimento por IA.

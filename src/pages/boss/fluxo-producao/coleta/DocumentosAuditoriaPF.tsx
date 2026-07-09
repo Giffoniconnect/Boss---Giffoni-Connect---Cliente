@@ -153,6 +153,27 @@ export default function DocumentosAuditoriaPF() {
     }
   };
 
+  const handleSaveAndAdvanceToDigitalizacao = async () => {
+    setError(null);
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, 'cases', caseId), {
+        'solicitacoesProvasWizardState.step6_completed': true,
+        'solicitacoesProvasWizardState.finalizedAt': new Date().toISOString(),
+        coletaStatus: 'concluida',
+        statusProvas: 'concluido'
+      });
+      setSuccess('Parabéns! Progresso salvo e avançando para a próxima etapa!');
+      setTimeout(() => {
+        navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/digitalizacao-upload/responsavel.pela.digitalizacao.e.upload`);
+      }, 1500);
+    } catch (err: any) {
+      setError(`Erro ao salvar e avançar: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <FluxoStepLayout 
       stepName="Coleta de Documentos" 
@@ -781,6 +802,15 @@ export default function DocumentosAuditoriaPF() {
                 className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md active:scale-[0.99] cursor-pointer"
               >
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <><span>Finalizar Auditoria & Avançar Fluxo</span><ArrowRight size={14} /></>}
+              </button>
+
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleSaveAndAdvanceToDigitalizacao}
+                className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md active:scale-[0.99] cursor-pointer mt-2"
+              >
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <><span>Salvar e avançar para Etapa 07 - Digitalização e Upload</span><ArrowRight size={14} /></>}
               </button>
             </div>
 

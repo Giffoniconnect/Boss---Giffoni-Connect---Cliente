@@ -428,7 +428,7 @@ export default function DecisaoRevisao() {
             <div className="space-y-1">
               <span className="font-extrabold uppercase tracking-wide text-indigo-950 block text-[10px]">Parecer Importado de EDRP (Etapa de Estruturação)</span>
               <p className="text-indigo-900 leading-relaxed font-semibold">
-                Conforme as regras de conformidade do BOSS, identificamos que um parecer técnico de auditoria já foi realizado na <strong>Etapa 07 (EDRP)</strong> para este caso. Para evitar duplicação ou divergência de formulários, esses dados foram sincronizados automaticamente. Você pode alterar as datas ou emitir novas ressalvas abaixo se necessário.
+                Conforme as regras de conformidade do BOSS, identificamos que um parecer técnico de auditoria já foi realizado na <strong>Etapa 08 (EDRP)</strong> para este caso. Para evitar duplicação ou divergência de formulários, esses dados foram sincronizados automaticamente. Você pode alterar as datas ou emitir novas ressalvas abaixo se necessário.
               </p>
             </div>
           </div>

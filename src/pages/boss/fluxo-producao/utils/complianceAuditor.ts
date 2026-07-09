@@ -548,7 +548,7 @@ export function runCaseComplianceAudit(
     weight: 3,
     isCriticalLock: !hasOQue,
     impact: 'Torna inviável a petição inicial técnica por ausência completa de causa de pedir.',
-    action: 'Ir para Etapa 2 (Entrevista 5W2H) e preencher "O que aconteceu?".',
+    action: 'Ir para Etapa 3 (Entrevista 5W2H) e preencher "O que aconteceu?".',
     responsible: 'Advogado'
   });
 
@@ -670,7 +670,7 @@ export function runCaseComplianceAudit(
         weight: 3,
         isCriticalLock: !hasRé,
         impact: 'Impede a estruturação substantiva da petição (qualificação réu) e ajuizamento seguro.',
-        action: 'Qualificar a Parte Adversa / Réu na Etapa 3.',
+        action: 'Qualificar a Parte Adversa / Réu na Etapa 4.',
         responsible: 'Advogado'
       });
 
@@ -685,7 +685,7 @@ export function runCaseComplianceAudit(
         weight: 3,
         isCriticalLock: !hasAssunto,
         impact: 'Causa o travamento operacional de eixos da central e classificação no rol de distribuição.',
-        action: 'Classificar a matéria e assunto do processo na Etapa 3.',
+        action: 'Classificar a matéria e assunto do processo na Etapa 4.',
         responsible: 'Advogado'
       });
 
@@ -759,7 +759,7 @@ export function runCaseComplianceAudit(
     weight: 3,
     isCriticalLock: !srvProcuracaoCriada,
     impact: 'Impede o protocolo seguro e representação fática do escritório perante as secretarias e servidores.',
-    action: 'Acessar Etapa 4 (Coletas) e acionar a Geração de Procuração.',
+    action: 'Acessar Etapa 6 (Coletas) e acionar a Geração de Procuração.',
     responsible: 'Secretaria'
   });
 
@@ -959,7 +959,7 @@ export function runCaseComplianceAudit(
     weight: 3,
     isCriticalLock: !hasDrive,
     impact: 'Sem pasta no drive, o sistema não consegue depositar petições, procurações geradas e provas indexadas de forma automatizada.',
-    action: 'Ir para Etapa 7 (Estruturação) e executar a criação de pastas.',
+    action: 'Ir para Etapa 8 (Estruturação) e executar a criação de pastas.',
     responsible: 'Secretaria'
   });
 
@@ -1004,7 +1004,7 @@ export function runCaseComplianceAudit(
     weight: 3,
     isCriticalLock: !hasResponsible,
     impact: 'Sem responsável delegado, o processo judicial adentra em estado neutro operacional, gerando atraso e perdas.',
-    action: 'Delegar um profissional responsável na Etapa 9.',
+    action: 'Delegar um profissional responsável na Etapa 10.',
     responsible: 'Advogado'
   });
 
@@ -1065,7 +1065,7 @@ export function runCaseComplianceAudit(
     weight: 3,
     isCriticalLock: !revLegal,
     impact: 'A peça jurídica final é transmitida sem a auditoria técnica de teses, acarretando riscos fiscais e sucumbências.',
-    action: 'Validar teses do rito processual na Etapa 10.',
+    action: 'Validar teses do rito processual na Etapa 11.',
     responsible: 'Advogado'
   });
 
