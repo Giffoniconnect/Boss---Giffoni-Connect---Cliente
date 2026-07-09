@@ -3400,7 +3400,7 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
           console.warn('Silent mirror save warning:', mirrorErr);
         }
 
-        navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId!}/edrp`);
+        navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId!}/card-iniciar-coleta-obrigatoria`);
       } catch (err: any) {
         console.error(err);
         setError(`Erro ao atualizar etapa de faturamento e produção: ${err.message}`);
@@ -3415,7 +3415,7 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
         productionStage: "edrp",
         updatedAt: nowISO,
       });
-      navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId!}/edrp`);
+      navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId!}/card-iniciar-coleta-obrigatoria`);
     } catch (err: any) {
       console.error(err);
       setError(
