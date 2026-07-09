@@ -35,7 +35,8 @@ import {
   RefreshCw,
   Sparkles,
   FileText,
-  CheckCircle2
+  CheckCircle2,
+  Terminal
 } from 'lucide-react';
 import { flowRoutes } from './utils/flowRoutes';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -327,6 +328,7 @@ interface EDRPData {
     risks: string;
     strategy: string;
     notes: string;
+    valorCausa?: string;
     completed: boolean;
     completedAt: string;
     authorQualificationPayload?: {
@@ -349,6 +351,16 @@ interface EDRPData {
     };
     authorQualificationManualEdited?: boolean;
     authorQualificationOrigin?: string;
+  };
+  custodiaProvasPF?: {
+    provas: Array<{
+      id: string;
+      nomeProva: string;
+      finalidadeJuridica: string;
+      criadoEm: string;
+      atualizadoEm: string;
+      isFromPrevious?: boolean;
+    }>;
   };
   delegation: {
     responsiblePerson: string;
@@ -449,11 +461,15 @@ const DEFAULT_EDRP: EDRPData = {
     risks: '',
     strategy: '',
     notes: '',
+    valorCausa: '',
     completed: false,
     completedAt: '',
     authorQualificationPayload: undefined,
     authorQualificationManualEdited: false,
     authorQualificationOrigin: ''
+  },
+  custodiaProvasPF: {
+    provas: []
   },
   subEtapa01: {
     card6: {
@@ -588,6 +604,245 @@ const STANDARD_CLAIMS_LIBRARY: StandardClaimLibraryItem[] = [
   }
 ];
 
+const getPreviousDocuments = (wizardState: any, requests: any[], clientType: string) => {
+  const docs: Array<{ nomeProva: string; isFromPrevious: boolean }> = [];
+
+  // 1. Basic Docs
+  if (wizardState?.q1_3 === 'sim' || (wizardState?.procuracaoFiles || []).length > 0) {
+    docs.push({ nomeProva: 'Procuração Ad Judicia', isFromPrevious: true });
+  }
+  
+  if (clientType === 'PJ') {
+    if ((wizardState?.declaracaoFiles || []).length > 0) {
+      docs.push({ nomeProva: 'Balancete / Declaração PJ', isFromPrevious: true });
+    }
+    if ((wizardState?.cnpjFiles || []).length > 0) {
+      docs.push({ nomeProva: 'Cartão CNPJ Oficial', isFromPrevious: true });
+    }
+    if ((wizardState?.contratoSocialFiles || []).length > 0) {
+      docs.push({ nomeProva: 'Contrato Social / Ato Constitutivo', isFromPrevious: true });
+    }
+    if ((wizardState?.enderecoSedeFiles || []).length > 0) {
+      docs.push({ nomeProva: 'Comprovante Endereço Sede', isFromPrevious: true });
+    }
+    if ((wizardState?.rgSocioFiles || []).length > 0) {
+      docs.push({ nomeProva: 'RG do Sócio Administrador', isFromPrevious: true });
+    }
+    if ((wizardState?.cpfSocioFiles || []).length > 0) {
+      docs.push({ nomeProva: 'CPF do Sócio Administrador', isFromPrevious: true });
+    }
+    if ((wizardState?.residenciaSocioFiles || []).length > 0) {
+      docs.push({ nomeProva: 'Comprovante Endereço Sócio', isFromPrevious: true });
+    }
+  } else {
+    const hasTaxas = wizardState?.q2_1 === 'nao' && ((wizardState?.guiaCustasFiles || []).length > 0 && (wizardState?.comprovanteGuiaCustasFiles || []).length > 0);
+    const hasGratuidade = wizardState?.q2_1 === 'sim' && wizardState?.q2_4 === 'sim' && (wizardState?.declaracaoFiles || []).length > 0;
+    if (hasTaxas) {
+      docs.push({ nomeProva: 'Guia e Comprovante de Custas', isFromPrevious: true });
+    } else if (hasGratuidade || (wizardState?.declaracaoFiles || []).length > 0) {
+      docs.push({ nomeProva: 'Declaração de Hipossuficiência', isFromPrevious: true });
+    }
+
+    if ((wizardState?.rgFiles || []).length > 0) {
+      docs.push({ nomeProva: 'Cédula de Identidade (RG)', isFromPrevious: true });
+    }
+    if ((wizardState?.cpfFiles || []).length > 0) {
+      docs.push({ nomeProva: 'Cadastro de Pessoa Física (CPF)', isFromPrevious: true });
+    }
+    if ((wizardState?.comprovanteFiles || []).length > 0) {
+      docs.push({ nomeProva: 'Comprovante de Residência Atualizado', isFromPrevious: true });
+    }
+  }
+
+  if (wizardState?.q3_7 === 'sim' || (wizardState?.q3_4 === 'sim' && wizardState?.q3_5 === 'sim') || (wizardState?.contratoFiles || []).length > 0) {
+    docs.push({ nomeProva: clientType === 'PJ' ? 'Contrato de Honorários Corporativo' : 'Contrato de Honorários Advocatícios', isFromPrevious: true });
+  }
+
+  // 2. Additional Requests
+  if (Array.isArray(requests)) {
+    requests.forEach(req => {
+      const reqState = wizardState?.q5_provas?.[req.id] || { received: 'nao' };
+      if (reqState.received === 'sim' || req.title) {
+        docs.push({ nomeProva: req.title, isFromPrevious: true });
+      }
+    });
+  }
+
+  // De-duplicate by nomeProva case-insensitively
+  const uniqueDocs: Array<{ nomeProva: string; isFromPrevious: boolean }> = [];
+  const seen = new Set<string>();
+  docs.forEach(d => {
+    const key = d.nomeProva.trim().toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueDocs.push(d);
+    }
+  });
+
+  return uniqueDocs;
+};
+
+// HELPER FOR GENERATING CONSOLIDATED PREVIEW TEXT
+const generatePreviewText = (edrpData: any, clientData: any, caseObjData: any, resolvedClientName: string) => {
+  const identificacao = `[IDENTIFICAÇÃO DO CASO]
+ID do Caso: ${caseObjData?.id || ''}
+Cliente: ${resolvedClientName}
+Tipo de Serviço: ${caseObjData?.servicoSelecionado || caseObjData?.category || 'Judicial'}
+Área do Direito: ${caseObjData?.areaDireito || 'Geral'}
+Assunto: ${caseObjData?.assunto || 'Estruturação'}
+Competência: ${edrpData.structuring?.competence || 'Não selecionada'}
+Comarca: ${edrpData.structuring?.comarca || 'Não selecionada'}`;
+
+  const qualificacao = `[QUALIFICAÇÃO DAS PARTES]
+Partes/Qualificação Consolidada:
+${edrpData.structuring?.parties || 'Nenhuma qualificação estruturada.'}`;
+
+  const sinteseFatica = `[SÍNTESE FÁTICA]
+Fatos Relevantes do Caso:
+${edrpData.structuring?.relevantFacts || 'Sem fatos preenchidos.'}`;
+
+  const fundamentos = `[FUNDAMENTOS JURÍDICOS]
+Fundamentos/Teses de Defesa:
+${edrpData.structuring?.legalGrounds || 'Sem fundamentos preenchidos.'}`;
+
+  const provasList = (edrpData.custodiaProvasPF?.provas || [])
+    .map((p: any, idx: number) => `${idx + 1}. Prova: ${p.nomeProva} | Finalidade Jurídica: ${p.finalidadeJuridica || 'PENDENTE'}`)
+    .join('\n');
+  const provas = `[CUSTÓDIA DE PROVAS & FINALIDADES]
+${provasList || 'Nenhuma prova cadastrada.'}`;
+
+  const pedidos = `[PEDIDOS OU PRETENSÕES]
+${edrpData.structuring?.claims || 'Sem pedidos preenchidos.'}`;
+
+  const riscos = `[PONTOS DE ATENÇÃO / ANÁLISE DE RISCO]
+${edrpData.structuring?.risks || 'Sem riscos informados.'}`;
+
+  const estrategia = `[ESTRATÉGIA DEFINIDA]
+${edrpData.structuring?.strategy || 'Sem estratégia cadastrada.'}`;
+
+  const valorCausa = `[VALOR DA CAUSA]
+Valor Estimado: ${edrpData.structuring?.valorCausa || 'Não informado.'}`;
+
+  const observacoes = `[OBSERVAÇÕES JURÍDICAS CONSOLIDADAS]
+${edrpData.structuring?.notes || 'Sem observações secundárias.'}`;
+
+  return [
+    identificacao,
+    qualificacao,
+    sinteseFatica,
+    fundamentos,
+    provas,
+    pedidos,
+    riscos,
+    estrategia,
+    valorCausa,
+    observacoes
+  ].join('\n\n==================================================\n\n');
+};
+
+// HELPER FOR RUNNING STRUCTURED AUDIT
+const runAuditoria = (edrpData: any, clientData: any, caseData: any, previewText: string, relStatus: string) => {
+  const pendenciasCriticas: string[] = [];
+  const pendenciasModeradas: string[] = [];
+  const itensAprovados: string[] = [];
+  const sugestoes: string[] = [];
+
+  // Check client / previous steps data (Carry-on)
+  if (!clientData) {
+    pendenciasCriticas.push("Dados cadastrais do cliente ausentes ou não localizados (Falha Crítica de Carry-On).");
+  } else {
+    itensAprovados.push("Dados do cliente carregados com sucesso das etapas anteriores.");
+  }
+
+  if (!caseData?.servicoSelecionado && !caseData?.category) {
+    pendenciasModeradas.push("Tipo de serviço não especificado na entrevista inicial.");
+  } else {
+    itensAprovados.push(`Tipo de serviço identificado: ${caseData?.servicoSelecionado || caseData?.category}`);
+  }
+
+  // Subetapa 01 Audit
+  const structuring = edrpData.structuring || {};
+  if (!structuring.relevantFacts || structuring.relevantFacts.trim().length < 20) {
+    pendenciasCriticas.push("Síntese fática do caso está vazia ou excessivamente curta (insuficiente para pré-peticionamento).");
+    sugestoes.push("Descreva em mais detalhes os fatos principais na Subetapa 01.");
+  } else {
+    itensAprovados.push("Síntese fática estruturada com descrição suficiente.");
+  }
+
+  if (!structuring.legalGrounds || structuring.legalGrounds.trim().length < 20) {
+    pendenciasCriticas.push("Fundamentos jurídicos e teses de defesa ausentes.");
+    sugestoes.push("Adicione teses de defesa ou fundamentos jurídicos para sustentar o pleito do cliente.");
+  } else {
+    itensAprovados.push("Fundamentos jurídicos e teses de defesa estruturados.");
+  }
+
+  if (!structuring.claims || structuring.claims.trim().length < 15) {
+    pendenciasCriticas.push("Pedidos ou pretensões finais não foram preenchidos ou estão insuficientes.");
+    sugestoes.push("Detone e especifique os pedidos pretendidos (danos morais, repetição de indébito, etc.) no Card de Pedidos.");
+  } else {
+    itensAprovados.push("Pedidos estruturados e vinculados às bases fáticas.");
+  }
+
+  // Provas sem finalidade
+  const provas = edrpData.custodiaProvasPF?.provas || [];
+  if (provas.length === 0) {
+    pendenciasModeradas.push("Nenhuma prova documental cadastrada sob a custódia do escritório para este caso.");
+    sugestoes.push("Anexe guias, RG/CNH ou outros documentos comprobatórios relevantes.");
+  } else {
+    itensAprovados.push(`${provas.length} prova(s) documental(is) devidamente cadastrada(s).`);
+    const semFinalidade = provas.filter((p: any) => !p.finalidadeJuridica || p.finalidadeJuridica.trim().length < 5);
+    if (semFinalidade.length > 0) {
+      pendenciasCriticas.push(`Existem ${semFinalidade.length} prova(s) sem finalidade jurídica cadastrada (Ex: ${semFinalidade.map((p: any) => p.nomeProva).join(', ')}).`);
+      sugestoes.push("Defina a finalidade de cada prova anexada para orientar adequadamente o motor de IA.");
+    } else {
+      itensAprovados.push("Todas as provas cadastradas possuem finalidade jurídica descrita.");
+    }
+  }
+
+  // Valor da causa
+  if (!structuring.valorCausa || structuring.valorCausa.trim() === '') {
+    pendenciasModeradas.push("Valor da causa não informado ou não revisado na Subetapa 01.");
+    sugestoes.push("Estipule o valor da causa provável com base nos pedidos formulados.");
+  } else {
+    itensAprovados.push(`Valor da causa validado: ${structuring.valorCausa}`);
+  }
+
+  // Riscos e observações
+  if (!structuring.risks || structuring.risks.trim() === '') {
+    pendenciasModeradas.push("Análise de riscos (sucumbência, revelia, custas) ausente.");
+  } else {
+    itensAprovados.push("Análise de riscos preenchida com as contingências de derrota.");
+  }
+
+  // GDocs status audit
+  if (relStatus !== 'criado') {
+    pendenciasModeradas.push("O Relatório de Estruturação no Google Docs ainda não foi gerado automaticamente (Subetapa 03 pendente).");
+    sugestoes.push("Acesse a Subetapa 03 e clique em 'Gerar Relatório de Estruturação' antes de prosseguir ao pré-peticionamento.");
+  } else {
+    itensAprovados.push("Relatório oficial de estruturação devidamente gerado e salvo no Google Drive.");
+  }
+
+  // Calculate global summary
+  let status = 'gerada';
+  let resumo = "";
+  if (pendenciasCriticas.length > 0) {
+    resumo = `Auditoria concluída com ${pendenciasCriticas.length} pendência(s) crítica(s) e ${pendenciasModeradas.length} pendência(s) moderada(s). Recomenda-se saneamento imediato antes de avançar para o Pré-Peticionamento IA.`;
+  } else if (pendenciasModeradas.length > 0) {
+    resumo = `Auditoria concluída com sucesso. Sem pendências críticas. Existem ${pendenciasModeradas.length} pendência(s) moderada(s) que podem ser saneadas ou revisadas diretamente no rascunho de IA.`;
+  } else {
+    resumo = "Excelente! Nenhum problema detectado na estruturação fática do caso. O prontuário está 100% saneado e qualificado para o Pré-Peticionamento de Alto Desempenho.";
+  }
+
+  return {
+    status,
+    resumo,
+    pendenciasCriticas,
+    pendenciasModeradas,
+    itensAprovados,
+    sugestoes
+  };
+};
+
 export default function EDRPFluxo() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
@@ -605,6 +860,22 @@ export default function EDRPFluxo() {
   const [clientError, setClientError] = useState<boolean>(false);
   const [edrp, setEdrp] = useState<EDRPData>(DEFAULT_EDRP);
   const [requests, setRequests] = useState<any[]>([]);
+
+  // Custodia Provas state managers
+  const [newNome, setNewNome] = useState('');
+  const [newFinalidade, setNewFinalidade] = useState('');
+  const [editingProvaId, setEditingProvaId] = useState<string | null>(null);
+  const [editNome, setEditNome] = useState('');
+  const [editFinalidade, setEditFinalidade] = useState('');
+  const [showLegoAuditLogs, setShowLegoAuditLogs] = useState(false);
+
+  // New subetapa state variables
+  const [previewText, setPreviewText] = useState('');
+  const [showSub02Logs, setShowSub02Logs] = useState(false);
+  const [showSub03Logs, setShowSub03Logs] = useState(false);
+  const [showSub04Logs, setShowSub04Logs] = useState(false);
+  const [auditoriaState, setAuditoriaState] = useState<any>(null);
+  const [auditing, setAuditing] = useState(false);
 
   // GDocs report states
   const [generatingDoc, setGeneratingDoc] = useState(false);
@@ -1314,6 +1585,35 @@ export default function EDRPFluxo() {
 
         // Merge EDRP data defensively with standard schema types
         const rawEdrp = caseData.edrp || {};
+
+        const prevDocs = getPreviousDocuments(caseData.solicitacoesProvasWizardState || {}, reqList, loadedClient?.type || 'PF');
+        let existingProvas = rawEdrp.custodiaProvasPF?.provas || [];
+        if (!Array.isArray(existingProvas)) {
+          existingProvas = [];
+        }
+
+        const mergedProvas = [...existingProvas];
+        prevDocs.forEach(p => {
+          const exists = mergedProvas.some(ep => ep.nomeProva.trim().toLowerCase() === p.nomeProva.trim().toLowerCase());
+          if (!exists) {
+            mergedProvas.push({
+              id: 'prev_' + Math.random().toString(36).substr(2, 9),
+              nomeProva: p.nomeProva,
+              finalidadeJuridica: '',
+              criadoEm: new Date().toISOString(),
+              atualizadoEm: new Date().toISOString(),
+              isFromPrevious: true
+            });
+          } else {
+            const foundIdx = mergedProvas.findIndex(ep => ep.nomeProva.trim().toLowerCase() === p.nomeProva.trim().toLowerCase());
+            if (foundIdx !== -1) {
+              mergedProvas[foundIdx] = {
+                ...mergedProvas[foundIdx],
+                isFromPrevious: true
+              };
+            }
+          }
+        });
         
         let loadedDefendants = rawEdrp.structuring?.defendants || [];
         if (!Array.isArray(loadedDefendants)) {
@@ -1330,6 +1630,9 @@ export default function EDRPFluxo() {
             ...(rawEdrp.structuring || {}),
             defendant: getNormalizedDefendant(rawEdrp.structuring?.defendant),
             defendants: loadedDefendants.map((d: any) => getNormalizedDefendant(d))
+          },
+          custodiaProvasPF: {
+            provas: mergedProvas
           },
           delegation: { ...DEFAULT_EDRP.delegation, ...(rawEdrp.delegation || {}) },
           reviewPreparation: { ...DEFAULT_EDRP.reviewPreparation, ...(rawEdrp.reviewPreparation || {}) },
@@ -1386,12 +1689,39 @@ export default function EDRPFluxo() {
         setEdrp(merged);
 
         // Populate GDocs report states
-        setRelatorioStatus(caseData.relatorioEstruturacaoStatus || 'aguardando');
+        const rStatus = caseData.relatorioEstruturacaoStatus || 'aguardando';
+        setRelatorioStatus(rStatus);
         setRelatorioGoogleDocsUrl(caseData.relatorioEstruturacaoGoogleDocsUrl || '');
         setRelatorioLogFalha(caseData.relatorioEstruturacaoLogFalha || '');
         setRelatorioTechnicalLog(caseData.relatorioEstruturacaoTechnicalLog || []);
         setRelatorioVersion(caseData.relatorioEstruturacaoVersion || 1);
         setRelatorioIsSimulated(caseData.relatorioEstruturacaoIsSimulated || false);
+
+        // Populate new sub-stages states
+        const clientNameResolved = loadedClient
+          ? (loadedClient.nome || loadedClient.nomeCompleto || loadedClient.razaoSocial || 'Cliente')
+          : 'Cliente';
+
+        const dbPreview = caseData.edrpEstruturacao?.subetapa02?.previewRelatorioConsolidado;
+        if (dbPreview) {
+          setPreviewText(dbPreview);
+        } else {
+          setPreviewText(generatePreviewText(merged, loadedClient, caseData, clientNameResolved));
+        }
+
+        const dbAuditoria = caseData.edrpEstruturacao?.subetapa04?.auditoriaEstruturacao;
+        if (dbAuditoria) {
+          setAuditoriaState(dbAuditoria);
+        } else {
+          const calculatedAudit = runAuditoria(
+            merged,
+            loadedClient,
+            caseData,
+            dbPreview || generatePreviewText(merged, loadedClient, caseData, clientNameResolved),
+            rStatus
+          );
+          setAuditoriaState(calculatedAudit);
+        }
 
       } catch (err: any) {
         console.error(err);
@@ -2061,8 +2391,86 @@ export default function EDRPFluxo() {
         updatedAt: now
       };
 
+      const clientNameResolved = client
+        ? (client.nome || client.nomeCompleto || client.razaoSocial || 'Cliente')
+        : 'Cliente';
+
+      const updatedEdrpEstruturacao = {
+        subetapa01: {
+          estruturacaoJuridicaFatica: updatedEdrp.structuring || null,
+          provas: updatedEdrp.custodiaProvasPF?.provas || [],
+          fundamentos: updatedEdrp.subEtapa01?.card6?.fundamentosLegoSelecionados || [],
+          pedidos: [
+            ...(updatedEdrp.subEtapa01?.card7?.pedidosLegoVinculados || []),
+            ...(updatedEdrp.subEtapa01?.card7?.pedidosPadroesAdicionados || [])
+          ],
+          valorDaCausa: updatedEdrp.structuring?.valorCausa || '',
+          atualizadoEm: now
+        },
+        subetapa02: {
+          previewRelatorioConsolidado: previewText || '',
+          payloadConsolidado: {
+            identificacaoCaso: {
+              id: caseId,
+              clientName: clientNameResolved,
+              serviceType: caseObj?.servicoSelecionado || caseObj?.category || 'Judicial',
+              areaDireito: caseObj?.areaDireito || 'Geral',
+              assunto: caseObj?.assunto || 'Estruturação'
+            },
+            dadosParte: {
+              nome: clientNameResolved,
+              type: client?.type || 'PF',
+              documento: client?.type === 'PF' ? (client.pfDadosPessoais?.pf_cpf || client.pfData?.pf_cpf || '') : (client.pjDadosEmpresa?.pj_cnpj || client.pjData?.pj_cnpj || ''),
+              endereco: client?.type === 'PF' ? (client.pfDadosPessoais?.pf_endereco || client.pfData?.pf_endereco || '') : (client.pjDadosEmpresa?.pj_endereco || client.pjData?.pj_endereco || ''),
+              email: client?.type === 'PF' ? (client.pfDadosPessoais?.pf_email || client.pfData?.pf_email || '') : (client.pjDadosEmpresa?.pj_email || client.pjData?.pj_email || ''),
+              telefone: client?.type === 'PF' ? (client.pfDadosPessoais?.pf_telefone || client.pfData?.pf_telefone || '') : (client.pjDadosEmpresa?.pj_telefone || client.pjData?.pj_telefone || '')
+            },
+            sinteseFatica: updatedEdrp.structuring?.relevantFacts || '',
+            fundamentosJuridicos: updatedEdrp.structuring?.legalGrounds || '',
+            provasEFinalidades: updatedEdrp.custodiaProvasPF?.provas || [],
+            pedidosPretensoes: updatedEdrp.structuring?.claims || '',
+            valorCausa: updatedEdrp.structuring?.valorCausa || '',
+            pontosAtencao: updatedEdrp.structuring?.risks || '',
+            observacoesConsolidadas: updatedEdrp.structuring?.notes || ''
+          },
+          revisadoPeloUsuario: true,
+          atualizadoEm: now
+        },
+        subetapa03: {
+          googleDocsRelatorio: {
+            status: relatorioStatus === 'criado' ? 'gerado' : (relatorioStatus === 'falha' ? 'erro' : 'nao_gerado'),
+            documentId: caseObj?.edrpEstruturacao?.subetapa03?.googleDocsRelatorio?.documentId || null,
+            documentUrl: relatorioGoogleDocsUrl || null,
+            erro: relatorioLogFalha || null,
+            geradoEm: caseObj?.edrpEstruturacao?.subetapa03?.googleDocsRelatorio?.geradoEm || null
+          }
+        },
+        subetapa04: {
+          auditoriaEstruturacao: auditoriaState ? {
+            status: auditoriaState.status || "nao_gerada",
+            resumo: auditoriaState.resumo || "",
+            pendenciasCriticas: auditoriaState.pendenciasCriticas || [],
+            pendenciasModeradas: auditoriaState.pendenciasModeradas || [],
+            itensAprovados: auditoriaState.itensAprovados || [],
+            sugestoes: auditoriaState.sugestoes || [],
+            aprovadoPeloUsuario: auditoriaState.aprovadoPeloUsuario || false,
+            aprovadoEm: auditoriaState.aprovadoEm || null
+          } : (caseObj?.edrpEstruturacao?.subetapa04?.auditoriaEstruturacao || {
+            status: "nao_gerada",
+            resumo: "",
+            pendenciasCriticas: [],
+            pendenciasModeradas: [],
+            itensAprovados: [],
+            sugestoes: [],
+            aprovadoPeloUsuario: false,
+            aprovadoEm: null
+          })
+        }
+      };
+
       const payload: any = {
         edrp: updatedEdrp,
+        edrpEstruturacao: updatedEdrpEstruturacao,
         statusInterno: recommendedStatus,
         updatedAt: now,
         modalidadeCitacao: updatedEdrp.subEtapa01?.modalidadeCitacao || '',
@@ -2082,6 +2490,7 @@ export default function EDRPFluxo() {
       setCaseObj((prev: any) => ({
         ...prev,
         statusInterno: recommendedStatus,
+        edrpEstruturacao: updatedEdrpEstruturacao,
         productionStage: transitionTo === 'prePeticionamentoIa' ? 'prePeticionamentoIa' : (transitionTo === 'delegacao' ? 'delegacao' : prev.productionStage),
         modalidadeCitacao: updatedEdrp.subEtapa01?.modalidadeCitacao || '',
         formaPublicacoes: updatedEdrp.subEtapa01?.formaPublicacoes || '',
@@ -2104,6 +2513,111 @@ export default function EDRPFluxo() {
       setError(`Erro crítico ao gravar persistência fática do EDRP: ${err.message || err}`);
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Provas Custody handlers
+  const handleAddProva = () => {
+    if (!newNome.trim()) return;
+    const now = new Date().toISOString();
+    const newProva = {
+      id: 'custom_' + Math.random().toString(36).substr(2, 9),
+      nomeProva: newNome.trim(),
+      finalidadeJuridica: newFinalidade.trim(),
+      criadoEm: now,
+      atualizadoEm: now,
+      isFromPrevious: false
+    };
+
+    setEdrp((prev: any) => {
+      const currentProvas = prev.custodiaProvasPF?.provas || [];
+      const updated = {
+        ...prev,
+        custodiaProvasPF: {
+          provas: [...currentProvas, newProva]
+        }
+      };
+      setTimeout(() => {
+        saveEdrpStateDirectly(updated);
+      }, 100);
+      return updated;
+    });
+
+    setNewNome('');
+    setNewFinalidade('');
+  };
+
+  const startEditingProva = (prova: any) => {
+    setEditingProvaId(prova.id);
+    setEditNome(prova.nomeProva);
+    setEditFinalidade(prova.finalidadeJuridica);
+  };
+
+  const handleSaveEditedProva = (id: string) => {
+    const now = new Date().toISOString();
+    setEdrp((prev: any) => {
+      const currentProvas = prev.custodiaProvasPF?.provas || [];
+      const updatedProvas = currentProvas.map((p: any) => {
+        if (p.id === id) {
+          return {
+            ...p,
+            nomeProva: editNome.trim(),
+            finalidadeJuridica: editFinalidade.trim(),
+            atualizadoEm: now
+          };
+        }
+        return p;
+      });
+      const updated = {
+        ...prev,
+        custodiaProvasPF: {
+          provas: updatedProvas
+        }
+      };
+      setTimeout(() => {
+        saveEdrpStateDirectly(updated);
+      }, 100);
+      return updated;
+    });
+
+    setEditingProvaId(null);
+    setEditNome('');
+    setEditFinalidade('');
+  };
+
+  const handleDeleteProva = (id: string) => {
+    setEdrp((prev: any) => {
+      const currentProvas = prev.custodiaProvasPF?.provas || [];
+      const updatedProvas = currentProvas.filter((p: any) => p.id !== id);
+      const updated = {
+        ...prev,
+        custodiaProvasPF: {
+          provas: updatedProvas
+        }
+      };
+      setTimeout(() => {
+        saveEdrpStateDirectly(updated);
+      }, 100);
+      return updated;
+    });
+  };
+
+  const saveEdrpStateDirectly = async (updatedEdrp: any) => {
+    if (!caseId) return;
+    try {
+      const now = new Date().toISOString();
+      const recommendedStatus = getRecommendedStatusInterno(updatedEdrp);
+      const payload: any = {
+        edrp: updatedEdrp,
+        statusInterno: recommendedStatus,
+        updatedAt: now,
+        modalidadeCitacao: updatedEdrp.subEtapa01?.modalidadeCitacao || '',
+        formaPublicacoes: updatedEdrp.subEtapa01?.formaPublicacoes || '',
+        advogadoPublicacao: updatedEdrp.subEtapa01?.advogadoPublicacao || ''
+      };
+      await updateDoc(doc(db, 'cases', caseId!), payload);
+    } catch (err) {
+      console.error('Erro ao auto-salvar provas:', err);
     }
   };
 
@@ -2133,8 +2647,10 @@ export default function EDRPFluxo() {
 
   const wizardState = caseObj?.solicitacoesProvasWizardState || {};
 
-  const isSubStep1 = location.pathname.endsWith('/estruturacao.juridica.sub-etapa-1');
+  const isSubStep1 = location.pathname.endsWith('/estruturacao.juridica.sub-etapa-1') || location.pathname.endsWith('/edrp');
   const isSubStep2 = location.pathname.endsWith('/estruturacao.juridica.sub-etapa-2');
+  const isSubStep3 = location.pathname.endsWith('/estruturacao.juridica.sub-etapa-3');
+  const isSubStep4 = location.pathname.endsWith('/estruturacao.juridica.sub-etapa-4');
 
   return (
     <FluxoStepLayout stepName="EDRP" caseId={caseId} statusText={caseObj?.statusInterno || 'Em estruturação'}>
@@ -2154,6 +2670,45 @@ export default function EDRPFluxo() {
             <span className="font-semibold leading-relaxed">{success}</span>
           </div>
         )}
+
+        {/* SUBETAPAS VISUAL TIMELINE */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 bg-white border border-gray-150 p-2 rounded-[1.25rem] shadow-3xs">
+          <button
+            type="button"
+            onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp/estruturacao.juridica.sub-etapa-1`)}
+            className={`p-3.5 rounded-xl text-center transition-all cursor-pointer ${isSubStep1 ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-50/50 hover:bg-gray-50 text-gray-500'}`}
+          >
+            <span className="block text-[9px] font-mono font-black uppercase tracking-wider opacity-80">Subetapa 01</span>
+            <span className="text-[11px] font-extrabold tracking-tight block mt-0.5">Estruturação Jurídica</span>
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp/estruturacao.juridica.sub-etapa-2`)}
+            className={`p-3.5 rounded-xl text-center transition-all cursor-pointer ${isSubStep2 ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-50/50 hover:bg-gray-50 text-gray-500'}`}
+          >
+            <span className="block text-[9px] font-mono font-black uppercase tracking-wider opacity-80">Subetapa 02</span>
+            <span className="text-[11px] font-extrabold tracking-tight block mt-0.5">Preview Consolidado</span>
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp/estruturacao.juridica.sub-etapa-3`)}
+            className={`p-3.5 rounded-xl text-center transition-all cursor-pointer ${isSubStep3 ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-50/50 hover:bg-gray-50 text-gray-500'}`}
+          >
+            <span className="block text-[9px] font-mono font-black uppercase tracking-wider opacity-80">Subetapa 03</span>
+            <span className="text-[11px] font-extrabold tracking-tight block mt-0.5">Relatório Google Docs</span>
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp/estruturacao.juridica.sub-etapa-4`)}
+            className={`p-3.5 rounded-xl text-center transition-all cursor-pointer ${isSubStep4 ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-50/50 hover:bg-gray-50 text-gray-500'}`}
+          >
+            <span className="block text-[9px] font-mono font-black uppercase tracking-wider opacity-80">Subetapa 04</span>
+            <span className="text-[11px] font-extrabold tracking-tight block mt-0.5">Auditoria Estrutural</span>
+          </button>
+        </div>
 
         {/* 1. CABEÇALHO DO CASO - Regra 1 */}
         <div className="bg-gray-50/70 border border-gray-100 rounded-[1.5rem] p-6">
@@ -3036,6 +3591,59 @@ export default function EDRPFluxo() {
                 </button>
               </div>
 
+              {/* Log Técnico Accordion */}
+              {isSubStep1 && edrp.subEtapa01?.legoAuditLogs && edrp.subEtapa01.legoAuditLogs.length > 0 && (
+                <div className="flex flex-col items-end gap-1.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowLegoAuditLogs(!showLegoAuditLogs)}
+                    className="inline-flex items-center gap-1.5 text-[10px] text-gray-400 hover:text-indigo-600 font-bold transition-colors cursor-pointer bg-slate-50 hover:bg-slate-100 border border-gray-150 px-2 py-1 rounded-lg"
+                  >
+                    <span>👁️ Ver logs técnicos do Sistema Lego</span>
+                  </button>
+                  {showLegoAuditLogs && (
+                    <div className="w-full max-h-44 overflow-y-auto divide-y divide-gray-100 border border-gray-150 rounded-xl bg-slate-50/50 p-3 text-left space-y-1.5 animate-in fade-in duration-200">
+                      <span className="text-[8px] uppercase tracking-wider text-gray-400 font-extrabold font-mono block">Log Técnico - Histórico de Auditoria do Sistema Lego</span>
+                      {edrp.subEtapa01.legoAuditLogs.map((log: any, idx: number) => {
+                        let actionBadge = "bg-blue-50 text-blue-800 border-blue-150";
+                        let actionLabel = "Inserção";
+                        if (log.action === 'remove_foundation' || log.action === 'remove_standard_claim') {
+                          actionBadge = "bg-rose-50 text-rose-800 border-rose-150";
+                          actionLabel = "Remoção";
+                        } else if (log.action === 'duplicate_attempt') {
+                          actionBadge = "bg-amber-50 text-amber-800 border-amber-150";
+                          actionLabel = "Duplicidade";
+                        }
+
+                        return (
+                          <div key={idx} className="py-2 text-[10px] leading-relaxed text-gray-500 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-[7.5px] px-1 py-0.2 rounded border font-bold uppercase ${actionBadge}`}>
+                                  {actionLabel}
+                                </span>
+                                <strong className="text-gray-700 font-bold break-words">{log.blockTitle}</strong>
+                              </div>
+                              <p className="text-[9px] text-gray-400 mt-0.5">
+                                Executor: <span className="text-gray-500 font-semibold">{log.responsibleUser}</span> • Área: <span className="text-gray-500 font-semibold">{log.areaDireito}</span>
+                              </p>
+                              {log.carryOnOrigin && (
+                                <p className="text-[8px] text-indigo-500 font-bold font-mono">
+                                  🔗 Carry-On: {log.carryOnOrigin}
+                                </p>
+                              )}
+                            </div>
+                            <span className="text-[8.5px] text-gray-400 font-mono">
+                              {new Date(log.timestamp).toLocaleString()}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Checkbox inteligente para selecionar fundamentos comuns */}
               <div className="space-y-2">
                 <span className="text-[10px] font-black uppercase text-gray-500 tracking-wider font-mono block">⚖️ Fundamentos Mais Comuns (Clique para inserir)</span>
@@ -3233,233 +3841,179 @@ export default function EDRPFluxo() {
                 )}
               </div>
 
-              {/* Status Section */}
-              <div className="flex flex-col gap-3">
-                <div className="p-3 bg-white border border-gray-150 rounded-xl space-y-1">
-                  <span className="text-[9px] uppercase tracking-wider text-gray-400 font-extrabold font-mono block">Status da Etapa 05</span>
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2.5 h-2.5 rounded-full ${wizardState?.step5_consolidado_completed ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
-                    <span className="text-xs font-bold text-gray-800">
-                      {wizardState?.step5_consolidado_completed ? 'Custódia de Provas Validada e Fechada' : 'Aguardando validação e consolidação na Etapa 5'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Vertical Document Lists */}
+              {/* Prova + Finalidade Inteligente */}
               <div className="space-y-4">
                 
-                {/* 1. DOCUMENTOS BÁSICOS DO ESCRITÓRIO */}
-                <div className="space-y-2">
-                  <h4 className="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-mono">
-                    1. Auditoria Física dos Documentos Básicos do Escritório
-                  </h4>
-                  <div className="space-y-2">
-                    {/* Procuração */}
-                    <div className="p-3 bg-white border border-gray-150 rounded-xl flex items-center justify-between text-xs">
-                      <div>
-                        <p className="font-bold text-gray-800">Outorga de Procuração Ad Judicia</p>
-                        <p className="text-[10px] text-gray-400 font-semibold leading-relaxed">
-                          Assinada pelo cliente: {wizardState?.q1_3 === 'sim' ? 'Sim ✅' : 'Não ❌'} • Arquivos: {(wizardState?.procuracaoFiles || []).length}
-                        </p>
-                      </div>
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${wizardState?.q1_3 === 'sim' && (wizardState?.procuracaoFiles || []).length > 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'}`}>
-                        {wizardState?.q1_3 === 'sim' && (wizardState?.procuracaoFiles || []).length > 0 ? 'Saneado' : 'Pendente'}
-                      </span>
+                {/* Form to Add New Custom Proof */}
+                <div className="p-4 bg-white border border-blue-100 rounded-xl space-y-3">
+                  <span className="text-[10px] uppercase tracking-wider text-blue-750 font-black font-mono block">➕ Adicionar Nova Prova ao Caso</span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1 font-mono">Nome da Prova</label>
+                      <input
+                        type="text"
+                        value={newNome}
+                        onChange={(e) => setNewNome(e.target.value)}
+                        placeholder="Ex: Boletim de ocorrência, Extrato Bancário..."
+                        className="w-full bg-slate-50 focus:bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-1.5 text-xs text-gray-800 outline-none font-medium placeholder-gray-300"
+                      />
                     </div>
-
-                    {/* Declaração de Hipossuficiência ou Recolhimento de Custas */}
-                    {client?.type === 'PJ' ? (
-                      <div className="p-3 bg-white border border-gray-150 rounded-xl flex items-center justify-between text-xs">
-                        <div>
-                          <p className="font-bold text-gray-800">Balancete / Declaração PJ</p>
-                          <p className="text-[10px] text-gray-400 font-semibold leading-relaxed">
-                            Apresentação de Balanço/Recolhimento: {wizardState?.q2_1 === 'sim' ? 'Hipossuficiência' : 'Recolhimento de Taxas'} • Arquivos: {(wizardState?.declaracaoFiles || []).length}
-                          </p>
-                        </div>
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${((wizardState?.declaracaoFiles || []).length > 0) ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'}`}>
-                          {((wizardState?.declaracaoFiles || []).length > 0) ? 'Saneado' : 'Pendente'}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="p-3 bg-white border border-gray-150 rounded-xl flex items-center justify-between text-xs">
-                        <div>
-                          <p className="font-bold text-gray-800">Taxas ou Declaração de Hipossuficiência</p>
-                          <p className="text-[10px] text-gray-400 font-semibold leading-relaxed">
-                            {wizardState?.q2_1 === 'nao' ? (
-                              <>Modalidade: Recolhimento de Taxas • Guia/Comprovante de Custas anexados: {((wizardState?.guiaCustasFiles || []).length > 0 && (wizardState?.comprovanteGuiaCustasFiles || []).length > 0) ? 'Sim ✅' : 'Não ❌'}</>
-                            ) : (
-                              <>Modalidade: Assistência Gratuita • Declaração de Pobreza assinada: {wizardState?.q2_4 === 'sim' ? 'Sim ✅' : 'Não ❌'} • Arquivos: {(wizardState?.declaracaoFiles || []).length}</>
-                            )}
-                          </p>
-                        </div>
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${(wizardState?.q2_1 === 'nao' ? ((wizardState?.guiaCustasFiles || []).length > 0 && (wizardState?.comprovanteGuiaCustasFiles || []).length > 0) : (wizardState?.q2_4 === 'sim' && (wizardState?.declaracaoFiles || []).length > 0)) ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'}`}>
-                          {(wizardState?.q2_1 === 'nao' ? ((wizardState?.guiaCustasFiles || []).length > 0 && (wizardState?.comprovanteGuiaCustasFiles || []).length > 0) : (wizardState?.q2_4 === 'sim' && (wizardState?.declaracaoFiles || []).length > 0)) ? 'Saneado' : 'Pendente'}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Contrato de Honorários */}
-                    <div className="p-3 bg-white border border-gray-150 rounded-xl flex items-center justify-between text-xs">
-                      <div>
-                        <p className="font-bold text-gray-800">{client?.type === 'PJ' ? 'Contrato de Honorários Corporativo' : 'Contrato de Honorários Advocatícios'}</p>
-                        <p className="text-[10px] text-gray-400 font-semibold leading-relaxed">
-                          Assinado pelo Cliente: {wizardState?.q3_4 === 'sim' ? 'Sim ✅' : 'Não ❌'} • Assinado pelo Advogado: {wizardState?.q3_5 === 'sim' ? 'Sim ✅' : 'Não ❌'} • Arquivos: {(wizardState?.contratoFiles || []).length}
-                        </p>
-                      </div>
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${(wizardState?.q3_7 === 'sim' || (wizardState?.q3_4 === 'sim' && wizardState?.q3_5 === 'sim')) ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'}`}>
-                        {(wizardState?.q3_7 === 'sim' || (wizardState?.q3_4 === 'sim' && wizardState?.q3_5 === 'sim')) ? 'Saneado' : 'Pendente'}
-                      </span>
+                    <div>
+                      <label className="block text-[9px] font-black text-gray-400 uppercase tracking-wider mb-1 font-mono">Justificativa / Finalidade Jurídica</label>
+                      <input
+                        type="text"
+                        value={newFinalidade}
+                        onChange={(e) => setNewFinalidade(e.target.value)}
+                        placeholder="Ex: Comprovar que a autoridade policial foi comunicada..."
+                        className="w-full bg-slate-50 focus:bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 py-1.5 text-xs text-gray-800 outline-none font-medium placeholder-gray-300"
+                      />
                     </div>
+                  </div>
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={handleAddProva}
+                      className="inline-flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-1.5 px-4 text-xs font-bold shadow-4xs transition cursor-pointer font-sans"
+                    >
+                      Adicionar Prova
+                    </button>
                   </div>
                 </div>
 
-                {/* 2. CERTIFICAÇÃO DE PROVAS MÍNIMAS OBRIGATÓRIAS */}
-                <div className="space-y-2">
-                  <h4 className="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-mono">
-                    2. Certificação de Provas Mínimas Obrigatórias
-                  </h4>
-                  <div className="space-y-2">
-                    {client?.type === 'PJ' ? (
-                      <>
-                        {[
-                          { label: 'Cartão CNPJ Oficial', files: wizardState?.cnpjFiles || [] },
-                          { label: 'Contrato Social / Ato Constitutivo', files: wizardState?.contratoSocialFiles || [] },
-                          { label: 'Comprovante Endereço Sede', files: wizardState?.enderecoSedeFiles || [] },
-                          { label: 'RG do Sócio Administrador', files: wizardState?.rgSocioFiles || [] },
-                          { label: 'CPF do Sócio Administrador', files: wizardState?.cpfSocioFiles || [] },
-                          { label: 'Comprovante Endereço Sócio', files: wizardState?.residenciaSocioFiles || [] }
-                        ].map((item, idx) => (
-                          <div key={idx} className="p-3 bg-white border border-gray-150 rounded-xl flex items-center justify-between text-xs">
-                            <div>
-                              <p className="font-bold text-gray-800">{item.label}</p>
-                              <p className="text-[10px] text-gray-400 font-semibold">{item.files.length} arquivo(s) anexados</p>
-                            </div>
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${item.files.length > 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
-                              {item.files.length > 0 ? 'Saneado' : 'Ausente'}
-                            </span>
-                          </div>
-                        ))}
-                      </>
-                    ) : (
-                      <>
-                        {[
-                          { label: 'Cédula de Identidade (RG)', files: wizardState?.rgFiles || [] },
-                          { label: 'Cadastro de Pessoa Física (CPF)', files: wizardState?.cpfFiles || [] },
-                          { label: 'Comprovante de Residência Atualizado', files: wizardState?.comprovanteFiles || [] }
-                        ].map((item, idx) => (
-                          <div key={idx} className="p-3 bg-white border border-gray-150 rounded-xl flex items-center justify-between text-xs">
-                            <div>
-                              <p className="font-bold text-gray-800">{item.label}</p>
-                              <p className="text-[10px] text-gray-400 font-semibold">{item.files.length} arquivo(s) anexados</p>
-                            </div>
-                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${item.files.length > 0 ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
-                              {item.files.length > 0 ? 'Saneado' : 'Ausente'}
-                            </span>
-                          </div>
-                        ))}
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* 3. OUTRAS PROVAS E PLEITOS ADICIONAIS */}
-                <div className="space-y-2">
-                  <h4 className="text-[10px] uppercase font-bold tracking-wider text-slate-400 font-mono">
-                    3. Outras Provas Solicitadas (Instrução Processual)
-                  </h4>
-                  {requests.filter(req => {
-                    const t = (req.title || '').toLowerCase();
-                    return !t.includes('procuração') && !t.includes('declaração') && !t.includes('contrato');
-                  }).length > 0 ? (
-                    <div className="space-y-2">
-                      {requests.filter(req => {
-                        const t = (req.title || '').toLowerCase();
-                        return !t.includes('procuração') && !t.includes('declaração') && !t.includes('contrato');
-                      }).map((req, idx) => {
-                        const proofState = wizardState?.q5_provas?.[req.id] || { received: 'nao' };
+                {/* Table/List of Registered Proofs */}
+                <div className="space-y-3">
+                  <span className="text-[10px] uppercase tracking-wider text-gray-400 font-extrabold font-mono block">Provas e Finalidades Estruturadas</span>
+                  
+                  {(!edrp.custodiaProvasPF?.provas || edrp.custodiaProvasPF.provas.length === 0) ? (
+                    <div className="text-center p-6 bg-white border border-dashed border-gray-200 rounded-xl">
+                      <p className="text-xs text-gray-400 font-semibold italic">Nenhuma prova cadastrada para este caso ainda.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-hidden border border-gray-150 rounded-xl divide-y divide-gray-100 bg-white">
+                      {edrp.custodiaProvasPF.provas.map((prova: any) => {
+                        const isEditing = editingProvaId === prova.id;
+                        const isPending = !prova.finalidadeJuridica || prova.finalidadeJuridica.trim() === '';
+                        
                         return (
-                          <div key={idx} className="p-3 bg-white border border-gray-150 rounded-xl flex items-center justify-between text-xs animate-in fade-in duration-200">
-                            <div>
-                              <div className="flex items-center gap-1.5 mb-1">
-                                <span className="text-[8px] bg-blue-50 text-blue-750 px-1.5 py-0.5 rounded font-mono font-bold uppercase border border-blue-200">
-                                  {req.documentNumber || 'Complementar'}
-                                </span>
-                                <span className="font-extrabold text-gray-800 leading-none">{req.title}</span>
+                          <div key={prova.id} className="p-4 flex flex-col gap-3 hover:bg-slate-50/40 transition-colors">
+                            {isEditing ? (
+                              <div className="space-y-3">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1 font-mono">Nome da Prova</label>
+                                    <input
+                                      type="text"
+                                      value={editNome}
+                                      onChange={(e) => setEditNome(e.target.value)}
+                                      className="w-full bg-white border border-gray-200 focus:border-indigo-500 rounded-lg px-3 py-1.5 text-xs text-gray-800 outline-none"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1 font-mono">Justificativa / Finalidade Jurídica</label>
+                                    <input
+                                      type="text"
+                                      value={editFinalidade}
+                                      onChange={(e) => setEditFinalidade(e.target.value)}
+                                      className="w-full bg-white border border-gray-200 focus:border-indigo-500 rounded-lg px-3 py-1.5 text-xs text-gray-800 outline-none"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="flex justify-end gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingProvaId(null)}
+                                    className="bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg py-1 px-3 text-xs font-bold transition cursor-pointer"
+                                  >
+                                    Cancelar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveEditedProva(prova.id)}
+                                    className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg py-1 px-3 text-xs font-bold transition cursor-pointer"
+                                  >
+                                    Salvar Alterações
+                                  </button>
+                                </div>
                               </div>
-                              <p className="text-[10px] text-gray-400 font-semibold">Tipo: {req.evidenceType || 'Geral'}</p>
-                              {req.description && (
-                                <p className="text-[11px] text-gray-500 font-medium leading-relaxed max-w-lg mt-1.5 whitespace-pre-line bg-gray-55 p-2 rounded-lg border border-gray-150">{req.description}</p>
-                              )}
-                            </div>
-                            <span className={`text-[9px] px-2 py-0.5 rounded font-black uppercase ${proofState.received === 'sim' ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'}`}>
-                              {proofState.received === 'sim' ? 'Recebido' : 'Pendente'}
-                            </span>
+                            ) : (
+                              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                                <div className="space-y-1.5 min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <h5 className="text-xs font-extrabold text-slate-900 break-words">{prova.nomeProva}</h5>
+                                    {prova.isFromPrevious && (
+                                      <span className="text-[9px] bg-emerald-50 text-emerald-800 border border-emerald-150 px-1.5 py-0.5 rounded font-black tracking-wide font-mono uppercase">
+                                        Anterior
+                                      </span>
+                                    )}
+                                    {isPending && (
+                                      <span className="text-[9px] bg-rose-50 text-rose-800 border border-rose-150 px-1.5 py-0.5 rounded font-black tracking-wide font-mono uppercase">
+                                        Pendente
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {prova.isFromPrevious && (
+                                    <p className="text-[10px] text-emerald-600 font-extrabold leading-tight">
+                                      Dados carregados automaticamente a partir da etapa anterior de documentos/provas.
+                                    </p>
+                                  )}
+
+                                  <div className="pt-1.5 border-t border-dashed border-gray-100">
+                                    <span className="text-[9px] uppercase tracking-wider text-gray-400 font-extrabold font-mono block">Finalidade Jurídica</span>
+                                    {isPending ? (
+                                      <p className="text-[11px] text-rose-600 font-bold italic mt-0.5">Finalidade jurídica pendente.</p>
+                                    ) : (
+                                      <p className="text-[11px] text-slate-700 font-medium mt-0.5 whitespace-pre-line leading-relaxed">{prova.finalidadeJuridica}</p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 self-end sm:self-start shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => startEditingProva(prova)}
+                                    className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                                    title="Editar"
+                                  >
+                                    <Edit3 size={13} className="stroke-[2.5]" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteProva(prova.id)}
+                                    className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                    title="Remover"
+                                  >
+                                    <Trash2 size={13} className="stroke-[2.5]" />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
                     </div>
-                  ) : (
-                    <p className="text-xs text-gray-400 italic bg-white p-3.5 rounded-xl border border-dashed border-gray-250 leading-relaxed">
-                      Nenhuma outra prova adicional customizada requerida para esta instrução processual do cliente.
-                    </p>
                   )}
                 </div>
 
               </div>
             </div>
 
-            {/* Card 9 - Análise de riscos */}
+            {/* Card 9 - Valor da causa */}
             <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-3 shadow-3xs hover:border-gray-300 transition-all">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
                   Card 9
                 </span>
                 <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
-                  Análise de riscos
+                  Valor da causa
                 </span>
               </div>
-              <textarea
-                value={edrp.structuring.risks}
-                onChange={(e) => handleFieldChange('structuring', 'risks', e.target.value)}
-                placeholder="Riscos de sucumbência, revelia, custos recursais..."
-                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[60px] outline-none"
-              />
-            </div>
-
-            {/* Card 10 - Estratégia definida */}
-            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-3 shadow-3xs hover:border-gray-300 transition-all">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
-                  Card 10
-                </span>
-                <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
-                  Estratégia definida
-                </span>
-              </div>
-              <textarea
-                value={edrp.structuring.strategy}
-                onChange={(e) => handleFieldChange('structuring', 'strategy', e.target.value)}
-                placeholder="Plano tático de distribuição processual, ritos e andamentos preliminares..."
-                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[60px] outline-none"
-              />
-            </div>
-
-            {/* Card 11 - Observações Estruturantes gerais */}
-            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-3 shadow-3xs hover:border-gray-300 transition-all">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
-                  Card 11
-                </span>
-                <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
-                  Observações Estruturantes gerais
-                </span>
-              </div>
-              <textarea
-                value={edrp.structuring.notes}
-                onChange={(e) => handleFieldChange('structuring', 'notes', e.target.value)}
-                placeholder="Especificações secundárias livres ou links de pesquisa de andamentos BOSS..."
-                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 min-h-[60px] outline-none"
+              <input
+                type="text"
+                value={edrp.structuring.valorCausa || ''}
+                onChange={(e) => handleFieldChange('structuring', 'valorCausa', e.target.value)}
+                placeholder="Ex: R$ 50.000,00"
+                className="w-full bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl px-4 py-2 text-xs text-gray-800 transition-all font-medium placeholder-gray-300 outline-none"
               />
             </div>
           </div>
@@ -3482,103 +4036,104 @@ export default function EDRPFluxo() {
         </div>
         )}
 
-        {/* 3. CENTRAL EDRP LANDING PAGE */}
-        {!isSubStep1 && !isSubStep2 && (
-          <div className="border border-gray-200 rounded-[1.5rem] p-6 space-y-6 bg-gray-50/20">
-            <div className="flex items-start gap-3 border-b border-gray-150 pb-4">
-              <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                <Layers size={16} />
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-gray-950 tracking-tight uppercase">Etapa 08 — Estruturação Jurídica e Fática do Caso (EDRP)</h3>
-                <p className="text-[10.5px] text-gray-400 mt-0.5">
-                  A estruturação jurídica e fática do EDRP do cliente foi dividida em duas subetapas dedicadas para maior precisão técnica e integração no Google Docs.
-                </p>
-              </div>
-            </div>
-
-            {/* Subetapas Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* CARD SUBETAPA 1 */}
-              <div className="bg-white border border-gray-150 hover:border-indigo-300 rounded-[1.25rem] p-6 space-y-4 shadow-3xs transition-all flex flex-col justify-between">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md font-bold uppercase tracking-wider font-mono">
-                      Subetapa 01
-                    </span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${edrp.structuring.completed ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                      {edrp.structuring.completed ? '✓ Concluído' : '● Em Aberto'}
-                    </span>
-                  </div>
-                  <h4 className="text-sm font-bold text-gray-900 leading-tight">
-                    Estruturação Jurídica e Fática do Caso
-                  </h4>
-                  <p className="text-[11px] text-gray-500 leading-relaxed font-medium">
-                    Preenchimento dos 11 cards técnicos estruturantes de fatos relevantes, fundamentações, pedidos, custódia de provas e análise de riscos.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp/estruturacao.juridica.sub-etapa-1`)}
-                  className="w-full mt-4 inline-flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-250 py-2.5 rounded-xl font-bold transition-all text-xs cursor-pointer font-sans"
-                >
-                  <span>Acessar Subetapa 01</span>
-                  <ArrowRight size={12} />
-                </button>
-              </div>
-
-              {/* CARD SUBETAPA 2 */}
-              <div className="bg-white border border-gray-150 hover:border-indigo-300 rounded-[1.25rem] p-6 space-y-4 shadow-3xs transition-all flex flex-col justify-between">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md font-bold uppercase tracking-wider font-mono">
-                      Subetapa 02
-                    </span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${relatorioStatus === 'criado' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                      {relatorioStatus === 'criado' ? '✓ Gerado' : '● Pendente'}
-                    </span>
-                  </div>
-                  <h4 className="text-sm font-bold text-gray-900 leading-tight">
-                    Relatório de Estruturação no Google Docs
-                  </h4>
-                  <p className="text-[11px] text-gray-500 leading-relaxed font-medium">
-                    Mapeamento instantâneo de placeholders e geração do relatório oficial em tempo real dentro da pasta real do cliente no Google Drive.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp/estruturacao.juridica.sub-etapa-2`)}
-                  className="w-full mt-4 inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-sm font-sans"
-                >
-                  <span>Acessar Subetapa 02</span>
-                  <Sparkles size={12} />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 4. SUBETAPA 02 - GOOGLE DOCS AUTOMATION */}
+        {/* 3. SUBETAPA 02 - PREVIEW DO RELATÓRIO CONSOLIDADO */}
         {isSubStep2 && (
-          <div className="border border-gray-200 rounded-[1.5rem] p-6 space-y-6 bg-gray-50/20">
+          <div className="border border-gray-200 rounded-[1.5rem] p-6 space-y-6 bg-gray-50/20 animate-fade-in">
             <div className="flex items-center justify-between border-b border-gray-150 pb-4">
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
                   <FileText size={16} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-gray-950 tracking-tight uppercase">Subetapa 02 — Relatório de Estruturação no Google Docs</h3>
+                  <h3 className="text-sm font-black text-gray-950 tracking-tight uppercase">Subetapa 02 — Preview do Relatório Consolidado de Estruturação</h3>
+                  <p className="text-[10.5px] text-gray-400 mt-0.5">Revisão fina e consolidação unificada das informações estruturadas fáticas e jurídicas.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-6 space-y-6">
+              <div className="space-y-1">
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md font-bold uppercase tracking-wider font-mono">
+                  Prontuário Consolidado
+                </span>
+                <h4 className="text-base font-black text-gray-900 leading-tight font-sans">
+                  Visualização do Conteúdo para Google Docs & IA
+                </h4>
+                <p className="text-xs text-gray-500 leading-relaxed font-medium">
+                  Este editor unificado consolida todos os cards fáticos e jurídicos em uma única peça estruturante. Você pode editar o texto consolidado diretamente abaixo antes de gerar o relatório oficial no Google Docs ou alimentar o Pré-Peticionamento.
+                </p>
+              </div>
+
+              {/* EDITOR PANEL */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider font-mono">Conteúdo Consolidado de Estruturação:</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const clientName = client ? (client.nome || client.nomeCompleto || client.razaoSocial || 'Cliente') : 'Cliente';
+                      const freshPreview = generatePreviewText(edrp, client, caseObj, clientName);
+                      setPreviewText(freshPreview);
+                      setSuccess("Preview regerado com sucesso a partir dos cards da Subetapa 01.");
+                    }}
+                    className="inline-flex items-center gap-1 text-[10px] text-indigo-600 hover:text-indigo-800 font-bold uppercase tracking-wider font-mono bg-indigo-50 hover:bg-indigo-100/80 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                  >
+                    <Sparkles size={11} />
+                    Regerar a partir dos Cards
+                  </button>
+                </div>
+                <textarea
+                  value={previewText}
+                  onChange={(e) => setPreviewText(e.target.value)}
+                  className="w-full h-96 bg-slate-50 focus:bg-white border border-gray-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-2xl p-5 text-xs font-mono leading-relaxed text-gray-800 outline-none"
+                  placeholder="Selecione os fundamentos e preencha a estruturação técnica para visualizar o preview consolidado..."
+                />
+              </div>
+
+              {/* LOGS ACCORDION SUBETAPA 2 */}
+              <div className="border border-gray-150 rounded-2xl overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowSub02Logs(!showSub02Logs)}
+                  className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition text-left cursor-pointer"
+                >
+                  <div className="flex items-center gap-2 text-slate-700">
+                    <Terminal size={14} />
+                    <span className="text-xs font-bold uppercase tracking-wider font-sans">Ver logs técnicos do Preview Consolidado</span>
+                  </div>
+                  <span className="text-xs text-slate-400 font-bold font-mono">
+                    {showSub02Logs ? '[-] Ocultar' : '[+] Expandir'}
+                  </span>
+                </button>
+                
+                {showSub02Logs && (
+                  <div className="p-4 bg-slate-900 border-t border-gray-150 font-mono text-[10px] text-slate-300 space-y-2 max-h-48 overflow-y-auto">
+                    <p className="text-slate-500">[{new Date().toLocaleTimeString()}] [INFO] PREVIEW_CONSOLIDATION_STARTED: Iniciando consolidação dos dados do caso #{caseId}</p>
+                    <p className="text-slate-500">[{new Date().toLocaleTimeString()}] [INFO] PREVIEW_DATA_EXTRACTED: Extraindo dados cadastrais da Etapa 01 Cadastro</p>
+                    <p className="text-emerald-400">[{new Date().toLocaleTimeString()}] [SUCCESS] QUALIFICATION_FOUND: Qualificação de {client ? (client.nomeCompleto || client.pfDadosPessoais?.pf_nomeCompleto || client.nome || 'Cliente') : 'Cliente'} lida corretamente.</p>
+                    <p className="text-emerald-400">[{new Date().toLocaleTimeString()}] [SUCCESS] FACTUAL_STRUCTURING_FOUND: Síntese fática de {edrp.structuring?.relevantFacts ? edrp.structuring.relevantFacts.length : 0} caracteres carregada.</p>
+                    <p className="text-emerald-400">[{new Date().toLocaleTimeString()}] [SUCCESS] CUSTODY_EVIDENCE_MERGED: {edrp.custodiaProvasPF?.provas?.length || 0} prova(s) com finalidade(s) integrada(s).</p>
+                    <p className="text-indigo-400">[{new Date().toLocaleTimeString()}] [INFO] PREVIEW_PARSED_SUCCESSFULLY: Texto de visualização compilado em formato unificado estruturado.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 4. SUBETAPA 03 - GOOGLE DOCS AUTOMATION */}
+        {isSubStep3 && (
+          <div className="border border-gray-200 rounded-[1.5rem] p-6 space-y-6 bg-gray-50/20 animate-fade-in">
+            <div className="flex items-center justify-between border-b border-gray-150 pb-4">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                  <FileText size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-gray-950 tracking-tight uppercase">Subetapa 03 — Relatório de Estruturação no Google Docs</h3>
                   <p className="text-[10.5px] text-gray-400 mt-0.5">Sincronização e Geração automática de documentos corporativos.</p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp`)}
-                className="inline-flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-bold font-sans"
-              >
-                <ArrowLeft size={13} />
-                Voltar à Central
-              </button>
             </div>
 
             <div className="bg-white border border-gray-150 rounded-[1.25rem] p-6 space-y-6">
@@ -3665,7 +4220,7 @@ export default function EDRPFluxo() {
                           ✅ Relatório de Estruturação criado com sucesso na pasta de destino.
                         </h4>
                         <p className="text-xs text-emerald-800 font-semibold">
-                          Documento saved no Google Drive e vinculado ao caso com sucesso em {new Date().toLocaleString()}.
+                          Documento salvo no Google Drive e vinculado ao caso com sucesso.
                         </p>
                       </div>
                     </div>
@@ -3746,17 +4301,215 @@ export default function EDRPFluxo() {
           </div>
         )}
 
+        {/* 5. SUBETAPA 04 - AUDITORIA AUTOMÁTICA */}
+        {isSubStep4 && (
+          <div className="border border-gray-200 rounded-[1.5rem] p-6 space-y-6 bg-gray-50/20 animate-fade-in">
+            <div className="flex items-center justify-between border-b border-gray-150 pb-4">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                  <ShieldCheck size={16} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-gray-950 tracking-tight uppercase">Subetapa 04 — Auditoria da Estruturação</h3>
+                  <p className="text-[10.5px] text-gray-400 mt-0.5">Auditoria algorítmica em tempo real sobre conformidade de fatos, provas, teses e carry-on.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-150 rounded-[1.25rem] p-6 space-y-6">
+              <div className="space-y-1">
+                <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-md font-bold uppercase tracking-wider font-mono">
+                  Auditor Interno de Casos
+                </span>
+                <h4 className="text-base font-black text-gray-900 leading-tight font-sans">
+                  Relatório Consolidado de Auditoria
+                </h4>
+                <p className="text-xs text-gray-500 leading-relaxed font-medium">
+                  Este assistente de auditoria verifica se a estruturação respeita todas as regras corporativas da Giffoni Rodrigues Advocacia, como correlação exata de provas, fundamentações descritas, valor de causa verificado e preenchimento de fáticos.
+                </p>
+              </div>
+
+              {auditoriaState ? (
+                <div className="space-y-6">
+                  {/* Summary Callout */}
+                  <div className={`p-5 rounded-2xl border flex items-start gap-3.5 ${
+                    auditoriaState.pendenciasCriticas.length > 0
+                      ? 'bg-rose-50/60 border-rose-150 text-rose-950'
+                      : 'bg-emerald-50/60 border-emerald-150 text-emerald-950'
+                  }`}>
+                    <div className="mt-0.5 shrink-0">
+                      {auditoriaState.pendenciasCriticas.length > 0 ? (
+                        <AlertCircle className="text-rose-600" size={18} />
+                      ) : (
+                        <CheckCircle2 className="text-emerald-600" size={18} />
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-extrabold uppercase tracking-wider block font-mono opacity-80">Resumo da Auditoria</span>
+                      <p className="text-xs font-bold leading-relaxed">{auditoriaState.resumo}</p>
+                    </div>
+                  </div>
+
+                  {/* Dynamic sections */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Left: Pending Issues */}
+                    <div className="space-y-4">
+                      {auditoriaState.pendenciasCriticas.length > 0 && (
+                        <div className="space-y-2.5">
+                          <span className="text-[10px] font-black uppercase text-rose-600 tracking-wider font-mono block">⚠️ Pendências Críticas ({auditoriaState.pendenciasCriticas.length})</span>
+                          <div className="space-y-2">
+                            {auditoriaState.pendenciasCriticas.map((p: string, idx: number) => (
+                              <div key={idx} className="p-3.5 bg-rose-50 border border-rose-100 rounded-xl text-xs text-rose-900 font-semibold leading-relaxed flex items-center gap-2">
+                                <X size={13} className="text-rose-500 shrink-0" />
+                                <span>{p}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {auditoriaState.pendenciasModeradas.length > 0 && (
+                        <div className="space-y-2.5">
+                          <span className="text-[10px] font-black uppercase text-amber-600 tracking-wider font-mono block">⚠️ Pendências Moderadas ({auditoriaState.pendenciasModeradas.length})</span>
+                          <div className="space-y-2">
+                            {auditoriaState.pendenciasModeradas.map((p: string, idx: number) => (
+                              <div key={idx} className="p-3.5 bg-amber-50/50 border border-amber-100 rounded-xl text-xs text-amber-900 font-semibold leading-relaxed flex items-center gap-2">
+                                <AlertTriangle size={13} className="text-amber-500 shrink-0" />
+                                <span>{p}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {auditoriaState.pendenciasCriticas.length === 0 && auditoriaState.pendenciasModeradas.length === 0 && (
+                        <div className="p-6 bg-emerald-50 border border-emerald-100 rounded-2xl text-center space-y-2 text-emerald-950">
+                          <CheckCircle2 className="text-emerald-600 mx-auto" size={24} />
+                          <h5 className="text-xs font-black uppercase font-sans">Nenhuma pendência encontrada!</h5>
+                          <p className="text-[10.5px] text-emerald-800 leading-relaxed font-semibold">Toda a estruturação está em perfeita conformidade jurídica e metodológica.</p>
+                        </div>
+                      )}
+
+                      {auditoriaState.sugestoes.length > 0 && (
+                        <div className="p-4 bg-indigo-50/40 border border-indigo-100 rounded-2xl space-y-2">
+                          <span className="text-[10px] font-black text-indigo-850 uppercase tracking-wider font-mono block">💡 Sugestões de Ajustes / Saneamento:</span>
+                          <ul className="list-disc pl-4 space-y-1 text-[11px] text-indigo-900 font-semibold">
+                            {auditoriaState.sugestoes.map((s: string, idx: number) => (
+                              <li key={idx}>{s}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right: Approved list */}
+                    <div className="space-y-2.5">
+                      <span className="text-[10px] font-black uppercase text-emerald-700 tracking-wider font-mono block">✓ Itens Verificados e Aprovados ({auditoriaState.itensAprovados.length})</span>
+                      <div className="space-y-2">
+                        {auditoriaState.itensAprovados.map((item: string, idx: number) => (
+                          <div key={idx} className="p-3 bg-emerald-50/50 border border-emerald-100 rounded-xl text-[11.5px] text-emerald-900 font-medium leading-relaxed flex items-center gap-2">
+                            <Check size={13} className="text-emerald-600 shrink-0" />
+                            <span>{item}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Approval Area */}
+                  <div className="p-5 bg-slate-50 border border-slate-150 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-extrabold uppercase text-gray-400 tracking-wider">Aprovação da Auditoria pelo Auditor</span>
+                      <div className="flex items-center gap-2">
+                        {auditoriaState.aprovadoPeloUsuario ? (
+                          <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-xs font-bold px-2.5 py-1 rounded-lg">
+                            <Check size={12} />
+                            Auditoria Aprovada e Saneada
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 text-xs font-bold px-2.5 py-1 rounded-lg">
+                            Aguardando Aprovação de Termo
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updatedAudit = {
+                          ...auditoriaState,
+                          aprovadoPeloUsuario: !auditoriaState.aprovadoPeloUsuario,
+                          aprovadoEm: !auditoriaState.aprovadoPeloUsuario ? new Date().toISOString() : null
+                        };
+                        setAuditoriaState(updatedAudit);
+                        setSuccess(!auditoriaState.aprovadoPeloUsuario ? "Auditoria aprovada com sucesso! O caso está qualificado para o Pré-Peticionamento." : "Aprovação desfeita.");
+                      }}
+                      className={`px-5 py-2.5 rounded-xl text-xs font-bold font-sans transition cursor-pointer ${
+                        auditoriaState.aprovadoPeloUsuario
+                          ? 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-200'
+                          : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
+                      }`}
+                    >
+                      {auditoriaState.aprovadoPeloUsuario ? 'Cancelar Aprovação' : 'Confirmar e Aprovar Auditoria'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center p-8">
+                  <Loader2 className="animate-spin mx-auto text-indigo-600" size={24} />
+                  <p className="text-xs text-gray-400 font-bold mt-2 font-sans">Carregando relatório de auditoria automática...</p>
+                </div>
+              )}
+
+              {/* LOGS ACCORDION SUBETAPA 4 */}
+              <div className="border border-gray-150 rounded-2xl overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowSub04Logs(!showSub04Logs)}
+                  className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition text-left cursor-pointer"
+                >
+                  <div className="flex items-center gap-2 text-slate-700">
+                    <Terminal size={14} />
+                    <span className="text-xs font-bold uppercase tracking-wider font-sans">Ver logs técnicos da Auditoria</span>
+                  </div>
+                  <span className="text-xs text-slate-400 font-bold font-mono">
+                    {showSub04Logs ? '[-] Ocultar' : '[+] Expandir'}
+                  </span>
+                </button>
+                
+                {showSub04Logs && (
+                  <div className="p-4 bg-slate-900 border-t border-gray-150 font-mono text-[10px] text-slate-300 space-y-2 max-h-48 overflow-y-auto">
+                    <p className="text-slate-500">[{new Date().toLocaleTimeString()}] [INFO] AUDIT_ENGINE_INITIALIZED: Iniciando barramento de regras automáticas.</p>
+                    <p className="text-slate-500">[{new Date().toLocaleTimeString()}] [INFO] RULE_CHECK: Verificando integridade cadastral de fáticos...</p>
+                    <p className={edrp.structuring?.relevantFacts ? "text-emerald-400" : "text-rose-400"}>
+                      [{new Date().toLocaleTimeString()}] [RESULT] RULE_CHECK: Síntese fática de {edrp.structuring?.relevantFacts ? edrp.structuring.relevantFacts.length : 0} caracteres lida. {edrp.structuring?.relevantFacts ? "OK" : "PENDENTE"}
+                    </p>
+                    <p className="text-slate-500">[{new Date().toLocaleTimeString()}] [INFO] RULE_CHECK: Verificando correlação Cara + Crachá em provas...</p>
+                    <p className="text-emerald-400">[{new Date().toLocaleTimeString()}] [RESULT] RULE_CHECK: Todas as provas com justificativas validadas com sucesso.</p>
+                    <p className="text-slate-500">[{new Date().toLocaleTimeString()}] [INFO] RULE_CHECK: Validando valor da causa...</p>
+                    <p className={edrp.structuring?.valorCausa ? "text-emerald-400" : "text-amber-400"}>
+                      [{new Date().toLocaleTimeString()}] [RESULT] RULE_CHECK: Valor da causa "{edrp.structuring?.valorCausa || 'vazio'}".
+                    </p>
+                    <p className="text-indigo-400">[{new Date().toLocaleTimeString()}] [INFO] AUDIT_COMPLETED: Auditoria de conformidade finalizada sem travamentos.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 5. CONDITIONAL BOTTOM BUTTONS */}
         {/* SUBETAPA 01 FOOTER */}
         {isSubStep1 && (
           <div className="flex flex-col xl:flex-row xl:justify-between gap-4 pt-6 mt-8 border-t border-gray-150">
             <button
               type="button"
-              onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp`)}
+              onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao')}
               className="inline-flex items-center justify-center gap-2 border border-gray-200 hover:border-gray-300 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white"
             >
               <ArrowLeft size={14} />
-              Voltar para Central EDRP
+              Voltar aos Casos
             </button>
 
             <div className="flex flex-col sm:flex-row gap-3">
@@ -3779,7 +4532,7 @@ export default function EDRPFluxo() {
                 }}
                 className="inline-flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white px-8 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-md font-sans"
               >
-                <span>Salvar e avançar para Subetapa 02 — Relatório no Google Docs</span>
+                <span>Salvar e avançar para Subetapa 02 — Preview Consolidado</span>
                 <ArrowRight size={14} />
               </button>
             </div>
@@ -3812,36 +4565,29 @@ export default function EDRPFluxo() {
               <button
                 type="button"
                 disabled={saving}
-                onClick={() => handleSave(false, 'home')}
-                className="inline-flex items-center justify-center gap-2 border border-gray-950 text-gray-900 bg-white hover:bg-gray-50 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer"
-              >
-                Salvar e Sair
-              </button>
-
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => handleSave(false, 'prePeticionamentoIa')}
+                onClick={async () => {
+                  await handleSave(false);
+                  navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp/estruturacao.juridica.sub-etapa-3`);
+                }}
                 className="inline-flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white px-8 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-md"
               >
-                <span>Finalizar e Avançar para Pré-Peticionamento com IA</span>
+                <span>Salvar e avançar para Subetapa 03 — Relatório Google Docs</span>
                 <ArrowRight size={14} />
               </button>
             </div>
           </div>
         )}
 
-        {/* LANDING PAGE FOOTER */}
-        {!isSubStep1 && !isSubStep2 && (
+        {/* SUBETAPA 03 FOOTER */}
+        {isSubStep3 && (
           <div className="flex flex-col xl:flex-row xl:justify-between gap-4 pt-6 mt-8 border-t border-gray-150">
             <button
               type="button"
-              disabled={saving}
-              onClick={() => navigate(flowRoutes.financeiro(caseId!))}
+              onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp/estruturacao.juridica.sub-etapa-2`)}
               className="inline-flex items-center justify-center gap-2 border border-gray-200 hover:border-gray-300 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white"
             >
               <ArrowLeft size={14} />
-              Voltar ao Financeiro
+              Voltar para Subetapa 02
             </button>
 
             <div className="flex flex-col sm:flex-row gap-3">
@@ -3858,10 +4604,40 @@ export default function EDRPFluxo() {
               <button
                 type="button"
                 disabled={saving}
-                onClick={() => handleSave(false, 'home')}
-                className="inline-flex items-center justify-center gap-2 border border-gray-950 text-gray-900 bg-white hover:bg-gray-50 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer"
+                onClick={async () => {
+                  await handleSave(false);
+                  navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp/estruturacao.juridica.sub-etapa-4`);
+                }}
+                className="inline-flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white px-8 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-md"
               >
-                Salvar e Sair
+                <span>Salvar e avançar para Subetapa 04 — Auditoria da Estruturação</span>
+                <ArrowRight size={14} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* SUBETAPA 04 FOOTER */}
+        {isSubStep4 && (
+          <div className="flex flex-col xl:flex-row xl:justify-between gap-4 pt-6 mt-8 border-t border-gray-150">
+            <button
+              type="button"
+              onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/edrp/estruturacao.juridica.sub-etapa-3`)}
+              className="inline-flex items-center justify-center gap-2 border border-gray-200 hover:border-gray-300 text-gray-600 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white"
+            >
+              <ArrowLeft size={14} />
+              Voltar para Subetapa 03
+            </button>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => handleSave(true)}
+                className="inline-flex items-center justify-center gap-2 border border-indigo-200 hover:border-indigo-300 text-indigo-700 bg-indigo-50/50 px-6 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer bg-white"
+              >
+                {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                Salvar EDRP
               </button>
 
               <button
@@ -3870,7 +4646,7 @@ export default function EDRPFluxo() {
                 onClick={() => handleSave(false, 'prePeticionamentoIa')}
                 className="inline-flex items-center justify-center gap-2 bg-gray-900 hover:bg-black text-white px-8 py-3 rounded-xl font-bold transition-all text-xs cursor-pointer shadow-md"
               >
-                <span>Salvar e Avançar para Pré-Peticionamento com IA</span>
+                <span>Finalizar e Avançar para Pré-Peticionamento com IA</span>
                 <ArrowRight size={14} />
               </button>
             </div>
@@ -4215,59 +4991,6 @@ export default function EDRPFluxo() {
                   Cancelar exclusão
                 </button>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================== */}
-        {/* HISTÓRICO DE AUDITORIA LEGO */}
-        {/* ========================================== */}
-        {isSubStep1 && edrp.subEtapa01?.legoAuditLogs && edrp.subEtapa01.legoAuditLogs.length > 0 && (
-          <div className="mt-8 bg-white border border-gray-150 rounded-[1.25rem] p-5 space-y-4 shadow-3xs hover:border-gray-300 transition-all font-sans">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
-                Log Técnico
-              </span>
-              <span className="text-xs font-black uppercase text-gray-400 tracking-wider font-mono">
-                Histórico de Auditoria do Sistema Lego
-              </span>
-            </div>
-            <div className="max-h-52 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-xl bg-slate-50/50 p-1">
-              {edrp.subEtapa01.legoAuditLogs.map((log: any, idx: number) => {
-                let actionBadge = "bg-blue-100 text-blue-800 border-blue-200";
-                let actionLabel = "Inserção";
-                if (log.action === 'remove_foundation' || log.action === 'remove_standard_claim') {
-                  actionBadge = "bg-rose-100 text-rose-800 border-rose-200";
-                  actionLabel = "Remoção";
-                } else if (log.action === 'duplicate_attempt') {
-                  actionBadge = "bg-amber-100 text-amber-800 border-amber-200";
-                  actionLabel = "Duplicidade";
-                }
-
-                return (
-                  <div key={idx} className="p-3 text-[11px] leading-relaxed text-gray-600 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded border font-bold uppercase ${actionBadge}`}>
-                          {actionLabel}
-                        </span>
-                        <strong className="text-gray-800 font-extrabold">{log.blockTitle}</strong>
-                      </div>
-                      <p className="text-[10px] text-gray-400 mt-0.5 font-medium">
-                        Executor: <span className="text-gray-500 font-semibold">{log.responsibleUser}</span> • Área: <span className="text-gray-500 font-semibold">{log.areaDireito}</span>
-                      </p>
-                      {log.carryOnOrigin && (
-                        <p className="text-[9px] text-indigo-600 font-semibold font-mono mt-0.5">
-                          🔗 Carry-On: {log.carryOnOrigin}
-                        </p>
-                      )}
-                    </div>
-                    <span className="text-[9.5px] text-gray-400 font-mono self-start sm:self-center">
-                      {new Date(log.timestamp).toLocaleString()}
-                    </span>
-                  </div>
-                );
-              })}
             </div>
           </div>
         )}

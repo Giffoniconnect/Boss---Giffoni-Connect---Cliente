@@ -339,6 +339,8 @@ const bossRouter = createBrowserRouter(
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/edrp" element={<SafeRoute children={<EDRPFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/edrp/estruturacao.juridica.sub-etapa-1" element={<SafeRoute children={<EDRPFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/edrp/estruturacao.juridica.sub-etapa-2" element={<SafeRoute children={<EDRPFluxo />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/edrp/estruturacao.juridica.sub-etapa-3" element={<SafeRoute children={<EDRPFluxo />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/edrp/estruturacao.juridica.sub-etapa-4" element={<SafeRoute children={<EDRPFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/delegacao" element={<SafeRoute children={<DelegacaoFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/revisao" element={<SafeRoute children={<RevisaoFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/agendamento.de.revisao" element={<SafeRoute children={<AgendamentoRevisao />} />} />

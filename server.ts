@@ -334,6 +334,37 @@ function generateHighFidelityMockFormat(fatos: string, estrategia: string, compe
 *Análise gerada em conformidade com as diretrizes do escritório Giffoni pelo Assistente de IA.*`;
 }
 
+// Helper function to call generateContent with retry and model fallback (handles 503 errors and spikes)
+async function callGeminiWithRetry(ai: any, params: { model: string; contents: any; config?: any }, maxRetries = 3) {
+  let lastError: any = null;
+  const modelsToTry = [params.model, "gemini-flash-latest", "gemini-3.1-flash-lite"];
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const currentModel = attempt === 0 ? params.model : (modelsToTry[attempt] || params.model);
+    try {
+      console.log(`[Gemini SDK] Attempt ${attempt + 1}: Calling generateContent with model ${currentModel}`);
+      const response = await ai.models.generateContent({
+        ...params,
+        model: currentModel
+      });
+      if (response && response.text) {
+        return response;
+      }
+      throw new Error("Empty response text");
+    } catch (err: any) {
+      lastError = err;
+      const status = err?.status || err?.code || (err?.message?.includes("503") ? 503 : null);
+      console.warn(`[Gemini SDK] Attempt ${attempt + 1} failed with model ${currentModel}. Error:`, err?.message || err);
+      
+      if (attempt < maxRetries - 1) {
+        const delay = (attempt + 1) * 350;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+  throw lastError;
+}
+
 // Format structured case details using Gemini AI
 app.post("/api/gemini-format", async (req, res) => {
   try {
@@ -376,7 +407,7 @@ Gere um RELATÓRIO JURÍDICO DE ESTRUTURAÇÃO DE TESE E ESTRATÉGIA PROCESSUAL 
 - Competência Jurisdicional e Foro Competente
 Mantenha um tom pericial, assertivo, formal e de alto rigor técnico-jurídico brasileiro.`;
 
-    const response = await ai.models.generateContent({
+    const response = await callGeminiWithRetry(ai, {
       model: "gemini-3.5-flash",
       contents: prompt,
     });
@@ -427,7 +458,7 @@ ${JSON.stringify(caseDetails, null, 2)}
 
 Responda estritamente em formato JSON com as chaves "acertos" (lista de strings), "erros" (lista de strings) e "sugestoes" (lista de strings).`;
 
-    const response = await ai.models.generateContent({
+    const response = await callGeminiWithRetry(ai, {
       model: "gemini-3.5-flash",
       contents: prompt,
       config: {
@@ -865,7 +896,7 @@ Ao final do parecer, acrescente um bloco exclusivo intitulado "📋 RESUMO EXECU
 
 Mantenha a escrita polida, jurídica, elegante e com espaçamento impecável.`;
 
-    const response = await ai.models.generateContent({
+    const response = await callGeminiWithRetry(ai, {
       model: "gemini-3.5-flash",
       contents: prompt,
     });
