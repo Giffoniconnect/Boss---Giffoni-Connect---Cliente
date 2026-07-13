@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import { BossLayout } from '../../../components/Layout';
 import { db } from '../../../lib/firebase';
 import { 
@@ -57,13 +57,77 @@ import {
   FolderOpen,
   FileCheck,
   Mail,
-  X
+  X,
+  ChevronDown
 } from 'lucide-react';
 
 import { PainelGeralCliente } from '../../../components/boss/portal/PainelGeralCliente';
 import { EventsManager } from '../../../components/boss/portal/EventsManager';
 import { FinancialManager } from '../../../components/boss/portal/FinancialManager';
 import { DadosCadastraisCliente } from '../../../components/boss/portal/DadosCadastraisCliente';
+
+const PORTAL_CLIENT_EDITOR_SECTIONS = [
+  {
+    id: "painel_geral",
+    label: "Painel Geral do Cliente",
+    routeSuffix: "Editar-Painel-Geral-do-Cliente",
+    title: "Editar Painel Geral do Cliente"
+  },
+  {
+    id: "dados_cadastrais",
+    label: "Dados Cadastrais do Cliente",
+    routeSuffix: "Editar-Dados-Cadastrais-do-Cliente",
+    title: "Editar Dados Cadastrais do Cliente"
+  },
+  {
+    id: "crm_cliente",
+    label: "CRM do Cliente",
+    routeSuffix: "Editar-CRM-do-Cliente",
+    title: "Editar CRM do Cliente"
+  },
+  {
+    id: "relacao_casos",
+    label: "Relação de casos do cliente",
+    routeSuffix: "Editar-Relacao-de-casos-do-cliente",
+    title: "Editar Relação de Casos do Cliente"
+  },
+  {
+    id: "audiencias",
+    label: "Audiências do cliente",
+    routeSuffix: "Editar-audiencias-do-cliente",
+    title: "Editar Audiências do Cliente"
+  },
+  {
+    id: "pericias",
+    label: "Perícias do Cliente",
+    routeSuffix: "Editar-pericias-do-cliente",
+    title: "Editar Perícias do Cliente"
+  },
+  {
+    id: "reunioes",
+    label: "Reuniões com o cliente",
+    routeSuffix: "Editar-reunioes-com-o-cliente",
+    title: "Editar Reuniões com o Cliente"
+  },
+  {
+    id: "solicitacao_provas",
+    label: "Solicitação de Provas",
+    routeSuffix: "Editar-solicitacao-de-provas",
+    title: "Editar Solicitação de Provas"
+  },
+  {
+    id: "solicitacao_informacoes",
+    label: "Solicitação de informações",
+    routeSuffix: "Editar-solicitacao-de-informacoes",
+    title: "Editar Solicitação de Informações"
+  },
+  {
+    id: "financeiro",
+    label: "Financeiro e Faturamento",
+    routeSuffix: "Editar-financeiro-e-faturamento",
+    title: "Editar Financeiro e Faturamento"
+  }
+];
 
 export default function EditarPortalCliente() {
   const navigate = useNavigate();
@@ -487,7 +551,37 @@ export default function EditarPortalCliente() {
   const [allClientFinancials, setAllClientFinancials] = useState<any[]>([]);
   const [loadingDashboard, setLoadingDashboard] = useState(false);
 
-  const [activeSidebarSection, setActiveSidebarSection] = useState<'painel_geral' | 'dados_cadastrais' | 'crm_cliente' | 'relacao_casos' | 'audiencias' | 'pericias' | 'reunioes' | 'solicitacao_provas' | 'solicitacao_informacoes' | 'financeiro'>('painel_geral');
+  const activeSectionConfig = PORTAL_CLIENT_EDITOR_SECTIONS.find(
+    section => location.pathname.endsWith(`/${section.routeSuffix}`)
+  );
+
+  const isExactBaseRoute = slug && (
+    location.pathname === `/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slug}` ||
+    location.pathname === `/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slug}/`
+  );
+
+  const activeSidebarSection = activeSectionConfig?.id || "painel_geral";
+  const isInvalidRoute = !isExactBaseRoute && !isPrestarContasRoute && !activeSectionConfig;
+
+  // Auto redirect base URL to Painel Geral
+  useEffect(() => {
+    if (slug) {
+      const basePath = `/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slug}`;
+      if (location.pathname === basePath || location.pathname === `${basePath}/`) {
+        navigate(`${basePath}/Editar-Painel-Geral-do-Cliente`, { replace: true });
+      }
+    }
+  }, [slug, location.pathname, navigate]);
+
+  const setActiveSidebarSection = (sectionId: string) => {
+    const section = PORTAL_CLIENT_EDITOR_SECTIONS.find(s => s.id === sectionId);
+    if (section && slug) {
+      navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slug}/${section.routeSuffix}`);
+      if (sectionId === 'relacao_casos') {
+        setActiveSubTab('entrevista');
+      }
+    }
+  };
 
   // Event creation form local states
   const [addingEvent, setAddingEvent] = useState(false);
@@ -2097,6 +2191,20 @@ export default function EditarPortalCliente() {
 
             {/* RIGHT SIDE PANE / CONTENT DISPLAY */}
             <div className="lg:col-span-9 space-y-6">
+              {isInvalidRoute && (
+                <div className="bg-white border border-gray-150 rounded-[2rem] p-8 text-center space-y-4 animate-fade-in">
+                  <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto shadow-xs border border-rose-100">
+                    <AlertCircle size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-gray-900 tracking-tight">Seção do editor não encontrada</h3>
+                    <p className="text-xs text-gray-550 mt-2 max-w-md mx-auto leading-relaxed">
+                      A página ou seção que você tentou acessar não faz parte das configurações válidas do portal. Use o menu lateral para navegar de forma segura.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* VIEW 1: PAINEL GERAL */}
               {activeSidebarSection === 'painel_geral' && (
                 <PainelGeralCliente

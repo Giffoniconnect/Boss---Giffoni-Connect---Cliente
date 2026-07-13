@@ -61,6 +61,7 @@ import {
   Copy,
   ChevronDown,
   ChevronUp,
+  Search,
 } from "lucide-react";
 import { flowRoutes } from "./utils/flowRoutes";
 
@@ -136,6 +137,31 @@ const GoogleDriveIcon = ({ size = 16, className = "" }: { size?: number; classNa
   </svg>
 );
 
+export function resolveTipoServicoContratado(caseObj: any) {
+  if (!caseObj) {
+    return { value: "", sourcePath: "empty", usedLegacyFallback: false };
+  }
+  if (caseObj.tipoServicoContratado && caseObj.tipoServicoContratado.trim() !== "") {
+    return { value: caseObj.tipoServicoContratado.trim(), sourcePath: "caseObj.tipoServicoContratado", usedLegacyFallback: false };
+  }
+  if (caseObj.financeiro?.tipoServicoContratado && caseObj.financeiro.tipoServicoContratado.trim() !== "") {
+    return { value: caseObj.financeiro.tipoServicoContratado.trim(), sourcePath: "caseObj.financeiro.tipoServicoContratado", usedLegacyFallback: false };
+  }
+  if (caseObj.contractedServiceType && caseObj.contractedServiceType.trim() !== "") {
+    return { value: caseObj.contractedServiceType.trim(), sourcePath: "caseObj.contractedServiceType", usedLegacyFallback: false };
+  }
+  if (caseObj.financeiro?.contractedServiceType && caseObj.financeiro.contractedServiceType.trim() !== "") {
+    return { value: caseObj.financeiro.contractedServiceType.trim(), sourcePath: "caseObj.financeiro.contractedServiceType", usedLegacyFallback: false };
+  }
+  if (caseObj.tipoServico && caseObj.tipoServico.trim() !== "") {
+    return { value: caseObj.tipoServico.trim(), sourcePath: "caseObj.tipoServico", usedLegacyFallback: false };
+  }
+  if (caseObj.assunto && caseObj.assunto.trim() !== "") {
+    return { value: caseObj.assunto.trim(), sourcePath: "caseObj.assunto", usedLegacyFallback: true };
+  }
+  return { value: "", sourcePath: "not_found", usedLegacyFallback: false };
+}
+
 export default function FinanceiroFluxo() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
@@ -165,12 +191,82 @@ export default function FinanceiroFluxo() {
   const [previewPayloadRaw, setPreviewPayloadRaw] = useState<any>(null);
   const [previewPayloadNormalized, setPreviewPayloadNormalized] = useState<any>(null);
   const [previewContractText, setPreviewContractText] = useState<string>("");
-  const [isLogPanelExpanded, setIsLogPanelExpanded] = useState<boolean>(true);
   const [lastTechnicalError, setLastTechnicalError] = useState<string | null>(null);
   const [lastFriendlyError, setLastFriendlyError] = useState<string | null>(null);
   const [copiedPayloadBruto, setCopiedPayloadBruto] = useState<boolean>(false);
   const [copiedPayloadNorm, setCopiedPayloadNorm] = useState<boolean>(false);
   const [copiedLogsText, setCopiedLogsText] = useState<boolean>(false);
+
+  const [isContractPreviewExpanded, setIsContractPreviewExpanded] = useState<boolean>(false);
+  const [isContractPreviewLogsExpanded, setIsContractPreviewLogsExpanded] = useState<boolean>(false);
+  const [previewGoogleDocsId, setPreviewGoogleDocsId] = useState<string>("");
+  const [previewGoogleDocsUrl, setPreviewGoogleDocsUrl] = useState<string>("");
+
+  const [isBattleNavalOpen, setIsBattleNavalOpen] = useState<boolean>(false);
+  const [battleNavalData, setBattleNavalData] = useState<any>(null);
+  const [battleNavalLoading, setBattleNavalLoading] = useState<boolean>(false);
+  const [battleSearchQuery, setBattleSearchQuery] = useState<string>("");
+  const [battleStatusFilter, setBattleStatusFilter] = useState<"all" | "success" | "failed">("all");
+
+  const handleOpenBattleNaval = async () => {
+    setIsBattleNavalOpen(true);
+    setBattleNavalLoading(true);
+    try {
+      const currentFinancialForm = {
+        tipoServicoContratado: tipoServicoContratadoForm,
+        tipoHonorario: tipoHonorarioForm,
+        honorarioExitoPercentual: honorarioExitoPercentualForm,
+        honorarioFixoValor: honorarioFixoValorForm,
+        formaPagamento: formaPagamentoForm,
+        tipoRecebimento: tipoRecebimentoForm,
+        pixBanco: pixBancoForm,
+        pixChave: pixChaveForm,
+        quantidadeParcelas: quantidadeParcelasForm,
+        valorParcela: valorParcelaForm,
+        diaVencimento: diaVencimentoForm,
+        valorEntrada: valorEntradaForm,
+        dataPrimeiroVencimento: dataPrimeiroVencimentoADefinir ? "a definir" : dataPrimeiroVencimentoForm,
+        modeloHonorarios: modeloHonorariosForm,
+        categoriaExito: categoriaExitoForm,
+        classeExito: classeExitoForm,
+        percentualExito: percentualExitoForm,
+        percentualExitoSobreRetroativo: percentualExitoSobreRetroativoForm,
+        quantidadeParcelasExitoPrevidenciario: quantidadeParcelasExitoPrevidenciarioForm,
+        clausulas: caseObj?.financeiro?.clausulas || "",
+        cobrancaAutomaticaInteg: cobrancaAutomaticaIntegForm
+      };
+
+      const response = await fetch("/api/google-docs/contrato-honorarios/batalha-naval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          caseId,
+          clientId: client?.id || caseObj?.clientId || "",
+          documentType: client?.type === "PF" ? "contrato_honorarios_pf" : "contrato_honorarios_pj",
+          currentFinancialState: currentFinancialForm
+        })
+      });
+
+      const resText = await response.text();
+      let resData;
+      try {
+        resData = JSON.parse(resText);
+      } catch {
+        resData = { success: false, errorMessage: resText };
+      }
+
+      if (!response.ok || !resData.success) {
+        throw new Error(resData.errorMessage || "Falha ao carregar diagnóstico da Batalha Naval.");
+      }
+
+      setBattleNavalData(resData);
+    } catch (err: any) {
+      console.error(err);
+      alert("Erro ao executar diagnóstico: " + err.message);
+    } finally {
+      setBattleNavalLoading(false);
+    }
+  };
 
   const maskSensitiveData = (key: string, value: string): string => {
     if (!value) return "";
@@ -213,26 +309,13 @@ export default function FinanceiroFluxo() {
   };
 
   const handleExecutePreview = async () => {
-    const isPf = client?.type === "PF";
-    const logs: any[] = [];
-    const addTechLog = (step: string, status: "success" | "failed" | "warning" | "info", message: string, details?: any, errorCode?: string, errorMessage?: string) => {
-      logs.push({
-        timestamp: new Date().toISOString(),
-        step,
-        status,
-        message,
-        details: details ? JSON.stringify(details, null, 2) : "",
-        errorCode: errorCode || "",
-        errorMessage: errorMessage || ""
-      });
-    };
-
     setPreviewStatus('preview_loading');
-    addTechLog("PREVIEW_BUTTON_CLICKED", "info", "O operador clicou em 'Ver Prévia de Contrato de Honorários' para gerar a auditoria do preview.");
+    setPreviewGoogleDocsId("");
+    setPreviewGoogleDocsUrl("");
+    setPlaceholderResolutionLogs([]);
+    setIsContractPreviewExpanded(false);
 
     try {
-      addTechLog("PREVIEW_PAYLOAD_BUILD_STARTED", "info", "Iniciando a coleta dos dados reais fáticos do cliente, do caso e do faturamento corrente.");
-      
       if (!caseObj) {
         throw new Error("Dados do caso (caseObj) não foram carregados corretamente do banco de dados.");
       }
@@ -265,247 +348,63 @@ export default function FinanceiroFluxo() {
         cobrancaAutomaticaInteg: cobrancaAutomaticaIntegForm
       };
 
-      const rawPayload = {
-        caseId: caseId,
-        clientId: client.id || caseObj.clientId || "",
-        clientType: client.type || "PF",
-        clientRawData: client,
-        caseRawData: caseObj,
-        currentFinancialState: currentFinancialForm
-      };
-      setPreviewPayloadRaw(rawPayload);
-
-      addTechLog("PREVIEW_PAYLOAD_BUILD_SUCCESS", "success", "Payload bruto do preview construído com sucesso contendo as condições fáticas atuais do faturamento.");
-
-      const officialTemplateId = "1GJZ6LSW_szLSAA8Z3iw9jt4Q6zy5k6EuuTNhR5ooJQQ";
-      addTechLog("PREVIEW_TEMPLATE_SELECTED", "success", `Template oficial localizado para o contrato (${isPf ? "Pessoa Física" : "Pessoa Jurídica"}): ${officialTemplateId}`);
-
-      addTechLog("PREVIEW_PLACEHOLDERS_EXTRACTED", "info", "Extraindo lista de placeholders esperados de acordo com os mapeamentos do sistema.");
-
-      // Mount normalized database data to feed into the builders
-      const mockFinData = {
-        ...caseObj?.financeiro,
-        ...currentFinancialForm
-      };
-      
-      const placeholdersMap = isPf 
-        ? buildContratoHonorariosPfPlaceholders(client, { ...caseObj, ...mockFinData }, mockFinData)
-        : buildContratoHonorariosPjPlaceholders(client, { ...caseObj, ...mockFinData }, mockFinData);
-
-      setPreviewPayloadNormalized(placeholdersMap);
-
-      // Metadata mapping for audit purposes (data source)
-      const placeholderMetadata: Record<string, { sourceField: string, label: string }> = {
-        "{{OUTORGANTE_NOME}}": { sourceField: isPf ? "client.pf_nomeCompleto || client.nomeCompleto" : "client.razaoSocial || client.nome", label: "Nome do Outorgante" },
-        "{{OUTORGANTE_CPF}}": { sourceField: "client.pf_cpf || client.cpf", label: "CPF do Outorgante" },
-        "{{OUTORGANTE_RG}}": { sourceField: "client.pf_rg || client.rg", label: "RG do Outorgante" },
-        "{{OUTORGANTE_NACIONALIDADE}}": { sourceField: "client.pf_nacionalidade", label: "Nacionalidade" },
-        "{{OUTORGANTE_ESTADO_CIVIL}}": { sourceField: "client.pf_estadoCivil", label: "Estado Civil" },
-        "{{OUTORGANTE_PROFISSAO}}": { sourceField: "client.pf_profissao", label: "Profissão" },
-        "{{OUTORGANTE_ENDERECO}}": { sourceField: "client.pf_endereco || client.enderecoCompleto", label: "Endereço" },
-        "{{OUTORGANTE_TELEFONE}}": { sourceField: "client.pf_telefone || client.telefone", label: "Telefone" },
-        "{{OUTORGANTE_EMAIL}}": { sourceField: "client.pf_email || client.email", label: "E-mail" },
-        "{{CONTRATANTE_RAZAO_SOCIAL}}": { sourceField: "client.pj_razaoSocial || client.razaoSocial", label: "Razão Social da Contratante" },
-        "{{CONTRATANTE_CNPJ}}": { sourceField: "client.pj_cnpj || client.cnpj", label: "CNPJ da Contratante" },
-        "{{REPRESENTANTE_NOME}}": { sourceField: "client.pj_nomeSocioAdministrador || client.socioNome", label: "Nome do Representante Legal" },
-        "{{REPRESENTANTE_CPF}}": { sourceField: "client.pj_socioCpf", label: "CPF do Representante" },
-        "{{TIPO_SERVICO}}": { sourceField: "financialForm.tipoServicoContratado", label: "Tipo do Serviço" },
-        "{{VALOR_HONORARIOS}}": { sourceField: "financialForm.honorarioFixoValor", label: "Valor dos Honorários" },
-        "{{TIPO_HONORARIO}}": { sourceField: "financialForm.tipoHonorario", label: "Tipo de Honorários" },
-        "{{MODELO_HONORARIOS}}": { sourceField: "financialForm.modeloHonorarios", label: "Modelo de Honorários" },
-        "{{FORMA_PAGAMENTO}}": { sourceField: "financialForm.formaPagamento", label: "Forma de Pagamento" },
-        "{{TIPO_RECEBIMENTO}}": { sourceField: "financialForm.tipoRecebimento", label: "Tipo de Recebimento" },
-        "{{PIX_BANCO}}": { sourceField: "financialForm.pixBanco", label: "Banco do PIX" },
-        "{{PIX_CHAVE}}": { sourceField: "financialForm.pixChave", label: "Chave PIX" },
-        "{{VALOR_PARCELA}}": { sourceField: "financialForm.valorParcela", label: "Valor da Parcela" },
-        "{{QUANTIDADE_PARCELAS}}": { sourceField: "financialForm.quantidadeParcelas", label: "Quantidade de Parcelas" },
-        "{{DIA_VENCIMENTO}}": { sourceField: "financialForm.diaVencimento", label: "Dia de Vencimento" },
-        "{{VALOR_ENTRADA}}": { sourceField: "financialForm.valorEntrada", label: "Valor da Entrada" },
-        "{{DATA_PRIMEIRO_VENCIMENTO}}": { sourceField: "financialForm.dataPrimeiroVencimento", label: "Data do Primeiro Vencimento" },
-        "{{CLAUSULA_SEGUNDA}}": { sourceField: "placeholderBuilders.buildClausulaSegunda", label: "Texto da Cláusula Segunda" }
-      };
-
-      addTechLog("PREVIEW_PLACEHOLDER_RESOLUTION_STARTED", "info", "Iniciando a resolução e auditoria individual de cada placeholder contra os dados do banco.");
-
-      const resolutionLogs: any[] = [];
-      let pendingCount = 0;
-      let successCount = 0;
-      let emptySourceCount = 0;
-
-      // Iterate on expected placeholders
-      const expectedPlaceholders = isPf 
-        ? ["{{OUTORGANTE_NOME}}", "{{OUTORGANTE_NACIONALIDADE}}", "{{OUTORGANTE_ESTADO_CIVIL}}", "{{OUTORGANTE_PROFISSAO}}", "{{OUTORGANTE_RG}}", "{{OUTORGANTE_CPF}}", "{{OUTORGANTE_ENDERECO}}", "{{OUTORGANTE_TELEFONE}}", "{{OUTORGANTE_EMAIL}}", "{{TIPO_SERVICO}}", "{{VALOR_HONORARIOS}}", "{{TIPO_HONORARIO}}", "{{FORMA_PAGAMENTO}}", "{{TIPO_RECEBIMENTO}}", "{{PIX_BANCO}}", "{{PIX_CHAVE}}", "{{QUANTIDADE_PARCELAS}}", "{{VALOR_PARCELA}}", "{{DIA_VENCIMENTO}}", "{{VALOR_ENTRADA}}", "{{DATA_PRIMEIRO_VENCIMENTO}}", "{{CLAUSULA_SEGUNDA}}"]
-        : ["{{CONTRATANTE_RAZAO_SOCIAL}}", "{{CONTRATANTE_CNPJ}}", "{{REPRESENTANTE_NOME}}", "{{REPRESENTANTE_CPF}}", "{{CONTRATANTE_ENDERECO}}", "{{CONTRATANTE_TELEFONE}}", "{{CONTRATANTE_EMAIL}}", "{{TIPO_SERVICO}}", "{{VALOR_HONORARIOS}}", "{{TIPO_HONORARIO}}", "{{FORMA_PAGAMENTO}}", "{{TIPO_RECEBIMENTO}}", "{{PIX_BANCO}}", "{{PIX_CHAVE}}", "{{QUANTIDADE_PARCELAS}}", "{{VALOR_PARCELA}}", "{{DIA_VENCIMENTO}}", "{{VALOR_ENTRADA}}", "{{DATA_PRIMEIRO_VENCIMENTO}}", "{{CLAUSULA_SEGUNDA}}"];
-
-      expectedPlaceholders.forEach(ph => {
-        const value = placeholdersMap[ph];
-        const meta = placeholderMetadata[ph] || { sourceField: "desconhecido", label: "Campo Geral" };
-        
-        let status: "success" | "warning" | "failed" = "success";
-        let reason = "Placeholder substituído com sucesso.";
-        let finalVal = value || "";
-
-        if (value === undefined) {
-          status = "failed";
-          reason = "PLACEHOLDER_NOT_FOUND_IN_PAYLOAD — O placeholder não foi gerado pelo mapeador.";
-          finalVal = ph;
-          pendingCount++;
-        } else if (value === null || value.trim() === "" || (value === "0,00" && ph === "{{VALOR_HONORARIOS}}" && tipoHonorarioForm !== "Honorários Fixos")) {
-          status = "warning";
-          reason = "SOURCE_FIELD_EMPTY — O campo de origem existe, mas está vazio ou não possui valor definido.";
-          finalVal = ph;
-          emptySourceCount++;
-          pendingCount++;
-        } else if (value.toLowerCase().includes("a definir") || value.toLowerCase().includes("a combinar") || value.toLowerCase().includes("não aplicável")) {
-          status = "warning";
-          reason = "SOURCE_FIELD_EMPTY — Campo possui valor provisório ('A combinar' ou 'A definir').";
-          finalVal = value;
-          successCount++;
-        } else {
-          status = "success";
-          finalVal = value;
-          successCount++;
-        }
-
-        resolutionLogs.push({
-          placeholder: ph,
-          status,
-          sourceField: meta.sourceField,
-          receivedValue: maskSensitiveData(ph, value || ""),
-          finalValue: finalVal,
-          reason
-        });
+      const response = await fetch("/api/google-docs/contrato-honorarios/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          caseId,
+          clientId: client.id || caseObj.clientId || "",
+          documentType: client.type === "PF" ? "contrato_honorarios_pf" : "contrato_honorarios_pj",
+          currentFinancialState: currentFinancialForm
+        })
       });
+
+      const resText = await response.text();
+      let resData;
+      try {
+        resData = JSON.parse(resText);
+      } catch {
+        resData = { success: false, errorMessage: resText };
+      }
+
+      if (!response.ok || !resData.success) {
+        throw new Error(resData.errorMessage || "Falha ao gerar o preview do contrato.");
+      }
+
+      // Store results
+      setPreviewContractText(resData.renderedContent || "");
+      
+      // Map placeholder resolution logs from Battle Map row results
+      const auditRows = resData.placeholderAudit?.rows || [];
+      const resolutionLogs = auditRows.map((row: any) => ({
+        placeholder: row.placeholder,
+        status: row.replacementStatus === "success" ? "success" : "warning",
+        sourceField: row.sourceField,
+        receivedValue: row.migratedValueMasked,
+        finalValue: row.replacementStatus === "success" ? row.previewValue : `[NÃO PREENCHIDO: ${row.placeholder}]`,
+        reason: row.naturalLanguageMessage
+      }));
 
       setPlaceholderResolutionLogs(resolutionLogs);
-      addTechLog("PREVIEW_PLACEHOLDER_RESOLUTION_SUCCESS", "success", `Auditoria concluída. Sucesso: ${successCount}, Pendências/Avisos: ${pendingCount}.`);
 
-      addTechLog("PREVIEW_RENDER_STARTED", "info", "Iniciando a renderização da minuta de prévia local substituindo os placeholders.");
-
-      const baseTemplateText = isPf 
-        ? `CONTRATO DE PRESTAÇÃO DE SERVIÇOS JURÍDICOS E HONORÁRIOS ADVOCATÍCIOS (MINUTA DE PRÉVIA)
-
-CONTRATANTE (OUTORGANTE):
-Nome Completo: {{OUTORGANTE_NOME}}
-Nacionalidade: {{OUTORGANTE_NACIONALIDADE}}
-Estado Civil: {{OUTORGANTE_ESTADO_CIVIL}}
-Profissão: {{OUTORGANTE_PROFISSAO}}
-Documento de Identidade: RG sob nº {{OUTORGANTE_RG}}
-Inscrição de CPF: sob nº {{OUTORGANTE_CPF}}
-Endereço Residencial: {{OUTORGANTE_ENDERECO}}
-Telefone de Contato: {{OUTORGANTE_TELEFONE}}
-Correio Eletrônico: {{OUTORGANTE_EMAIL}}
-
-CONTRATADOS:
-GIFFONI & ASSOCIADOS ADVOCACIA, sociedade de advogados devidamente registrada na Ordem dos Advogados do Brasil, CNPJ sob nº 12.345.678/0001-99, com sede corporativa à Av. das Nações, nº 1000, São Paulo/SP.
-
-CLÁUSULA PRIMEIRA - DO OBJETO E ESCOPO:
-O presente contrato de honorários advocatícios tem como objeto a prestação de serviços técnicos jurídicos consistentes no patrocínio do processo relativo ao assunto: {{TIPO_SERVICO}}.
-
-CLÁUSULA SEGUNDA - DOS HONORÁRIOS PACTUADOS:
-Pelo trabalho e acompanhamento do escopo contratado, o(a) CONTRATANTE pagará aos CONTRATADOS os honorários fixados conforme as seguintes condições pactuadas:
-- Modelo de Faturamento Escolhido: {{TIPO_HONORARIO}} ({{MODELO_HONORARIOS}})
-- Valor Fixo Total de Honorários: R$ {{VALOR_HONORARIOS}}
-- Percentual de Êxito Acordado: {{HONORARIO_EXITO_PERCENTUAL}}
-- Forma Geral de Pagamento: {{FORMA_PAGAMENTO}}
-- Modalidade de Recebimento: {{TIPO_RECEBIMENTO}}
-- Banco Indicado: {{PIX_BANCO}}
-- Chave PIX Destino: {{PIX_CHAVE}}
-- Número de Parcelas Definidas: {{QUANTIDADE_PARCELAS}} parcela(s)
-- Valor Individual de Cada Parcela: R$ {{VALOR_PARCELA}}
-- Dia de Vencimento Mensal: Dia {{DIA_VENCIMENTO}}
-- Entrada Financeira de Sinal: R$ {{VALOR_ENTRADA}}
-- Data da Primeira Parcela / Vencimento: {{DATA_PRIMEIRO_VENCIMENTO}}
-
-{{CLAUSULA_SEGUNDA}}
-
-CLÁUSULA TERCEIRA - DAS RESPONSABILIDADES:
-O(A) CONTRATANTE se compromete a disponibilizar com a tempestividade necessária todos os documentos pessoais, comprobatórios de renda e patrimônio, certidões e demais esclarecimentos que lhes forem solicitados para a sustentação e acompanhamento adequado do feito judicial, respondendo civil e penalmente pela veracidade integral de tais declarações.
-
-CLÁUSULA QUARTA - DO FORO ELEITO:
-Fica eleito de comum acordo o Foro da Comarca de São Paulo/SP para dirimir quaisquer eventuais divergências ou controvérsias oriundas da interpretação ou execução das cláusulas constantes deste instrumento jurídico.
-
-Para que se produzam os plenos efeitos jurídicos e legais, lavra-se o presente em duas vias de igual teor e forma.
-
-São Paulo, na data de assinatura deste rascunho de homologação.`
-        : `CONTRATO DE PRESTAÇÃO DE SERVIÇOS JURÍDICOS E HONORÁRIOS ADVOCATÍCIOS (MINUTA DE PRÉVIA PJ)
-
-CONTRATANTE (OUTORGANTE):
-Razão Social da Empresa: {{CONTRATANTE_RAZAO_SOCIAL}}
-Inscrição de CNPJ: sob nº {{CONTRATANTE_CNPJ}}
-Representante Legal / Sócio Administrador: {{REPRESENTANTE_NOME}}
-Representante CPF: {{REPRESENTANTE_CPF}}
-Endereço Corporativo: {{CONTRATANTE_ENDERECO}}
-Telefone Corporativo: {{CONTRATANTE_TELEFONE}}
-Correio Eletrônico: {{CONTRATANTE_EMAIL}}
-
-CONTRATADOS:
-GIFFONI & ASSOCIADOS ADVOCACIA, sociedade de advogados devidamente registrada na Ordem dos Advogados do Brasil, CNPJ sob nº 12.345.678/0001-99, com sede corporativa à Av. das Nações, nº 1000, São Paulo/SP.
-
-CLÁUSULA PRIMEIRA - DO OBJETO E ESCOPO:
-O presente contrato de honorários advocatícios tem como objeto a prestação de serviços técnicos jurídicos consistentes no patrocínio do processo relativo ao assunto: {{TIPO_SERVICO}}.
-
-CLÁUSULA SEGUNDA - DOS HONORÁRIOS PACTUADOS:
-Pelo trabalho e acompanhamento do escopo contratado, a CONTRATANTE pagará aos CONTRATADOS os honorários fixados conforme as seguintes condições pactuadas:
-- Modelo de Faturamento Escolhido: {{TIPO_HONORARIO}} ({{MODELO_HONORARIOS}})
-- Valor Fixo Total de Honorários: R$ {{VALOR_HONORARIOS}}
-- Percentual de Êxito Acordado: {{HONORARIO_EXITO_PERCENTUAL}}
-- Forma Geral de Pagamento: {{FORMA_PAGAMENTO}}
-- Modalidade de Recebimento: {{TIPO_RECEBIMENTO}}
-- Banco Indicado: {{PIX_BANCO}}
-- Chave PIX Destino: {{PIX_CHAVE}}
-- Número de Parcelas Definidas: {{QUANTIDADE_PARCELAS}} parcela(s)
-- Valor Individual de Cada Parcela: R$ {{VALOR_PARCELA}}
-- Dia de Vencimento Mensal: Dia {{DIA_VENCIMENTO}}
-- Entrada Financeira de Sinal: R$ {{VALOR_ENTRADA}}
-- Data da Primeira Parcela / Vencimento: {{DATA_PRIMEIRO_VENCIMENTO}}
-
-{{CLAUSULA_SEGUNDA}}
-
-CLÁUSULA TERCEIRA - DAS RESPONSABILIDADES:
-A CONTRATANTE se compromete a disponibilizar com a tempestividade necessária todos os documentos corporativos, certidões e demais esclarecimentos que lhes forem solicitados para a sustentação e acompanhamento adequado do feito judicial, respondendo civil e penalmente pela veracidade integral de tais declarações.
-
-CLÁUSULA QUARTA - DO FORO ELEITO:
-Fica eleito de comum acordo o Foro da Comarca de São Paulo/SP para dirimir quaisquer eventuais divergências ou controvérsias oriundas da interpretação ou execução das cláusulas constantes deste instrumento jurídico.
-
-Para que se produzam os plenos efeitos jurídicos e legais, lavra-se o presente em duas vias de igual teor e forma.
-
-São Paulo, na data de assinatura deste rascunho de homologação.`;
-
-      let renderedText = baseTemplateText;
-      expectedPlaceholders.forEach(ph => {
-        const res = resolutionLogs.find(r => r.placeholder === ph);
-        if (res && res.status === "success") {
-          renderedText = renderedText.replace(new RegExp(ph, 'g'), placeholdersMap[ph]);
-        } else if (res && res.status === "warning" && placeholdersMap[ph] && placeholdersMap[ph].trim() !== "") {
-          renderedText = renderedText.replace(new RegExp(ph, 'g'), placeholdersMap[ph]);
-        } else {
-          renderedText = renderedText.replace(new RegExp(ph, 'g'), `[PLACEHOLDER NÃO SUBSTITUÍDO: ${ph.replace("{{", "").replace("}}", "")}]`);
-        }
-      });
-
-      setPreviewContractText(renderedText);
-      addTechLog("PREVIEW_RENDER_SUCCESS", "success", "Minuta de prévia do contrato de honorários renderizada localmente com sucesso absoluto.");
-
-      if (pendingCount > 0) {
+      const hasFailures = auditRows.some((row: any) => row.replacementStatus === "failed");
+      if (hasFailures) {
         setPreviewStatus('preview_success_with_warnings');
-        setLastFriendlyError("Alguns campos secundários de cadastro do cliente ou do faturamento estão vazios ou pendentes de definição. Verifique a lista de placeholders.");
+        const failedPhs = auditRows.filter((r: any) => r.replacementStatus === "failed").map((r: any) => r.placeholder);
+        setLastFriendlyError(`Alguns campos de cadastro estão vazios ou não foram encontrados no documento: ${failedPhs.join(", ")}`);
       } else {
         setPreviewStatus('preview_success');
         setLastFriendlyError(null);
       }
 
+      setIsContractPreviewExpanded(true); // Auto-expand when successful
       setLastTechnicalError(null);
-      addTechLog("PREVIEW_LOG_PANEL_RENDERED", "success", "Painel de Logs de Preview preenchido e exibido de forma auditável para o operador.");
 
     } catch (err: any) {
       console.error(err);
       setPreviewStatus('preview_failed');
       setLastTechnicalError(err.stack || err.message || "Erro desconhecido");
-      setLastFriendlyError("Falha na construção ou renderização da prévia. Verifique os dados inseridos e as mensagens técnicas no card 'Erros e Alertas'.");
-      addTechLog("PREVIEW_RENDER_FAILED", "failed", "Falha catastrófica durante a simulação de prévia do contrato de honorários.", null, "PREVIEW_RENDER_FAILED", err.message || "Unknown error");
-    } finally {
-      setPreviewLogs(logs);
+      setLastFriendlyError(err.message || "Falha na geração integrada do preview.");
     }
   };
 
@@ -516,6 +415,9 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
     setPreviewPayloadRaw(null);
     setPreviewPayloadNormalized(null);
     setPreviewContractText("");
+    setPreviewGoogleDocsId("");
+    setPreviewGoogleDocsUrl("");
+    setIsContractPreviewExpanded(false);
     setLastTechnicalError(null);
     setLastFriendlyError(null);
   };
@@ -2767,6 +2669,12 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
       setSuccess("Condições financeiras gravadas e subetapa 02 sincronizada com sucesso!");
       setRefreshToggle((prev) => prev + 1);
       setTimeout(() => setSuccess(null), 3050);
+
+      // Auto-update Preview and Battle Naval on save
+      handleExecutePreview();
+      if (isBattleNavalOpen) {
+        handleOpenBattleNaval();
+      }
     } catch (err: any) {
       console.error(err);
       setError(`Erro ao gravar condições financeiras: ${err.message || err}`);
@@ -4583,10 +4491,25 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
                                   </div>
 
                                   {(() => {
+                                    if (boletoPorOndeForm === "ASAAS") {
+                                      return (
+                                        <div className="p-3.5 bg-emerald-50/50 border border-emerald-100 rounded-xl space-y-2.5 animate-fadeIn">
+                                          <p className="text-[11px] font-semibold text-emerald-800 leading-relaxed">
+                                            A emissão de boletos via <strong>ASAAS</strong> está integrada de forma fática com o Giffoni Connect. O sistema irá automatizar o silenciamento de notificações, geração da cobrança e guarda imediata do arquivo PDF na pasta do Google Drive do cliente.
+                                          </p>
+                                          <button
+                                            type="button"
+                                            onClick={() => navigate(`/boss-giffoni-clientes/configuracoes/asaas?billingContextId=${caseId}`)}
+                                            className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold uppercase transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                                          >
+                                            <Landmark size={13} />
+                                            <span>Iniciar Emissão ASAAS</span>
+                                          </button>
+                                        </div>
+                                      );
+                                    }
                                     const shortId = caseId ? caseId.substring(0, 6) : "GDI";
-                                    const generatedBoletoLink = boletoPorOndeForm === "ASAAS"
-                                      ? `https://cobranca.asaas.com/i/boleto_giffoni_${shortId}_${Date.now().toString().substring(8)}`
-                                      : `https://checkout.stripe.com/pay/boleto_giffoni_${shortId}_${Date.now().toString().substring(8)}`;
+                                    const generatedBoletoLink = `https://checkout.stripe.com/pay/boleto_giffoni_${shortId}_${Date.now().toString().substring(8)}`;
                                     return <ApiLinkBox link={generatedBoletoLink} />;
                                   })()}
                                 </div>
@@ -4799,43 +4722,62 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
                     {previewStatus === 'preview_loading' ? (
                       <div className="py-12 flex flex-col items-center justify-center space-y-2">
                         <Loader2 className="animate-spin text-blue-600" size={24} />
-                        <span className="text-xs font-mono font-bold text-slate-500 uppercase tracking-widest animate-pulse">Gerando auditoria...</span>
+                        <span className="text-xs font-mono font-bold text-slate-500 uppercase tracking-widest animate-pulse">Gerando prévia real...</span>
                       </div>
                     ) : previewStatus === 'preview_failed' ? (
                       <div className="p-4 bg-rose-50 border border-rose-150 rounded-2xl flex items-start gap-3 text-left">
                         <AlertCircle size={20} className="text-rose-600 shrink-0 mt-0.5" />
                         <div className="space-y-1">
                           <h5 className="text-xs font-black uppercase text-rose-900 font-sans">
-                            Falha na Geração da Prévia
+                            Falha na Geração da Prévia Real
                           </h5>
                           <p className="text-[11px] text-rose-700 leading-relaxed font-semibold">
-                            {lastFriendlyError || "Ocorreu um erro técnico inesperado ao tentar compilar os placeholders do cliente."}
+                            {lastFriendlyError || "Ocorreu um erro técnico inesperado ao tentar gerar o documento real temporário no Google Drive."}
                           </p>
                         </div>
                       </div>
                     ) : (
-                      <div className="p-5 bg-white border border-slate-150 rounded-2xl max-h-[450px] overflow-y-auto shadow-inner select-text text-left">
-                        <div className="whitespace-pre-line text-xs leading-relaxed text-slate-850 font-sans space-y-3">
-                          {previewContractText.split("\n").map((para, pIdx) => {
-                            if (!para.trim()) return <div key={pIdx} className="h-2" />;
-                            
-                            const parts = para.split(/(\[PLACEHOLDER NÃO SUBSTITUÍDO: [^\]]+\])/g);
-                            return (
-                              <p key={pIdx} className="text-[11px] font-semibold leading-relaxed text-slate-700">
-                                {parts.map((part, ptIdx) => {
-                                  if (part.startsWith("[PLACEHOLDER NÃO SUBSTITUÍDO:")) {
-                                    return (
-                                      <span key={ptIdx} className="inline-block bg-rose-50 border border-rose-200 text-rose-700 px-1.5 py-0.2 rounded font-mono font-black text-[9.5px] mx-0.5 animate-pulse">
-                                        {part}
-                                      </span>
-                                    );
-                                  }
-                                  return part;
-                                })}
-                              </p>
-                            );
-                          })}
+                      <div className="space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-white border border-slate-150 rounded-2xl">
+                          <div className="flex items-center gap-2">
+                            <FileText size={15} className="text-blue-600" />
+                            <span className="font-bold text-xs text-slate-700">Documento de Prévia Temporária</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setIsContractPreviewExpanded(!isContractPreviewExpanded)}
+                              className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold uppercase rounded-lg text-[10px] transition cursor-pointer"
+                            >
+                              {isContractPreviewExpanded ? "Recolher Prévia" : "Visualizar Prévia"}
+                            </button>
+                            {previewGoogleDocsUrl && (
+                              <a
+                                href={previewGoogleDocsUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold uppercase rounded-lg text-[10px] border border-blue-200 transition flex items-center gap-1 cursor-pointer"
+                              >
+                                <ExternalLink size={10} /> Abrir em Nova Aba
+                              </a>
+                            )}
+                          </div>
                         </div>
+
+                        {isContractPreviewExpanded && (
+                          <div className="border border-slate-200 rounded-3xl shadow-xs bg-slate-50 p-6 max-h-[600px] overflow-y-auto">
+                            {previewContractText ? (
+                              <div 
+                                className="p-8 bg-white border border-slate-100 rounded-2xl shadow-3xs prose max-w-none text-slate-800 leading-relaxed font-serif"
+                                dangerouslySetInnerHTML={{ __html: previewContractText }}
+                              />
+                            ) : (
+                              <div className="text-center py-12 text-slate-400 text-xs font-mono">
+                                Nenhum conteúdo renderizado disponível.
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -4848,41 +4790,59 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
                         Contêiner Estrutural do Contrato
                       </p>
                       <p className="text-[11px] text-slate-400 max-w-sm mt-1 font-medium">
-                        O preview em tempo real do Google Docs será exibido aqui automaticamente assim que você gravar as condições operacionais fáticas do faturamento.
+                        O preview em tempo real e a Batalha Naval serão exibidos aqui automaticamente assim que você gravar as condições operacionais fáticas do faturamento.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      disabled={previewStatus === 'preview_loading'}
-                      onClick={handleExecutePreview}
-                      className="inline-flex items-center gap-1.5 px-4.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-wider text-xs rounded-xl transition-all cursor-pointer shadow-3xs disabled:opacity-50"
-                    >
-                      {previewStatus === 'preview_loading' ? (
-                        <Loader2 size={13} className="animate-spin" />
-                      ) : (
-                        <Eye size={13} />
-                      )}
-                      Ver Prévia de Contrato de Honorários
-                    </button>
+                    <div className="flex flex-wrap items-center gap-3 justify-center">
+                      <button
+                        type="button"
+                        disabled={previewStatus === 'preview_loading'}
+                        onClick={handleExecutePreview}
+                        className="inline-flex items-center gap-1.5 px-4.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-wider text-xs rounded-xl transition-all cursor-pointer shadow-3xs disabled:opacity-50 font-bold"
+                      >
+                        {previewStatus === 'preview_loading' ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : (
+                          <Eye size={13} />
+                        )}
+                        Ver Prévia de Contrato de Honorários
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleOpenBattleNaval}
+                        className="inline-flex items-center gap-1.5 px-4.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-black uppercase tracking-wider text-xs rounded-xl transition-all cursor-pointer shadow-3xs font-bold"
+                      >
+                        👁️Ver Batalha Naval 🚢
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-5">
                     {/* Real Document Preview Frame */}
                     <div className="border border-gray-200 rounded-3xl overflow-hidden shadow-2xs bg-white">
                       <div className="p-4 bg-slate-50 border-b border-gray-150 flex flex-wrap items-center justify-between gap-3">
-                        <button
-                          type="button"
-                          disabled={previewStatus === 'preview_loading'}
-                          onClick={handleExecutePreview}
-                          className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-wider text-[10px] rounded-lg transition-all cursor-pointer shadow-3xs flex items-center gap-1.5 disabled:opacity-50"
-                        >
-                          {previewStatus === 'preview_loading' ? (
-                            <Loader2 size={11} className="animate-spin" />
-                          ) : (
-                            <Eye size={11} />
-                          )}
-                          Ver Prévia de Contrato de Honorários
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={previewStatus === 'preview_loading'}
+                            onClick={handleExecutePreview}
+                            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-wider text-[10px] rounded-lg transition-all cursor-pointer shadow-3xs flex items-center gap-1.5 disabled:opacity-50 font-bold"
+                          >
+                            {previewStatus === 'preview_loading' ? (
+                              <Loader2 size={11} className="animate-spin" />
+                            ) : (
+                              <Eye size={11} />
+                            )}
+                            Ver Prévia de Contrato de Honorários
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleOpenBattleNaval}
+                            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-black uppercase tracking-wider text-[10px] rounded-lg transition-all cursor-pointer shadow-3xs flex items-center gap-1.5 font-bold"
+                          >
+                            👁️Ver Batalha Naval 🚢
+                          </button>
+                        </div>
                         <div className="flex items-center gap-1.5">
                           {caseObj?.contratoHonorariosAprovadoStatus === "approved" ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-250 rounded-full text-[10px] font-black uppercase font-mono">
@@ -5013,10 +4973,10 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => setIsLogPanelExpanded(!isLogPanelExpanded)}
+                                      onClick={() => setIsContractPreviewLogsExpanded(!isContractPreviewLogsExpanded)}
                                       className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-755 font-bold uppercase rounded-lg transition-all cursor-pointer"
                                     >
-                                      {isLogPanelExpanded ? "Ocultar Detalhes" : "Expandir Detalhes"}
+                                      {isContractPreviewLogsExpanded ? "Ocultar Detalhes" : "Expandir Detalhes"}
                                     </button>
                                     <button
                                       type="button"
@@ -5050,7 +5010,7 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
                             ) : (
                               <div className="space-y-4">
                                 {/* Se estiver recolhido, mostrar badge compacto */}
-                                {!isLogPanelExpanded && (
+                                {!isContractPreviewLogsExpanded && (
                                   <div className="p-3 bg-white border border-slate-150 rounded-xl flex items-center justify-between text-xs">
                                     <div className="flex items-center gap-2">
                                       <span className={`w-2.5 h-2.5 rounded-full ${
@@ -5066,7 +5026,7 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
                                     </div>
                                     <button
                                       type="button"
-                                      onClick={() => setIsLogPanelExpanded(true)}
+                                      onClick={() => setIsContractPreviewLogsExpanded(true)}
                                       className="text-indigo-650 hover:text-indigo-850 font-black uppercase text-[10px] tracking-wider"
                                     >
                                       Expandir Detalhes do Diagnóstico
@@ -5075,7 +5035,7 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
                                 )}
 
                                 {/* Card 1 — Resumo da Execução */}
-                                {isLogPanelExpanded && (
+                                {isContractPreviewLogsExpanded && (
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div className="p-4 bg-white border border-slate-150 rounded-xl space-y-2.5">
                                       <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono border-b pb-1">
@@ -5130,7 +5090,7 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
                                 )}
 
                                 {/* Card 2 — Payload do Preview */}
-                                {isLogPanelExpanded && (
+                                {isContractPreviewLogsExpanded && (
                                   <div className="p-4 bg-white border border-slate-150 rounded-xl space-y-3">
                                     <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono border-b pb-1 flex justify-between items-center">
                                       <span>Card 2 — Payload de Integração</span>
@@ -5154,7 +5114,7 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
                                 )}
 
                                 {/* Card 3 — Substituição de Placeholders */}
-                                {isLogPanelExpanded && (
+                                {isContractPreviewLogsExpanded && (
                                   <div className="p-4 bg-white border border-slate-150 rounded-xl space-y-3">
                                     <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono border-b pb-1">
                                       Card 3 — Substituição de Placeholders (Tabela de Auditoria)
@@ -5197,7 +5157,7 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
                                 )}
 
                                 {/* Card 4 — Erros e Alertas */}
-                                {isLogPanelExpanded && (
+                                {isContractPreviewLogsExpanded && (
                                   <div className="p-4 bg-white border border-slate-150 rounded-xl space-y-3">
                                     <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono border-b pb-1">
                                       Card 4 — Erros e Alertas
@@ -5261,7 +5221,7 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
                                 )}
 
                                 {/* Card 5 — Resultado */}
-                                {isLogPanelExpanded && (
+                                {isContractPreviewLogsExpanded && (
                                   <div className="p-4 bg-white border border-slate-150 rounded-xl space-y-3">
                                     <h5 className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono border-b pb-1">
                                       Card 5 — Resultado Final & Próxima Ação
@@ -7859,6 +7819,209 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
           </div>
         </div>
       </div>
+
+      {/* Batalha Naval Diagnostic Modal */}
+      {isBattleNavalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-xs p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-slate-900 text-slate-100 w-full max-w-6xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-800 font-sans">
+            {/* Header */}
+            <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">🚢</span>
+                  <h3 className="text-base font-black uppercase tracking-wider text-slate-100">
+                    Batalha Naval — Auditoria de Rastreabilidade Carry-On
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-400 font-medium leading-relaxed">
+                  Mapa de conformidade de placeholders e governança do contrato de honorários fáticos.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBattleNavalOpen(false)}
+                className="p-1.5 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-100 transition cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {battleNavalLoading ? (
+              <div className="flex-1 py-24 flex flex-col items-center justify-center space-y-3">
+                <Loader2 className="animate-spin text-amber-500" size={32} />
+                <span className="text-xs font-mono font-bold text-slate-400 uppercase tracking-widest animate-pulse">
+                  Carregando diagnóstico fático...
+                </span>
+              </div>
+            ) : !battleNavalData ? (
+              <div className="flex-1 p-8 text-center text-slate-400 text-xs font-mono">
+                Nenhum dado fático carregado.
+              </div>
+            ) : (() => {
+              const audit = battleNavalData.placeholderAudit || {};
+              const summary = audit.summary || { total: 0, success: 0, failed: 0 };
+              const rows = audit.rows || [];
+
+              const filteredRows = rows.filter((row: any) => {
+                const matchesSearch = 
+                  row.placeholder.toLowerCase().includes(battleSearchQuery.toLowerCase()) ||
+                  row.informationLabel.toLowerCase().includes(battleSearchQuery.toLowerCase()) ||
+                  row.sourceStage.toLowerCase().includes(battleSearchQuery.toLowerCase()) ||
+                  row.sourceField.toLowerCase().includes(battleSearchQuery.toLowerCase());
+                
+                const matchesStatus = 
+                  battleStatusFilter === "all" ||
+                  (battleStatusFilter === "success" && row.replacementStatus === "success") ||
+                  (battleStatusFilter === "failed" && row.replacementStatus === "failed");
+
+                return matchesSearch && matchesStatus;
+              });
+
+              return (
+                <>
+                  {/* Summary Banner */}
+                  <div className="p-6 bg-slate-950/20 grid grid-cols-1 md:grid-cols-4 gap-4 border-b border-slate-850">
+                    <div className="bg-slate-950/40 p-4 border border-slate-800 rounded-2xl flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Analisado</span>
+                      <span className="text-2xl font-black font-mono text-slate-100">{summary.total}</span>
+                    </div>
+                    <div className="bg-emerald-950/10 p-4 border border-emerald-900/30 rounded-2xl flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Substituído com Sucesso</span>
+                      <span className="text-2xl font-black font-mono text-emerald-400">{summary.success}</span>
+                    </div>
+                    <div className="bg-rose-950/10 p-4 border border-rose-900/30 rounded-2xl flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-rose-400 uppercase tracking-wider">Falha / Pendente</span>
+                      <span className="text-2xl font-black font-mono text-rose-400">{summary.failed}</span>
+                    </div>
+                    <div className="bg-blue-950/10 p-4 border border-blue-900/30 rounded-2xl flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Status do Contrato</span>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className="w-2 h-2 bg-blue-500 rounded-full animate-ping" />
+                        <span className="text-xs font-black uppercase text-blue-300 font-mono">
+                          {summary.failed > 0 ? "REVISÃO MANUAL RECOMENDADA" : "PRONTO PARA EMISSÃO"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Filter controls */}
+                  <div className="p-4 bg-slate-900 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setBattleStatusFilter("all")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                          battleStatusFilter === "all" ? "bg-indigo-600 text-white" : "bg-slate-800 text-slate-300 hover:bg-slate-750"
+                        }`}
+                      >
+                        Todos ({rows.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBattleStatusFilter("success")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                          battleStatusFilter === "success" ? "bg-emerald-600 text-white" : "bg-slate-800 text-emerald-400 hover:bg-slate-750"
+                        }`}
+                      >
+                        <CheckCircle2 size={12} /> Sucesso ({rows.filter((r: any) => r.replacementStatus === "success").length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBattleStatusFilter("failed")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+                          battleStatusFilter === "failed" ? "bg-rose-600 text-white" : "bg-slate-800 text-rose-400 hover:bg-slate-750"
+                        }`}
+                      >
+                        <AlertCircle size={12} /> Falhas ({rows.filter((r: any) => r.replacementStatus === "failed").length})
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2 max-w-sm w-full">
+                      <div className="relative w-full">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
+                        <input
+                          type="text"
+                          value={battleSearchQuery}
+                          onChange={(e) => setBattleSearchQuery(e.target.value)}
+                          placeholder="Buscar por placeholder, campo, etapa..."
+                          className="w-full bg-slate-950 border border-slate-850 rounded-xl py-1.5 pl-9 pr-4 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(JSON.stringify(battleNavalData, null, 2));
+                          alert("Dados copiados para a área de transferência!");
+                        }}
+                        className="px-3 py-1.5 bg-slate-850 hover:bg-slate-800 border border-slate-800 rounded-lg text-slate-300 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                        title="Copiar JSON Completo"
+                      >
+                        <Copy size={12} /> JSON
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Table area */}
+                  <div className="flex-1 overflow-auto bg-slate-950">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-900/60 border-b border-slate-850 text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                          <th className="p-4 w-3/12">Placeholder / Informação</th>
+                          <th className="p-4 w-3/12">Rastreabilidade Carry-On</th>
+                          <th className="p-4 w-3/12">Valor Resolvido (Fático)</th>
+                          <th className="p-4 w-3/12">Status / Diagnóstico do Sistema</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-900 text-xs">
+                        {filteredRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="p-8 text-center text-slate-500 italic font-mono">
+                              Nenhum campo localizado para os filtros ativos.
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredRows.map((row: any) => (
+                            <tr key={row.id} className="hover:bg-slate-900/40 transition">
+                              <td className="p-4 space-y-1">
+                                <div className="font-mono text-indigo-400 font-black">{row.placeholder}</div>
+                                <div className="text-[11px] font-black text-slate-200">{row.informationLabel}</div>
+                              </td>
+                              <td className="p-4 space-y-1">
+                                <div className="text-[10px] bg-slate-900 border border-slate-850 px-1.5 py-0.5 rounded text-slate-300 font-bold inline-block max-w-full truncate">
+                                  {row.sourceStage}
+                                </div>
+                                <div className="font-mono text-[10px] text-slate-400 font-medium">{row.sourceField}</div>
+                              </td>
+                              <td className="p-4 font-mono text-[11px] text-slate-300">
+                                {row.migratedValueMasked ? (
+                                  <span className="break-all whitespace-pre-wrap">{row.migratedValueMasked}</span>
+                                ) : (
+                                  <span className="text-slate-600 font-bold italic">[Vazio / Sem Valor]</span>
+                                )}
+                              </td>
+                              <td className="p-4 space-y-1.5">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`w-2 h-2 rounded-full ${row.replacementStatus === "success" ? "bg-emerald-500" : "bg-rose-500"}`} />
+                                  <span className={`text-[10px] font-black uppercase font-mono ${row.replacementStatus === "success" ? "text-emerald-400" : "text-rose-400"}`}>
+                                    {row.replacementStatus === "success" ? "Sucesso" : `FALHA: ${row.failureReason}`}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-slate-400 leading-relaxed font-medium">
+                                  {row.naturalLanguageMessage}
+                                </p>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
     </FluxoStepLayout>
   );
 }

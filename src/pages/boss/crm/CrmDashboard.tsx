@@ -252,7 +252,14 @@ export default function CrmDashboard() {
                           {/* Action - Redirect to Client's Integrated Portal */}
                           <button
                             type="button"
-                            onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${client.slug || client.id}`)}
+                            onClick={() => {
+                              const slugStr = client.slug;
+                              if (!slugStr) {
+                                alert("Não foi possível abrir o Editor do Portal porque o cliente não possui slug cadastrado.");
+                                return;
+                              }
+                              navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slugStr}/Editar-CRM-do-Cliente`);
+                            }}
                             className="p-2 bg-white hover:bg-[#5850ec] hover:text-white border border-gray-200 rounded-xl transition text-gray-500 cursor-pointer shadow-3xs group-hover:scale-105"
                             title="Abrir CRM do Cliente no Portal Integrado"
                           >
@@ -327,7 +334,14 @@ export default function CrmDashboard() {
                           {profEntry.clients.map((c) => (
                             <div
                               key={c.id}
-                              onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${c.slug || c.id}`)}
+                              onClick={() => {
+                                const slugStr = c.slug;
+                                if (!slugStr) {
+                                  alert("Não foi possível abrir o Editor do Portal porque o cliente não possui slug cadastrado.");
+                                  return;
+                                }
+                                navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slugStr}/Editar-CRM-do-Cliente`);
+                              }}
                               className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-gray-100 hover:border-indigo-200 hover:shadow-3xs transition cursor-pointer text-xxs group"
                             >
                               <span className="font-bold text-gray-700 group-hover:text-indigo-900 truncate">

@@ -799,7 +799,14 @@ export default function EditarCadastroCliente() {
             {(prevClientData?.slug || clientId) && (
               <button
                 type="button"
-                onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${prevClientData?.slug || clientId}`)}
+                onClick={() => {
+                  const slugStr = prevClientData?.slug;
+                  if (!slugStr) {
+                    alert("Não foi possível abrir o Editor do Portal porque o cliente não possui slug cadastrado.");
+                    return;
+                  }
+                  navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slugStr}/Editar-Painel-Geral-do-Cliente`);
+                }}
                 className="inline-flex items-center gap-1.5 px-3 py-1 border bg-orange-100/80 hover:bg-orange-200/80 text-orange-800 border-orange-200 hover:border-orange-355 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all duration-300 shadow-3xs cursor-pointer"
                 title="Editar dados ou portal do cliente"
               >

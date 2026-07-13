@@ -314,7 +314,14 @@ export default function OnboardingFluxo() {
             
             <button
               type="button"
-              onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${client?.slug || client?.clientId || caseObj?.clientId}`)}
+              onClick={() => {
+                const slugStr = client?.slug;
+                if (!slugStr) {
+                  alert("Não foi possível abrir o Editor do Portal porque o cliente não possui slug cadastrado.");
+                  return;
+                }
+                navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slugStr}/Editar-Painel-Geral-do-Cliente`);
+              }}
               className="inline-flex items-center gap-1.5 px-4 py-2 border bg-indigo-100/50 hover:bg-indigo-150 text-indigo-800 border-indigo-200 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 self-start md:self-auto"
             >
               <ExternalLink size={12} />

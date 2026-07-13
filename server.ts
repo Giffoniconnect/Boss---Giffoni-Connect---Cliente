@@ -1,10 +1,13 @@
 import express from "express";
 import path from "path";
+import cookieParser from "cookie-parser";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import * as admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
 import { google } from "googleapis";
+import { setupAsaasRoutes } from "./server/routes/asaas-routes";
 import fs from "fs";
 import { Readable } from "stream";
 
@@ -22,6 +25,7 @@ import {
   buildContratoHonorariosPjPlaceholders,
   buildPrePeticaoPlaceholders
 } from "./src/lib/documents/placeholderBuilders.js";
+import { buildContratoHonorariosDocumentContext } from "./src/lib/documents/contratoHonorariosBattleMap.js";
 
 dotenv.config();
 
@@ -207,6 +211,8 @@ async function initializeFirebaseAdmin() {
 // Perform initial boot trigger
 initializeFirebaseAdmin();
 
+app.use(cookieParser("boss_session_secret_giffoni_connect"));
+
 // Parse JSON payloads with increased limits for file base64 uploads
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -364,6 +370,322 @@ async function callGeminiWithRetry(ai: any, params: { model: string; contents: a
   }
   throw lastError;
 }
+
+// ========================================================
+// SESSÕES E INTEGRAÇÃO GOOGLE OAUTH CENTRALIZADA:
+// ========================================================
+
+// 1. GET /api/auth/session — retorna a sessão ativa e status do Google
+app.get("/api/auth/session", async (req: any, res: any) => {
+  const sessionCookie = req.signedCookies?.boss_session;
+  if (!sessionCookie) {
+    return res.json({ authenticated: false, user: null, googleConnected: false });
+  }
+
+  try {
+    const session = JSON.parse(sessionCookie);
+    if (!session || !session.uid) {
+      return res.json({ authenticated: false, user: null, googleConnected: false });
+    }
+
+    if (!dbAdmin) {
+      return res.json({
+        authenticated: true,
+        user: { uid: session.uid, email: session.email, profile: { email: session.email, role: "boss_admin" } },
+        googleConnected: false,
+        warning: "Banco de dados indisponível no momento"
+      });
+    }
+
+    const userRef = dbAdmin.collection("users").doc(session.uid);
+    const userSnap = await userRef.get();
+    const profile = userSnap.exists ? userSnap.data() : { email: session.email, role: "boss_admin" };
+
+    const tokenRef = dbAdmin.collection("google_tokens").doc(session.uid);
+    const tokenSnap = await tokenRef.get();
+    const googleConnected = tokenSnap.exists && !!tokenSnap.data()?.refreshToken;
+
+    res.json({
+      authenticated: true,
+      user: {
+        uid: session.uid,
+        email: session.email,
+        profile
+      },
+      googleConnected
+    });
+  } catch (err: any) {
+    console.error("Erro em GET /api/auth/session:", err);
+    res.json({ authenticated: false, error: err.message });
+  }
+});
+
+// POST /api/auth/session — cria cookie assinado a partir de ID Token do Firebase Auth
+app.post("/api/auth/session", async (req: any, res: any) => {
+  const { idToken } = req.body;
+  if (!idToken) {
+    return res.status(400).json({ error: "Missing ID token" });
+  }
+
+  try {
+    const decodedToken = await getAuth().verifyIdToken(idToken);
+    const uid = decodedToken.uid;
+    const email = decodedToken.email;
+
+    const sessionData = { uid, email };
+    res.cookie("boss_session", JSON.stringify(sessionData), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+      signed: true
+    });
+
+    res.json({ success: true, uid, email });
+  } catch (err: any) {
+    console.error("Error setting session cookie:", err);
+    res.status(401).json({ error: "Invalid ID token", message: err.message });
+  }
+});
+
+// 2. GET /api/integrations/status — retorna detalhes de escopo e conexões Google
+app.get("/api/integrations/status", async (req: any, res: any) => {
+  const sessionCookie = req.signedCookies?.boss_session;
+  if (!sessionCookie) {
+    return res.status(401).json({ error: "Não autorizado" });
+  }
+
+  try {
+    const session = JSON.parse(sessionCookie);
+    if (!session || !session.uid) {
+      return res.status(401).json({ error: "Não autorizado" });
+    }
+
+    if (!dbAdmin) {
+      return res.json({ connected: false, error: "Database not initialized" });
+    }
+
+    const tokenRef = dbAdmin.collection("google_tokens").doc(session.uid);
+    const tokenSnap = await tokenRef.get();
+
+    if (!tokenSnap.exists) {
+      return res.json({ connected: false });
+    }
+
+    const tokenData = tokenSnap.data();
+    const requiredScopes = [
+      'https://www.googleapis.com/auth/drive',
+      'https://www.googleapis.com/auth/documents',
+      'https://www.googleapis.com/auth/gmail.send',
+      'https://www.googleapis.com/auth/gmail.compose',
+      'https://www.googleapis.com/auth/spreadsheets',
+      'https://www.googleapis.com/auth/calendar',
+      'https://www.googleapis.com/auth/calendar.events',
+      'https://www.googleapis.com/auth/contacts',
+      'https://www.googleapis.com/auth/meetings.space.created'
+    ];
+
+    const currentScopes = tokenData.scopes || [];
+    const missingScopes = requiredScopes.filter(s => !currentScopes.includes(s));
+    const hasRefreshToken = !!tokenData.refreshToken;
+    const isExpired = Date.now() >= (tokenData.expiryDate || 0);
+
+    res.json({
+      connected: true,
+      email: session.email,
+      hasRefreshToken,
+      isExpired,
+      expiryDate: tokenData.expiryDate,
+      missingScopes,
+      scopes: currentScopes
+    });
+  } catch (err: any) {
+    console.error("Error in /api/integrations/status:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 3. GET /api/auth/google/start — inicia fluxo OAuth2 Code Flow
+app.get("/api/auth/google/start", async (req: any, res: any) => {
+  try {
+    const state = Math.random().toString(36).substring(2) + Date.now().toString(36);
+    res.cookie("oauth_state", state, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 10 * 60 * 1000 // 10 min
+    });
+
+    const redirectUri = `${process.env.APP_URL || "https://" + req.get("host")}/api/auth/google/callback`;
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID || "286170489831-irji52s23v26af138po2906rodtsdbhp.apps.googleusercontent.com",
+      process.env.GOOGLE_CLIENT_SECRET,
+      redirectUri
+    );
+
+    const scopes = [
+      'https://www.googleapis.com/auth/drive',
+      'https://www.googleapis.com/auth/documents',
+      'https://www.googleapis.com/auth/gmail.send',
+      'https://www.googleapis.com/auth/gmail.compose',
+      'https://www.googleapis.com/auth/spreadsheets',
+      'https://www.googleapis.com/auth/calendar',
+      'https://www.googleapis.com/auth/calendar.events',
+      'https://www.googleapis.com/auth/contacts',
+      'https://www.googleapis.com/auth/meetings.space.created',
+      'https://www.googleapis.com/auth/userinfo.email'
+    ];
+
+    const authUrl = oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      scope: scopes,
+      state: state,
+      prompt: 'consent' // Garante que o refresh_token seja retornado
+    });
+
+    res.redirect(authUrl);
+  } catch (err: any) {
+    console.error("Error starting Google OAuth:", err);
+    res.status(500).send(`Erro ao iniciar autenticação Google: ${err.message}`);
+  }
+});
+
+// 4. GET /api/auth/google/callback — valida state, troca code por token e persiste no Firestore
+app.get("/api/auth/google/callback", async (req: any, res: any) => {
+  const { code, state } = req.query;
+  const savedState = req.cookies?.oauth_state;
+
+  if (!state || state !== savedState) {
+    return res.status(400).send("CSRF Protection: O state retornado é inválido ou expirou. Tente novamente.");
+  }
+
+  res.clearCookie("oauth_state");
+
+  try {
+    const redirectUri = `${process.env.APP_URL || "https://" + req.get("host")}/api/auth/google/callback`;
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID || "286170489831-irji52s23v26af138po2906rodtsdbhp.apps.googleusercontent.com",
+      process.env.GOOGLE_CLIENT_SECRET,
+      redirectUri
+    );
+
+    const { tokens } = await oauth2Client.getToken(code as string);
+    oauth2Client.setCredentials(tokens);
+
+    const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
+    const userInfo = await oauth2.userinfo.get();
+    const userEmail = userInfo.data.email;
+
+    if (!userEmail) {
+      return res.status(400).send("Não foi possível obter o e-mail da conta Google.");
+    }
+
+    let uid = "";
+    const sessionCookie = req.signedCookies?.boss_session;
+    if (sessionCookie) {
+      const session = JSON.parse(sessionCookie);
+      uid = session.uid;
+    }
+
+    if (!uid && dbAdmin) {
+      const q = dbAdmin.collection("users").where("email", "==", userEmail);
+      const snap = await q.get();
+      if (!snap.empty) {
+        uid = snap.docs[0].id;
+      }
+    }
+
+    if (!uid) {
+      uid = userEmail.replace(/[^a-zA-Z0-9]/g, "_");
+    }
+
+    if (!dbAdmin) {
+      return res.status(500).send("Banco de dados indisponível no callback.");
+    }
+
+    const googleTokenData: any = {
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token || null,
+      expiryDate: tokens.expiry_date || (Date.now() + ((tokens as any).expires_in || 3600) * 1000),
+      scopes: tokens.scope ? tokens.scope.split(' ') : [],
+      updatedAt: new Date().toISOString()
+    };
+
+    const tokenRef = dbAdmin.collection("google_tokens").doc(uid);
+    const existingSnap = await tokenRef.get();
+    if (existingSnap.exists) {
+      const existingData = existingSnap.data();
+      if (!googleTokenData.refreshToken && existingData.refreshToken) {
+        googleTokenData.refreshToken = existingData.refreshToken;
+      }
+    }
+
+    await tokenRef.set(googleTokenData, { merge: true });
+
+    // Login local
+    const sessionData = { uid, email: userEmail };
+    res.cookie("boss_session", JSON.stringify(sessionData), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+      signed: true
+    });
+
+    console.log(`[GoogleOAuth] Sucesso para o usuário ${userEmail} (${uid})`);
+    res.redirect("/boss-giffoni-clientes/dashboard");
+  } catch (err: any) {
+    console.error("Error exchanging code for tokens:", err);
+    res.status(500).send(`Erro ao processar tokens Google: ${err.message}`);
+  }
+});
+
+// 5. POST /api/auth/logout — limpa o cookie de sessão
+app.post("/api/auth/logout", (req: any, res: any) => {
+  res.clearCookie("boss_session");
+  res.json({ success: true });
+});
+
+// 6. POST /api/integrations/google/disconnect — revoga e apaga credenciais do usuário
+app.post("/api/integrations/google/disconnect", async (req: any, res: any) => {
+  const sessionCookie = req.signedCookies?.boss_session;
+  if (!sessionCookie) {
+    return res.status(401).json({ error: "Não autorizado" });
+  }
+
+  try {
+    const session = JSON.parse(sessionCookie);
+    if (!session || !session.uid) {
+      return res.status(401).json({ error: "Não autorizado" });
+    }
+
+    if (!dbAdmin) {
+      return res.status(500).json({ error: "Banco de dados indisponível" });
+    }
+
+    const tokenRef = dbAdmin.collection("google_tokens").doc(session.uid);
+    const snap = await tokenRef.get();
+
+    if (snap.exists) {
+      const tokenData = snap.data();
+      const tokenToRevoke = tokenData.refreshToken || tokenData.accessToken;
+      if (tokenToRevoke) {
+        try {
+          const oauth2Client = new google.auth.OAuth2(
+            process.env.GOOGLE_CLIENT_ID || "286170489831-irji52s23v26af138po2906rodtsdbhp.apps.googleusercontent.com",
+            process.env.GOOGLE_CLIENT_SECRET
+          );
+          await oauth2Client.revokeToken(tokenToRevoke);
+        } catch (revokeErr: any) {
+          console.warn("[GoogleOAuth] Falha ao revogar token:", revokeErr.message);
+        }
+      }
+      await tokenRef.delete();
+    }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error("Error disconnecting Google:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Format structured case details using Gemini AI
 app.post("/api/gemini-format", async (req, res) => {
@@ -1581,10 +1903,67 @@ async function getGoogleDocsCredentials(req?: any) {
   };
 }
 
+async function getGoogleAccessTokenForUser(uid: string): Promise<string> {
+  if (!dbAdmin) {
+    throw new Error("Banco de dados indisponível no backend.");
+  }
+  const tokenRef = dbAdmin.collection("google_tokens").doc(uid);
+  const tokenSnap = await tokenRef.get();
+  if (!tokenSnap.exists) {
+    throw new Error("Integração Google não conectada no backend.");
+  }
+
+  const tokenData = tokenSnap.data();
+  let accessToken = tokenData.accessToken;
+  const expiryDate = tokenData.expiryDate;
+  const refreshToken = tokenData.refreshToken;
+
+  // If expired or expiring in less than 5 minutes, refresh it automatically
+  if (!accessToken || !expiryDate || Date.now() >= (expiryDate - 5 * 60 * 1000)) {
+    if (!refreshToken) {
+      throw new Error("Token de acesso expirado e refresh token não disponível. reconecte.");
+    }
+
+    console.log(`[GoogleOAuth] Token for user ${uid} is expired or near expiry. Refreshing automatically...`);
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID || "286170489831-irji52s23v26af138po2906rodtsdbhp.apps.googleusercontent.com",
+      process.env.GOOGLE_CLIENT_SECRET
+    );
+    oauth2Client.setCredentials({ refresh_token: refreshToken });
+
+    const { credentials } = await oauth2Client.refreshAccessToken();
+    accessToken = credentials.access_token;
+    const newExpiry = credentials.expiry_date || (Date.now() + 3600 * 1000);
+
+    await tokenRef.set({
+      accessToken: accessToken,
+      expiryDate: newExpiry,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+
+    console.log(`[GoogleOAuth] Token automatically refreshed for user ${uid}`);
+  }
+
+  return accessToken;
+}
+
 async function createGoogleDocsJwtClient(req: any) {
   let googleAccessToken = req?.body?.googleAccessToken || req?.headers?.["x-google-access-token"] || req?.body?.credentialOverride?.googleAccessToken;
   if (googleAccessToken === "null" || googleAccessToken === "undefined") {
     googleAccessToken = "";
+  }
+
+  // Automatic token resolution from secure cookie-based session
+  if (!googleAccessToken && req?.signedCookies?.boss_session) {
+    try {
+      const session = JSON.parse(req.signedCookies.boss_session);
+      if (session && session.uid) {
+        googleAccessToken = await getGoogleAccessTokenForUser(session.uid);
+        console.log(`[GoogleDocsEngine] Automatically resolved token from secure session for user: ${session.uid}`);
+      }
+    } catch (e: any) {
+      console.warn(`[GoogleDocsEngine] Automatic token resolution failed:`, e.message);
+    }
   }
   
   let tokenWasPassedAndExpired = false;
@@ -1776,9 +2155,10 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
     intent
   } = req.body || {};
 
-  const isForceNew = intent === "new_version" || req.body?.forceNewVersion || req.body?.forceNew;
+  const isForceNew = intent === "new_version" || req.body?.forceNewVersion || req.body?.forceNew || mode === "preview" || req.body?.previewOnly === true;
 
   const isStateless = mode === "stateless";
+  const isPreview = mode === "preview" || req.body?.previewOnly === true;
 
   // Resolve dynamic prefix, status value, and display label based on documentType/documentType
   let prefix = "primeiroAtendimento";
@@ -2174,7 +2554,7 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
   const nextVersion = Math.max(maxFoundVersion + 1, payloadVersion + 1);
 
   // 4. Caso o documento esteja realmente na pasta do cliente: retornar already_exists_in_destination
-  if (verifiedDocInFolder && !isForceNew) {
+  if (verifiedDocInFolder && !isForceNew && !isPreview) {
     const existingId = verifiedDocInFolder.id;
     const existingUrl = verifiedDocInFolder.webViewLink || `https://docs.google.com/document/d/${existingId}/edit`;
     const docVer = parseInt(verifiedDocInFolder.appProperties?.documentVersion, 10) || payloadVersion || maxFoundVersion || 1;
@@ -2232,9 +2612,11 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
   ).trim();
   
   // Support custom names, falling back to dynamic name
-  const finalDocName = (isForceNew && documentName)
-    ? `${documentName} - v${nextVersion}`
-    : (documentName || req.body?.customName || req.body?.documentName || `${typeLabel} - ${clientNameForName} - v${nextVersion}`);
+  const finalDocName = isPreview
+    ? `PREVIEW TEMPORÁRIO — Contrato de Honorários — ${clientNameForName} — ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}`
+    : (isForceNew && documentName)
+      ? `${documentName} - v${nextVersion}`
+      : (documentName || req.body?.customName || req.body?.documentName || `${typeLabel} - ${clientNameForName} - v${nextVersion}`);
 
   // Copy template
   let googleDocsId = "";
@@ -2333,7 +2715,7 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
       });
     }
 
-    if (documentType === "contrato_honorarios_pf") {
+    if (documentType === "contrato_honorarios_pf" && !isPreview) {
       const docVerify = await docs.documents.get({ documentId: googleDocsId });
       const docContent = JSON.stringify(docVerify.data.body || {});
       const unresolved = [];
@@ -2369,6 +2751,63 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
   addLog("success", "FLOW_COMPLETED", "Geração concluída com sucesso. O link real do Google Docs foi retornado.");
 
   const googleDocsUrl = `https://docs.google.com/document/d/${googleDocsId}/edit`;
+
+  if (isPreview) {
+    // Schedule self-destruction of the newly created preview file in 10 minutes (600,000 ms)
+    setTimeout(() => {
+      console.log(`[GoogleDocsEngine] Scheduled self-destruction of preview document: ${googleDocsId}`);
+      drive.files.delete({ fileId: googleDocsId }).catch((err: any) => {
+        console.warn(`[GoogleDocsEngine] Scheduled self-destruction failed for ${googleDocsId}:`, err.message);
+      });
+    }, 600 * 1000);
+
+    // Asynchronously cleanup other old preview files (starting with "PREVIEW TEMPORÁRIO") in the folder
+    try {
+      drive.files.list({
+        q: `'${destinationFolderId}' in parents and trashed = false and name contains 'PREVIEW TEMPORÁRIO'`,
+        fields: "files(id, name)"
+      }).then(listRes => {
+        const previewFiles = listRes.data.files || [];
+        for (const file of previewFiles) {
+          if (file.id !== googleDocsId) {
+            console.log(`[GoogleDocsEngine] Asynchronously cleaning up old preview file: ${file.name} (${file.id})`);
+            drive.files.delete({ fileId: file.id }).catch((err: any) => {
+              console.warn(`[GoogleDocsEngine] Failed to delete old preview ${file.id}:`, err.message);
+            });
+          }
+        }
+      }).catch(err => {
+        console.warn("[GoogleDocsEngine] Non-blocking list for cleanup failed:", err.message);
+      });
+    } catch (err) {
+      console.warn("[GoogleDocsEngine] Error starting non-blocking cleanup:", err);
+    }
+
+    // Check for remaining placeholders using extractTextFromGoogleDoc
+    let remainingPlaceholders: string[] = [];
+    try {
+      const docs = google.docs({ version: "v1", auth: jwtClient });
+      const docVerify = await docs.documents.get({ documentId: googleDocsId });
+      const extractedText = extractTextFromGoogleDoc(docVerify.data);
+      const matches1 = extractedText.match(/<<[^>]+>>/g) || [];
+      const matches2 = extractedText.match(/\{\{[^}]+\}\}/g) || [];
+      remainingPlaceholders = [...new Set([...matches1, ...matches2])];
+      addLog("success", "PREVIEW_AUDIT_COMPLETED", `Auditoria de placeholders finalizada. Encontrados ${remainingPlaceholders.length} placeholders não substituídos.`);
+    } catch (errAudit: any) {
+      addLog("warning", "PREVIEW_AUDIT_FAILED", `Não foi possível auditar os placeholders restantes: ${errAudit.message}`);
+    }
+
+    return res.status(200).json({
+      success: true,
+      outcome: "preview",
+      documentType,
+      googleDocsId,
+      googleDocsUrl,
+      remainingPlaceholders,
+      technicalLog,
+      message: "Prévia temporária gerada com sucesso pelo GDI."
+    });
+  }
 
   // Save to Firestore
   if (dbAdmin && caseId) {
@@ -6616,6 +7055,147 @@ async function startServer() {
       res.status(500).json({ success: false, error: err.message });
     }
   });
+
+  // Batalha Naval Diagnostic Endpoint
+  app.post("/api/google-docs/contrato-honorarios/batalha-naval", async (req: any, res: any) => {
+    try {
+      const { caseId, clientId, documentType, currentFinancialState } = req.body || {};
+      if (!caseId) {
+        return res.status(400).json({ success: false, errorMessage: "caseId é de preenchimento obrigatório." });
+      }
+      if (!clientId) {
+        return res.status(400).json({ success: false, errorMessage: "clientId é de preenchimento obrigatório." });
+      }
+      const docType = documentType || "contrato_honorarios_pf";
+
+      const caseSnap = await dbAdmin.collection("cases").doc(caseId).get();
+      if (!caseSnap.exists) {
+        return res.status(404).json({ success: false, errorMessage: "Caso não encontrado no banco de dados." });
+      }
+      const caseData = caseSnap.data();
+
+      const clientSnap = await dbAdmin.collection("clients").doc(clientId).get();
+      if (!clientSnap.exists) {
+        return res.status(404).json({ success: false, errorMessage: "Cliente não encontrado no banco de dados." });
+      }
+      const clientData = clientSnap.data();
+
+      // Execute Battle Map context resolver (pure, dry-run, no writes)
+      const result = buildContratoHonorariosDocumentContext({
+        documentType: docType,
+        clientData,
+        caseData,
+        financialData: currentFinancialState || {}
+      });
+
+      return res.json({
+        success: true,
+        ...result
+      });
+    } catch (err: any) {
+      console.error("[BATALHA_NAVAL_DIAGNOSTICS_ERROR]", err);
+      return res.status(500).json({
+        success: false,
+        errorMessage: err.message || "Erro interno ao processar a Batalha Naval."
+      });
+    }
+  });
+
+  // Stateless / Dry-Run Contract Preview Endpoint
+  app.post("/api/google-docs/contrato-honorarios/preview", async (req: any, res: any) => {
+    try {
+      const { caseId, clientId, documentType, currentFinancialState } = req.body || {};
+      if (!caseId) {
+        return res.status(400).json({ success: false, errorMessage: "caseId é de preenchimento obrigatório." });
+      }
+      if (!clientId) {
+        return res.status(400).json({ success: false, errorMessage: "clientId é de preenchimento obrigatório." });
+      }
+      const docType = documentType || "contrato_honorarios_pf";
+
+      const caseSnap = await dbAdmin.collection("cases").doc(caseId).get();
+      if (!caseSnap.exists) {
+        return res.status(404).json({ success: false, errorMessage: "Caso não encontrado no banco de dados." });
+      }
+      const caseData = caseSnap.data();
+
+      const clientSnap = await dbAdmin.collection("clients").doc(clientId).get();
+      if (!clientSnap.exists) {
+        return res.status(404).json({ success: false, errorMessage: "Cliente não encontrado no banco de dados." });
+      }
+      const clientData = clientSnap.data();
+
+      // Execute Battle Map context resolver
+      const result = buildContratoHonorariosDocumentContext({
+        documentType: docType,
+        clientData,
+        caseData,
+        financialData: currentFinancialState || {}
+      });
+
+      let renderedContent = result.renderedPreview;
+      let fetchedFromGoogle = false;
+
+      // Try fetching template from Google Docs API
+      try {
+        const { jwtClient } = await createGoogleDocsJwtClient(req);
+        if (jwtClient) {
+          const docs = google.docs({ version: "v1", auth: jwtClient });
+          const templateDoc = await docs.documents.get({ documentId: result.templateId });
+          if (templateDoc && templateDoc.data) {
+            // Parse Google Doc content to text in memory
+            const content = templateDoc.data.body?.content || [];
+            let extractedText = "";
+            for (const el of content) {
+              if (el.paragraph) {
+                for (const sub of el.paragraph.elements) {
+                  if (sub.textRun && sub.textRun.content) {
+                    extractedText += sub.textRun.content;
+                  }
+                }
+              }
+            }
+
+            if (extractedText) {
+              // Substitute placeholders in memory
+              let tempText = extractedText;
+              for (const [ph, val] of Object.entries(result.placeholders)) {
+                tempText = tempText.replace(new RegExp(ph.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'g'), String(val) || "");
+              }
+              
+              // Formatting as simple HTML paragraphs
+              renderedContent = `<div class="space-y-4 text-gray-800 leading-relaxed font-sans max-w-3xl mx-auto p-6 bg-white border border-gray-100 rounded-xl shadow-xs whitespace-pre-wrap font-serif">${tempText}</div>`;
+              fetchedFromGoogle = true;
+            }
+          }
+        }
+      } catch (googleErr: any) {
+        console.warn("[PREVIEW_ENDPOINT] Google Docs API retrieval failed, using canonical local template. Reason:", googleErr.message);
+      }
+
+      return res.json({
+        success: true,
+        documentType: docType,
+        templateId: result.templateId,
+        canonicalPayload: result.canonicalPayload,
+        placeholders: result.placeholders,
+        renderedContent,
+        placeholderAudit: result.placeholderAudit,
+        parityHash: result.parityHash,
+        technicalLog: result.technicalLog,
+        fetchedFromGoogle
+      });
+    } catch (err: any) {
+      console.error("[PREVIEW_DIAGNOSTICS_ERROR]", err);
+      return res.status(500).json({
+        success: false,
+        errorMessage: err.message || "Erro interno ao processar o Preview."
+      });
+    }
+  });
+
+  // Set up ASAAS integration routes
+  setupAsaasRoutes(app, dbAdmin, createGoogleDocsJwtClient);
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);

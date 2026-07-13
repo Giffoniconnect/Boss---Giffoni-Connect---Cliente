@@ -1419,7 +1419,14 @@ Recomendação: ${statusGeral === 'Não recomendado para deploy' ? 'Ajustar erro
                               Editar
                             </button>
                             <button
-                              onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/viviane-correa-medina-giffoni-rodrigues-pf-77759b')}
+                              onClick={() => {
+                                const slugStr = c?.slug;
+                                if (!slugStr) {
+                                  alert("Não foi possível abrir o Editor do Portal porque o cliente não possui slug cadastrado.");
+                                  return;
+                                }
+                                navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slugStr}/Editar-Painel-Geral-do-Cliente`);
+                              }}
                               className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-[15px] text-white rounded-xl font-extrabold cursor-pointer transition-colors shadow-sm shadow-indigo-100"
                             >
                               Editar Painel do Cliente

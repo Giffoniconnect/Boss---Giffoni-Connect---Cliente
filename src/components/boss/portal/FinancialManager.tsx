@@ -973,7 +973,11 @@ export const FinancialManager: React.FC<FinancialManagerProps> = ({
                 alert("Este cliente não possui nenhum caso ativo cadastrado para realizar a prestação de contas.");
                 return;
               }
-              const clientSlug = selectedClient?.slug || selectedClient?.id;
+              const clientSlug = selectedClient?.slug;
+              if (!clientSlug) {
+                alert("Não foi possível abrir a Prestação de Contas porque o cliente não possui slug cadastrado.");
+                return;
+              }
               navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${clientSlug}/prestar.contas.questionario`);
             }}
             className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition font-mono cursor-pointer"

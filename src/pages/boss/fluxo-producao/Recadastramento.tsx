@@ -399,9 +399,9 @@ export default function Recadastramento() {
       'sucesso'
     );
     if (client.slug) {
-      navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${client.slug}`);
+      navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${client.slug}/Editar-Painel-Geral-do-Cliente`);
     } else {
-      navigate(`/boss-giffoni-clientes/portal-editor/${client.id}`);
+      alert("Não foi possível abrir o Editor do Portal porque o cliente não possui slug cadastrado.");
     }
   };
 

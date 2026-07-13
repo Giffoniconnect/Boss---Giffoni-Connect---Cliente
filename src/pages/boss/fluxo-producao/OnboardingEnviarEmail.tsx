@@ -265,7 +265,14 @@ export default function OnboardingEnviarEmail() {
                 </p>
                 <button
                   type="button"
-                  onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${client?.slug || client?.clientId || caseObj?.clientId}`)}
+                  onClick={() => {
+                    const slugStr = client?.slug;
+                    if (!slugStr) {
+                      alert("Não foi possível abrir o Editor do Portal porque o cliente não possui slug cadastrado.");
+                      return;
+                    }
+                    navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slugStr}/Editar-Painel-Geral-do-Cliente`);
+                  }}
                   className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-red-800 hover:bg-red-900 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all"
                 >
                   <ExternalLink size={10} />

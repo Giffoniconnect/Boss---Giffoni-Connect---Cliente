@@ -532,7 +532,14 @@ export default function PortalClienteFluxo() {
                 return (
                   <button
                     key={c.id}
-                    onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${c.slug || c.id}`)}
+                    onClick={() => {
+                      const slugStr = c.slug;
+                      if (!slugStr) {
+                        alert("Não foi possível abrir o Editor do Portal porque o cliente não possui slug cadastrado.");
+                        return;
+                      }
+                      navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slugStr}/Editar-Painel-Geral-do-Cliente`);
+                    }}
                     className="w-full text-left p-4 rounded-2xl border border-gray-150 hover:border-blue-500 hover:bg-blue-50/5 text-gray-900 transition-all flex items-start justify-between min-h-[80px] cursor-pointer"
                   >
                     <div className="min-w-0 pr-1 select-none">

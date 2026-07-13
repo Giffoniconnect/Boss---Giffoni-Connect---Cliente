@@ -291,6 +291,16 @@ const bossRouter = createBrowserRouter(
       <Route path="/boss-giffoni-clientes/portal-cliente-preview/:clientId" element={<SafeRoute children={<PortalClientePreview />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/portal-cliente" element={<SafeRoute children={<PortalClienteFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug" element={<SafeRoute children={<EditarPortalCliente />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug/Editar-Painel-Geral-do-Cliente" element={<SafeRoute children={<EditarPortalCliente />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug/Editar-Dados-Cadastrais-do-Cliente" element={<SafeRoute children={<EditarPortalCliente />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug/Editar-CRM-do-Cliente" element={<SafeRoute children={<EditarPortalCliente />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug/Editar-Relacao-de-casos-do-cliente" element={<SafeRoute children={<EditarPortalCliente />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug/Editar-audiencias-do-cliente" element={<SafeRoute children={<EditarPortalCliente />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug/Editar-pericias-do-cliente" element={<SafeRoute children={<EditarPortalCliente />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug/Editar-reunioes-com-o-cliente" element={<SafeRoute children={<EditarPortalCliente />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug/Editar-solicitacao-de-provas" element={<SafeRoute children={<EditarPortalCliente />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug/Editar-solicitacao-de-informacoes" element={<SafeRoute children={<EditarPortalCliente />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug/Editar-financeiro-e-faturamento" element={<SafeRoute children={<EditarPortalCliente />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug/prestar.contas.questionario" element={<SafeRoute children={<EditarPortalCliente />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug/prestar.contas.apuracao.efetiva" element={<SafeRoute children={<EditarPortalCliente />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug/prestar.contas.recibo.e.envio" element={<SafeRoute children={<EditarPortalCliente />} />} />

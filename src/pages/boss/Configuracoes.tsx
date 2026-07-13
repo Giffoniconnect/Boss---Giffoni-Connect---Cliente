@@ -267,6 +267,67 @@ export default function Configuracoes() {
   // Standard documents template configuration state
   const [documentTemplates, setDocumentTemplates] = useState<DocumentTemplateConfig[]>(LOCAL_FALLBACK_TEMPLATES);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+
+  // Google Workspace Integration State
+  const [googleStatus, setGoogleStatus] = useState<{
+    connected: boolean;
+    email?: string;
+    hasRefreshToken?: boolean;
+    isExpired?: boolean;
+    missingScopes?: string[];
+    scopes?: string[];
+    error?: string;
+  } | null>(null);
+  const [loadingGoogleStatus, setLoadingGoogleStatus] = useState(false);
+
+  const fetchGoogleStatus = async () => {
+    setLoadingGoogleStatus(true);
+    try {
+      const res = await fetch('/api/integrations/status');
+      if (res.ok) {
+        const data = await res.json();
+        setGoogleStatus(data);
+      } else {
+        setGoogleStatus({ connected: false });
+      }
+    } catch (err: any) {
+      console.error("Failed to fetch Google status:", err);
+      setGoogleStatus({ connected: false, error: err.message });
+    } finally {
+      setLoadingGoogleStatus(false);
+    }
+  };
+
+  const handleDisconnectGoogle = async () => {
+    if (!window.confirm("Deseja realmente desconectar a integração Google Workspace e revogar os acessos?")) {
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/integrations/google/disconnect', { method: 'POST' });
+      if (res.ok) {
+        setFeedback({ type: 'success', message: 'Google Workspace desconectado com sucesso.' });
+        fetchGoogleStatus();
+      } else {
+        const errData = await res.json();
+        setFeedback({ type: 'error', message: errData.error || 'Erro ao desconectar Google Workspace.' });
+      }
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: err.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleConnectGoogle = () => {
+    window.location.href = '/api/auth/google/start';
+  };
+
+  useEffect(() => {
+    if (activeSubTab === 'conectores') {
+      fetchGoogleStatus();
+    }
+  }, [activeSubTab]);
   
   // New Document Template Form states
   const [newDocName, setNewDocName] = useState('');
@@ -1445,6 +1506,134 @@ export default function Configuracoes() {
                     <p className="text-xs text-slate-350 leading-relaxed font-semibold">
                       Chaves secretas, tokens fáticos ou hashes de certificação não devem ser armazenados no frontend público. Em conformidade com as diretivas, este painel serve para gerenciar estados, parâmetros públicos e simular handshakes seguros na nuvem.
                     </p>
+                  </div>
+                </div>
+
+                {/* GOOGLE WORKSPACE OAUTH CENTRAL CONNECTION CARD */}
+                <div className="bg-white border border-gray-200 p-6 rounded-[2rem] shadow-sm space-y-4">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                        <Globe size={24} />
+                      </div>
+                      <div className="space-y-1">
+                        <h3 className="text-base font-black tracking-tight text-gray-900">Integração Centralizada Google Workspace</h3>
+                        <p className="text-xs text-gray-500 font-medium">
+                          Conecte e autorize as APIs de Drive, Docs, Gmail, Planilhas, Calendário, Contatos e Meet em uma única sessão segura.
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      {loadingGoogleStatus ? (
+                        <div className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-wider font-mono animate-pulse">
+                          <RefreshCw size={14} className="animate-spin text-blue-550" />
+                          <span>Buscando Status...</span>
+                        </div>
+                      ) : googleStatus?.connected ? (
+                        <div className="flex flex-col items-end gap-1.5">
+                          <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase border border-emerald-200 tracking-wider rounded-full flex items-center gap-1 font-sans">
+                            <Check size={12} className="stroke-[3]" />
+                            CONECTADO
+                          </span>
+                          <span className="text-[10px] text-gray-400 font-mono font-bold">{googleStatus.email}</span>
+                        </div>
+                      ) : (
+                        <span className="px-3 py-1 bg-amber-50 text-amber-700 text-[10px] font-black uppercase border border-amber-200 tracking-wider rounded-full font-sans">
+                          DESCONECTADO
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {googleStatus?.connected && (
+                    <div className="bg-gray-50 rounded-2xl p-4 space-y-3 border border-gray-150 text-xs text-gray-700">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Token Offline (Refresh Token)</span>
+                          <span className="font-semibold text-gray-800 flex items-center gap-1">
+                            {googleStatus.hasRefreshToken ? (
+                              <>
+                                <Check size={12} className="text-emerald-600 stroke-[3]" />
+                                Ativo e seguro no Firestore
+                              </>
+                            ) : (
+                              <span className="text-amber-600">Pendente de nova autorização</span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Status do Token de Acesso</span>
+                          <span className="font-semibold text-gray-800">
+                            {googleStatus.isExpired ? (
+                              <span className="text-amber-600 flex items-center gap-1">Expirado (Renovação Automática ativa)</span>
+                            ) : (
+                              <span className="text-emerald-600 flex items-center gap-1">Válido e operacional</span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+
+                      {googleStatus.scopes && googleStatus.scopes.length > 0 && (
+                        <div className="space-y-1.5 pt-2 border-t border-gray-200">
+                          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Escopos Autorizados ({googleStatus.scopes.length})</span>
+                          <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto pr-1">
+                            {googleStatus.scopes.map((scope, idx) => (
+                              <span key={idx} className="bg-white border border-gray-200 px-2 py-0.5 rounded-md font-mono text-[9px] text-gray-600 truncate max-w-xs" title={scope}>
+                                {scope.split('/').pop()}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {googleStatus.missingScopes && googleStatus.missingScopes.length > 0 && (
+                        <div className="space-y-1 pt-2 border-t border-gray-200">
+                          <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider block">Aviso: Escopos em Falta ({googleStatus.missingScopes.length})</span>
+                          <p className="text-[11px] text-amber-700 leading-normal font-semibold">
+                            Para garantir a total operação das funcionalidades do Giffoni Connect, sugerimos reconectar para conceder as permissões em falta:
+                          </p>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {googleStatus.missingScopes.map((scope, idx) => (
+                              <span key={idx} className="bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md font-mono text-[9px] text-amber-700">
+                                {scope.split('/').pop()}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-3 pt-2">
+                    {googleStatus?.connected ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleConnectGoogle}
+                          className="px-5 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-black uppercase rounded-2xl transition duration-150 flex items-center gap-2 cursor-pointer"
+                        >
+                          <RefreshCw size={14} />
+                          Reautorizar / Sincronizar Permissões
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDisconnectGoogle}
+                          className="px-5 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 text-xs font-black uppercase rounded-2xl transition duration-150 flex items-center gap-2 ml-auto cursor-pointer"
+                        >
+                          <X size={14} className="stroke-[3]" />
+                          Desconectar Conta Google
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleConnectGoogle}
+                        className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase tracking-wider rounded-2xl transition duration-150 flex items-center gap-2 shadow-lg shadow-blue-200 cursor-pointer"
+                      >
+                        <Globe size={14} className="animate-pulse" />
+                        Conectar Conta Google Workspace
+                      </button>
+                    )}
                   </div>
                 </div>
 

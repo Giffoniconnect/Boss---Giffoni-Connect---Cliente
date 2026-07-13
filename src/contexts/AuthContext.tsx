@@ -135,6 +135,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setErrorMsg(null);
       if (firebaseUser) {
         try {
+          // Synchronize session token with backend Express cookie session
+          const idToken = await firebaseUser.getIdToken();
+          await fetch('/api/auth/session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken })
+          });
+
           const matchedProfile = await resolveUserProfile(firebaseUser);
           setProfile(matchedProfile);
         } catch (error: any) {
@@ -143,6 +151,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } else {
         setProfile(null);
+        // Clear backend session cookie
+        try {
+          await fetch('/api/auth/logout', { method: 'POST' });
+        } catch (err) {
+          console.warn('[AuthContext] Falha ao limpar sessão no backend:', err);
+        }
       }
       setLoading(false);
     });

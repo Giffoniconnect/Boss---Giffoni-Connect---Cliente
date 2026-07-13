@@ -800,7 +800,7 @@ export function buildContratoHonorariosPfPlaceholders(clientData: any, caseData:
     "<<clausula_segunda_varia_de_acordo_com_o_tipo_de_contrato_estabelecido>>": cl2.replace(/^Cláusula Segunda:\s*/i, ""),
 
     // BRAND NEW PLACEHOLDERS
-    "<<Tipo do serviço contratado>>": fin?.contractedServiceType || fin?.tipoServicoContratado || caseData?.contractedServiceType || caseData?.tipoServicoContratado || caseData?.tipoServico || caseData?.assunto || "Serviços Advocatícios",
+    "<<Tipo do serviço contratado>>": caseData?.tipoServicoContratado || fin?.tipoServicoContratado || caseData?.contractedServiceType || fin?.contractedServiceType || caseData?.tipoServico || caseData?.assunto || "Serviços Advocatícios",
 
 
     "{{MODELO_HONORARIOS}}": modelLabel,
@@ -889,7 +889,7 @@ export function buildContratoHonorariosPjPlaceholders(clientData: any, caseData:
     "{{CLAUSULA_SEGUNDA}}": cl2,
 
     // BRAND NEW PLACEHOLDERS
-    "<<Tipo do serviço contratado>>": fin?.contractedServiceType || fin?.tipoServicoContratado || caseData?.contractedServiceType || caseData?.tipoServicoContratado || caseData?.tipoServico || caseData?.assunto || "Serviços Advocatícios",
+    "<<Tipo do serviço contratado>>": caseData?.tipoServicoContratado || fin?.tipoServicoContratado || caseData?.contractedServiceType || fin?.contractedServiceType || caseData?.tipoServico || caseData?.assunto || "Serviços Advocatícios",
     "{{MODELO_HONORARIOS}}": modelLabel,
     "{{CATEGORIA_EXITO}}": fin?.categoriaExito || caseData?.categoriaExito || "N/A",
     "{{CLASSE_EXITO}}": fin?.classeExito || caseData?.classeExito || "N/A",

@@ -353,7 +353,14 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
           {(clientObj || caseObj?.clientId) && (
             <button
               type="button"
-              onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${clientObj?.slug || clientObj?.clientId || caseObj?.clientId}`)}
+              onClick={() => {
+                const slugStr = clientObj?.slug;
+                if (!slugStr) {
+                  alert("Não foi possível abrir o Editor do Portal porque o cliente não possui slug cadastrado.");
+                  return;
+                }
+                navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${slugStr}/Editar-Painel-Geral-do-Cliente`);
+              }}
               className="inline-flex items-center gap-1.5 px-4 py-3 border bg-orange-100/80 hover:bg-orange-200/80 text-orange-800 border-orange-200 hover:border-orange-300 rounded-2xl text-[11px] font-black uppercase tracking-wider transition-all duration-300 shadow-3xs cursor-pointer h-[44px]"
               title="Editar dados ou portal do cliente"
             >
