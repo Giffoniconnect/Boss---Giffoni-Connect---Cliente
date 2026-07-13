@@ -144,6 +144,13 @@ export default function EditarPortalCliente() {
     prestacaoStep = 3;
   }
 
+  const normalizedPathname = decodeURIComponent(location.pathname)
+    .replace(/\/+$/, "")
+    .toLowerCase();
+
+  const isEditarFinanceiroEFaturamentoRoute = !!slug && 
+    normalizedPathname.endsWith("/editar-financeiro-e-faturamento");
+
   // Selected client & loading states
   const [selectedClient, setSelectedClient] = useState<any | null>(null);
   const [clientCases, setClientCases] = useState<any[]>([]);
@@ -1213,7 +1220,7 @@ export default function EditarPortalCliente() {
             <p className="text-[15px] text-gray-400 font-semibold mt-1">Configuração individual das seções e fichas integradas fáticas para o portal do cliente.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3 self-start">
-            {slug === 'viviane-correa-medina-giffoni-rodrigues-pf-77759b' && (
+            {isEditarFinanceiroEFaturamentoRoute && (
               <button
                 id="btn-ver-cadastro-contrato"
                 onClick={() => navigate('/boss-giffoni-clientes/fluxo-producao/f60jptoSi8Z9xat45yIb/financeiro/Criar%20Contrato%20de%20Honor%C3%A1rios')}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   CreditCard, 
   Plus, 
@@ -28,7 +28,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { db } from '../../../lib/firebase';
-import { doc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../../../contexts/AuthContext';
 import {
   buildContratoHonorariosPfPlaceholders,
@@ -90,6 +90,215 @@ export const FinancialManager: React.FC<FinancialManagerProps> = ({
 
   const { googleAccessToken } = useAuth();
   const activeCase = selectedCase || (clientCases && clientCases.length > 0 ? clientCases.find((c: any) => c.id === 'f60jptoSi8Z9xat45yIb') || clientCases[0] : null);
+
+  const location = useLocation();
+  const normalizedPathname = decodeURIComponent(location.pathname)
+    .replace(/\/+$/, "")
+    .toLowerCase();
+
+  const isEditarFinanceiroEFaturamentoRoute =
+    normalizedPathname.endsWith("/editar-financeiro-e-faturamento");
+
+  interface TechLogType {
+    action: string;
+    timestamp: string;
+    message: string;
+    caseId?: string;
+    clientId?: string;
+    fileName?: string;
+    filesCount?: number;
+    selectedIndex?: number;
+    urlStatus?: string;
+    sourceStage?: string;
+  }
+
+  const [activeCaseRealtime, setActiveCaseRealtime] = useState<any>(null);
+  const [techLogs, setTechLogs] = useState<TechLogType[]>([]);
+  const [showFileDetails, setShowFileDetails] = useState(false);
+  const [showTechLogs, setShowTechLogs] = useState(false);
+
+  const isSafeGoogleDriveUrl = (rawUrl: string): boolean => {
+    try {
+      const url = new URL(rawUrl);
+      return (
+        url.protocol === "https:" &&
+        [
+          "drive.google.com",
+          "docs.google.com"
+        ].includes(url.hostname)
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  const resolveLatestSignedContractFile = (caseData: any) => {
+    const files = caseData?.solicitacoesProvasWizardState?.contratoFiles;
+
+    if (!Array.isArray(files) || files.length === 0) {
+      return null;
+    }
+
+    return [...files]
+      .reverse()
+      .find((file) => {
+        return (
+          file &&
+          typeof file.url === "string" &&
+          file.url.trim() !== "" &&
+          isSafeGoogleDriveUrl(file.url)
+        );
+      }) || null;
+  };
+
+  const maskUrl = (url: string): string => {
+    if (!url) return "";
+    try {
+      const parsed = new URL(url);
+      const origin = parsed.origin;
+      const path = parsed.pathname;
+      if (path.length > 15) {
+        return `${origin}${path.substring(0, 10)}...${path.substring(path.length - 8)}`;
+      }
+      return `${origin}${path}...`;
+    } catch {
+      return "URL_INVALIDA";
+    }
+  };
+
+  useEffect(() => {
+    setActiveCaseRealtime(activeCase);
+  }, [activeCase]);
+
+  useEffect(() => {
+    if (!activeCase?.id) return;
+    const unsub = onSnapshot(doc(db, "cases", activeCase.id), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        setActiveCaseRealtime({
+          id: snapshot.id,
+          ...data
+        });
+        setTechLogs((prev) => [
+          ...prev,
+          {
+            action: "SIGNED_CONTRACT_REALTIME_UPDATE_RECEIVED",
+            timestamp: new Date().toISOString(),
+            caseId: snapshot.id,
+            clientId: data.clientId,
+            message: "Atualização em tempo real recebida do Firestore para o contrato digitalizado."
+          }
+        ]);
+      }
+    }, (err) => {
+      console.error("Error watching active case:", err);
+    });
+    return () => unsub();
+  }, [activeCase?.id]);
+
+  useEffect(() => {
+    if (!activeCaseRealtime) {
+      setTechLogs([{
+        action: "SIGNED_CONTRACT_LOOKUP_STARTED",
+        timestamp: new Date().toISOString(),
+        message: "Iniciando busca do contrato assinado fático..."
+      }]);
+      return;
+    }
+
+    const initLogs: TechLogType[] = [
+      {
+        action: "SIGNED_CONTRACT_LOOKUP_STARTED",
+        timestamp: new Date().toISOString(),
+        message: "Iniciando busca do contrato assinado fático..."
+      },
+      {
+        action: "SIGNED_CONTRACT_CASE_RESOLVED",
+        timestamp: new Date().toISOString(),
+        caseId: activeCaseRealtime.id,
+        clientId: activeCaseRealtime.clientId,
+        message: `Caso resolvido com ID: ${activeCaseRealtime.id}`
+      }
+    ];
+
+    const files = activeCaseRealtime?.solicitacoesProvasWizardState?.contratoFiles;
+    if (!Array.isArray(files) || files.length === 0) {
+      initLogs.push({
+        action: "SIGNED_CONTRACT_NOT_FOUND",
+        timestamp: new Date().toISOString(),
+        caseId: activeCaseRealtime.id,
+        clientId: activeCaseRealtime.clientId,
+        message: "Nenhum arquivo de contrato foi localizado na Etapa 07."
+      });
+      setTechLogs(initLogs);
+      return;
+    }
+
+    initLogs.push({
+      action: "SIGNED_CONTRACT_FILES_FOUND",
+      timestamp: new Date().toISOString(),
+      caseId: activeCaseRealtime.id,
+      clientId: activeCaseRealtime.clientId,
+      filesCount: files.length,
+      message: `Foram localizados ${files.length} arquivo(s) na Etapa 07.`
+    });
+
+    let selectedFile: any = null;
+    let selectedIdx = -1;
+    for (let i = files.length - 1; i >= 0; i--) {
+      const file = files[i];
+      if (file && typeof file.url === 'string' && file.url.trim() !== '') {
+        if (isSafeGoogleDriveUrl(file.url)) {
+          selectedFile = file;
+          selectedIdx = i;
+          break;
+        } else {
+          initLogs.push({
+            action: "SIGNED_CONTRACT_URL_INVALID",
+            timestamp: new Date().toISOString(),
+            caseId: activeCaseRealtime.id,
+            clientId: activeCaseRealtime.clientId,
+            fileName: file.name,
+            message: `Arquivo na posição ${i} possui URL não autorizada do Google Drive.`
+          });
+        }
+      }
+    }
+
+    if (selectedFile) {
+      initLogs.push({
+        action: "SIGNED_CONTRACT_FILE_SELECTED",
+        timestamp: new Date().toISOString(),
+        caseId: activeCaseRealtime.id,
+        clientId: activeCaseRealtime.clientId,
+        fileName: selectedFile.name,
+        filesCount: files.length,
+        selectedIndex: selectedIdx,
+        message: `Último contrato assinado válido selecionado: ${selectedFile.name}`
+      });
+      initLogs.push({
+        action: "SIGNED_CONTRACT_URL_VALIDATED",
+        timestamp: new Date().toISOString(),
+        caseId: activeCaseRealtime.id,
+        clientId: activeCaseRealtime.clientId,
+        fileName: selectedFile.name,
+        filesCount: files.length,
+        selectedIndex: selectedIdx,
+        urlStatus: "VALID_DRIVE_URL",
+        message: `URL de destino segura validada com sucesso para o arquivo: ${selectedFile.name}`
+      });
+    } else {
+      initLogs.push({
+        action: "SIGNED_CONTRACT_NOT_FOUND",
+        timestamp: new Date().toISOString(),
+        caseId: activeCaseRealtime.id,
+        clientId: activeCaseRealtime.clientId,
+        message: "Nenhum arquivo com URL válida e segura do Google Drive foi encontrado."
+      });
+    }
+
+    setTechLogs(initLogs);
+  }, [activeCaseRealtime?.id, activeCaseRealtime?.solicitacoesProvasWizardState?.contratoFiles]);
   
   const [tabelaAnalitica, setTabelaAnalitica] = useState<any[]>([]);
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
@@ -935,13 +1144,169 @@ export const FinancialManager: React.FC<FinancialManagerProps> = ({
         </div>
         
         <div className="flex flex-col sm:flex-row gap-2 shrink-0 self-start sm:self-center">
-          <button
-            type="button"
-            onClick={() => setShowForm(!showForm)}
-            className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition font-mono cursor-pointer"
-          >
-            {showForm ? 'Fechar Lançamento' : 'Lançar Nova Cobrança'}
-          </button>
+          <div className="flex flex-col gap-2 min-w-[220px]">
+            <button
+              type="button"
+              onClick={() => setShowForm(!showForm)}
+              className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition font-mono cursor-pointer w-full"
+            >
+              {showForm ? 'Fechar Lançamento' : 'Lançar Nova Cobrança'}
+            </button>
+
+            {/* Contract files checking and button */}
+            {isEditarFinanceiroEFaturamentoRoute && (() => {
+              const latestContractFile = resolveLatestSignedContractFile(activeCaseRealtime);
+              const totalFiles = activeCaseRealtime?.solicitacoesProvasWizardState?.contratoFiles || [];
+              const hasFilesButInvalid = totalFiles.length > 0 && !latestContractFile;
+
+              if (latestContractFile) {
+                // Scenario 1: File is available
+                return (
+                  <div className="flex flex-col gap-1.5 w-full bg-slate-50 border border-slate-150 p-3 rounded-2xl text-left shadow-3xs">
+                    <a
+                      href={latestContractFile.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => {
+                        setTechLogs((prev) => [
+                          ...prev,
+                          {
+                            action: "SIGNED_CONTRACT_OPEN_CLICKED",
+                            timestamp: new Date().toISOString(),
+                            caseId: activeCaseRealtime?.id,
+                            clientId: activeCaseRealtime?.clientId,
+                            fileName: latestContractFile.name,
+                            message: "O operador clicou para abrir o contrato digitalizado."
+                          }
+                        ]);
+                      }}
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[11px] font-black uppercase tracking-wider transition font-mono text-center cursor-pointer shadow-3xs"
+                    >
+                      👁️ Ver contrato de honorários assinado ✍️ Digitalizado 🖨️
+                    </a>
+                    
+                    {/* Toggle File Details */}
+                    <button
+                      type="button"
+                      onClick={() => setShowFileDetails(!showFileDetails)}
+                      className="text-[10px] text-slate-500 hover:text-indigo-600 transition font-bold font-mono uppercase tracking-wider text-left flex items-center gap-1 mt-1 cursor-pointer"
+                    >
+                      {showFileDetails ? "▼ Ocultar detalhes" : "▶ Ver detalhes do arquivo"}
+                    </button>
+
+                    {showFileDetails && (
+                      <div className="p-2 bg-white border border-slate-100 rounded-lg text-[10px] text-slate-600 font-mono space-y-1 mt-1 animate-fade-in break-all">
+                        <div><strong>Nome:</strong> {latestContractFile.name}</div>
+                        <div><strong>Data:</strong> {latestContractFile.date || "Sem data"}</div>
+                        <div><strong>Tamanho:</strong> {latestContractFile.size || "Sem tamanho"}</div>
+                        <div><strong>Origem:</strong> Etapa 07 — Digitalização e Upload</div>
+                        <div><strong>Case ID:</strong> {activeCaseRealtime?.id}</div>
+                        <div><strong>URL:</strong> {maskUrl(latestContractFile.url)}</div>
+                      </div>
+                    )}
+
+                    {/* Toggle Tech Logs */}
+                    <button
+                      type="button"
+                      onClick={() => setShowTechLogs(!showTechLogs)}
+                      className="text-[10px] text-slate-400 hover:text-indigo-600 transition font-bold font-mono uppercase tracking-wider text-left flex items-center gap-1 cursor-pointer"
+                    >
+                      {showTechLogs ? "▼ Ocultar logs técnicos" : "👁️ Ver logs técnicos do contrato digitalizado"}
+                    </button>
+
+                    {showTechLogs && (
+                      <div className="p-2 bg-slate-900 text-slate-300 rounded-lg text-[9px] font-mono space-y-2 mt-1 max-h-[150px] overflow-y-auto">
+                        {techLogs.map((log, idx) => (
+                          <div key={idx} className="border-b border-slate-800 pb-1 last:border-0">
+                            <span className="text-amber-500 font-bold">[{log.action}]</span> <span className="text-slate-500">({new Date(log.timestamp).toLocaleTimeString()})</span>: {log.message}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              } else if (hasFilesButInvalid) {
+                // Scenario 3: Files exist but links are invalid
+                return (
+                  <div className="flex flex-col gap-1.5 w-full bg-rose-50 border border-rose-100 p-3 rounded-2xl text-left shadow-3xs">
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-rose-200 text-rose-700 rounded-xl text-[11px] font-black uppercase tracking-wider font-mono text-center cursor-not-allowed opacity-75"
+                    >
+                      Não foi possível abrir o contrato digitalizado
+                    </button>
+                    <p className="text-[10px] text-rose-600 font-bold leading-relaxed">
+                      O arquivo foi localizado, mas o hyperlink do Google Drive é inválido. Verifique o upload na Etapa 07.
+                    </p>
+
+                    {/* Toggle Tech Logs */}
+                    <button
+                      type="button"
+                      onClick={() => setShowTechLogs(!showTechLogs)}
+                      className="text-[10px] text-rose-500/70 hover:text-rose-700 transition font-bold font-mono uppercase tracking-wider text-left flex items-center gap-1 mt-1 cursor-pointer"
+                    >
+                      {showTechLogs ? "▼ Ocultar logs técnicos" : "👁️ Ver logs técnicos do contrato digitalizado"}
+                    </button>
+
+                    {showTechLogs && (
+                      <div className="p-2 bg-slate-900 text-slate-300 rounded-lg text-[9px] font-mono space-y-2 mt-1 max-h-[150px] overflow-y-auto">
+                        {techLogs.map((log, idx) => (
+                          <div key={idx} className="border-b border-slate-800 pb-1 last:border-0">
+                            <span className="text-amber-500 font-bold">[{log.action}]</span> <span className="text-slate-500">({new Date(log.timestamp).toLocaleTimeString()})</span>: {log.message}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              } else {
+                // Scenario 2: No files available
+                return (
+                  <div className="flex flex-col gap-1.5 w-full bg-slate-50 border border-slate-150 p-3 rounded-2xl text-left shadow-3xs">
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-200 text-slate-500 rounded-xl text-[11px] font-black uppercase tracking-wider font-mono text-center cursor-not-allowed opacity-70"
+                    >
+                      Contrato assinado digitalizado ainda não disponível
+                    </button>
+                    <p className="text-[10px] text-slate-400 font-bold leading-relaxed">
+                      O arquivo deve ser enviado na Etapa 07 — Digitalização e Upload.
+                    </p>
+                    {activeCaseRealtime?.id && (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${activeCaseRealtime.id}/digitalizacao-upload/setor.de.digitalizacao.e.upload`)}
+                        className="text-[10px] text-indigo-600 hover:text-indigo-800 hover:underline transition font-bold font-mono uppercase tracking-wider text-left flex items-center gap-1 cursor-pointer mt-1"
+                      >
+                        ➜ Ir para Digitalização e Upload
+                      </button>
+                    )}
+
+                    {/* Toggle Tech Logs */}
+                    <button
+                      type="button"
+                      onClick={() => setShowTechLogs(!showTechLogs)}
+                      className="text-[10px] text-slate-400 hover:text-indigo-600 transition font-bold font-mono uppercase tracking-wider text-left flex items-center gap-1 cursor-pointer mt-1"
+                    >
+                      {showTechLogs ? "▼ Ocultar logs técnicos" : "👁️ Ver logs técnicos do contrato digitalizado"}
+                    </button>
+
+                    {showTechLogs && (
+                      <div className="p-2 bg-slate-900 text-slate-300 rounded-lg text-[9px] font-mono space-y-2 mt-1 max-h-[150px] overflow-y-auto">
+                        {techLogs.map((log, idx) => (
+                          <div key={idx} className="border-b border-slate-800 pb-1 last:border-0">
+                            <span className="text-amber-500 font-bold">[{log.action}]</span> <span className="text-slate-500">({new Date(log.timestamp).toLocaleTimeString()})</span>: {log.message}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+            })()}
+          </div>
           
           {(() => {
             const clientSlug = selectedClient?.slug || selectedClient?.id || "";

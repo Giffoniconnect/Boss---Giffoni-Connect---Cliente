@@ -397,7 +397,8 @@ export default function FinanceiroFluxo() {
         setLastFriendlyError(null);
       }
 
-      setIsContractPreviewExpanded(true); // Auto-expand when successful
+      // Keep closed by default per permanent technical tray guidelines
+      setIsContractPreviewExpanded(false);
       setLastTechnicalError(null);
 
     } catch (err: any) {
@@ -7966,49 +7967,58 @@ export default function FinanceiroFluxo() {
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="bg-slate-900/60 border-b border-slate-850 text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                          <th className="p-4 w-3/12">Placeholder / Informação</th>
-                          <th className="p-4 w-3/12">Rastreabilidade Carry-On</th>
-                          <th className="p-4 w-3/12">Valor Resolvido (Fático)</th>
-                          <th className="p-4 w-3/12">Status / Diagnóstico do Sistema</th>
+                          <th className="p-4 w-5/12">Info</th>
+                          <th className="p-4 w-3/12">Placeholder</th>
+                          <th className="p-4 w-4/12">Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-900 text-xs">
                         {filteredRows.length === 0 ? (
                           <tr>
-                            <td colSpan={4} className="p-8 text-center text-slate-500 italic font-mono">
+                            <td colSpan={3} className="p-8 text-center text-slate-500 italic font-mono">
                               Nenhum campo localizado para os filtros ativos.
                             </td>
                           </tr>
                         ) : (
                           filteredRows.map((row: any) => (
-                            <tr key={row.id} className="hover:bg-slate-900/40 transition">
-                              <td className="p-4 space-y-1">
-                                <div className="font-mono text-indigo-400 font-black">{row.placeholder}</div>
+                            <tr key={row.id} className="hover:bg-slate-900/40 transition border-b border-slate-900">
+                              {/* Info Column */}
+                              <td className="p-4 space-y-2">
                                 <div className="text-[11px] font-black text-slate-200">{row.informationLabel}</div>
-                              </td>
-                              <td className="p-4 space-y-1">
-                                <div className="text-[10px] bg-slate-900 border border-slate-850 px-1.5 py-0.5 rounded text-slate-300 font-bold inline-block max-w-full truncate">
-                                  {row.sourceStage}
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="text-[10px] bg-slate-900 border border-slate-850 px-1.5 py-0.5 rounded text-slate-300 font-bold max-w-full truncate">
+                                    {row.sourceStage}
+                                  </span>
+                                  <span className="font-mono text-[10px] text-slate-400 font-medium">
+                                    {row.sourceField}
+                                  </span>
                                 </div>
-                                <div className="font-mono text-[10px] text-slate-400 font-medium">{row.sourceField}</div>
+                                <p className="text-[11px] text-slate-400 leading-relaxed font-medium">
+                                  {row.naturalLanguageMessage}
+                                </p>
                               </td>
-                              <td className="p-4 font-mono text-[11px] text-slate-300">
-                                {row.migratedValueMasked ? (
-                                  <span className="break-all whitespace-pre-wrap">{row.migratedValueMasked}</span>
-                                ) : (
-                                  <span className="text-slate-600 font-bold italic">[Vazio / Sem Valor]</span>
-                                )}
+
+                              {/* Placeholder Column */}
+                              <td className="p-4 font-mono text-indigo-400 font-black">
+                                {row.placeholder}
                               </td>
-                              <td className="p-4 space-y-1.5">
+
+                              {/* Status Column */}
+                              <td className="p-4 space-y-2">
                                 <div className="flex items-center gap-1.5">
                                   <span className={`w-2 h-2 rounded-full ${row.replacementStatus === "success" ? "bg-emerald-500" : "bg-rose-500"}`} />
                                   <span className={`text-[10px] font-black uppercase font-mono ${row.replacementStatus === "success" ? "text-emerald-400" : "text-rose-400"}`}>
                                     {row.replacementStatus === "success" ? "Sucesso" : `FALHA: ${row.failureReason}`}
                                   </span>
                                 </div>
-                                <p className="text-[11px] text-slate-400 leading-relaxed font-medium">
-                                  {row.naturalLanguageMessage}
-                                </p>
+                                <div className="font-mono text-[11px] text-slate-300 bg-slate-900/40 p-2 rounded border border-slate-850/50">
+                                  <span className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider mb-0.5">Valor Resolvido:</span>
+                                  {row.migratedValueMasked ? (
+                                    <span className="break-all whitespace-pre-wrap">{row.migratedValueMasked}</span>
+                                  ) : (
+                                    <span className="text-slate-600 font-bold italic">[Vazio / Sem Valor]</span>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           ))
