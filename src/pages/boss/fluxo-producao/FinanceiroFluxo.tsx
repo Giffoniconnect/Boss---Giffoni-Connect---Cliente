@@ -3588,7 +3588,7 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
                     }
                     resetForm();
                   }}
-                  className={`flex items-center gap-3 text-left p-4 border rounded-2xl transition duration-150 hover:bg-gray-50/50 cursor-pointer ${
+                  className={`flex items-start gap-3 text-left p-4 border rounded-2xl transition duration-150 hover:bg-gray-50/50 cursor-pointer h-auto ${
                     isSelected
                       ? "bg-indigo-50 border-indigo-500 text-indigo-950 shadow-3xs ring-1"
                       : "bg-white border-gray-200 text-gray-500"
@@ -3599,13 +3599,16 @@ São Paulo, na data de assinatura deste rascunho de homologação.`;
                   >
                     <Icon size={18} />
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <span
-                      className={`block text-[9px] font-extrabold uppercase tracking-widest font-mono ${isSelected ? "text-indigo-650" : "text-gray-400"}`}
+                      className={`block text-[9px] font-extrabold uppercase tracking-widest font-mono ${
+                        isSelected ? "text-indigo-650" : "text-gray-400"
+                      }`}
                     >
                       {sub.title}
                     </span>
-                    <span className="text-xs font-black leading-tight mt-0.5 block truncate">
+
+                    <span className="block mt-1 text-xs font-black leading-snug whitespace-normal break-words overflow-visible">
                       {sub.label}
                     </span>
                   </div>

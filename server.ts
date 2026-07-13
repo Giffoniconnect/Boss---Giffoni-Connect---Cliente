@@ -1582,7 +1582,10 @@ async function getGoogleDocsCredentials(req?: any) {
 }
 
 async function createGoogleDocsJwtClient(req: any) {
-  const googleAccessToken = req?.body?.googleAccessToken || req?.headers?.["x-google-access-token"] || req?.body?.credentialOverride?.googleAccessToken;
+  let googleAccessToken = req?.body?.googleAccessToken || req?.headers?.["x-google-access-token"] || req?.body?.credentialOverride?.googleAccessToken;
+  if (googleAccessToken === "null" || googleAccessToken === "undefined") {
+    googleAccessToken = "";
+  }
   
   let tokenWasPassedAndExpired = false;
   let tokenErrorMessage = "";
@@ -1601,9 +1604,13 @@ async function createGoogleDocsJwtClient(req: any) {
         credentialSource: "user_oauth"
       };
     } catch (tokenErr: any) {
-      console.warn("[GoogleDocsEngine] Passed Google OAuth token is invalid or expired. Gracefully falling back to Service Account. Error:", tokenErr.message);
+      console.warn("[GoogleDocsEngine] Passed Google OAuth token is invalid or expired. Raising token expired error. Error:", tokenErr.message);
       tokenWasPassedAndExpired = true;
       tokenErrorMessage = tokenErr.message || "token_expired_or_invalid";
+      
+      const err = new Error(`Sua sessão do Google Docs expirou ou é inválida (${tokenErrorMessage}). Por favor, clique em 'Conectar com Google / Renovar Token' para reautorizar a integração de forma rápida em 1-clique sem sair do sistema.`) as any;
+      err.errorCode = "GOOGLE_DOCS_TOKEN_EXPIRED";
+      throw err;
     }
   }
 
@@ -2253,6 +2260,29 @@ app.post(["/api/google-docs/generate-document", "/api/google-docs/generate"], as
       throw new Error("ID de cópia de arquivo vazio.");
     }
     addLog("success", "DOCUMENT_COPY_SUCCESS", `O modelo de [${typeLabel}] foi copiado com sucesso para a pasta do cliente.`);
+
+    // Non-blocking: Auto-share the generated document with the Service Account email if created via User OAuth
+    if (credentialSource === "user_oauth") {
+      try {
+        const saCredentials = await getGoogleDocsCredentials(req);
+        const saEmail = saCredentials?.serviceAccountEmail;
+        if (saEmail && saEmail.includes("@") && saEmail !== "application-default-credentials" && saEmail !== "user-connected-via-oauth") {
+          console.log(`[GoogleDocsEngine] Sharing generated file ${googleDocsId} with Service Account: ${saEmail}`);
+          await drive.permissions.create({
+            fileId: googleDocsId,
+            requestBody: {
+              role: "writer",
+              type: "user",
+              emailAddress: saEmail
+            },
+            sendNotificationEmail: false
+          });
+          addLog("info", "SHARE_WITH_SA_SUCCESS", `Documento compartilhado com a Conta de Serviço (${saEmail}) para permitir automações futuras.`);
+        }
+      } catch (errShare: any) {
+        console.warn("[GoogleDocsEngine] Non-blocking auto-share with Service Account failed:", errShare.message);
+      }
+    }
   } catch (errCopy: any) {
     addLog("error", "DOCUMENT_COPY_FAILED", `Não foi possível copiar o modelo para a pasta do cliente. Erro: ${errCopy.message}`);
     return res.status(500).json({
@@ -3219,6 +3249,28 @@ async function exportGoogleDocToPdfBase64(req: any, googleDocsUrl: string) {
     });
 
     const drive = google.drive({ version: "v3", auth: jwtClient });
+
+    // Proactive non-blocking sharing with the service account if authenticated via User OAuth
+    if (credentialSource === "user_oauth") {
+      try {
+        const saCredentials = await getGoogleDocsCredentials(req);
+        const saEmail = saCredentials?.serviceAccountEmail;
+        if (saEmail && saEmail.includes("@") && saEmail !== "application-default-credentials" && saEmail !== "user-connected-via-oauth") {
+          console.log(`[GoogleDocsExportPDF] Proactively sharing file ${fileId} with Service Account: ${saEmail}`);
+          await drive.permissions.create({
+            fileId,
+            requestBody: {
+              role: "writer",
+              type: "user",
+              emailAddress: saEmail
+            },
+            sendNotificationEmail: false
+          });
+        }
+      } catch (errShare: any) {
+        console.warn("[GoogleDocsExportPDF] Non-blocking auto-share with Service Account failed:", errShare.message);
+      }
+    }
 
     const meta = await drive.files.get({
       fileId,

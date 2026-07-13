@@ -87,6 +87,7 @@ export default function EntregaDocumento({
   });
 
   const [waspeedError, setWaspeedError] = useState<string | null>(null);
+  const [waspeedErrorCode, setWaspeedErrorCode] = useState<string | null>(null);
 
   const resolvedGoogleAccessToken = googleAccessToken || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken') || '';
 
@@ -146,6 +147,7 @@ export default function EntregaDocumento({
     };
     fetchDiagnostics();
   }, []);
+
   const getWASpeedMessageText = () => {
     if (tipoDocumento === 'procuracao') {
       return `Olá, ${nomeCliente}.\n\nSegue a procuração para assinatura.\n\nPor favor, confira, assine e nos envie a procuração assinada.\n\nQualquer dúvida, estamos à disposição.`;
@@ -159,10 +161,11 @@ export default function EntregaDocumento({
   };
 
   const getWASpeedTargetUrl = () => {
-    if (waDiagnostics?.waSpeedUrl && waDiagnostics.waSpeedUrl.trim()) {
-      return waDiagnostics.waSpeedUrl.trim();
+    const phoneNormalized = normalizeWhatsAppNumber(whatsappCliente);
+    if (phoneNormalized) {
+      return `https://web.whatsapp.com/send?phone=${phoneNormalized}`;
     }
-    return '/integrations/wa-speed';
+    return 'https://web.whatsapp.com/';
   };
 
   const handleSendViaWASpeed = async () => {
@@ -171,14 +174,18 @@ export default function EntregaDocumento({
     // Reset results & error
     setWhatsappResult(null);
     setWaspeedError(null);
+    setWaspeedErrorCode(null);
 
     const initialStatus = waspeedStatus;
 
     // Helper to log blocking/failure
-    const logFailure = (action: string, errorMsg: string, statusFinal: string, details: string) => {
+    const logFailure = (action: string, errorMsg: string, statusFinal: string, details: string, errorCode?: string) => {
       setWaspeedStatus(statusFinal);
       localStorage.setItem(`waspeed_status_${caseId}_${tipoDocumento}`, statusFinal);
       setWaspeedError(errorMsg);
+      if (errorCode) {
+        setWaspeedErrorCode(errorCode);
+      }
 
       const currentLogs = [...waLogs];
       currentLogs.push({
@@ -189,7 +196,8 @@ export default function EntregaDocumento({
         etapa: "Pergunta 1.2 — Como você entregará o documento ao cliente?",
         documento: docInfo.label,
         clientName: nomeCliente,
-        phone: whatsappCliente || "NÃO PREENCHIDO",
+        phoneOriginal: whatsappCliente || "NÃO PREENCHIDO",
+        phone: normalizeWhatsAppNumber(whatsappCliente) || "NÃO PREENCHIDO",
         payload: getWASpeedMessageText(),
         pdfId: extractGoogleDocId(googleDocsUrl) || "N/A",
         pdfStatus: (googleDocsUrl && !googleDocsUrl.includes('placeholder')) ? 'gerado' : 'pendente',
@@ -234,18 +242,22 @@ export default function EntregaDocumento({
     if (!phoneNormalized || phoneNormalized.length < 10) {
       logFailure(
         "BLOQUEIO_DADOS_AUSENTES",
-        `O telefone do cliente (${whatsappCliente}) não pôde ser normalizado para WhatsApp. Verifique o formato.`,
+        "Não é possível enviar via W.A Speed porque o telefone do cliente está inválido.",
         "Envio bloqueado — dados obrigatórios ausentes",
-        `Telefone do cliente no formato incorreto ou impossível de normalizar.`
+        "Telefone do cliente no formato incorreto ou impossível de normalizar."
       );
       return;
     }
 
     // 4. Document generation validation
+    const docTitle = docInfo.title;
+    const isMasculine = docTitle.startsWith('o ');
+    const geradoStr = isMasculine ? 'gerado' : 'gerada';
+
     if (!googleDocsUrl || googleDocsUrl.trim() === '' || googleDocsUrl.includes('placeholder')) {
       logFailure(
         "BLOQUEIO_DADOS_AUSENTES",
-        `Não é possível enviar via W.A Speed porque a ${tipoDocumento === 'procuracao' ? 'procuração' : 'declaração'} ainda não foi gerada.`,
+        `Não é possível enviar via W.A Speed porque ${docTitle} ainda não foi ${geradoStr}.`,
         "Envio bloqueado — dados obrigatórios ausentes",
         "URL do Google Docs não gerada ou pendente."
       );
@@ -257,9 +269,20 @@ export default function EntregaDocumento({
     if (!docId) {
       logFailure(
         "BLOQUEIO_DADOS_AUSENTES",
-        "A procuração foi gerada, mas o PDF ainda não está disponível para envio pelo W.A Speed.",
+        `Não é possível enviar via W.A Speed porque ${docTitle} ainda não foi ${geradoStr}.`,
         "Envio bloqueado — dados obrigatórios ausentes",
         "Não foi possível extrair ID de arquivo válido da URL do Google Docs."
+      );
+      return;
+    }
+
+    // 6. Secret Wascript_API validation
+    if (!waDiagnostics || !waDiagnostics.configured) {
+      logFailure(
+        "BLOQUEIO_DADOS_AUSENTES",
+        "Não foi possível acionar o W.A Speed porque a configuração Wascript_API está indisponível.",
+        "Falha no envio via W.A Speed",
+        "Configuração do Wascript_API ausente ou indisponível no backend."
       );
       return;
     }
@@ -284,7 +307,7 @@ export default function EntregaDocumento({
             <body>
               <div class="spinner"></div>
               <h3>Enviando documento pelo sistema...</h3>
-              <p>Por favor, aguarde. Após o envio ser confirmado, você será redirecionado para o W.A Speed automaticamente.</p>
+              <p>Por favor, aguarde. Após o envio ser confirmado, você será redirecionado para a conversa do cliente no WhatsApp Web.</p>
             </body>
           </html>
         `);
@@ -335,16 +358,21 @@ export default function EntregaDocumento({
 
         logFailure(
           "FALHA_CONEXAO_INTEGRACAO",
-          errorMsg,
-          "Falha no envio via W.A Speed. O documento não foi enviado.",
-          "Resposta do servidor não pôde ser interpretada como JSON."
+          "Falha no envio via W.A Speed. A mensagem e o PDF não foram confirmados como enviados.",
+          "Falha no envio via W.A Speed",
+          `Resposta do servidor não pôde ser interpretada como JSON. Detalhes: ${errorMsg}`
         );
         return;
       }
 
       if (response.ok && data.success) {
+        // Envio confirmado com sucesso real no backend
         const targetUrl = getWASpeedTargetUrl();
         let wasOpened = false;
+
+        // Atualizar status conforme fluxo esperado
+        setWaspeedStatus("Mensagem e PDF enviados via W.A Speed");
+        localStorage.setItem(`waspeed_status_${caseId}_${tipoDocumento}`, "Mensagem e PDF enviados via W.A Speed");
 
         if (reservedWindow && !reservedWindow.closed) {
           try {
@@ -356,8 +384,8 @@ export default function EntregaDocumento({
         }
 
         const finalStatus = wasOpened
-          ? "W.A Speed aberto para conferência"
-          : "O envio foi concluído, mas o navegador bloqueou a abertura automática do W.A Speed. Clique em ‘Abrir W.A Speed’ para conferir.";
+          ? "Conversa aberta no WhatsApp Web para conferência"
+          : "Envio concluído. Clique em ‘Abrir conversa no WhatsApp Web’ para conferir.";
 
         setWaspeedStatus(finalStatus);
         localStorage.setItem(`waspeed_status_${caseId}_${tipoDocumento}`, finalStatus);
@@ -371,6 +399,7 @@ export default function EntregaDocumento({
           etapa: "Pergunta 1.2 — Como você entregará o documento ao cliente?",
           documento: docInfo.label,
           clientName: nomeCliente,
+          phoneOriginal: whatsappCliente,
           phone: data.phoneNormalized || phoneNormalized,
           payload: getWASpeedMessageText(),
           pdfId: docId,
@@ -383,7 +412,13 @@ export default function EntregaDocumento({
           error: "",
           fallbackAcionado: "Não",
           usuario: user?.email || 'Usuário Responsável',
-          detalhes: `Envio confirmado com sucesso real. Retorno: ${data.message}. W.A Speed aberto automaticamente: ${wasOpened ? 'Sim' : 'Não (Bloqueio ou fecharam)'}`
+          urlConversa: targetUrl,
+          popupBloqueado: wasOpened ? "Não" : "Sim",
+          envioIniciado: "Sim",
+          mensagemConfirmada: "Sim",
+          pdfConfirmado: "Sim",
+          retornoReal: JSON.stringify(data),
+          detalhes: `Envio confirmado com sucesso real. Retorno: ${data.message}. Conversa do WhatsApp Web aberta automaticamente: ${wasOpened ? 'Sim' : 'Não (Bloqueio ou fecharam)'}`
         });
         setWaLogs(currentLogs);
         localStorage.setItem(`wa_logs_${caseId}_${tipoDocumento}`, JSON.stringify(currentLogs));
@@ -394,9 +429,10 @@ export default function EntregaDocumento({
         const errorMsg = data.errorMessage || 'Falha ao enviar por WhatsApp via W.A Speed.';
         logFailure(
           "ENVIO_WASPEED_REJEITADO",
-          `Falha ao acionar o W.A Speed/Wascript. O documento não foi enviado. Verifique os logs técnicos. Detalhes: ${errorMsg}`,
-          "Falha no envio via W.A Speed. O documento não foi enviado.",
-          `API retornou erro HTTP ${response.status} (${data.errorCode || 'UNKNOWN'}).`
+          `Falha no envio via W.A Speed: ${errorMsg}`,
+          "Falha no envio via W.A Speed",
+          `API retornou erro HTTP ${response.status} (${data.errorCode || 'UNKNOWN'}). Detalhes: ${errorMsg}`,
+          data.errorCode
         );
       }
     } catch (err: any) {
@@ -405,9 +441,10 @@ export default function EntregaDocumento({
       }
       logFailure(
         "EXCEPCAO_ENVIO_WASPEED",
+        `Falha no envio via W.A Speed: ${err.message || 'Erro de conexão'}`,
+        "Falha no envio via W.A Speed",
         `Erro ao conectar à API de WhatsApp: ${err.message || 'Sem mensagem'}`,
-        "Falha no envio via W.A Speed. O documento não foi enviado.",
-        "Ocorreu uma exceção no lado do cliente ao tentar realizar a chamada fetch."
+        err.errorCode || 'EXCEPCAO_CONEXAO'
       );
     } finally {
       setSendingWhatsapp(false);
@@ -911,15 +948,15 @@ export default function EntregaDocumento({
                     {questionNumber}.2 — Automação W.A Speed/Wascript no navegador
                   </span>
                   <span className={`text-[9px] font-black uppercase border rounded px-1.5 py-0.2 tracking-wider ${
-                    waspeedStatus === 'Mensagem e PDF enviados via W.A Speed' || waspeedStatus === 'W.A Speed aberto para conferência'
+                    waspeedStatus === 'Mensagem e PDF enviados via W.A Speed' || waspeedStatus === 'Conversa aberta no WhatsApp Web para conferência'
                       ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
                       : waspeedStatus === 'Enviando mensagem e PDF via W.A Speed...'
                       ? 'bg-yellow-100 text-yellow-800 border-yellow-200 animate-pulse'
                       : waspeedStatus.includes('Falha no envio')
                       ? 'bg-rose-100 text-rose-800 border-rose-200'
-                      : waspeedStatus.includes('bloqueou')
+                      : waspeedStatus.includes('Envio concluído')
                       ? 'bg-blue-100 text-blue-800 border-blue-200'
-                      : waspeedStatus === 'Envio bloqueado — dados obrigatórios ausentes'
+                      : waspeedStatus.includes('bloqueado')
                       ? 'bg-orange-100 text-orange-800 border-orange-200'
                       : 'bg-slate-100 text-slate-800 border-slate-200'
                   }`}>
@@ -957,13 +994,16 @@ export default function EntregaDocumento({
                 </button>
 
                 {/* Popup Blocker Fallback Button */}
-                {waspeedStatus.includes('bloqueou') && (
+                {(waspeedStatus === 'Conversa aberta no WhatsApp Web para conferência' ||
+                  waspeedStatus === 'Mensagem e PDF enviados via W.A Speed' ||
+                  waspeedStatus === 'Envio concluído. Clique em ‘Abrir conversa no WhatsApp Web’ para conferir.') && (
                   <button
                     type="button"
                     onClick={() => {
                       const targetUrl = getWASpeedTargetUrl();
                       window.open(targetUrl, '_blank', 'noopener,noreferrer');
-                      setWaspeedStatus("W.A Speed aberto para conferência");
+                      setWaspeedStatus("Conversa aberta no WhatsApp Web para conferência");
+                      localStorage.setItem(`waspeed_status_${caseId}_${tipoDocumento}`, "Conversa aberta no WhatsApp Web para conferência");
                       
                       const currentLogs = [...waLogs];
                       currentLogs.push({
@@ -974,19 +1014,20 @@ export default function EntregaDocumento({
                         etapa: "Pergunta 1.2 — Como você entregará o documento ao cliente?",
                         documento: docInfo.label,
                         clientName: nomeCliente,
-                        phone: whatsappCliente,
+                        phoneOriginal: whatsappCliente,
+                        phone: normalizeWhatsAppNumber(whatsappCliente),
                         payload: getWASpeedMessageText(),
                         pdfId: extractGoogleDocId(googleDocsUrl) || "N/A",
                         pdfStatus: 'gerado',
                         motor: "W.A Speed/Wascript",
                         secret: waDiagnostics?.configured ? "Wascript_API configurado" : "Wascript_API ausente/indisponível",
                         statusInicial: waspeedStatus,
-                        statusFinal: "W.A Speed aberto para conferência",
+                        statusFinal: "Conversa aberta no WhatsApp Web para conferência",
                         sucessoReal: "Sim",
                         error: "",
                         fallbackAcionado: "Não",
                         usuario: user?.email || 'Usuário Responsável',
-                        detalhes: "Popup blocker superado clicando no botão secundário."
+                        detalhes: "WhatsApp Web aberto para conferência."
                       });
                       setWaLogs(currentLogs);
                       localStorage.setItem(`wa_logs_${caseId}_${tipoDocumento}`, JSON.stringify(currentLogs));
@@ -994,7 +1035,7 @@ export default function EntregaDocumento({
                     className="w-full sm:w-auto min-h-[44px] justify-center text-center inline-flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] sm:text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-3xs cursor-pointer select-none leading-normal break-words whitespace-normal animate-bounce"
                   >
                     <ExternalLink size={14} className="shrink-0" />
-                    <span>Abrir W.A Speed</span>
+                    <span>Abrir conversa no WhatsApp Web</span>
                   </button>
                 )}
               </div>
@@ -1002,9 +1043,32 @@ export default function EntregaDocumento({
 
             {/* Validation Feedback & Alerts */}
             {waspeedError && (
-              <div className="p-3 bg-rose-50 border border-rose-150 text-rose-800 rounded-xl text-[11px] font-bold flex items-center gap-2">
-                <AlertCircle size={14} className="shrink-0 text-rose-600" />
-                <span>{waspeedError}</span>
+              <div className="flex flex-col gap-2">
+                <div className="p-3 bg-rose-50 border border-rose-150 text-rose-800 rounded-xl text-[11px] font-bold flex items-center gap-2">
+                  <AlertCircle size={14} className="shrink-0 text-rose-600" />
+                  <span>{waspeedError}</span>
+                </div>
+                {(waspeedErrorCode === 'GOOGLE_DOCS_TOKEN_EXPIRED' ||
+                  waspeedErrorCode === 'GOOGLE_AUTH_UNAUTHORIZED' ||
+                  waspeedErrorCode === 'GOOGLE_DOCS_PERMISSION_DENIED' ||
+                  waspeedErrorCode === 'GOOGLE_DOCS_CREDENTIALS_MISSING') && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await loginWithGoogle('boss_admin');
+                        setWaspeedError(null);
+                        setWaspeedErrorCode(null);
+                      } catch (e: any) {
+                        alert("Erro ao reautorizar conta Google: " + e.message);
+                      }
+                    }}
+                    className="w-max px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all shadow-3xs cursor-pointer flex items-center gap-1.5"
+                  >
+                    <ExternalLink size={10} />
+                    <span>Conectar com Google / Renovar Token</span>
+                  </button>
+                )}
               </div>
             )}
 
