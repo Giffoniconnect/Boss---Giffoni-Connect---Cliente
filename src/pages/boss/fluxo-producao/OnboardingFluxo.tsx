@@ -4,6 +4,11 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import FluxoStepLayout from './components/FluxoStepLayout';
 import {
+  extractClientOnboardingFields,
+  buildOnboardingExecutionPlan,
+  OnboardingStepPlan
+} from './onboardingHelper';
+import {
   ArrowLeft,
   ArrowRight,
   Save,
@@ -20,7 +25,10 @@ import {
   ChevronRight,
   ExternalLink,
   History,
-  FileText
+  FileText,
+  Star,
+  MessageSquare,
+  HelpCircle
 } from 'lucide-react';
 
 export default function OnboardingFluxo() {
@@ -153,123 +161,76 @@ export default function OnboardingFluxo() {
 
   const resolvedClientSlug = client?.slug || 'sem-slug';
 
-  // Extract client contact information
-  const getClientPhone = () => {
-    if (!client) return '';
-    if (client.type === 'PJ' || client.tipoPessoa === 'PJ' || client.isCompany === true) {
-      return client.pjDadosEmpresa?.pj_telefoneEmpresa || client.pjData?.pj_telefoneEmpresa || client.pjDadosEmpresa?.pj_telefoneRepresentante || client.pjData?.pj_telefoneRepresentante || client.phone || '';
+  // Dynamic Execution Plan via Canonical State Machine
+  const clientFields = extractClientOnboardingFields(client);
+  const executionPlan = buildOnboardingExecutionPlan(clientFields, caseObj?.onboarding);
+
+  // Routing Map to align helper steps to actual React Router definitions
+  const routeMap: Record<string, string> = {
+    'add.telefone.do.cliente': 'add.telefone.do.cliente',
+    'welcome.zap': 'welcome.zap',
+    'add.instagram.do.cliente': 'add.cliente.no.instagram',
+    'add.facebook.do.cliente': 'add.cliente.no.facebook',
+    'add.tiktok.do.cliente': 'add.cliente.no.tiktok',
+    'email.boas.vindas': 'enviar.email.cliente',
+    'avaliacard': 'avaliacard',
+    'auditoria.onboarding': 'auditoria.onboarding.cliente'
+  };
+
+  const getStepIcon = (id: number) => {
+    switch (id) {
+      case 1: return <Smartphone size={18} />;
+      case 2: return <MessageSquare size={18} />;
+      case 3: return <Instagram size={18} />;
+      case 4: return <Facebook size={18} />;
+      case 5: return <Video size={18} />;
+      case 6: return <Mail size={18} />;
+      case 7: return <Star size={18} />;
+      case 8: return <ShieldCheck size={18} />;
+      default: return <HelpCircle size={18} />;
     }
-    return client.pfDadosPessoais?.pf_telefoneCelular || client.pfData?.pf_telefoneCelular || client.phone || '';
   };
 
-  const getClientEmail = () => {
-    if (!client) return '';
-    if (client.type === 'PJ' || client.tipoPessoa === 'PJ' || client.isCompany === true) {
-      return client.pjDadosEmpresa?.pj_emailEmpresa || client.pjData?.pj_emailEmpresa || client.email || '';
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return {
+          label: 'Concluído ✅',
+          class: 'text-emerald-700 bg-emerald-50 border-emerald-200'
+        };
+      case 'dispensed_not_owned':
+      case 'dispensed_no_channel':
+        return {
+          label: 'Dispensado ⚪',
+          class: 'text-gray-400 bg-gray-50 border-gray-200 line-through decoration-gray-300'
+        };
+      case 'blocked_missing_data':
+        return {
+          label: 'Bloqueado ⚠️',
+          class: 'text-red-700 bg-red-50 border-red-200 font-bold'
+        };
+      case 'awaiting_human_confirmation':
+        return {
+          label: 'Confirmação Pendente ⏳',
+          class: 'text-amber-700 bg-amber-50 border-amber-200 font-bold animate-pulse'
+        };
+      case 'available':
+      default:
+        return {
+          label: 'Disponível ✈️',
+          class: 'text-indigo-700 bg-indigo-50 border-indigo-200'
+        };
     }
-    return client.pfDadosPessoais?.pf_email || client.pfData?.pf_email || client.email || '';
   };
 
-  const getClientInstagram = () => {
-    if (!client) return '';
-    if (client.type === 'PJ' || client.tipoPessoa === 'PJ' || client.isCompany === true) {
-      return client.pjDadosEmpresa?.pj_instagramEmpresa || client.pjData?.pj_instagramEmpresa || client.pj_instagramEmpresa || '';
+  const handleStepNavigation = (step: OnboardingStepPlan) => {
+    if (step.status === 'blocked_missing_data') {
+      alert(`Ação Bloqueada: Não é possível acessar esta subetapa devido à ausência de dados obrigatórios no cadastro do cliente (${step.reason || 'Informações em falta'}).`);
+      return;
     }
-    return client.pfDadosPessoais?.pf_instagram || client.pfData?.pf_instagram || client.pf_instagram || '';
+    const alignedPath = routeMap[step.route] || step.route;
+    navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/${alignedPath}`);
   };
-
-  const getClientFacebook = () => {
-    if (!client) return '';
-    if (client.type === 'PJ' || client.tipoPessoa === 'PJ' || client.isCompany === true) {
-      return client.pjDadosEmpresa?.pj_facebookEmpresa || client.pjData?.pj_facebookEmpresa || client.pj_facebookEmpresa || '';
-    }
-    return client.pfDadosPessoais?.pf_facebook || client.pfData?.pf_facebook || client.pf_facebook || '';
-  };
-
-  const getClientTikTok = () => {
-    if (!client) return '';
-    if (client.type === 'PJ' || client.tipoPessoa === 'PJ' || client.isCompany === true) {
-      return client.pjDadosEmpresa?.pj_tiktokEmpresa || client.pjData?.pj_tiktokEmpresa || client.pj_tiktokEmpresa || '';
-    }
-    return client.pfDadosPessoais?.pf_tiktok || client.pfData?.pf_tiktok || client.pf_tiktok || '';
-  };
-
-  const phoneInformed = getClientPhone();
-  const emailInformed = getClientEmail();
-  const instagramInformed = getClientInstagram();
-  const facebookInformed = getClientFacebook();
-  const tiktokInformed = getClientTikTok();
-
-  // Dynamic Status Resolvers for 6 Sub-stages
-  const onb = caseObj?.onboarding || {};
-
-  // 1. Telefone Celular
-  const getTelefoneStatus = () => {
-    const tel = onb.telefone;
-    if (!tel) return { label: 'Não Iniciado ⚪', class: 'text-gray-500 bg-gray-50 border-gray-200' };
-    if (!phoneInformed) return { label: 'Bloqueado — Sem Telefone ⚠️', class: 'text-red-700 bg-red-50 border-red-150 font-black' };
-    if (tel.telefoneClienteAdicionadoCelular === 'sim') return { label: 'Adicionado ✅', class: 'text-emerald-700 bg-emerald-50 border-emerald-100' };
-    if (tel.telefoneClienteAdicionadoCelular === 'nao') return { label: 'Pendente ⚠️', class: 'text-amber-700 bg-amber-50 border-amber-100' };
-    return { label: 'Não Iniciado ⚪', class: 'text-gray-500 bg-gray-50 border-gray-200' };
-  };
-
-  // 2. Instagram
-  const getInstagramStatus = () => {
-    const inst = onb.instagram;
-    if (inst?.naoAplicavel === true || instagramInformed === 'Não possuo' || (!instagramInformed && inst?.clienteAdicionadoInstagram === 'nao')) {
-      return { label: 'Não se aplica ⚪', class: 'text-gray-400 bg-gray-50/50 border-gray-150' };
-    }
-    if (!inst) return { label: 'Não Iniciado ⚪', class: 'text-gray-500 bg-gray-50 border-gray-200' };
-    if (inst.clienteAdicionadoInstagram === 'sim') return { label: 'Adicionado ✅', class: 'text-emerald-700 bg-emerald-50 border-emerald-100' };
-    return { label: 'Pendente ⚠️', class: 'text-amber-700 bg-amber-50 border-amber-100' };
-  };
-
-  // 3. Facebook
-  const getFacebookStatus = () => {
-    const face = onb.facebook;
-    if (face?.naoAplicavel === true || facebookInformed === 'Não possuo' || (!facebookInformed && face?.clienteAdicionadoFacebook === 'nao')) {
-      return { label: 'Não se aplica ⚪', class: 'text-gray-400 bg-gray-50/50 border-gray-150' };
-    }
-    if (!face) return { label: 'Não Iniciado ⚪', class: 'text-gray-500 bg-gray-50 border-gray-200' };
-    if (face.clienteAdicionadoFacebook === 'sim') return { label: 'Adicionado ✅', class: 'text-emerald-700 bg-emerald-50 border-emerald-100' };
-    return { label: 'Pendente ⚠️', class: 'text-amber-700 bg-amber-50 border-amber-100' };
-  };
-
-  // 4. TikTok
-  const getTikTokStatus = () => {
-    const tik = onb.tiktok;
-    if (tik?.naoAplicavel === true || tiktokInformed === 'Não possuo' || (!tiktokInformed && tik?.clienteAdicionadoTikTok === 'nao')) {
-      return { label: 'Não se aplica ⚪', class: 'text-gray-400 bg-gray-50/50 border-gray-150' };
-    }
-    if (!tik) return { label: 'Não Iniciado ⚪', class: 'text-gray-500 bg-gray-50 border-gray-200' };
-    if (tik.clienteAdicionadoTikTok === 'sim') return { label: 'Adicionado ✅', class: 'text-emerald-700 bg-emerald-50 border-emerald-100' };
-    return { label: 'Pendente ⚠️', class: 'text-amber-700 bg-amber-50 border-amber-100' };
-  };
-
-  // 5. Enviar E-mail
-  const getEmailStatus = () => {
-    const em = onb.email;
-    if (!em) return { label: 'Não Iniciado ⚪', class: 'text-gray-500 bg-gray-50 border-gray-200' };
-    if (!emailInformed) return { label: 'Bloqueado — Sem E-mail ⚠️', class: 'text-red-700 bg-red-50 border-red-150 font-black' };
-    if (em.emailBoasVindasEnviadoCliente === 'sim') return { label: 'E-mail Enviado ✅', class: 'text-emerald-700 bg-emerald-50 border-emerald-100' };
-    return { label: 'Pendente ⚠️', class: 'text-amber-700 bg-amber-50 border-amber-100' };
-  };
-
-  // 6. Auditoria Onboarding
-  const getAuditoriaStatus = () => {
-    const aud = onb.auditoria;
-    if (!aud) return { label: 'Não Iniciado ⚪', class: 'text-gray-500 bg-gray-50 border-gray-200' };
-    if (aud.statusFinal === 'Onboarding completo ✅') return { label: 'Completo ✅', class: 'text-emerald-700 bg-emerald-50 border-emerald-100 font-extrabold shadow-3xs' };
-    if (aud.statusFinal === 'Onboarding bloqueado ❌') return { label: 'Bloqueado ❌', class: 'text-red-700 bg-red-50 border-red-100 font-black' };
-    return { label: 'Pendente ⚠️', class: 'text-amber-700 bg-amber-50 border-amber-100 font-semibold' };
-  };
-
-  const statusTel = getTelefoneStatus();
-  const statusInst = getInstagramStatus();
-  const statusFace = getFacebookStatus();
-  const statusTik = getTikTokStatus();
-  const statusEm = getEmailStatus();
-  const statusAud = getAuditoriaStatus();
 
   return (
     <FluxoStepLayout
@@ -333,165 +294,72 @@ export default function OnboardingFluxo() {
         {/* HUB SUB-STAGES HEADER */}
         <div className="space-y-2">
           <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-            <Plane className="text-indigo-600" size={18} />
-            Subetapas de Onboarding Integradas
+            <Plane className="text-indigo-600 animate-bounce" size={18} />
+            Matriz Canônica de Onboarding (8 Subetapas)
           </h3>
           <p className="text-xs text-gray-500 font-medium leading-relaxed">
-            Organize o acolhimento do novo cliente através das subetapas indicadas. O processo de auditoria final avalia a conformidade dos dados antes da liberação oficial do fluxo de trabalho.
+            Acompanhe o fluxo inteligente de acolhimento social e físico do cliente. O sistema calcula dinamicamente quais etapas são necessárias de acordo com os dados informados, aplicando regras rígidas de Skip e Skip-Reason para garantir a conformidade dos dados.
           </p>
         </div>
 
-        {/* 6 SUB-STAGES CARDS GRID */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {/* 1. Telefone Celular */}
-          <div
-            onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/add.telefone.do.cliente`)}
-            className="group bg-white border border-gray-150 hover:border-indigo-400 p-5 rounded-2xl cursor-pointer transition-all hover:shadow-md flex flex-col justify-between gap-4 h-[155px]"
-          >
-            <div className="space-y-1">
-              <div className="flex justify-between items-start">
-                <span className="text-[9px] font-black tracking-widest text-slate-400 uppercase">Subetapa 01</span>
-                <Smartphone size={18} className="text-gray-400 group-hover:text-indigo-600 transition-all" />
-              </div>
-              <h4 className="text-xs font-black text-slate-800 group-hover:text-indigo-600 transition-all uppercase tracking-wide">
-                Adicionar Telefone Celular
-              </h4>
-              <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
-                Salvar contato no dispositivo corporativo e validar envio do WhatsApp de acolhimento.
-              </p>
-            </div>
-            <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${statusTel.class}`}>
-                {statusTel.label}
-              </span>
-              <ChevronRight size={14} className="text-gray-300 group-hover:text-gray-600 group-hover:translate-x-0.5 transition-all" />
-            </div>
-          </div>
+        {/* 8 SUB-STAGES CARDS GRID */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {executionPlan.map((step) => {
+            const badge = getStatusBadge(step.status);
+            const isSelectable = step.status !== 'blocked_missing_data';
 
-          {/* 2. Instagram */}
-          <div
-            onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/add.cliente.no.instagram`)}
-            className="group bg-white border border-gray-150 hover:border-indigo-400 p-5 rounded-2xl cursor-pointer transition-all hover:shadow-md flex flex-col justify-between gap-4 h-[155px]"
-          >
-            <div className="space-y-1">
-              <div className="flex justify-between items-start">
-                <span className="text-[9px] font-black tracking-widest text-slate-400 uppercase">Subetapa 02</span>
-                <Instagram size={18} className="text-gray-400 group-hover:text-indigo-600 transition-all" />
-              </div>
-              <h4 className="text-xs font-black text-slate-800 group-hover:text-indigo-600 transition-all uppercase tracking-wide">
-                Cliente no Instagram
-              </h4>
-              <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
-                Localizar o cliente no Instagram e incluí-lo na rede de contatos oficial do escritório.
-              </p>
-            </div>
-            <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${statusInst.class}`}>
-                {statusInst.label}
-              </span>
-              <ChevronRight size={14} className="text-gray-300 group-hover:text-gray-600 group-hover:translate-x-0.5 transition-all" />
-            </div>
-          </div>
+            return (
+              <div
+                key={step.id}
+                onClick={() => handleStepNavigation(step)}
+                className={`group bg-white border rounded-2xl p-5 cursor-pointer transition-all hover:shadow-md flex flex-col justify-between gap-4 h-[165px] ${
+                  step.status === 'blocked_missing_data'
+                    ? 'border-red-150 opacity-85 cursor-not-allowed bg-red-50/10'
+                    : step.status === 'completed'
+                    ? 'border-emerald-200 hover:border-emerald-400'
+                    : 'border-gray-150 hover:border-indigo-400'
+                }`}
+              >
+                <div className="space-y-1">
+                  <div className="flex justify-between items-start">
+                    <span className="text-[9px] font-black tracking-widest text-slate-400 uppercase">
+                      Subetapa 0{step.id}
+                    </span>
+                    <div className={`${
+                      step.status === 'completed'
+                        ? 'text-emerald-600'
+                        : step.status === 'blocked_missing_data'
+                        ? 'text-red-500'
+                        : 'text-gray-400 group-hover:text-indigo-600'
+                    } transition-all`}>
+                      {getStepIcon(step.id)}
+                    </div>
+                  </div>
 
-          {/* 3. Facebook */}
-          <div
-            onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/add.cliente.no.facebook`)}
-            className="group bg-white border border-gray-150 hover:border-indigo-400 p-5 rounded-2xl cursor-pointer transition-all hover:shadow-md flex flex-col justify-between gap-4 h-[155px]"
-          >
-            <div className="space-y-1">
-              <div className="flex justify-between items-start">
-                <span className="text-[9px] font-black tracking-widest text-slate-400 uppercase">Subetapa 03</span>
-                <Facebook size={18} className="text-gray-400 group-hover:text-indigo-600 transition-all" />
-              </div>
-              <h4 className="text-xs font-black text-slate-800 group-hover:text-indigo-600 transition-all uppercase tracking-wide">
-                Cliente no Facebook
-              </h4>
-              <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
-                Realizar conexão social do perfil do cliente no Facebook oficial do escritório.
-              </p>
-            </div>
-            <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${statusFace.class}`}>
-                {statusFace.label}
-              </span>
-              <ChevronRight size={14} className="text-gray-300 group-hover:text-gray-600 group-hover:translate-x-0.5 transition-all" />
-            </div>
-          </div>
+                  <h4 className={`text-xs font-black uppercase tracking-wide leading-tight ${
+                    step.status === 'completed'
+                      ? 'text-emerald-950'
+                      : 'text-slate-800 group-hover:text-indigo-600'
+                  } transition-all`}>
+                    {step.name.split(' — ')[1] || step.name}
+                  </h4>
 
-          {/* 4. TikTok */}
-          <div
-            onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/add.cliente.no.tiktok`)}
-            className="group bg-white border border-gray-150 hover:border-indigo-400 p-5 rounded-2xl cursor-pointer transition-all hover:shadow-md flex flex-col justify-between gap-4 h-[155px]"
-          >
-            <div className="space-y-1">
-              <div className="flex justify-between items-start">
-                <span className="text-[9px] font-black tracking-widest text-slate-400 uppercase">Subetapa 04</span>
-                <Video size={18} className="text-gray-400 group-hover:text-indigo-600 transition-all" />
-              </div>
-              <h4 className="text-xs font-black text-slate-800 group-hover:text-indigo-600 transition-all uppercase tracking-wide">
-                Cliente no TikTok
-              </h4>
-              <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
-                Registrar e seguir o usuário do cliente no TikTok corporativo (se disponível).
-              </p>
-            </div>
-            <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${statusTik.class}`}>
-                {statusTik.label}
-              </span>
-              <ChevronRight size={14} className="text-gray-300 group-hover:text-gray-600 group-hover:translate-x-0.5 transition-all" />
-            </div>
-          </div>
+                  <p className="text-[10px] text-gray-500 font-medium leading-relaxed line-clamp-2">
+                    {step.reason || `Executar homologação fática da subetapa 0${step.id}.`}
+                  </p>
+                </div>
 
-          {/* 5. Enviar E-mail */}
-          <div
-            onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/enviar.email.cliente`)}
-            className="group bg-white border border-gray-150 hover:border-indigo-400 p-5 rounded-2xl cursor-pointer transition-all hover:shadow-md flex flex-col justify-between gap-4 h-[155px]"
-          >
-            <div className="space-y-1">
-              <div className="flex justify-between items-start">
-                <span className="text-[9px] font-black tracking-widest text-slate-400 uppercase">Subetapa 05</span>
-                <Mail size={18} className="text-gray-400 group-hover:text-indigo-600 transition-all" />
+                <div className="flex items-center justify-between border-t border-gray-100 pt-2.5">
+                  <span className={`text-[9px] font-bold px-2.5 py-0.5 rounded-full border ${badge.class}`}>
+                    {badge.label}
+                  </span>
+                  {isSelectable && (
+                    <ChevronRight size={14} className="text-gray-300 group-hover:text-gray-600 group-hover:translate-x-0.5 transition-all" />
+                  )}
+                </div>
               </div>
-              <h4 className="text-xs font-black text-slate-800 group-hover:text-indigo-600 transition-all uppercase tracking-wide">
-                Enviar E-mail de Boas-vindas
-              </h4>
-              <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
-                Envio do e-mail oficial de acolhimento e validação de credenciais de acesso do portal.
-              </p>
-            </div>
-            <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${statusEm.class}`}>
-                {statusEm.label}
-              </span>
-              <ChevronRight size={14} className="text-gray-300 group-hover:text-gray-600 group-hover:translate-x-0.5 transition-all" />
-            </div>
-          </div>
-
-          {/* 6. Auditoria */}
-          <div
-            onClick={() => navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/auditoria.onboarding.cliente`)}
-            className="group bg-white border border-indigo-150 hover:border-indigo-500 p-5 rounded-2xl cursor-pointer transition-all hover:shadow-md flex flex-col justify-between gap-4 h-[155px] shadow-3xs"
-          >
-            <div className="space-y-1">
-              <div className="flex justify-between items-start">
-                <span className="text-[9px] font-black tracking-widest text-indigo-400 uppercase">Subetapa 06</span>
-                <ShieldCheck size={18} className="text-indigo-400 group-hover:text-indigo-600 transition-all animate-pulse" />
-              </div>
-              <h4 className="text-xs font-black text-indigo-900 group-hover:text-indigo-600 transition-all uppercase tracking-wide">
-                Auditoria do Onboarding
-              </h4>
-              <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
-                Aprovação regulamentar do onboarding e validação final da integração social/física.
-              </p>
-            </div>
-            <div className="flex items-center justify-between border-t border-indigo-50 pt-3">
-              <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${statusAud.class}`}>
-                {statusAud.label}
-              </span>
-              <ChevronRight size={14} className="text-indigo-300 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all" />
-            </div>
-          </div>
+            );
+          })}
         </div>
 
         {/* GENERAL PARAMETERS EDIT FORM */}

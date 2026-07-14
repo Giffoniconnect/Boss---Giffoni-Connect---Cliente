@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
-import { useAuth } from '../../../contexts/AuthContext';
 import FluxoStepLayout from './components/FluxoStepLayout';
 import {
   ArrowLeft,
@@ -10,23 +9,20 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
-  Smartphone,
+  MessageSquare,
   Info,
   CheckSquare,
   ArrowRight,
-  ExternalLink,
-  RefreshCw,
-  UserCheck
+  Send
 } from 'lucide-react';
 
-export default function OnboardingAddTelefone() {
+export default function OnboardingWelcomeZap() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
-  const { googleAccessToken, loginWithGoogle } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [syncing, setSyncing] = useState(false);
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -35,17 +31,14 @@ export default function OnboardingAddTelefone() {
 
   // Form State
   const [formData, setFormData] = useState({
-    telefoneClienteAdicionadoCelular: '', // 'sim' | 'nao'
+    whatsappBoasVindasEnviado: '', // 'sim' | 'nao'
     observacoes: ''
   });
 
-  // Google Sync Status State
-  const [syncResult, setSyncResult] = useState<{
+  const [whatsappResult, setWhatsappResult] = useState<{
     success?: boolean;
-    action?: 'created' | 'updated';
-    resourceName?: string;
-    syncedAt?: string;
-    error?: string;
+    sentAt?: string;
+    message?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -76,26 +69,23 @@ export default function OnboardingAddTelefone() {
         }
 
         // Initialize sub-step form data
-        const onbTel = cData.onboarding?.telefone || {};
+        const onbWz = cData.onboarding?.welcomeZap || {};
         setFormData({
-          telefoneClienteAdicionadoCelular: onbTel.telefoneClienteAdicionadoCelular || '',
-          observacoes: onbTel.observacoes || ''
+          whatsappBoasVindasEnviado: onbWz.whatsappBoasVindasEnviado || '',
+          observacoes: onbWz.observacoes || ''
         });
 
-        const gcState = cData.onboarding?.googleContacts || {};
-        if (gcState.status === 'completed' || gcState.resourceName) {
-          setSyncResult({
+        if (onbWz.status === 'completed' || onbWz.sentAt) {
+          setWhatsappResult({
             success: true,
-            action: gcState.action || 'created',
-            resourceName: gcState.resourceName,
-            syncedAt: gcState.syncedAt,
-            error: gcState.error
+            sentAt: onbWz.sentAt,
+            message: onbWz.messageText
           });
         }
 
       } catch (err: any) {
         console.error(err);
-        setError(`Erro ao carregar dados do telefone de onboarding: ${err.message || err}`);
+        setError(`Erro ao carregar dados do welcome zap: ${err.message || err}`);
       } finally {
         setLoading(false);
       }
@@ -117,16 +107,7 @@ export default function OnboardingAddTelefone() {
     return client.pfDadosPessoais?.pf_telefoneCelular || client.pfData?.pf_telefoneCelular || client.phone || '';
   };
 
-  const getClientEmail = () => {
-    if (!client) return '';
-    if (client.type === 'PJ' || client.tipoPessoa === 'PJ' || client.isCompany === true) {
-      return client.pjDadosEmpresa?.pj_emailEmpresa || client.pjData?.pj_emailEmpresa || client.email || '';
-    }
-    return client.pfDadosPessoais?.pf_email || client.pfData?.pf_email || client.email || '';
-  };
-
   const phoneInformed = getClientPhone();
-  const emailInformed = getClientEmail();
 
   const resolvedClientName = client
     ? (client.type === 'PJ' || client.tipoPessoa === 'PJ' || client.isCompany === true
@@ -134,71 +115,67 @@ export default function OnboardingAddTelefone() {
         : (client.pfDadosPessoais?.pf_nomeCompleto || client.pfData?.pf_nomeCompleto || 'Cadastro Sem Nome'))
     : 'Buscando Cliente...';
 
-  // Real, idempotent Google Contact synchronization
-  const handleGoogleSync = async () => {
+  const getWelcomeMessageText = () => {
+    return `Olá, ${resolvedClientName}.\n\nSeja muito bem-vindo(a) à Giffoni Advogados Associados!\n\nEste é o nosso canal oficial de comunicação. Por favor, salve este contato em sua agenda para garantir o recebimento de todas as atualizações sobre o seu caso.\n\nQualquer dúvida, estamos à inteira disposição!`;
+  };
+
+  // Real WhatsApp message dispatch via W.A Speed endpoint
+  const handleSendWhatsApp = async () => {
     if (!phoneInformed) {
       setError('Operação impossível: O cliente não possui um número de telefone válido.');
       return;
     }
 
-    const resolvedToken = googleAccessToken || localStorage.getItem('oauth_google_access_token') || localStorage.getItem('portal_boss_google_accessToken') || '';
-    if (!resolvedToken) {
-      setError('Por favor, faça login com sua conta Google primeiro ou renove suas permissões OAuth.');
-      return;
-    }
-
-    setSyncing(true);
+    setSending(true);
     setError(null);
     setSuccess(null);
 
+    const msgText = getWelcomeMessageText();
+
     try {
-      const response = await fetch('/api/onboarding/sync-contact', {
+      const response = await fetch('/api/whatsapp/test-send-text', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          name: resolvedClientName,
           phone: phoneInformed,
-          email: emailInformed,
-          googleAccessToken: resolvedToken
+          message: msgText
         })
       });
 
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        throw new Error(data.errorMessage || 'Falha ao sincronizar contato.');
+        throw new Error(data.errorMessage || 'Falha ao enviar mensagem via W.A Speed.');
       }
 
       const nowStr = new Date().toISOString();
-      const updatedSync = {
+      const updatedRes = {
         success: true,
-        action: data.action,
-        resourceName: data.resourceName,
-        syncedAt: nowStr
+        sentAt: nowStr,
+        message: msgText
       };
 
-      setSyncResult(updatedSync);
+      setWhatsappResult(updatedRes);
 
-      // Save sync status to Firestore onboarding
+      // Update Firestore state
       const existingOnboarding = caseObj?.onboarding || {};
       const updatedOnboarding = {
         ...existingOnboarding,
-        googleContacts: {
+        welcomeZap: {
           status: 'completed',
-          action: data.action,
-          resourceName: data.resourceName,
-          syncedAt: nowStr,
-          humanCertified: formData.telefoneClienteAdicionadoCelular === 'sim'
+          sentAt: nowStr,
+          messageText: msgText,
+          humanCertified: formData.whatsappBoasVindasEnviado === 'sim'
         }
       };
 
       const logEntry = {
         timestamp: nowStr,
-        subetapa: 'Subetapa 01 — Google Contacts',
-        action: 'Sincronizar Contato Google',
-        details: `Contato ${data.action === 'updated' ? 'atualizado' : 'criado'} com resourceName: ${data.resourceName}`
+        subetapa: 'Subetapa 02 — Welcome Zap',
+        action: 'Enviar WhatsApp de Boas-vindas',
+        details: `Mensagem enviada via W.A Speed com sucesso.`
       };
 
       const updatedLogs = [
@@ -218,12 +195,12 @@ export default function OnboardingAddTelefone() {
         onboardingSubetapaLogs: updatedLogs
       }));
 
-      setSuccess(`Contato sincronizado com sucesso total no Google Contatos (${data.action === 'updated' ? 'Contato Atualizado' : 'Novo Contato Criado'})!`);
+      setSuccess('Mensagem de boas-vindas enviada com sucesso ao WhatsApp do cliente!');
     } catch (err: any) {
       console.error(err);
-      setError(`Erro na sincronização de contatos: ${err.message || err}`);
+      setError(`Erro no envio de WhatsApp: ${err.message || err}`);
     } finally {
-      setSyncing(false);
+      setSending(false);
     }
   };
 
@@ -233,36 +210,26 @@ export default function OnboardingAddTelefone() {
     setError(null);
     setSuccess(null);
 
-    // Block onboarding if phone is missing
-    if (!phoneInformed) {
-      setError('Ação bloqueada: Não é possível concluir esta subetapa sem um número de telefone celular cadastrado para o cliente.');
-      setSaving(false);
-      return;
-    }
-
     try {
       const now = new Date().toISOString();
       const existingOnboarding = caseObj?.onboarding || {};
       
       const updatedOnboarding = {
         ...existingOnboarding,
-        googleContacts: {
-          ...(existingOnboarding.googleContacts || {}),
-          status: syncResult?.success ? 'completed' : 'pending',
-          humanCertified: formData.telefoneClienteAdicionadoCelular === 'sim'
-        },
-        telefone: {
-          ...formData,
-          nomeCompletoCliente: resolvedClientName,
-          telefoneInformed: phoneInformed
+        welcomeZap: {
+          ...(existingOnboarding.welcomeZap || {}),
+          status: whatsappResult?.success ? 'completed' : 'pending',
+          humanCertified: formData.whatsappBoasVindasEnviado === 'sim',
+          whatsappBoasVindasEnviado: formData.whatsappBoasVindasEnviado,
+          observacoes: formData.observacoes
         }
       };
 
       const logEntry = {
         timestamp: now,
-        subetapa: 'Subetapa 01 — Google Contacts',
+        subetapa: 'Subetapa 02 — Welcome Zap',
         action: 'Salvar Certificação Humana',
-        details: `Telefone Certificado: ${formData.telefoneClienteAdicionadoCelular === 'sim' ? 'Sim ✅' : 'Não ❌'}`
+        details: `Certificação: ${formData.whatsappBoasVindasEnviado === 'sim' ? 'Sim ✅' : 'Não ❌'}`
       };
 
       const updatedLogs = [
@@ -276,23 +243,22 @@ export default function OnboardingAddTelefone() {
         updatedAt: now
       });
 
-      // Update local state
       setCaseObj((prev: any) => ({
         ...prev,
         onboarding: updatedOnboarding,
         onboardingSubetapaLogs: updatedLogs
       }));
 
-      setSuccess('Dados de telefone e certificação salvos com sucesso!');
+      setSuccess('Dados de WhatsApp salvos com sucesso!');
 
       if (advanceAfter) {
         setTimeout(() => {
-          navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/welcome.zap`);
+          navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/add.instagram.do.cliente`);
         }, 800);
       }
     } catch (err: any) {
       console.error(err);
-      setError(`Erro ao salvar dados de telefone: ${err.message || err}`);
+      setError(`Erro ao salvar dados de WhatsApp: ${err.message || err}`);
     } finally {
       setSaving(false);
     }
@@ -304,7 +270,7 @@ export default function OnboardingAddTelefone() {
         <div className="p-16 text-center text-gray-400 flex flex-col items-center justify-center gap-3">
           <Loader2 className="animate-spin text-indigo-500" size={28} />
           <span className="text-xs font-bold font-mono text-gray-500 tracking-wide uppercase">
-            Carregando Telefone de Onboarding...
+            Carregando Boas-vindas WhatsApp...
           </span>
         </div>
       </FluxoStepLayout>
@@ -322,13 +288,13 @@ export default function OnboardingAddTelefone() {
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-150 pb-5">
           <div className="space-y-1">
-            <span className="text-[10px] font-black tracking-wider text-indigo-500 uppercase">Subetapa 01 de 08</span>
+            <span className="text-[10px] font-black tracking-wider text-indigo-500 uppercase">Subetapa 02 de 08</span>
             <h2 id="page-title" className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
-              <Smartphone className="text-indigo-600" size={24} />
-              Adicionar Telefone do Cliente ao Celular
+              <MessageSquare className="text-indigo-600" size={24} />
+              Boas-vindas via W.A Speed (WhatsApp)
             </h2>
             <p className="text-xs text-gray-500 font-medium">
-              Sincronize o contato faticamente com a conta Google do escritório e certifique a ação no checklist.
+              Envie de forma programada a mensagem de boas-vindas do escritório usando a automação oficial W.A Speed.
             </p>
           </div>
 
@@ -361,88 +327,69 @@ export default function OnboardingAddTelefone() {
         <div className="bg-slate-50 border border-gray-150 rounded-[2rem] p-6 space-y-4">
           <h3 className="text-xs font-black uppercase text-slate-800 tracking-wider flex items-center gap-1.5">
             <Info size={14} className="text-slate-500" />
-            Informações do Cadastro
+            Detalhes de Envio
           </h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-white p-4 border border-gray-100 rounded-xl">
-              <span className="text-[10px] font-black uppercase text-gray-400 block">Nome do Cliente</span>
+              <span className="text-[10px] font-black uppercase text-gray-400 block">Cliente</span>
               <span className="text-xs font-bold text-gray-800 block mt-1">{resolvedClientName}</span>
             </div>
 
             <div className="bg-white p-4 border border-gray-100 rounded-xl">
-              <span className="text-[10px] font-black uppercase text-gray-400 block">Telefone Celular Informado</span>
+              <span className="text-[10px] font-black uppercase text-gray-400 block">WhatsApp de Destino</span>
               <span className="text-xs font-mono font-bold text-gray-800 block mt-1">
-                {phoneInformed ? phoneInformed : <span className="text-red-500">NENHUM TELEFONE CADASTRADO (BLOQUEANTE ❌)</span>}
+                {phoneInformed ? phoneInformed : <span className="text-red-500">Sem telefone cadastrado</span>}
               </span>
             </div>
           </div>
-
-          {!phoneInformed && (
-            <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-900 text-xs flex gap-2.5 items-start">
-              <AlertCircle size={16} className="text-red-500 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-black block uppercase tracking-wider text-[10px] text-red-800 mb-1">Atenção Operacional</span>
-                <p className="font-medium leading-relaxed">
-                  Não foi detectado um telefone celular no cadastro deste cliente. Adicione-o no cadastro antes de continuar.
-                </p>
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* REAL SYNCHRONIZATION MODULE */}
+        {/* W.A SPEED DISPATCH MODULE */}
         {phoneInformed && (
           <div className="bg-white border border-gray-150 rounded-[2rem] p-6 space-y-4">
             <h3 className="text-xs font-black uppercase text-gray-800 tracking-wider flex items-center gap-1.5">
-              <UserCheck size={16} className="text-indigo-600" />
-              Integração com Google Contatos (People API)
+              <Send size={16} className="text-emerald-600" />
+              Automação W.A Speed (Wascript)
             </h3>
-            <p className="text-xs text-gray-500 leading-relaxed font-medium">
-              Sincronize automaticamente o cadastro do cliente com os contatos do Google Workspace do escritório. Esta operação evita duplicidades realizando validação idempotente por telefone.
-            </p>
+            
+            <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-4 space-y-2">
+              <span className="text-[10px] font-black uppercase text-emerald-800 block">Texto da Mensagem a ser Enviada:</span>
+              <p className="text-xs text-gray-700 leading-relaxed font-semibold whitespace-pre-line bg-white p-3 border border-gray-100 rounded-lg">
+                {getWelcomeMessageText()}
+              </p>
+            </div>
 
-            <div className="flex flex-wrap gap-4 items-center pt-2">
+            <div className="pt-2">
               <button
                 type="button"
-                disabled={syncing}
-                onClick={handleGoogleSync}
-                className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-3xs"
+                disabled={sending}
+                onClick={handleSendWhatsApp}
+                className="inline-flex items-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-3xs"
               >
-                {syncing ? (
+                {sending ? (
                   <>
                     <Loader2 size={14} className="animate-spin" />
-                    <span>Sincronizando Contato...</span>
+                    <span>Disparando Mensagem...</span>
                   </>
                 ) : (
                   <>
-                    <RefreshCw size={14} />
-                    <span>Sincronizar com Google Contatos</span>
+                    <Send size={14} />
+                    <span>Disparar Mensagem via W.A Speed</span>
                   </>
                 )}
               </button>
-
-              {!googleAccessToken && (
-                <button
-                  type="button"
-                  onClick={() => loginWithGoogle('boss_admin')}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 border border-indigo-200 text-indigo-700 bg-indigo-50/50 hover:bg-indigo-100 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer"
-                >
-                  Conectar Conta Google
-                </button>
-              )}
             </div>
 
-            {syncResult && (
+            {whatsappResult && (
               <div className="bg-slate-50 border border-gray-150 rounded-xl p-4 space-y-2 mt-4 text-[11px] font-mono">
                 <div className="flex items-center gap-2 text-emerald-700 font-bold">
                   <CheckCircle2 size={14} />
-                  <span>Sincronização Ativa & Idempotente!</span>
+                  <span>Mensagem enviada e persistida no sistema!</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-gray-500 pt-1">
-                  <div>• Operação: <strong className="text-gray-700 uppercase">{syncResult.action === 'updated' ? 'Contato Atualizado' : 'Novo Contato Criado'}</strong></div>
-                  <div>• ID do Recurso: <strong className="text-gray-700">{syncResult.resourceName}</strong></div>
-                  <div>• Data de Sincronização: <strong className="text-gray-700">{new Date(syncResult.syncedAt!).toLocaleString('pt-BR')}</strong></div>
+                  <div>• Status técnico: <strong className="text-gray-700 uppercase">SUCESSO</strong></div>
+                  <div>• Data de envio: <strong className="text-gray-700">{new Date(whatsappResult.sentAt!).toLocaleString('pt-BR')}</strong></div>
                 </div>
               </div>
             )}
@@ -455,43 +402,43 @@ export default function OnboardingAddTelefone() {
             <div className="border-b border-gray-100 pb-3">
               <h3 className="text-xs font-black text-gray-800 uppercase tracking-wide flex items-center gap-1.5">
                 <CheckSquare size={16} className="text-indigo-600" />
-                Checklist de Execução
+                Certificação Humana
               </h3>
             </div>
 
             <div className="space-y-6">
               <div className="space-y-2">
                 <label className="text-xs font-black uppercase text-gray-700 tracking-wide block">
-                  1. O contato foi devidamente homologado na agenda Google? *
+                  Você enviou e conferiu se a mensagem de boas-vindas chegou corretamente? *
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md">
-                  <label className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition-all ${formData.telefoneClienteAdicionadoCelular === 'sim' ? 'bg-indigo-50/40 border-indigo-500 ring-1 ring-indigo-500' : 'border-gray-150 hover:bg-gray-50'}`}>
+                  <label className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition-all ${formData.whatsappBoasVindasEnviado === 'sim' ? 'bg-indigo-50/40 border-indigo-500 ring-1 ring-indigo-500' : 'border-gray-150 hover:bg-gray-50'}`}>
                     <input
                       type="radio"
-                      name="telefoneClienteAdicionadoCelular"
+                      name="whatsappBoasVindasEnviado"
                       value="sim"
-                      checked={formData.telefoneClienteAdicionadoCelular === 'sim'}
+                      checked={formData.whatsappBoasVindasEnviado === 'sim'}
                       onChange={handleChange}
                       className="text-indigo-600 focus:ring-indigo-500"
                     />
                     <div>
-                      <span className="text-xs font-bold text-gray-800 block">Sim, adicionado ✅</span>
-                      <span className="text-[10px] text-gray-400 font-medium">Nome e celular salvos e auditados</span>
+                      <span className="text-xs font-bold text-gray-800 block">Sim, enviada e conferida ✅</span>
+                      <span className="text-[10px] text-gray-400 font-medium">A mensagem chegou perfeitamente</span>
                     </div>
                   </label>
 
-                  <label className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition-all ${formData.telefoneClienteAdicionadoCelular === 'nao' ? 'bg-red-50/40 border-red-300 ring-1 ring-red-300' : 'border-gray-150 hover:bg-gray-50'}`}>
+                  <label className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition-all ${formData.whatsappBoasVindasEnviado === 'nao' ? 'bg-red-50/40 border-red-300 ring-1 ring-red-300' : 'border-gray-150 hover:bg-gray-50'}`}>
                     <input
                       type="radio"
-                      name="telefoneClienteAdicionadoCelular"
+                      name="whatsappBoasVindasEnviado"
                       value="nao"
-                      checked={formData.telefoneClienteAdicionadoCelular === 'nao'}
+                      checked={formData.whatsappBoasVindasEnviado === 'nao'}
                       onChange={handleChange}
                       className="text-indigo-600 focus:ring-indigo-500"
                     />
                     <div>
-                      <span className="text-xs font-bold text-gray-800 block">Não adicionado ❌</span>
-                      <span className="text-[10px] text-gray-400 font-medium">Pendente de auditoria ou ação</span>
+                      <span className="text-xs font-bold text-gray-800 block">Não ou não verifiquei ❌</span>
+                      <span className="text-[10px] text-gray-400 font-medium">Pendente de verificação fática</span>
                     </div>
                   </label>
                 </div>
@@ -499,14 +446,14 @@ export default function OnboardingAddTelefone() {
 
               <div className="space-y-1.5">
                 <label className="text-[11px] font-black uppercase text-gray-500 tracking-wider">
-                  Observações ou Notas de Acompanhamento
+                  Observações adicionais
                 </label>
                 <textarea
                   name="observacoes"
                   value={formData.observacoes}
                   onChange={handleChange}
                   rows={3}
-                  placeholder="Se houver alguma restrição no contato do cliente, registre aqui..."
+                  placeholder="Se houver alguma observação, registre aqui..."
                   className="w-full border border-gray-150 rounded-xl p-4 text-xs font-semibold focus:outline-none focus:border-indigo-500 transition-all resize-none"
                 />
               </div>
@@ -530,7 +477,7 @@ export default function OnboardingAddTelefone() {
 
               <button
                 type="button"
-                disabled={saving || formData.telefoneClienteAdicionadoCelular !== 'sim'}
+                disabled={saving || formData.whatsappBoasVindasEnviado !== 'sim'}
                 onClick={() => handleSave(true)}
                 className="inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[11px] uppercase tracking-wider rounded-2xl cursor-pointer transition-all disabled:opacity-50 shadow-3xs hover:shadow-2xs w-full sm:w-auto h-[48px]"
               >

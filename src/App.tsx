@@ -171,10 +171,12 @@ const DigitalizacaoUpload = React.lazy(() => import('./pages/boss/fluxo-producao
 // Onboarding ✈️ Steps (Fase de Acolhimento)
 const OnboardingFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/OnboardingFluxo'));
 const OnboardingAddTelefone = React.lazy(() => import('./pages/boss/fluxo-producao/OnboardingAddTelefone'));
+const OnboardingWelcomeZap = React.lazy(() => import('./pages/boss/fluxo-producao/OnboardingWelcomeZap'));
 const OnboardingAddInstagram = React.lazy(() => import('./pages/boss/fluxo-producao/OnboardingAddInstagram'));
 const OnboardingAddFacebook = React.lazy(() => import('./pages/boss/fluxo-producao/OnboardingAddFacebook'));
 const OnboardingAddTikTok = React.lazy(() => import('./pages/boss/fluxo-producao/OnboardingAddTikTok'));
 const OnboardingEnviarEmail = React.lazy(() => import('./pages/boss/fluxo-producao/OnboardingEnviarEmail'));
+const OnboardingAvaliacard = React.lazy(() => import('./pages/boss/fluxo-producao/OnboardingAvaliacard'));
 const OnboardingAuditoria = React.lazy(() => import('./pages/boss/fluxo-producao/OnboardingAuditoria'));
 
 // Coleta / Documents step views (FASE 3 - Lazy Imports)
@@ -331,10 +333,12 @@ const bossRouter = createBrowserRouter(
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/dados-caso" element={<SafeRoute children={<DadosCaso />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/onboarding" element={<SafeRoute children={<OnboardingFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/add.telefone.do.cliente" element={<SafeRoute children={<OnboardingAddTelefone />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/welcome.zap" element={<SafeRoute children={<OnboardingWelcomeZap />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/add.cliente.no.instagram" element={<SafeRoute children={<OnboardingAddInstagram />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/add.cliente.no.facebook" element={<SafeRoute children={<OnboardingAddFacebook />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/add.cliente.no.tiktok" element={<SafeRoute children={<OnboardingAddTikTok />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/enviar.email.cliente" element={<SafeRoute children={<OnboardingEnviarEmail />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/avaliacard" element={<SafeRoute children={<OnboardingAvaliacard />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/auditoria.onboarding.cliente" element={<SafeRoute children={<OnboardingAuditoria />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacoes-informacoes" element={<SafeRoute children={<SolicitacoesInformacoes />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/solicitacoes-provas" element={<SafeRoute children={<SolicitacoesProvas />} />} />

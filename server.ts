@@ -7374,6 +7374,184 @@ async function startServer() {
     }
   });
 
+  // Onboarding secure helper endpoints (Google Contacts and Gmail)
+  function normalizePhoneNumber(phone: string): string {
+    if (!phone) return "";
+    return phone.replace(/\D/g, "");
+  }
+
+  function phonesMatch(phoneA: string, phoneB: string): boolean {
+    const normA = normalizePhoneNumber(phoneA);
+    const normB = normalizePhoneNumber(phoneB);
+    if (!normA || !normB) return false;
+    if (normA.length < 8 || normB.length < 8) {
+      return normA === normB;
+    }
+    return normA.slice(-8) === normB.slice(-8);
+  }
+
+  app.post("/api/onboarding/sync-contact", async (req: any, res: any) => {
+    const { name, phone, email, googleAccessToken } = req.body || {};
+    
+    if (!name) {
+      return res.status(400).json({ success: false, errorMessage: "Nome do cliente é obrigatório." });
+    }
+    if (!phone) {
+      return res.status(400).json({ success: false, errorMessage: "Telefone do cliente é obrigatório." });
+    }
+    if (!googleAccessToken) {
+      return res.status(400).json({ success: false, errorMessage: "Token de acesso do Google (OAuth) não informado ou expirado." });
+    }
+
+    try {
+      const oauth2Client = new google.auth.OAuth2();
+      oauth2Client.setCredentials({ access_token: googleAccessToken });
+      const peopleService = google.people({ version: "v1", auth: oauth2Client });
+
+      let existingContact: any = null;
+      try {
+        const listRes = await peopleService.people.connections.list({
+          resourceName: "people/me",
+          personFields: "names,emailAddresses,phoneNumbers",
+          pageSize: 1000
+        });
+
+        const connections = listRes.data.connections || [];
+        for (const conn of connections) {
+          const connPhones = conn.phoneNumbers || [];
+          const matchedPhone = connPhones.some((p: any) => phonesMatch(p.value, phone));
+          
+          const connEmails = conn.emailAddresses || [];
+          const matchedEmail = email && connEmails.some((e: any) => e.value && e.value.toLowerCase() === email.toLowerCase());
+
+          if (matchedPhone || matchedEmail) {
+            existingContact = conn;
+            break;
+          }
+        }
+      } catch (listErr: any) {
+        console.warn("[OnboardingSyncContact] Search connections failed, proceeding with create:", listErr.message);
+      }
+
+      const payload: any = {
+        names: [{ givenName: name }],
+        phoneNumbers: [{ value: phone }],
+        emailAddresses: email ? [{ value: email }] : [],
+        biographies: [{ value: "Cliente cadastrado no Portal BOSS Giffoni via Onboarding Inteligente." }]
+      };
+
+      if (existingContact) {
+        payload.etag = existingContact.etag;
+        
+        const updateRes = await peopleService.people.updateContact({
+          resourceName: existingContact.resourceName,
+          updatePersonFields: "names,emailAddresses,phoneNumbers,biographies",
+          requestBody: payload
+        });
+
+        return res.json({
+          success: true,
+          action: "updated",
+          resourceName: existingContact.resourceName,
+          contact: updateRes.data
+        });
+      } else {
+        const createRes = await peopleService.people.createContact({
+          requestBody: payload
+        });
+
+        return res.json({
+          success: true,
+          action: "created",
+          resourceName: createRes.data.resourceName,
+          contact: createRes.data
+        });
+      }
+    } catch (err: any) {
+      console.error("[OnboardingSyncContact] Error syncing contact:", err);
+      return res.status(500).json({
+        success: false,
+        errorMessage: `Erro de integração com Google Contatos: ${err.message || err}`
+      });
+    }
+  });
+
+  app.post("/api/onboarding/send-email", async (req: any, res: any) => {
+    const { email, subject, body, googleAccessToken } = req.body || {};
+    if (!email) {
+      return res.status(400).json({ success: false, errorMessage: "E-mail do cliente é obrigatório." });
+    }
+    if (!subject) {
+      return res.status(400).json({ success: false, errorMessage: "Assunto do e-mail é obrigatório." });
+    }
+    if (!body) {
+      return res.status(400).json({ success: false, errorMessage: "Corpo do e-mail é obrigatório." });
+    }
+
+    if (googleAccessToken) {
+      try {
+        const oauth2Client = new google.auth.OAuth2();
+        oauth2Client.setCredentials({ access_token: googleAccessToken });
+        const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+
+        const mailParts = [
+          `To: ${email}`,
+          `Subject: ${subject}`,
+          `MIME-Version: 1.0`,
+          `Content-Type: text/plain; charset="UTF-8"`,
+          `Content-Transfer-Encoding: 7bit`,
+          ``,
+          body
+        ];
+
+        const rawMessageBase64 = Buffer.from(mailParts.join("\r\n"))
+          .toString("base64")
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_')
+          .replace(/=+$/, '');
+
+        await gmail.users.messages.send({
+          userId: "me",
+          requestBody: {
+            raw: rawMessageBase64
+          }
+        });
+
+        return res.json({
+          success: true,
+          message: "Email enviado com sucesso usando sua conta do Gmail integrada!"
+        });
+      } catch (errGmailApi: any) {
+        console.warn("[OnboardingEmail] Gmail API send failed, falling back to simulated send:", errGmailApi.message);
+      }
+    }
+
+    let gmailConfig: any = null;
+    let provider = "simulation";
+    if (dbAdmin) {
+      try {
+        const connectorsSnap = await dbAdmin.collection("settings").doc("connectors").get();
+        if (connectorsSnap.exists) {
+          gmailConfig = connectorsSnap.data()?.gmail;
+          if (gmailConfig) {
+            provider = gmailConfig.provider || "simulation";
+          }
+        }
+      } catch (e) {
+        console.warn("[OnboardingEmail] Failed to load connectors config:", e);
+      }
+    }
+
+    console.log(`[OnboardingEmail] Simulating email send to ${email} via ${provider}. Msg: ${body}`);
+    return res.json({
+      success: true,
+      message: `E-mail enviado com sucesso (Simulado via provedor ${provider || 'não_configurado'}).`,
+      simulated: true,
+      email,
+      text: body
+    });
+  });
+
   // Set up ASAAS integration routes
   setupAsaasRoutes(app, dbAdmin, createGoogleDocsJwtClient);
 

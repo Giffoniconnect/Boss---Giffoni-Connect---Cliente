@@ -4,6 +4,11 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import FluxoStepLayout from './components/FluxoStepLayout';
 import {
+  extractClientOnboardingFields,
+  buildOnboardingExecutionPlan,
+  OnboardingStepPlan
+} from './onboardingHelper';
+import {
   ArrowLeft,
   Save,
   Loader2,
@@ -17,7 +22,10 @@ import {
   Mail,
   Info,
   CheckSquare,
-  Sparkles
+  Sparkles,
+  MessageSquare,
+  Star,
+  HelpCircle
 } from 'lucide-react';
 
 export default function OnboardingAuditoria() {
@@ -92,67 +100,45 @@ export default function OnboardingAuditoria() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const getClientPhone = () => {
-    if (!client) return '';
-    if (client.type === 'PJ' || client.tipoPessoa === 'PJ' || client.isCompany === true) {
-      return client.pjDadosEmpresa?.pj_telefoneEmpresa || client.pjData?.pj_telefoneEmpresa || client.pjDadosEmpresa?.pj_telefoneRepresentante || client.pjData?.pj_telefoneRepresentante || client.phone || '';
+  // Build the dynamic execution plan to check for prior compliance
+  const clientFields = extractClientOnboardingFields(client);
+  const executionPlan = buildOnboardingExecutionPlan(clientFields, caseObj?.onboarding);
+
+  // Filter out step 8 (this audit step itself) and check if all other 7 steps are compliant (either completed or dispensed)
+  const priorSteps = executionPlan.filter(step => step.id < 8);
+  const priorStepsApproved = priorSteps.every(
+    step => step.status === 'completed' || step.status === 'dispensed_not_owned' || step.status === 'dispensed_no_channel'
+  );
+
+  const getStepIcon = (id: number) => {
+    switch (id) {
+      case 1: return <Smartphone size={16} />;
+      case 2: return <MessageSquare size={16} />;
+      case 3: return <Instagram size={16} />;
+      case 4: return <Facebook size={16} />;
+      case 5: return <Video size={16} />;
+      case 6: return <Mail size={16} />;
+      case 7: return <Star size={16} />;
+      default: return <HelpCircle size={16} />;
     }
-    return client.pfDadosPessoais?.pf_telefoneCelular || client.pfData?.pf_telefoneCelular || client.phone || '';
   };
 
-  const getClientEmail = () => {
-    if (!client) return '';
-    if (client.type === 'PJ' || client.tipoPessoa === 'PJ' || client.isCompany === true) {
-      return client.pjDadosEmpresa?.pj_emailEmpresa || client.pjData?.pj_emailEmpresa || client.email || '';
+  const getStepStatusStyle = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return { label: 'Em Conformidade ✅', class: 'bg-emerald-50 text-emerald-700 border-emerald-100' };
+      case 'dispensed_not_owned':
+      case 'dispensed_no_channel':
+        return { label: 'Dispensado ⚪', class: 'bg-gray-100 text-gray-500 border-gray-200' };
+      case 'blocked_missing_data':
+        return { label: 'Dados Incompletos ❌', class: 'bg-red-50 text-red-700 border-red-150' };
+      case 'awaiting_human_confirmation':
+        return { label: 'Pendente Homologação ⏳', class: 'bg-amber-50 text-amber-700 border-amber-200 animate-pulse' };
+      case 'available':
+      default:
+        return { label: 'Não Iniciado ⏳', class: 'bg-indigo-50/50 text-indigo-700 border-indigo-100' };
     }
-    return client.pfDadosPessoais?.pf_email || client.pfData?.pf_email || client.email || '';
   };
-
-  const getClientInstagram = () => {
-    if (!client) return '';
-    if (client.type === 'PJ' || client.tipoPessoa === 'PJ' || client.isCompany === true) {
-      return client.pjDadosEmpresa?.pj_instagramEmpresa || client.pjData?.pj_instagramEmpresa || client.pj_instagramEmpresa || '';
-    }
-    return client.pfDadosPessoais?.pf_instagram || client.pfData?.pf_instagram || client.pf_instagram || '';
-  };
-
-  const getClientFacebook = () => {
-    if (!client) return '';
-    if (client.type === 'PJ' || client.tipoPessoa === 'PJ' || client.isCompany === true) {
-      return client.pjDadosEmpresa?.pj_facebookEmpresa || client.pjData?.pj_facebookEmpresa || client.pj_facebookEmpresa || '';
-    }
-    return client.pfDadosPessoais?.pf_facebook || client.pfData?.pf_facebook || client.pf_facebook || '';
-  };
-
-  const getClientTikTok = () => {
-    if (!client) return '';
-    if (client.type === 'PJ' || client.tipoPessoa === 'PJ' || client.isCompany === true) {
-      return client.pjDadosEmpresa?.pj_tiktokEmpresa || client.pjData?.pj_tiktokEmpresa || client.pj_tiktokEmpresa || '';
-    }
-    return client.pfDadosPessoais?.pf_tiktok || client.pfData?.pf_tiktok || client.pf_tiktok || '';
-  };
-
-  const phoneInformed = getClientPhone();
-  const emailInformed = getClientEmail();
-  const instagramInformed = getClientInstagram();
-  const facebookInformed = getClientFacebook();
-  const tiktokInformed = getClientTikTok();
-
-  // Load steps state
-  const onb = caseObj?.onboarding || {};
-  const stepTel = onb.telefone || {};
-  const stepInst = onb.instagram || {};
-  const stepFace = onb.facebook || {};
-  const stepTik = onb.tiktok || {};
-  const stepEm = onb.email || {};
-
-  const isTelDone = phoneInformed && stepTel.telefoneClienteAdicionadoCelular === 'sim';
-  const isInstDone = stepInst.naoAplicavel || !instagramInformed || instagramInformed === 'Não possuo' || stepInst.clienteAdicionadoInstagram === 'sim';
-  const isFaceDone = stepFace.naoAplicavel || !facebookInformed || facebookInformed === 'Não possuo' || stepFace.clienteAdicionadoFacebook === 'sim';
-  const isTikDone = stepTik.naoAplicavel || !tiktokInformed || tiktokInformed === 'Não possuo' || stepTik.clienteAdicionadoTikTok === 'sim';
-  const isEmailDone = emailInformed && stepEm.emailBoasVindasEnviadoCliente === 'sim';
-
-  const priorStepsApproved = isTelDone && isEmailDone;
 
   const handleSave = async () => {
     if (!caseId) return;
@@ -162,7 +148,7 @@ export default function OnboardingAuditoria() {
 
     // Strict validation: cannot complete onboarding if essential checks failed
     if (formData.statusFinal === 'Onboarding completo ✅' && !priorStepsApproved) {
-      setError('Bloqueio de Auditoria: Não é possível definir o status como "Completo" pois existem subetapas essenciais pendentes ou sem preenchimento correto (Telefone ou E-mail).');
+      setError('Bloqueio de Auditoria: Não é possível definir o status como "Completo" pois existem subetapas pendentes ou não homologadas na esteira de onboarding.');
       setSaving(false);
       return;
     }
@@ -182,8 +168,8 @@ export default function OnboardingAuditoria() {
 
       const logEntry = {
         timestamp: now,
-        subetapa: 'Subetapa 06 — Auditoria',
-        action: 'Salvar Decisão de Auditoria',
+        subetapa: 'Subetapa 08 — Auditoria Final',
+        action: 'Salvar Parecer de Auditoria',
         details: `Decisão: ${formData.statusFinal}. Liberado Produção: ${formData.aprovadoLiberacaoProducao === 'sim' ? 'Sim ✅' : 'Não ❌'}. Auditor: ${formData.auditorResponsavel || 'Não Definido'}`
       };
 
@@ -214,7 +200,7 @@ export default function OnboardingAuditoria() {
         onboardingCompleted: updatePayload.onboardingCompleted || prev.onboardingCompleted
       }));
 
-      setSuccess('Auditoria de onboarding atualizada e salva com sucesso!');
+      setSuccess('Auditoria de onboarding atualizada e homologada com absoluto sucesso!');
     } catch (err: any) {
       console.error(err);
       setError(`Erro ao salvar dados de auditoria: ${err.message || err}`);
@@ -253,13 +239,13 @@ export default function OnboardingAuditoria() {
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-150 pb-5">
           <div className="space-y-1">
-            <span className="text-[10px] font-black tracking-wider text-indigo-500 uppercase">Subetapa 06 de 06</span>
+            <span className="text-[10px] font-black tracking-wider text-indigo-500 uppercase">Subetapa 08 de 08</span>
             <h2 id="page-title" className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
-              <ShieldCheck className="text-indigo-600" size={24} />
+              <ShieldCheck className="text-indigo-600 animate-pulse" size={24} />
               Auditoria de Integração do Onboarding
             </h2>
             <p className="text-xs text-gray-500 font-medium">
-              Avalie e homologue a conclusão de todas as etapas de onboarding antes de liberar o caso.
+              Avalie e homologue a conclusão de todas as subetapas da esteira produtiva de onboarding antes de liberar o caso.
             </p>
           </div>
 
@@ -292,89 +278,40 @@ export default function OnboardingAuditoria() {
         <div className="bg-slate-50 border border-gray-150 rounded-[2rem] p-6 space-y-4">
           <h3 className="text-xs font-black uppercase text-slate-800 tracking-wider flex items-center gap-1.5">
             <Sparkles size={14} className="text-indigo-500" />
-            Status das Subetapas Anteriores
+            Relatório de Conformidade das Subetapas Anteriores
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            
-            {/* Telefone Status */}
-            <div className="bg-white p-4 border border-gray-100 rounded-xl flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Smartphone size={16} className={isTelDone ? 'text-emerald-500' : 'text-gray-400'} />
-                <div>
-                  <span className="text-[10px] font-black uppercase text-gray-400 block">01. Telefone Celular</span>
-                  <span className="text-[11px] font-bold text-gray-800">{phoneInformed || 'Não Informado'}</span>
-                </div>
-              </div>
-              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${isTelDone ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'}`}>
-                {isTelDone ? 'OK ✅' : 'PENDENTE ❌'}
-              </span>
-            </div>
+            {priorSteps.map((step) => {
+              const statusStyle = getStepStatusStyle(step.status);
+              const isOK = step.status === 'completed' || step.status === 'dispensed_not_owned' || step.status === 'dispensed_no_channel';
 
-            {/* Email Status */}
-            <div className="bg-white p-4 border border-gray-100 rounded-xl flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Mail size={16} className={isEmailDone ? 'text-emerald-500' : 'text-gray-400'} />
-                <div>
-                  <span className="text-[10px] font-black uppercase text-gray-400 block">05. E-mail Boas-vindas</span>
-                  <span className="text-[11px] font-bold text-gray-800 truncate max-w-[150px]">{emailInformed || 'Não Informado'}</span>
+              return (
+                <div key={step.id} className="bg-white p-4 border border-gray-100 rounded-xl flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={isOK ? 'text-emerald-500' : 'text-amber-500'}>
+                      {getStepIcon(step.id)}
+                    </div>
+                    <div>
+                      <span className="text-[9px] font-black uppercase text-gray-400 block">Subetapa 0{step.id}</span>
+                      <span className="text-xs font-bold text-gray-800 line-clamp-1">{step.name.split(' — ')[1] || step.name}</span>
+                    </div>
+                  </div>
+                  <span className={`text-[9px] font-black px-2.5 py-0.5 rounded-full border ${statusStyle.class}`}>
+                    {statusStyle.label}
+                  </span>
                 </div>
-              </div>
-              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${isEmailDone ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'}`}>
-                {isEmailDone ? 'OK ✅' : 'PENDENTE ❌'}
-              </span>
-            </div>
-
-            {/* Instagram Status */}
-            <div className="bg-white p-4 border border-gray-100 rounded-xl flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Instagram size={16} className={isInstDone ? 'text-emerald-500' : 'text-amber-500'} />
-                <div>
-                  <span className="text-[10px] font-black uppercase text-gray-400 block">02. Instagram</span>
-                  <span className="text-[11px] font-bold text-gray-800">{instagramInformed || 'Não Informado'}</span>
-                </div>
-              </div>
-              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${isInstDone ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>
-                {isInstDone ? (stepInst.naoAplicavel ? 'NÃO SE APLICA ⚪' : 'OK ✅') : 'PENDENTE ⚠️'}
-              </span>
-            </div>
-
-            {/* Facebook Status */}
-            <div className="bg-white p-4 border border-gray-100 rounded-xl flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Facebook size={16} className={isFaceDone ? 'text-emerald-500' : 'text-amber-500'} />
-                <div>
-                  <span className="text-[10px] font-black uppercase text-gray-400 block">03. Facebook</span>
-                  <span className="text-[11px] font-bold text-gray-800">{facebookInformed || 'Não Informado'}</span>
-                </div>
-              </div>
-              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${isFaceDone ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>
-                {isFaceDone ? (stepFace.naoAplicavel ? 'NÃO SE APLICA ⚪' : 'OK ✅') : 'PENDENTE ⚠️'}
-              </span>
-            </div>
-
-            {/* TikTok Status */}
-            <div className="bg-white p-4 border border-gray-100 rounded-xl flex items-center justify-between col-span-1 md:col-span-2">
-              <div className="flex items-center gap-3">
-                <Video size={16} className={isTikDone ? 'text-emerald-500' : 'text-amber-500'} />
-                <div>
-                  <span className="text-[10px] font-black uppercase text-gray-400 block">04. TikTok</span>
-                  <span className="text-[11px] font-bold text-gray-800">{tiktokInformed || 'Não Informado'}</span>
-                </div>
-              </div>
-              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${isTikDone ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>
-                {isTikDone ? (stepTik.naoAplicavel ? 'NÃO SE APLICA ⚪' : 'OK ✅') : 'PENDENTE ⚠️'}
-              </span>
-            </div>
+              );
+            })}
           </div>
 
           {!priorStepsApproved && (
             <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-red-900 text-xs flex gap-2.5 items-start">
               <AlertCircle size={16} className="text-red-500 shrink-0 mt-0.5" />
               <div>
-                <span className="font-black block uppercase tracking-wider text-[10px] text-red-800 mb-1">Bloqueios Detectados</span>
+                <span className="font-black block uppercase tracking-wider text-[10px] text-red-800 mb-1">Bloqueios de Conformidade Detectados</span>
                 <p className="font-medium leading-relaxed">
-                  As subetapas essenciais de **Telefone Celular** e **E-mail de Boas-vindas** são mandatórias. Você não conseguirá aprovar a conclusão do onboarding sem marcá-las como corretas em seus checklists dedicados.
+                  Para homologar a aprovação definitiva do Onboarding, todas as subetapas precedentes na esteira de produção devem estar **Em Conformidade** ou marcadas como **Dispensadas**. Volte ao hub e conclua os checklist em falta.
                 </p>
               </div>
             </div>
@@ -386,7 +323,7 @@ export default function OnboardingAuditoria() {
           <div className="border-b border-gray-100 pb-3">
             <h3 className="text-xs font-black text-gray-800 uppercase tracking-wide flex items-center gap-1.5">
               <CheckSquare size={16} className="text-indigo-600" />
-              Parecer Final da Auditoria
+              Parecer Final de Homologação
             </h3>
           </div>
 
@@ -424,7 +361,7 @@ export default function OnboardingAuditoria() {
 
           <div className="space-y-2">
             <label className="text-xs font-black uppercase text-gray-700 tracking-wide block">
-              Aprovar liberação do caso para a próxima etapa produtiva no fluxo de trabalho?
+              Aprovar liberação definitiva do caso para a próxima etapa produtiva?
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md">
               <label className={`flex items-center gap-3 p-3 border rounded-xl cursor-pointer transition-all ${formData.aprovadoLiberacaoProducao === 'sim' ? 'bg-indigo-50/40 border-indigo-500 ring-1 ring-indigo-500' : 'border-gray-150 hover:bg-gray-50'}`}>
