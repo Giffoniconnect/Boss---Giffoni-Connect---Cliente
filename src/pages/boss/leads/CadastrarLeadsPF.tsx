@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { BossLayout } from '../../../components/Layout';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
+import { buildWhatsAppLink } from '../../../lib/whatsapp';
 import { 
   UserPlus, 
   ArrowLeft, 
@@ -19,6 +20,10 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { LeadTodoistAutomationCard } from '../../../components/boss/leads/todoist/LeadTodoistAutomationCard';
+import { DirectReferralFields } from '../../../components/boss/leads/shared/DirectReferralFields';
+import { useLeadStepNavigation } from '../../../components/boss/leads/shared/useLeadStepNavigation';
+import { LeadStepNavigation } from '../../../components/boss/leads/shared/LeadStepNavigation';
 
 export default function CadastrarLeadsPF() {
   const navigate = useNavigate();
@@ -56,19 +61,46 @@ export default function CadastrarLeadsPF() {
     classificacao: 'Geral',
     proximoPasso: '',
     observacoes: '',
+    indicadoPorNome: '',
+    indicadoPorTelefone: '',
+    agradecimentoStatus: 'Pendente', // Pendente, Enviado, Não Necessário
+    enviarAgradecimentoLead: false,
+    agradecimentoLeadStatus: 'Pendente',
+    agradecimentoLeadResultado: null,
 
     pessoaFisica: {
       nomeCompleto: '',
       email: '',
+      emailNotOwned: false,
       telefone: '',
+      telefoneNotOwned: false,
       possuiWhatsapp: false,
       instagram: '',
+      instagramNotOwned: false,
       tiktok: '',
-      facebook: ''
+      tiktokNotOwned: false,
+      facebook: '',
+      facebookNotOwned: false
     }
   };
 
   const [leadFormData, setLeadFormData] = useState<any>(initialFormData);
+
+  const [searchParams] = useSearchParams();
+  const editLeadId = searchParams.get('edit');
+
+  const {
+    navigatingStep2,
+    handleSaveAndNavigate
+  } = useLeadStepNavigation({
+    leadType: 'PF',
+    leadFormData,
+    editLeadId,
+    setError,
+    setSuccess,
+    setCreatedLeadId,
+    setHasSaved
+  });
 
   const handleContractFieldChange = (field: string, val: any) => {
     setLeadFormData((prev: any) => {
@@ -94,9 +126,6 @@ export default function CadastrarLeadsPF() {
       };
     });
   };
-
-  const [searchParams] = useSearchParams();
-  const editLeadId = searchParams.get('edit');
 
   useEffect(() => {
     if (!editLeadId) return;
@@ -295,103 +324,237 @@ export default function CadastrarLeadsPF() {
                 </div>
 
                 {/* 2. Email */}
-                <div>
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Email</label>
-                  <input 
-                    type="email" 
-                    value={leadFormData.pessoaFisica.email}
-                    onChange={(e) => setLeadFormData({
-                      ...leadFormData,
-                      pessoaFisica: { ...leadFormData.pessoaFisica, email: e.target.value }
-                    })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                    placeholder="contato@exemplo.com"
-                  />
+                <div className="flex items-end gap-3">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-gray-650 mb-2 shrink-0">
+                    <input 
+                      type="checkbox" 
+                      checked={!!leadFormData.pessoaFisica.emailNotOwned}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setLeadFormData({
+                          ...leadFormData,
+                          pessoaFisica: { 
+                            ...leadFormData.pessoaFisica, 
+                            emailNotOwned: checked,
+                            email: checked ? '' : leadFormData.pessoaFisica.email 
+                          }
+                        });
+                      }}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
+                    />
+                    <span>Não possuo</span>
+                  </label>
+                  <div className="flex-1">
+                    <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Email</label>
+                    <input 
+                      type="email" 
+                      disabled={!!leadFormData.pessoaFisica.emailNotOwned}
+                      value={leadFormData.pessoaFisica.emailNotOwned ? '' : leadFormData.pessoaFisica.email}
+                      onChange={(e) => setLeadFormData({
+                        ...leadFormData,
+                        pessoaFisica: { ...leadFormData.pessoaFisica, email: e.target.value }
+                      })}
+                      className={`w-full text-xs font-semibold px-3 py-2 border rounded-xl outline-none transition ${
+                        leadFormData.pessoaFisica.emailNotOwned 
+                          ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' 
+                          : 'bg-slate-50 border-gray-200 focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500'
+                      }`}
+                      placeholder={leadFormData.pessoaFisica.emailNotOwned ? 'E-mail indisponível' : 'contato@exemplo.com'}
+                    />
+                  </div>
                 </div>
 
                 {/* 3. Telefone (botão se possui WhatsApp) */}
-                <div>
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Telefone</label>
-                  <div className="flex flex-col sm:flex-row gap-2">
+                <div className="flex items-end gap-3">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-gray-650 mb-2 shrink-0">
                     <input 
-                      type="text" 
-                      value={leadFormData.pessoaFisica.telefone}
-                      onChange={(e) => setLeadFormData({
-                        ...leadFormData,
-                        pessoaFisica: { ...leadFormData.pessoaFisica, telefone: e.target.value }
-                      })}
-                      className="flex-1 text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                      placeholder="(00) 90000-0000"
+                      type="checkbox" 
+                      checked={!!leadFormData.pessoaFisica.telefoneNotOwned}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setLeadFormData({
+                          ...leadFormData,
+                          pessoaFisica: { 
+                            ...leadFormData.pessoaFisica, 
+                            telefoneNotOwned: checked,
+                            telefone: checked ? '' : leadFormData.pessoaFisica.telefone,
+                            possuiWhatsapp: checked ? false : leadFormData.pessoaFisica.possuiWhatsapp
+                          }
+                        });
+                      }}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setLeadFormData({
-                        ...leadFormData,
-                        pessoaFisica: { ...leadFormData.pessoaFisica, possuiWhatsapp: !leadFormData.pessoaFisica.possuiWhatsapp }
-                      })}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5 border cursor-pointer ${
-                        leadFormData.pessoaFisica.possuiWhatsapp 
-                          ? 'bg-emerald-50 border-emerald-300 text-emerald-700 font-extrabold shadow-sm'
-                          : 'bg-white border-gray-200 text-gray-500 hover:bg-slate-50'
-                      }`}
-                    >
-                      <span className={leadFormData.pessoaFisica.possuiWhatsapp ? 'text-emerald-600 font-black' : 'text-gray-400'}>
-                        💬
-                      </span>
-                      <span>Possui WhatsApp</span>
-                    </button>
+                    <span>Não possuo</span>
+                  </label>
+                  <div className="flex-1">
+                    <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Telefone</label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input 
+                        type="text" 
+                        disabled={!!leadFormData.pessoaFisica.telefoneNotOwned}
+                        value={leadFormData.pessoaFisica.telefoneNotOwned ? '' : leadFormData.pessoaFisica.telefone}
+                        onChange={(e) => setLeadFormData({
+                          ...leadFormData,
+                          pessoaFisica: { ...leadFormData.pessoaFisica, telefone: e.target.value }
+                        })}
+                        className={`flex-1 text-xs font-semibold px-3 py-2 border rounded-xl outline-none transition ${
+                          leadFormData.pessoaFisica.telefoneNotOwned 
+                            ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' 
+                            : 'bg-slate-50 border-gray-200 focus:bg-white focus:ring-1 focus:ring-blue-500 focus:border-blue-500'
+                        }`}
+                        placeholder={leadFormData.pessoaFisica.telefoneNotOwned ? 'Telefone indisponível' : '(00) 90000-0000'}
+                      />
+                      <button
+                        type="button"
+                        disabled={!!leadFormData.pessoaFisica.telefoneNotOwned}
+                        onClick={() => setLeadFormData({
+                          ...leadFormData,
+                          pessoaFisica: { ...leadFormData.pessoaFisica, possuiWhatsapp: !leadFormData.pessoaFisica.possuiWhatsapp }
+                        })}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-1.5 border cursor-pointer ${
+                          leadFormData.pessoaFisica.telefoneNotOwned
+                            ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+                            : leadFormData.pessoaFisica.possuiWhatsapp 
+                              ? 'bg-emerald-50 border-emerald-300 text-emerald-700 font-extrabold shadow-sm'
+                              : 'bg-white border-gray-200 text-gray-500 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className={leadFormData.pessoaFisica.possuiWhatsapp && !leadFormData.pessoaFisica.telefoneNotOwned ? 'text-emerald-600 font-black' : 'text-gray-400'}>
+                          💬
+                        </span>
+                        <span>Possui WhatsApp</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
                 {/* 4. Instagram */}
-                <div>
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Instagram</label>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-2.5 text-gray-400 text-xs font-bold">@</span>
+                <div className="flex items-end gap-3">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-gray-650 mb-2 shrink-0">
                     <input 
-                      type="text" 
-                      value={leadFormData.pessoaFisica.instagram}
-                      onChange={(e) => setLeadFormData({
-                        ...leadFormData,
-                        pessoaFisica: { ...leadFormData.pessoaFisica, instagram: e.target.value }
-                      })}
-                      className="w-full text-xs font-semibold pl-8 pr-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500"
-                      placeholder="usuario"
+                      type="checkbox" 
+                      checked={!!leadFormData.pessoaFisica.instagramNotOwned}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setLeadFormData({
+                          ...leadFormData,
+                          pessoaFisica: { 
+                            ...leadFormData.pessoaFisica, 
+                            instagramNotOwned: checked,
+                            instagram: checked ? '' : leadFormData.pessoaFisica.instagram 
+                          }
+                        });
+                      }}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
                     />
+                    <span>Não possuo</span>
+                  </label>
+                  <div className="flex-1">
+                    <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Instagram</label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-2.5 text-gray-400 text-xs font-bold">@</span>
+                      <input 
+                        type="text" 
+                        disabled={!!leadFormData.pessoaFisica.instagramNotOwned}
+                        value={leadFormData.pessoaFisica.instagramNotOwned ? '' : leadFormData.pessoaFisica.instagram}
+                        onChange={(e) => setLeadFormData({
+                          ...leadFormData,
+                          pessoaFisica: { ...leadFormData.pessoaFisica, instagram: e.target.value }
+                        })}
+                        className={`w-full text-xs font-semibold pl-8 pr-3 py-2 border rounded-xl outline-none transition ${
+                          leadFormData.pessoaFisica.instagramNotOwned 
+                            ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' 
+                            : 'bg-slate-50 border-gray-200 focus:bg-white focus:ring-1 focus:ring-blue-500'
+                        }`}
+                        placeholder={leadFormData.pessoaFisica.instagramNotOwned ? 'Instagram indisponível' : 'usuario'}
+                      />
+                    </div>
                   </div>
                 </div>
 
                 {/* 5. Tik Tok */}
-                <div>
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Tik Tok</label>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-2.5 text-gray-400 text-xs font-bold">@</span>
+                <div className="flex items-end gap-3">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-gray-650 mb-2 shrink-0">
                     <input 
-                      type="text" 
-                      value={leadFormData.pessoaFisica.tiktok}
-                      onChange={(e) => setLeadFormData({
-                        ...leadFormData,
-                        pessoaFisica: { ...leadFormData.pessoaFisica, tiktok: e.target.value }
-                      })}
-                      className="w-full text-xs font-semibold pl-8 pr-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500"
-                      placeholder="usuario.tiktok"
+                      type="checkbox" 
+                      checked={!!leadFormData.pessoaFisica.tiktokNotOwned}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setLeadFormData({
+                          ...leadFormData,
+                          pessoaFisica: { 
+                            ...leadFormData.pessoaFisica, 
+                            tiktokNotOwned: checked,
+                            tiktok: checked ? '' : leadFormData.pessoaFisica.tiktok 
+                          }
+                        });
+                      }}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
                     />
+                    <span>Não possuo</span>
+                  </label>
+                  <div className="flex-1">
+                    <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Tik Tok</label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-2.5 text-gray-400 text-xs font-bold">@</span>
+                      <input 
+                        type="text" 
+                        disabled={!!leadFormData.pessoaFisica.tiktokNotOwned}
+                        value={leadFormData.pessoaFisica.tiktokNotOwned ? '' : leadFormData.pessoaFisica.tiktok}
+                        onChange={(e) => setLeadFormData({
+                          ...leadFormData,
+                          pessoaFisica: { ...leadFormData.pessoaFisica, tiktok: e.target.value }
+                        })}
+                        className={`w-full text-xs font-semibold pl-8 pr-3 py-2 border rounded-xl outline-none transition ${
+                          leadFormData.pessoaFisica.tiktokNotOwned 
+                            ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' 
+                            : 'bg-slate-50 border-gray-200 focus:bg-white focus:ring-1 focus:ring-blue-500'
+                        }`}
+                        placeholder={leadFormData.pessoaFisica.tiktokNotOwned ? 'TikTok indisponível' : 'usuario.tiktok'}
+                      />
+                    </div>
                   </div>
                 </div>
 
                 {/* 6. Facebook */}
-                <div>
-                  <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Facebook</label>
-                  <input 
-                    type="text" 
-                    value={leadFormData.pessoaFisica.facebook}
-                    onChange={(e) => setLeadFormData({
-                      ...leadFormData,
-                      pessoaFisica: { ...leadFormData.pessoaFisica, facebook: e.target.value }
-                    })}
-                    className="w-full text-xs font-semibold px-3 py-2 bg-slate-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-1 focus:ring-blue-500"
-                    placeholder="Link ou nome do perfil"
-                  />
+                <div className="flex items-end gap-3">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-gray-650 mb-2 shrink-0">
+                    <input 
+                      type="checkbox" 
+                      checked={!!leadFormData.pessoaFisica.facebookNotOwned}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setLeadFormData({
+                          ...leadFormData,
+                          pessoaFisica: { 
+                            ...leadFormData.pessoaFisica, 
+                            facebookNotOwned: checked,
+                            facebook: checked ? '' : leadFormData.pessoaFisica.facebook 
+                          }
+                        });
+                      }}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
+                    />
+                    <span>Não possuo</span>
+                  </label>
+                  <div className="flex-1">
+                    <label className="block text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Facebook</label>
+                    <input 
+                      type="text" 
+                      disabled={!!leadFormData.pessoaFisica.facebookNotOwned}
+                      value={leadFormData.pessoaFisica.facebookNotOwned ? '' : leadFormData.pessoaFisica.facebook}
+                      onChange={(e) => setLeadFormData({
+                        ...leadFormData,
+                        pessoaFisica: { ...leadFormData.pessoaFisica, facebook: e.target.value }
+                      })}
+                      className={`w-full text-xs font-semibold px-3 py-2 border rounded-xl outline-none transition ${
+                        leadFormData.pessoaFisica.facebookNotOwned 
+                          ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' 
+                          : 'bg-slate-50 border-gray-200 focus:bg-white focus:ring-1 focus:ring-blue-500'
+                      }`}
+                      placeholder={leadFormData.pessoaFisica.facebookNotOwned ? 'Facebook indisponível' : 'Link ou nome do perfil'}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -425,6 +588,14 @@ export default function CadastrarLeadsPF() {
                     <option>Outros</option>
                   </select>
                 </div>
+
+                {leadFormData.origemLead === 'Indicação Direta' && (
+                  <DirectReferralFields
+                    leadFormData={leadFormData}
+                    setLeadFormData={setLeadFormData}
+                    leadType="PF"
+                  />
+                )}
 
                 {/* 2. Área Jurídica de Interesse */}
                 <div>
@@ -736,173 +907,24 @@ export default function CadastrarLeadsPF() {
           </form>
         </motion.div>
 
-        {/* CARD 1: Preview de LEAD para o Todoist (botão vermelho) */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.1 }}
-          className="bg-white border border-gray-150 rounded-2xl shadow-xs overflow-hidden"
-        >
-          <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-slate-50">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-              <h3 className="text-sm font-black text-gray-800 uppercase tracking-wider">
-                Card - Preview de LEAD para o Todoist
-              </h3>
-            </div>
-            
-            {/* Botão Vermelho como requerido na especificação */}
-            <button
-              onClick={() => {
-                const textToCopy = `LEAD - ${leadFormData.pessoaFisica.nomeCompleto || '[Preencha o Nome Completo]'} - ${leadFormData.areaJuridica} - ${leadFormData.assunto || '[Preencha o Assunto]'} - Telefone de contato: ${leadFormData.pessoaFisica.telefone || '[Preencha o Telefone]'}`;
-                navigator.clipboard.writeText(textToCopy);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-              }}
-              className="px-3.5 py-1.5 bg-[#de4c3a] hover:bg-[#c53d2e] active:bg-[#ad3224] text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition flex items-center gap-1.5 cursor-pointer shadow-xs"
-              title="Copiar texto formatado do Preview"
-            >
-              {copied ? <Check size={11} /> : <Copy size={11} />}
-              <span>{copied ? 'Copiado!' : 'Copiar Texto'}</span>
-            </button>
-          </div>
+        {/* NEW REAL TODOIST AUTOMATION CARD */}
+        <LeadTodoistAutomationCard
+          leadId={editLeadId || createdLeadId}
+          lead={leadFormData}
+          tipoPessoa="PF"
+          onLeadUpdated={(updatedFields) => {
+            setLeadFormData((prev: any) => ({
+              ...prev,
+              ...updatedFields
+            }));
+          }}
+        />
 
-          <div className="p-5 space-y-4">
-            <p className="text-xs font-bold text-gray-500 leading-relaxed">
-              Estrutura obrigatória em tempo real, alimentada automaticamente após preenchimento ou salvamento:
-            </p>
-
-            <div className="p-4 bg-red-50/40 border border-red-100 rounded-xl space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[9px] font-mono font-black text-[#de4c3a] uppercase tracking-widest">
-                  {hasSaved ? '● Alimentado & Confirmado (Salvo)' : '○ Alimentando em Tempo Real'}
-                </span>
-                <span className="text-[9px] font-mono font-bold text-gray-400">Todoist Format</span>
-              </div>
-              <div id="todoist-preview-text" className="text-xs font-black text-gray-900 break-words font-sans bg-white p-3 rounded-lg border border-red-100/50 shadow-3xs leading-relaxed">
-                LEAD - {leadFormData.pessoaFisica.nomeCompleto || <span className="text-gray-300 italic">[Nome do Cliente]</span>} - {leadFormData.areaJuridica} - {leadFormData.assunto || <span className="text-gray-300 italic">[Assunto]</span>} - Telefone de contato: {leadFormData.pessoaFisica.telefone || <span className="text-gray-300 italic">[Telefone]</span>}
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* CARD 2: Enviar LEAD para o Todoist */}
-        <motion.div
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.2 }}
-          className="bg-white border border-gray-150 rounded-2xl shadow-xs overflow-hidden"
-        >
-          <div className="p-5 border-b border-gray-100 bg-slate-50">
-            <h3 className="text-sm font-black text-gray-800 uppercase tracking-wider">
-              Card - Enviar LEAD para o Todoist
-            </h3>
-          </div>
-
-          <div className="p-5 space-y-4">
-            <p className="text-xs text-gray-600 leading-relaxed font-semibold">
-              Aperte no botão abaixo para despachar este LEAD diretamente para a sua caixa de entrada e fluxos do Todoist. Certifique-se de ter salvo os dados do LEAD no formulário primeiro para fins de consistência.
-            </p>
-
-            {todoistSuccess && (
-              <div className="p-4 bg-emerald-50 border border-emerald-150 rounded-xl text-xs text-emerald-8 bg-emerald-50/50 flex flex-col gap-1">
-                <div className="font-black text-emerald-900 flex items-center gap-1.5">
-                  <CheckCircle2 size={14} className="text-emerald-600" />
-                  <span>Tarefa Enviada com Sucesso ao Todoist!</span>
-                </div>
-                <p className="text-[11px] text-emerald-800 font-semibold">{todoistSuccess}</p>
-              </div>
-            )}
-
-            {todoistError && (
-              <div className="p-4 bg-rose-50 border border-rose-150 rounded-xl text-xs text-rose-8 flex items-center gap-2">
-                <AlertCircle size={14} className="text-rose-600 shrink-0" />
-                <span className="font-bold text-rose-800">{todoistError}</span>
-              </div>
-            )}
-
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              <button
-                type="button"
-                disabled={todoistSubmitting}
-                onClick={async () => {
-                  setTodoistSubmitting(true);
-                  setTodoistError(null);
-                  setTodoistSuccess(null);
-
-                  const computedPreviewText = `LEAD - ${leadFormData.pessoaFisica.nomeCompleto || 'Sem Nome'} - ${leadFormData.areaJuridica} - ${leadFormData.assunto || 'Sem Assunto'} - Telefone de contato: ${leadFormData.pessoaFisica.telefone || 'Sem Telefone'}`;
-
-                  try {
-                    const desc = `Origem do Lead: ${leadFormData.origemLead}\nResponsável: ${leadFormData.responsavelInterno}\nDor Principal: ${leadFormData.dorPrincipal || 'Não detalhada'}\nObservações: ${leadFormData.observacoes || 'Sem observações'}`;
-                    
-                    const res = await fetch('/api/todoist/create-task', {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                      },
-                      body: JSON.stringify({
-                        title: computedPreviewText,
-                        description: desc,
-                        priority: leadFormData.urgencia === 'Alta' ? 4 : (leadFormData.urgencia === 'Média' ? 3 : 1)
-                      })
-                    });
-
-                    const resData = await res.json();
-                    if (!res.ok || !resData.success) {
-                      if (resData.error === "TODOIST_SECRET_MISSING") {
-                        // Simulation fallback to keep 100% developer functionality active
-                        setTodoistSuccess("Pronto! Integração com API v1 validada com sucesso. (Como o TODOIST_API_TOKEN não está configurado na máquina/ambiente, o simulador local processou o envio perfeitamente!)");
-                      } else {
-                        throw new Error(resData.message || 'Houve um problema de autenticação ou transporte.');
-                      }
-                    } else {
-                      setTodoistSuccess(`Concluído! ID: ${resData.todoistTaskId}. URL da tarefa: ${resData.todoistUrl}`);
-                    }
-                  } catch (e: any) {
-                    setTodoistError(e.message || 'Não foi possível completar o envio para a rota do Todoist.');
-                  } finally {
-                    setTodoistSubmitting(false);
-                  }
-                }}
-                className={`w-full sm:w-auto px-6 py-3 text-white rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center justify-center gap-2 cursor-pointer shadow-md bg-red-600 hover:bg-red-700 active:bg-red-800 ${todoistSubmitting ? 'opacity-70 pointer-events-none' : ''}`}
-              >
-                <Send size={14} />
-                <span>{todoistSubmitting ? 'Enviando...' : 'Enviar LEAD para o Todoist'}</span>
-              </button>
-
-              {createdLeadId && (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/boss/cadastrar.leads/private/etapa02/${createdLeadId}`)}
-                  className="w-full sm:w-auto px-5 py-3 border border-gray-250 text-gray-700 hover:bg-slate-50 rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span>Seguir para Etapa 02</span>
-                  <Sparkles size={12} className="text-amber-500" />
-                </button>
-              )}
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Ir para Etapa 02 always visible button at the end */}
-        <div className="mt-8 pt-6 border-t border-gray-150 flex justify-center">
-          <button
-            type="button"
-            id="ir-para-etapa-02-btn-pf"
-            onClick={() => {
-              const activeId = createdLeadId || editLeadId;
-              if (activeId) {
-                navigate(`/boss/cadastrar.leads/private/etapa02/${activeId}`);
-              } else {
-                alert("Por favor, preencha e salve os dados do LEAD (clicando no botão 'Salvar dados do LEAD' acima) antes de ir para a Etapa 02.");
-              }
-            }}
-            className="w-full max-w-lg px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-650 hover:from-blue-700 hover:to-indigo-700 active:scale-[0.99] text-white rounded-2xl text-sm font-black uppercase tracking-wider transition flex items-center justify-center gap-2.5 cursor-pointer shadow-lg hover:shadow-xl"
-          >
-            <span>Ir para etapa 02</span>
-            <ArrowRight size={18} />
-          </button>
-        </div>
+        <LeadStepNavigation
+          id="ir-para-etapa-02-btn-pf"
+          navigating={navigatingStep2}
+          onClick={handleSaveAndNavigate}
+        />
 
       </div>
     </BossLayout>

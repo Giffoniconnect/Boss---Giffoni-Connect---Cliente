@@ -6167,6 +6167,103 @@ app.get("/api/todoist/projects", async (req: any, res: any) => {
   }
 });
 
+// GET /api/todoist/sections
+app.get("/api/todoist/sections", async (req: any, res: any) => {
+  try {
+    const token = process.env.TODOIST_API_TOKEN;
+    if (!token || !token.trim()) {
+      return res.status(400).json({
+        success: false,
+        errorMessage: "O token de API do Todoist (TODOIST_API_TOKEN) não foi configurado."
+      });
+    }
+
+    const { projectId } = req.query;
+    let url = "https://api.todoist.com/rest/v2/sections";
+    if (projectId) {
+      url += `?project_id=${projectId}`;
+    }
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      return res.status(response.status).json({
+        success: false,
+        errorMessage: `Erro de resposta do Todoist: ${response.statusText}`,
+        rawResponse: text
+      });
+    }
+
+    const sections = await response.json();
+    return res.status(200).json({
+      success: true,
+      sections
+    });
+  } catch (err: any) {
+    console.error("[Todoist Sections Endpoint Error]:", err);
+    return res.status(500).json({
+      success: false,
+      errorMessage: err.message || "Erro interno do servidor ao obter seções."
+    });
+  }
+});
+
+// GET /api/todoist/collaborators
+app.get("/api/todoist/collaborators", async (req: any, res: any) => {
+  try {
+    const token = process.env.TODOIST_API_TOKEN;
+    if (!token || !token.trim()) {
+      return res.status(400).json({
+        success: false,
+        errorMessage: "O token de API do Todoist (TODOIST_API_TOKEN) não foi configurado."
+      });
+    }
+
+    const { projectId } = req.query;
+    if (!projectId) {
+      return res.status(400).json({
+        success: false,
+        errorMessage: "projectId é obrigatório para obter colaboradores."
+      });
+    }
+
+    const url = `https://api.todoist.com/rest/v2/projects/${projectId}/collaborators`;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      return res.status(response.status).json({
+        success: false,
+        errorMessage: `Erro de resposta do Todoist: ${response.statusText}`,
+        rawResponse: text
+      });
+    }
+
+    const collaborators = await response.json();
+    return res.status(200).json({
+      success: true,
+      collaborators
+    });
+  } catch (err: any) {
+    console.error("[Todoist Collaborators Endpoint Error]:", err);
+    return res.status(500).json({
+      success: false,
+      errorMessage: err.message || "Erro interno do servidor ao obter colaboradores."
+    });
+  }
+});
+
 async function saveTodoistStatusToFirestore(caseId: string, payload: any) {
   if (!dbAdmin || !caseId) return;
 
