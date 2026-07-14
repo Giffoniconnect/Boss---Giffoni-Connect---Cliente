@@ -140,6 +140,7 @@ const DadosCaso = React.lazy(() => import('./pages/boss/fluxo-producao/DadosCaso
 const SolicitacoesInformacoes = React.lazy(() => import('./pages/boss/fluxo-producao/SolicitacoesInformacoes'));
 const SolicitacoesProvas = React.lazy(() => import('./pages/boss/fluxo-producao/SolicitacoesProvas'));
 const FinanceiroFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/FinanceiroFluxo'));
+const ApuracaoExitoPage = React.lazy(() => import('./pages/boss/fluxo-producao/ApuracaoExitoPage'));
 const EDRPFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/EDRPFluxo'));
 const DelegacaoFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/DelegacaoFluxo'));
 const RevisaoFluxo = React.lazy(() => import('./pages/boss/fluxo-producao/RevisaoFluxo'));
@@ -346,6 +347,8 @@ const bossRouter = createBrowserRouter(
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/financeiro/Criar Contrato de Honorários" element={<SafeRoute children={<FinanceiroFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/financeiro/ver.detalhes.do.contrato.de.honorarios" element={<SafeRoute children={<FinanceiroFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/financeiro/auditoria.do.contrato.de.honorarios" element={<SafeRoute children={<FinanceiroFluxo />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/financeiro/Auditoria formal do contrato de honorários" element={<SafeRoute children={<FinanceiroFluxo />} />} />
+      <Route path="/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/:slug/Editar-financeiro-e-faturamento/apuracao-de-exito/:caseId/:contractId" element={<SafeRoute children={<ApuracaoExitoPage />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/edrp" element={<SafeRoute children={<EDRPFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/edrp/estruturacao.juridica.sub-etapa-1" element={<SafeRoute children={<EDRPFluxo />} />} />
       <Route path="/boss-giffoni-clientes/fluxo-producao/:caseId/edrp/estruturacao.juridica.sub-etapa-2" element={<SafeRoute children={<EDRPFluxo />} />} />

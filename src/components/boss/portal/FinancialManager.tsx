@@ -28,12 +28,13 @@ import {
   Loader2
 } from 'lucide-react';
 import { db } from '../../../lib/firebase';
-import { doc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, onSnapshot, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { useAuth } from '../../../contexts/AuthContext';
 import {
   buildContratoHonorariosPfPlaceholders,
   buildContratoHonorariosPjPlaceholders
 } from '../../../lib/documents/placeholderBuilders';
+import { compileClausulaSegunda } from '../../../lib/documents/contratoHonorariosClauseEngine';
 
 interface FinancialManagerProps {
   clientCases: any[];
@@ -831,6 +832,53 @@ export const FinancialManager: React.FC<FinancialManagerProps> = ({
 
   // Apurar Contrato Exito Modal States
   const [showApurarExitoModal, setShowApurarExitoModal] = useState(false);
+  const [showVerContratoExitoModal, setShowVerContratoExitoModal] = useState(false);
+  const [compiledClausulaExito, setCompiledClausulaExito] = useState("");
+  const [showHistoricoFinanceiro, setShowHistoricoFinanceiro] = useState(false);
+  const [historicoMovimentos, setHistoricoMovimentos] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function loadHistorico() {
+      if (showHistoricoFinanceiro && activeCase) {
+        try {
+          const q = query(
+            collection(db, "movimentosFinanceirosExito"),
+            where("caseId", "==", activeCase.id)
+          );
+          const snap = await getDocs(q);
+          const list = snap.docs.map(d => d.data());
+          setHistoricoMovimentos(list);
+        } catch (err) {
+          console.error("Erro ao carregar histórico financeiro de êxito:", err);
+        }
+      }
+    }
+    loadHistorico();
+  }, [showHistoricoFinanceiro, activeCase]);
+
+  const handleVerContratoExito = async () => {
+    if (!activeCase) return;
+    try {
+      const contractId = `contract_${activeCase.id}`;
+      const contractSnap = await getDoc(doc(db, "contratosHonorariosCanonical", contractId));
+      if (contractSnap.exists()) {
+        const data = contractSnap.data();
+        setCompiledClausulaExito(data.termos?.clausulaSegundaCompilada || "Termos contratuais não encontrados.");
+      } else {
+        const compiled = compileClausulaSegunda({
+          modeloHonorarios: activeCase.modeloHonorarios || "exito_simples",
+          percentualExito: activeCase.percentualExito || "30%",
+          baseCalculoExito: activeCase.baseCalculoExito || "proveito_economico",
+          eventoCaracterizadorExito: activeCase.eventoCaracterizadorExito || "Trânsito em julgado"
+        });
+        setCompiledClausulaExito(compiled);
+      }
+      setShowVerContratoExitoModal(true);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao recuperar os termos contratuais de êxito.");
+    }
+  };
   const [modalFormaPagamento, setModalFormaPagamento] = useState("A definir");
   const [modalMeioRecebimento, setModalMeioRecebimento] = useState("A definir");
   const [modalRecebidoContaDo, setModalRecebidoContaDo] = useState("A definir");
@@ -1321,13 +1369,86 @@ export const FinancialManager: React.FC<FinancialManagerProps> = ({
             const shouldShowExitoButton = activeCase && (isExitoContract || isViviane);
             if (!shouldShowExitoButton) return null;
             return (
-              <button
-                type="button"
-                onClick={() => setShowApurarExitoModal(true)}
-                className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition font-mono cursor-pointer"
-              >
-                <span>💲Apurar Contrato de êxito $</span>
-              </button>
+              <div className="flex flex-wrap gap-2 pt-2 pb-2">
+                <button
+                  type="button"
+                  onClick={handleVerContratoExito}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-black uppercase tracking-wider transition font-mono cursor-pointer"
+                >
+                  <span>📜 Ver Contrato de Êxito</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigate(`/boss-giffoni-clientes/fluxo-producao/editar-portal-cliente/${clientSlug}/Editar-financeiro-e-faturamento/apuracao-de-exito/${activeCase.id}/contract_${activeCase.id}`);
+                  }}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-750 text-white rounded-xl text-xs font-black uppercase tracking-wider transition font-mono cursor-pointer"
+                >
+                  <span>💲 Apurar Êxito</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowHistoricoFinanceiro(!showHistoricoFinanceiro)}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-purple-150 hover:bg-purple-200 text-purple-950 rounded-xl text-xs font-black uppercase tracking-wider transition font-mono cursor-pointer"
+                >
+                  <span>📊 {showHistoricoFinanceiro ? "Ocultar Histórico" : "Ver Histórico Financeiro"}</span>
+                </button>
+                {showHistoricoFinanceiro && (
+                  <div className="w-full mt-3 p-4 bg-purple-50 border border-purple-100 rounded-xl space-y-3">
+                    <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wider font-mono">
+                      📊 Histórico de Apuração & Rateio de Êxito
+                    </h4>
+                    {historicoMovimentos.length === 0 ? (
+                      <p className="text-[11px] text-purple-700 italic font-medium">
+                        Nenhuma movimentação ou apuração de êxito registrada para este caso.
+                      </p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-[11px] font-mono">
+                          <thead>
+                            <tr className="border-b border-purple-200 text-purple-900 uppercase tracking-wider text-[10px]">
+                              <th className="py-2">Ref</th>
+                              <th className="py-2">Modalidade</th>
+                              <th className="py-2">Valor Total</th>
+                              <th className="py-2">Liquidados</th>
+                              <th className="py-2">Rateio Advogados</th>
+                              <th className="py-2">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-purple-100">
+                            {historicoMovimentos.map((mov, idx) => {
+                              const totalMov = mov.valorTotalCentavos ? formatBRL(mov.valorTotalCentavos / 100) : "R$ 0,00";
+                              const rateioTotal = mov.rateios ? mov.rateios.reduce((acc: number, r: any) => acc + (r.valorCentavos || 0), 0) : 0;
+                              return (
+                                <tr key={idx} className="hover:bg-purple-100/50 transition">
+                                  <td className="py-2 text-purple-950 font-bold">#{mov.numero || idx + 1}</td>
+                                  <td className="py-2 capitalize text-purple-900">{mov.modalidadePagamento || "Única"}</td>
+                                  <td className="py-2 font-bold text-emerald-700">{totalMov}</td>
+                                  <td className="py-2 font-semibold text-purple-800">
+                                    {mov.parcelasLiquidadas || 0}/{mov.parcelasTotal || 1}
+                                  </td>
+                                  <td className="py-2 text-purple-900">
+                                    {rateioTotal > 0 ? formatBRL(rateioTotal / 100) : "Sem rateio"}
+                                  </td>
+                                  <td className="py-2">
+                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                                      mov.status === "pago" || mov.status === "concluido"
+                                        ? "bg-emerald-100 text-emerald-800"
+                                        : "bg-amber-100 text-amber-800"
+                                    }`}>
+                                      {mov.status || "pendente"}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             );
           })()}
 
@@ -3208,6 +3329,51 @@ export const FinancialManager: React.FC<FinancialManagerProps> = ({
                 className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer flex items-center justify-center gap-1"
               >
                 {savingExito ? 'Salvando...' : 'Confirmar e Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showVerContratoExitoModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-2xl border border-gray-100 shadow-2xl flex flex-col max-h-[85vh]">
+            {/* Header */}
+            <div className="p-6 bg-slate-900 text-white rounded-t-3xl flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wider font-mono">
+                  📜 Termos Canônicos do Contrato de Êxito
+                </h3>
+                <p className="text-[10px] text-slate-300 font-mono mt-0.5">
+                  Visualização da Cláusula Segunda (Prestações e Condições de Êxito)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowVerContratoExitoModal(false)}
+                className="p-1.5 hover:bg-white/10 rounded-xl transition text-slate-400 hover:text-white"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 overflow-y-auto space-y-4 text-xs leading-relaxed text-gray-700 font-sans">
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 font-mono whitespace-pre-wrap select-all">
+                {compiledClausulaExito}
+              </div>
+              <p className="text-[10px] text-gray-400 italic text-center">
+                Você pode selecionar e copiar os termos acima para uso formal ou auditoria.
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-gray-50 border-t border-gray-150 rounded-b-3xl flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowVerContratoExitoModal(false)}
+                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition font-mono"
+              >
+                Fechar Visualização
               </button>
             </div>
           </div>

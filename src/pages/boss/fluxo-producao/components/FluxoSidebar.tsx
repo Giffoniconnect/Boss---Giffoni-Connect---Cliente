@@ -10,11 +10,132 @@ interface FluxoSidebarProps {
   caseId?: string;
 }
 
+/**
+ * Normaliza caminhos de forma segura em conformidade com a FASE 1
+ */
+export function normalizePathname(pathname: string): string {
+  try {
+    if (!pathname) return '';
+    // 1. remover query string
+    let cleaned = pathname.split('?')[0];
+    // 2. remover hash
+    cleaned = cleaned.split('#')[0];
+    // 3. decodeURIComponent seguro
+    try {
+      cleaned = decodeURIComponent(cleaned);
+    } catch (e) {
+      // Ignorar erros de decodeURIComponent e manter o original
+    }
+    // 4. substituir barras duplicadas por uma única barra
+    cleaned = cleaned.replace(/\/+/g, '/');
+    // 5. remover barra final, exceto quando for apenas "/"
+    if (cleaned.length > 1 && cleaned.endsWith('/')) {
+      cleaned = cleaned.slice(0, -1);
+    }
+    return cleaned;
+  } catch (error) {
+    return pathname || '';
+  }
+}
+
+/**
+ * Resolve a etapa atual de forma canônica em conformidade com a FASE 5
+ */
+export function resolveCurrentStepIndex({
+  pathname,
+  activeSteps,
+  caseId,
+}: {
+  pathname: string;
+  activeSteps: any[];
+  caseId?: string;
+}): { index: number; matchType: 'exact' | 'hierarchical' | 'alias' | 'none'; matchedRoute?: string } {
+  const normPath = normalizePathname(pathname);
+  if (!normPath) return { index: -1, matchType: 'none' };
+
+  let bestIndex = -1;
+  let bestSpecificity = -1; // Comprimento normalizado da rota correspondente
+  let bestMatchType: 'exact' | 'hierarchical' | 'alias' | 'none' = 'none';
+  let bestMatchedRoute = '';
+
+  activeSteps.forEach((step, idx) => {
+    const isCadastro = step.id === 'cadastro';
+    
+    // Obter todas as rotas candidatas para esta etapa
+    const candidateRoutes: { url: string; type: 'exact' | 'hierarchical' | 'alias' }[] = [];
+
+    // 1. Rota padrão da etapa
+    let stepUrl = '';
+    if (isCadastro) {
+      stepUrl = caseId ? flowRoutes.editarCadastroCliente(caseId) : flowRoutes.cadastro();
+    } else if (caseId) {
+      const routeHelper = flowRoutes[step.routeKey];
+      if (typeof routeHelper === 'function') {
+        stepUrl = (routeHelper as (id: string) => string)(caseId);
+      }
+    }
+
+    if (stepUrl) {
+      candidateRoutes.push({ url: stepUrl, type: 'exact' });
+    }
+
+    // 2. Outras rotas legadas ou fallback para cadastro
+    if (!caseId && isCadastro) {
+      candidateRoutes.push({ url: '/boss-giffoni-clientes/fluxo-producao/cadastro', type: 'exact' });
+    }
+    if (caseId && isCadastro) {
+      candidateRoutes.push({ url: `/boss-giffoni-clientes/fluxo-producao/${caseId}/editar-cadastro-cliente`, type: 'exact' });
+    }
+
+    // 3. matchPaths (aliases) definidos no flowSteps
+    if (step.matchPaths && Array.isArray(step.matchPaths)) {
+      step.matchPaths.forEach((p: string) => {
+        let routeWithCase = p;
+        if (caseId) {
+          routeWithCase = p.replace(/:caseId/g, caseId);
+        }
+        candidateRoutes.push({ url: routeWithCase, type: 'alias' });
+      });
+    }
+
+    // Avaliar correspondência para cada rota candidata
+    candidateRoutes.forEach((routeObj) => {
+      const normRoute = normalizePathname(routeObj.url);
+      if (!normRoute) return;
+
+      let isMatch = false;
+      let matchType: 'exact' | 'hierarchical' | 'alias' = routeObj.type;
+
+      if (normPath === normRoute) {
+        isMatch = true;
+        matchType = 'exact';
+      } else if (normPath.startsWith(normRoute + '/')) {
+        isMatch = true;
+        matchType = 'hierarchical';
+      }
+
+      if (isMatch) {
+        // FASE 4: rota mais específica (com maior comprimento normalizado)
+        const specificity = normRoute.length;
+        if (specificity > bestSpecificity) {
+          bestSpecificity = specificity;
+          bestIndex = idx;
+          bestMatchType = matchType;
+          bestMatchedRoute = normRoute;
+        }
+      }
+    });
+  });
+
+  return { index: bestIndex, matchType: bestMatchType, matchedRoute: bestMatchedRoute };
+}
+
 export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [isNovoCaso, setIsNovoCaso] = useState(false);
   const [clientType, setClientType] = useState<string | null>(null);
+  const [showTechLogs, setShowTechLogs] = useState(false);
 
   // Loaded database objects to measure real semantic integrity
   const [caseObj, setCaseObj] = useState<any>(null);
@@ -102,26 +223,16 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
         });
   }, [isNovoCaso, caseId, clientType]);
 
-  // Find active step index based on current URL path
-  const currentIndex = useMemo(() => {
-    return activeSteps.findIndex((step) => {
-      const isCadastro = step.id === 'cadastro';
-      let stepUrl = '';
-
-      if (isCadastro) {
-        stepUrl = isNovoCaso ? '' : (caseId ? flowRoutes.editarCadastroCliente(caseId) : flowRoutes.cadastro());
-      } else if (caseId) {
-        const routeHelper = flowRoutes[step.routeKey];
-        if (typeof routeHelper === 'function') {
-          stepUrl = (routeHelper as (id: string) => string)(caseId);
-        }
-      }
-      
-      return location.pathname === stepUrl || 
-             (!caseId && isCadastro && location.pathname.endsWith('/cadastro')) ||
-             (caseId && isCadastro && location.pathname.endsWith('/editar-cadastro-cliente'));
+  // Canonical step index resolution in compliance with FASE 5
+  const resolution = useMemo(() => {
+    return resolveCurrentStepIndex({
+      pathname: location.pathname,
+      activeSteps,
+      caseId,
     });
-  }, [activeSteps, caseId, isNovoCaso, location.pathname]);
+  }, [activeSteps, caseId, location.pathname]);
+
+  const currentIndex = resolution.index;
 
   // Measure real, functional step completeness mapping in compliance with Obstáculo 1 & 6
   const getStepStatus = (stepId: string): 'complete' | 'incomplete' | 'uninitiated' => {
@@ -313,8 +424,9 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
 
   // Percentage calculation: math-safe avanço metric
   const progressPercent = useMemo(() => {
+    if (currentIndex === -1) return null;
     if (activeSteps.length <= 1) return 0;
-    const activeIdx = currentIndex !== -1 ? currentIndex : 0;
+    const activeIdx = currentIndex;
     return Math.round((activeIdx / (activeSteps.length - 1)) * 100);
   }, [activeSteps, currentIndex]);
 
@@ -370,27 +482,52 @@ export default function FluxoSidebar({ caseId }: FluxoSidebarProps) {
           )}
 
           {/* PROGRESS METRIC BLOCK */}
-          <div className="flex items-center gap-4 bg-gray-50/55 border border-gray-100 px-4 py-2 rounded-2xl shrink-0 h-[44px]">
-            <div className="text-left">
-              <span className="text-[10px] md:text-[12px] font-black uppercase text-gray-400 block tracking-widest leading-none">
-                Avanço Administrativo
-              </span>
-              <span className="text-[11px] md:text-xs font-black text-gray-900 block mt-1">
-                Etapa {currentIndex !== -1 ? currentIndex + 1 : 1} de {activeSteps.length}
-              </span>
-            </div>
+          <div className="flex flex-col gap-1 shrink-0 self-start md:self-auto">
+            <div className="flex items-center gap-4 bg-gray-50/55 border border-gray-100 px-4 py-2 rounded-2xl shrink-0 h-[44px]">
+              <div className="text-left">
+                <span className="text-[10px] md:text-[11px] font-black uppercase text-gray-400 block tracking-widest leading-none">
+                  Avanço Administrativo
+                </span>
+                <span className="text-[11px] md:text-xs font-black text-gray-900 block mt-1">
+                  {currentIndex !== -1 ? `Etapa ${currentIndex + 1} de ${activeSteps.length}` : 'Etapa não identificada'}
+                </span>
+              </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-black text-orange-600 font-mono">
-                {progressPercent}%
-              </span>
-              <div className="w-16 bg-gray-200 h-2 rounded-full overflow-hidden">
-                <div 
-                  className="bg-orange-600 h-full rounded-full transition-all duration-300" 
-                  style={{ width: `${progressPercent}%` }}
-                />
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-black text-orange-600 font-mono">
+                  {progressPercent !== null ? `${progressPercent}%` : '--'}
+                </span>
+                <div className="w-16 bg-gray-200 h-2 rounded-full overflow-hidden">
+                  <div 
+                    className="bg-orange-600 h-full rounded-full transition-all duration-300" 
+                    style={{ width: `${progressPercent !== null ? progressPercent : 0}%` }}
+                  />
+                </div>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setShowTechLogs(!showTechLogs)}
+              className="text-[9px] font-bold text-gray-400 hover:text-gray-600 transition-colors self-start cursor-pointer px-1"
+            >
+              👁️ {showTechLogs ? 'Ocultar' : 'Ver'} logs técnicos do Avanço Administrativo
+            </button>
+
+            {showTechLogs && (
+              <div className="text-[10px] font-mono bg-gray-900 text-gray-100 p-3 rounded-xl space-y-1 overflow-x-auto max-w-xs md:max-w-md mt-1 shadow-md border border-gray-800">
+                <div><strong>Pathname original:</strong> {location.pathname}</div>
+                <div><strong>Pathname decodificado:</strong> {(() => { try { return decodeURIComponent(location.pathname); } catch (e) { return 'Erro'; } })()}</div>
+                <div><strong>Pathname normalizado:</strong> {normalizePathname(location.pathname)}</div>
+                <div><strong>Rota correspondente:</strong> {resolution.matchedRoute || 'Nenhuma'}</div>
+                <div><strong>Tipo de correspondência:</strong> {resolution.matchType}</div>
+                <div><strong>Índice encontrado:</strong> {currentIndex}</div>
+                <div><strong>Número administrativo:</strong> {currentIndex !== -1 ? currentIndex + 1 : 'Indeterminado'}</div>
+                <div><strong>Total de etapas:</strong> {activeSteps.length}</div>
+                <div><strong>Percentual:</strong> {progressPercent !== null ? `${progressPercent}%` : 'Indisponível'}</div>
+                <div><strong>Falha de correspondência:</strong> {currentIndex === -1 ? 'SIM' : 'NÃO'}</div>
+              </div>
+            )}
           </div>
         </div>
       </div>

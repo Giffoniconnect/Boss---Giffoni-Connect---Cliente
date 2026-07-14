@@ -654,7 +654,7 @@ export function buildContratoHonorariosDocumentContext(params: ContractContextPa
     placeholderAudit: {
       success: true,
       documentType,
-      caseId: cs => cs?.id || caseData?.id || "",
+      caseId: caseData?.id || "",
       generatedAt: new Date().toISOString(),
       summary,
       rows,

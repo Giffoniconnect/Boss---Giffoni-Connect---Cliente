@@ -487,9 +487,50 @@
         }
       },
       "required": ["id", "name", "role", "department", "status"]
+    },
+    "ContractClauseTemplate": {
+      "title": "Contract Clause Template",
+      "description": "Metadata for versioned contract clause templates.",
+      "type": "object",
+      "properties": {
+        "templateKey": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "activeVersionId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["templateKey", "name"]
+    },
+    "ContractClauseTemplateVersion": {
+      "title": "Contract Clause Template Version",
+      "description": "A specific version of contract clause templates under subcollection versions.",
+      "type": "object",
+      "properties": {
+        "versionId": { "type": "string" },
+        "templates": {
+          "type": "object",
+          "properties": {
+            "fixo": { "type": "string" },
+            "exito_simples": { "type": "string" },
+            "exito_completo_trabalhista": { "type": "string" },
+            "exito_completo_previdenciario": { "type": "string" },
+            "fixo_mais_exito_simples": { "type": "string" },
+            "fixo_mais_exito_completo_trabalhista": { "type": "string" },
+            "fixo_mais_exito_completo_previdenciario": { "type": "string" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["versionId", "templates", "createdAt"]
     }
   },
   "firestore": {
+    "contractClauseTemplates": {
+      "schema": "ContractClauseTemplate",
+      "description": "Versioned contract clause templates."
+    },
     "clients": {
       "schema": "Client",
       "description": "Consolidated client data."
