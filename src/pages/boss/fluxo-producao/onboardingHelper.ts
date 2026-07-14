@@ -150,9 +150,12 @@ export function buildOnboardingExecutionPlan(clientData: ClientOnboardingData, o
   let step3Status: OnboardingStepStatus = 'available';
   let step3Reason = '';
 
-  if (clientData.instagramNotOwned || clientData.instagram === 'Não possuo' || !clientData.instagram || clientData.instagram.trim() === '') {
+  if (clientData.instagramNotOwned || clientData.instagram === 'Não possuo') {
     step3Status = 'dispensed_not_owned';
-    step3Reason = 'Instagram formalmente registrado como inexistente ou não informado.';
+    step3Reason = 'Instagram formalmente registrado como inexistente.';
+  } else if (!clientData.instagram || clientData.instagram.trim() === '') {
+    step3Status = 'blocked_missing_data';
+    step3Reason = 'Instagram está vazio e não marcado como "Não possuo".';
   } else if (instState.status === 'completed' && instState.humanCertified) {
     step3Status = 'completed';
   } else if (instState.status === 'completed' && !instState.humanCertified) {
@@ -166,9 +169,12 @@ export function buildOnboardingExecutionPlan(clientData: ClientOnboardingData, o
   let step4Status: OnboardingStepStatus = 'available';
   let step4Reason = '';
 
-  if (clientData.facebookNotOwned || clientData.facebook === 'Não possuo' || !clientData.facebook || clientData.facebook.trim() === '') {
+  if (clientData.facebookNotOwned || clientData.facebook === 'Não possuo') {
     step4Status = 'dispensed_not_owned';
-    step4Reason = 'Facebook formalmente registrado como inexistente ou não informado.';
+    step4Reason = 'Facebook formalmente registrado como inexistente.';
+  } else if (!clientData.facebook || clientData.facebook.trim() === '') {
+    step4Status = 'blocked_missing_data';
+    step4Reason = 'Facebook está vazio e não marcado como "Não possuo".';
   } else if (fbState.status === 'completed' && fbState.humanCertified) {
     step4Status = 'completed';
   } else if (fbState.status === 'completed' && !fbState.humanCertified) {
@@ -182,9 +188,12 @@ export function buildOnboardingExecutionPlan(clientData: ClientOnboardingData, o
   let step5Status: OnboardingStepStatus = 'available';
   let step5Reason = '';
 
-  if (clientData.tiktokNotOwned || clientData.tiktok === 'Não possuo' || !clientData.tiktok || clientData.tiktok.trim() === '') {
+  if (clientData.tiktokNotOwned || clientData.tiktok === 'Não possuo') {
     step5Status = 'dispensed_not_owned';
-    step5Reason = 'TikTok formalmente registrado como inexistente ou não informado.';
+    step5Reason = 'TikTok formalmente registrado como inexistente.';
+  } else if (!clientData.tiktok || clientData.tiktok.trim() === '') {
+    step5Status = 'blocked_missing_data';
+    step5Reason = 'TikTok está vazio e não marcado como "Não possuo".';
   } else if (tkState.status === 'completed' && tkState.humanCertified) {
     step5Status = 'completed';
   } else if (tkState.status === 'completed' && !tkState.humanCertified) {
@@ -198,9 +207,12 @@ export function buildOnboardingExecutionPlan(clientData: ClientOnboardingData, o
   let step6Status: OnboardingStepStatus = 'available';
   let step6Reason = '';
 
-  if (clientData.emailNotOwned || clientData.email === 'Não possuo' || !clientData.email || clientData.email.trim() === '') {
+  if (clientData.emailNotOwned || clientData.email === 'Não possuo') {
     step6Status = 'dispensed_not_owned';
-    step6Reason = 'E-mail formalmente registrado como inexistente ou não informado.';
+    step6Reason = 'E-mail formalmente registrado como inexistente.';
+  } else if (!clientData.email || clientData.email.trim() === '') {
+    step6Status = 'blocked_missing_data';
+    step6Reason = 'E-mail está vazio e não marcado como "Não possuo".';
   } else if (emState.status === 'completed' && emState.humanCertified) {
     step6Status = 'completed';
   } else if (emState.status === 'completed' && !emState.humanCertified) {
@@ -240,7 +252,7 @@ export function buildOnboardingExecutionPlan(clientData: ClientOnboardingData, o
   return [
     {
       id: 1,
-      name: 'Subetapa 01 — Google Contacts',
+      name: 'Subetapa 01 — Adicionar telefone celular automaticamente',
       route: 'add.telefone.do.cliente',
       status: step1Status,
       reason: step1Reason,
@@ -249,7 +261,7 @@ export function buildOnboardingExecutionPlan(clientData: ClientOnboardingData, o
     },
     {
       id: 2,
-      name: 'Subetapa 02 — Boas-vindas W.A Speed',
+      name: 'Subetapa 02 — Boas-vindas via W.A Speed',
       route: 'welcome.zap',
       status: step2Status,
       reason: step2Reason,
@@ -258,8 +270,8 @@ export function buildOnboardingExecutionPlan(clientData: ClientOnboardingData, o
     },
     {
       id: 3,
-      name: 'Subetapa 03 — Conexão Instagram',
-      route: 'add.instagram.do.cliente',
+      name: 'Subetapa 03 — Adicionar cliente no Instagram',
+      route: 'add.cliente.no.instagram',
       status: step3Status,
       reason: step3Reason,
       technicalStatus: instState.status || 'pending',
@@ -267,8 +279,8 @@ export function buildOnboardingExecutionPlan(clientData: ClientOnboardingData, o
     },
     {
       id: 4,
-      name: 'Subetapa 04 — Conexão Facebook',
-      route: 'add.facebook.do.cliente',
+      name: 'Subetapa 04 — Adicionar cliente no Facebook',
+      route: 'add.cliente.no.facebook',
       status: step4Status,
       reason: step4Reason,
       technicalStatus: fbState.status || 'pending',
@@ -276,8 +288,8 @@ export function buildOnboardingExecutionPlan(clientData: ClientOnboardingData, o
     },
     {
       id: 5,
-      name: 'Subetapa 05 — Conexão TikTok',
-      route: 'add.tiktok.do.cliente',
+      name: 'Subetapa 05 — Adicionar cliente no TikTok',
+      route: 'add.cliente.no.tiktok',
       status: step5Status,
       reason: step5Reason,
       technicalStatus: tkState.status || 'pending',
@@ -285,8 +297,8 @@ export function buildOnboardingExecutionPlan(clientData: ClientOnboardingData, o
     },
     {
       id: 6,
-      name: 'Subetapa 06 — E-mail de Boas-vindas',
-      route: 'email.boas.vindas',
+      name: 'Subetapa 06 — E-mail de boas-vindas',
+      route: 'enviar.email.cliente',
       status: step6Status,
       reason: step6Reason,
       technicalStatus: emState.status || 'pending',
@@ -294,7 +306,7 @@ export function buildOnboardingExecutionPlan(clientData: ClientOnboardingData, o
     },
     {
       id: 7,
-      name: 'Subetapa 07 — AvaliaCard Google',
+      name: 'Subetapa 07 — AvaliaCard: avaliação do Google',
       route: 'avaliacard',
       status: step7Status,
       reason: step7Reason,
@@ -303,8 +315,8 @@ export function buildOnboardingExecutionPlan(clientData: ClientOnboardingData, o
     },
     {
       id: 8,
-      name: 'Subetapa 08 — Auditoria Final',
-      route: 'auditoria.onboarding',
+      name: 'Subetapa 08 — Auditoria do Onboarding',
+      route: 'auditoria.onboarding.cliente',
       status: step8Status,
       reason: step8Reason,
       technicalStatus: audState.status || 'pending',

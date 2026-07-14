@@ -253,7 +253,7 @@ export default function OnboardingWelcomeZap() {
 
       if (advanceAfter) {
         setTimeout(() => {
-          navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/add.instagram.do.cliente`);
+          navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/add.cliente.no.instagram`);
         }, 800);
       }
     } catch (err: any) {

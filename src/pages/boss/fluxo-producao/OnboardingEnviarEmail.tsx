@@ -158,7 +158,7 @@ export default function OnboardingEnviarEmail() {
 
       if (advanceAfter) {
         setTimeout(() => {
-          navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/auditoria.onboarding.cliente`);
+          navigate(`/boss-giffoni-clientes/fluxo-producao/${caseId}/avaliacard`);
         }, 800);
       }
     } catch (err: any) {

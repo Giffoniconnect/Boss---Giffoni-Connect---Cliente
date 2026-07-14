@@ -3,6 +3,7 @@ import { BossLayout } from '../../../../components/Layout';
 import FluxoSidebar from './FluxoSidebar';
 import ColetaProvasSubetapasCard from './ColetaProvasSubetapasCard';
 import TipoProducaoSubetapasCard from './TipoProducaoSubetapasCard';
+import OnboardingSubetapasCard from './OnboardingSubetapasCard';
 
 interface FluxoStepLayoutProps {
   children: React.ReactNode;
@@ -38,6 +39,10 @@ export default function FluxoStepLayout({
       <div className="flex flex-col gap-6">
         {/* Fused Stepper + progress tracking in single horizontal tracker */}
         <FluxoSidebar caseId={caseId} />
+
+        {stepName === 'Onboarding' && (
+          <OnboardingSubetapasCard caseId={caseId} />
+        )}
 
         {coletaSubetapasStep && (
           <ColetaProvasSubetapasCard
